@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# Builds of older commits racing past newer ones can publish stale APKs to
+# the rolling release; cancel the in-flight build when a new push lands.
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
