@@ -20,10 +20,24 @@ class ThrowLabApp extends StatelessWidget {
         theme: ThemeData(
           brightness: Brightness.dark,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepOrange,
+            // Matches the light blue of the flask-and-javelin logo.
+            seedColor: const Color(0xFF4FC3F7),
             brightness: Brightness.dark,
           ),
           useMaterial3: true,
+          appBarTheme: const AppBarTheme(
+            centerTitle: false,
+            titleSpacing: 16,
+          ),
+          sliderTheme: const SliderThemeData(
+            showValueIndicator: ShowValueIndicator.never,
+          ),
+          cardTheme: CardThemeData(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
         ),
         home: const HomeScreen(),
       ),

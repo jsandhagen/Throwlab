@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
+import '../utils/frame_seeker.dart';
 import '../utils/time_format.dart';
 
 const kPlaybackSpeeds = [0.1, 0.25, 0.5, 0.75, 1.0];
@@ -16,7 +17,7 @@ Duration snapToFrame(Duration position, double fps) {
 
 /// Scrubber + transport controls for a single video: play/pause,
 /// frame-by-frame stepping, and slow-motion speed selection.
-class PlaybackControls extends StatelessWidget {
+class PlaybackControls extends StatefulWidget {
   const PlaybackControls({
     super.key,
     required this.controller,
@@ -28,16 +29,22 @@ class PlaybackControls extends StatelessWidget {
   final double fps;
   final Widget? trailing;
 
+  @override
+  State<PlaybackControls> createState() => _PlaybackControlsState();
+}
+
+class _PlaybackControlsState extends State<PlaybackControls> {
+  late final FrameSeeker _seeker = FrameSeeker(widget.controller);
+
+  VideoPlayerController get controller => widget.controller;
+  double get fps => widget.fps;
+
   Duration get _frameStep =>
       Duration(microseconds: (Duration.microsecondsPerSecond / fps).round());
 
   void _stepBy(int frames) {
     controller.pause();
-    final target = controller.value.position + _frameStep * frames;
-    controller.seekTo(Duration(
-      microseconds: target.inMicroseconds
-          .clamp(0, controller.value.duration.inMicroseconds),
-    ));
+    _seeker.seekTo(_seeker.position + _frameStep * frames);
   }
 
   @override
@@ -56,7 +63,7 @@ class PlaybackControls extends StatelessWidget {
               max: duration == 0 ? 1 : duration.toDouble(),
               onChanged: (ms) {
                 controller.pause();
-                controller.seekTo(
+                _seeker.seekTo(
                     snapToFrame(Duration(milliseconds: ms.round()), fps));
               },
             ),
@@ -92,7 +99,7 @@ class PlaybackControls extends StatelessWidget {
                   speed: value.playbackSpeed,
                   onChanged: controller.setPlaybackSpeed,
                 ),
-                if (trailing != null) trailing!,
+                if (widget.trailing != null) widget.trailing!,
                 const SizedBox(width: 12),
               ],
             ),

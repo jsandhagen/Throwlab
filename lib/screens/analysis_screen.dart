@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/video_library.dart';
+import '../utils/frame_seeker.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
 
@@ -30,6 +31,7 @@ class AnalysisScreen extends StatefulWidget {
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
   late final VideoPlayerController _controller;
+  late final FrameSeeker _seeker = FrameSeeker(_controller);
   final DrawingController _drawing = DrawingController();
 
   @override
@@ -51,14 +53,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   /// Steps the video by [frames] while dragging across it in scrub mode.
   void _jogFrames(int frames) {
     _controller.pause();
-    final frameUs =
-        (Duration.microsecondsPerSecond / widget.video.fps).round();
-    final target =
-        _controller.value.position.inMicroseconds + frameUs * frames;
-    _controller.seekTo(Duration(
-      microseconds:
-          target.clamp(0, _controller.value.duration.inMicroseconds),
-    ));
+    final step = Duration(
+        microseconds: (Duration.microsecondsPerSecond / widget.video.fps)
+            .round());
+    _seeker.seekTo(_seeker.position + step * frames);
   }
 
   Future<void> _editFps() async {

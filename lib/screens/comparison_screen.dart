@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../utils/frame_seeker.dart';
 import '../utils/time_format.dart';
 import '../widgets/playback_controls.dart';
 
@@ -26,6 +27,8 @@ class ComparisonScreen extends StatefulWidget {
 class _ComparisonScreenState extends State<ComparisonScreen> {
   late final VideoPlayerController _controllerA;
   late final VideoPlayerController _controllerB;
+  late final FrameSeeker _seekerA = FrameSeeker(_controllerA);
+  late final FrameSeeker _seekerB = FrameSeeker(_controllerB);
 
   ComparisonMode _mode = ComparisonMode.sideBySide;
   double _overlayOpacity = 0.5;
@@ -70,15 +73,14 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
   void _seekBoth(Duration positionA) {
     _controllerA.pause();
     _controllerB.pause();
-    _controllerA.seekTo(_clampToDuration(positionA, _controllerA));
-    final offset = positionA - _syncA;
-    _controllerB.seekTo(_clampToDuration(_syncB + offset, _controllerB));
+    _seekerA.seekTo(positionA);
+    _seekerB.seekTo(_syncB + (positionA - _syncA));
   }
 
   void _stepBoth(int frames) {
     final step = Duration(
         microseconds: (Duration.microsecondsPerSecond / _fps).round());
-    _seekBoth(_controllerA.value.position + step * frames);
+    _seekBoth(_seekerA.position + step * frames);
   }
 
   void _togglePlay() {
@@ -102,8 +104,9 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
           child: VideoPlayer(controller))
       : const Center(child: CircularProgressIndicator());
 
-  Widget _syncRow(String label, VideoPlayerController controller, double fps,
+  Widget _syncRow(String label, FrameSeeker seeker, double fps,
       Duration sync, ValueChanged<Duration> onSet) {
+    final controller = seeker.controller;
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: controller,
       builder: (context, value, _) => Row(
@@ -120,7 +123,7 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                   : value.duration.inMilliseconds.toDouble(),
               onChanged: (ms) {
                 controller.pause();
-                controller.seekTo(
+                seeker.seekTo(
                     snapToFrame(Duration(milliseconds: ms.round()), fps));
               },
             ),
@@ -211,9 +214,9 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                         const SizedBox(width: 12),
                       ],
                     ),
-                  _syncRow('A', _controllerA, widget.videoA.fps, _syncA,
+                  _syncRow('A', _seekerA, widget.videoA.fps, _syncA,
                       (d) => setState(() => _syncA = d)),
-                  _syncRow('B', _controllerB, widget.videoB.fps, _syncB,
+                  _syncRow('B', _seekerB, widget.videoB.fps, _syncB,
                       (d) => setState(() => _syncB = d)),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,

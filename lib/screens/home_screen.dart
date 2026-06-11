@@ -106,11 +106,26 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Color _eventColor(ThrowEvent event) => switch (event) {
+        ThrowEvent.shotPut => Colors.orangeAccent,
+        ThrowEvent.discus => Colors.greenAccent,
+        ThrowEvent.hammer => Colors.purpleAccent,
+        ThrowEvent.javelin => Colors.lightBlueAccent,
+      };
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ThrowLab'),
+        title: Row(
+          children: [
+            Image.asset('assets/icon/logo.png', height: 32),
+            const SizedBox(width: 10),
+            const Text('ThrowLab',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Compare two throws',
@@ -149,14 +164,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     return const _EmptyState();
                   }
                   return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
                     itemCount: library.videos.length,
                     itemBuilder: (context, index) {
                       final video = library.videos[index];
-                      return ListTile(
-                        leading:
-                            CircleAvatar(child: Icon(video.event.icon)),
+                      final color = _eventColor(video.event);
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        leading: CircleAvatar(
+                          backgroundColor: color.withOpacity(0.18),
+                          child: Icon(video.event.icon, color: color),
+                        ),
                         title: Text(
-                            '${video.event.label} · ${video.gender.label}'),
+                            '${video.event.label} · ${video.gender.label}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600)),
                         subtitle: Text(
                           '${video.importedAt.toLocal().toString().substring(0, 16)}'
                           '${video.note.isEmpty ? '' : ' — ${video.note}'}',
@@ -188,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           MaterialPageRoute(
                               builder: (_) =>
                                   AnalysisScreen(video: video)),
+                        ),
                         ),
                       );
                     },
@@ -241,7 +267,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.sports_martial_arts, size: 72),
+            Image.asset('assets/icon/logo.png', width: 140),
             const SizedBox(height: 16),
             Text('No throws yet',
                 style: Theme.of(context).textTheme.headlineSmall),
