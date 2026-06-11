@@ -86,10 +86,25 @@ class DrawingController extends ChangeNotifier {
 }
 
 /// Transparent gesture + paint layer stacked over the video player.
-class DrawingCanvas extends StatelessWidget {
-  const DrawingCanvas({super.key, required this.controller});
+///
+/// In scrub mode ([DrawTool.none]) horizontal drags are reported through
+/// [onJogFrames] so the video underneath can be stepped frame by frame.
+class DrawingCanvas extends StatefulWidget {
+  const DrawingCanvas({super.key, required this.controller, this.onJogFrames});
 
   final DrawingController controller;
+  final ValueChanged<int>? onJogFrames;
+
+  @override
+  State<DrawingCanvas> createState() => _DrawingCanvasState();
+}
+
+class _DrawingCanvasState extends State<DrawingCanvas> {
+  /// Drag distance that advances the video by one frame.
+  static const _pixelsPerFrame = 8.0;
+  double _jogAccumulator = 0;
+
+  DrawingController get controller => widget.controller;
 
   Offset _normalize(Offset position, Size size) => Offset(
         (position.dx / size.width).clamp(0.0, 1.0),
@@ -128,8 +143,9 @@ class DrawingCanvas extends StatelessWidget {
                   controller
                       .add(LineAnnotation(controller.color, point, point));
                 case DrawTool.angle:
-                case DrawTool.none:
                   break;
+                case DrawTool.none:
+                  _jogAccumulator = 0;
               }
             },
             onPanUpdate: (details) {
@@ -147,8 +163,14 @@ class DrawingCanvas extends StatelessWidget {
                     controller.notifyChanged();
                   }
                 case DrawTool.angle:
-                case DrawTool.none:
                   break;
+                case DrawTool.none:
+                  _jogAccumulator += details.delta.dx;
+                  final frames = _jogAccumulator ~/ _pixelsPerFrame;
+                  if (frames != 0 && widget.onJogFrames != null) {
+                    _jogAccumulator -= frames * _pixelsPerFrame;
+                    widget.onJogFrames!(frames);
+                  }
               }
             },
             child: CustomPaint(

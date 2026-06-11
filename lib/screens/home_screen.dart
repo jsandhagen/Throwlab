@@ -75,7 +75,9 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Consumer<VideoLibrary>(
+      body: SafeArea(
+        top: false,
+        child: Consumer<VideoLibrary>(
         builder: (context, library, _) {
           if (!library.isLoaded) {
             return const Center(child: CircularProgressIndicator());
@@ -122,7 +124,8 @@ class HomeScreen extends StatelessWidget {
               );
             },
           );
-        },
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.video_library),

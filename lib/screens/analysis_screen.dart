@@ -48,6 +48,19 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     super.dispose();
   }
 
+  /// Steps the video by [frames] while dragging across it in scrub mode.
+  void _jogFrames(int frames) {
+    _controller.pause();
+    final frameUs =
+        (Duration.microsecondsPerSecond / widget.video.fps).round();
+    final target =
+        _controller.value.position.inMicroseconds + frameUs * frames;
+    _controller.seekTo(Duration(
+      microseconds:
+          target.clamp(0, _controller.value.duration.inMicroseconds),
+    ));
+  }
+
   Future<void> _editFps() async {
     final fieldController =
         TextEditingController(text: widget.video.fps.toStringAsFixed(0));
@@ -105,40 +118,49 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Container(
-              color: Colors.black,
-              alignment: Alignment.center,
-              child: _controller.value.isInitialized
-                  ? AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          VideoPlayer(_controller),
-                          DrawingCanvas(controller: _drawing),
-                        ],
-                      ),
-                    )
-                  : const CircularProgressIndicator(),
+      // top: false — the AppBar already handles the status bar; the bottom
+      // inset keeps controls above the Android gesture/taskbar area.
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: Container(
+                color: Colors.black,
+                alignment: Alignment.center,
+                child: _controller.value.isInitialized
+                    ? AspectRatio(
+                        aspectRatio: _controller.value.aspectRatio,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            VideoPlayer(_controller),
+                            DrawingCanvas(
+                              controller: _drawing,
+                              onJogFrames: _jogFrames,
+                            ),
+                          ],
+                        ),
+                      )
+                    : const CircularProgressIndicator(),
+              ),
             ),
-          ),
-          _DrawingToolbar(controller: _drawing),
-          PlaybackControls(
-            controller: _controller,
-            fps: widget.video.fps,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Calibration reference: ${spec.referenceLabel.toLowerCase()} '
-              '${(spec.nominalSize * 100).toStringAsFixed(1)} cm (nominal)',
-              style: Theme.of(context).textTheme.bodySmall,
+            _DrawingToolbar(controller: _drawing),
+            PlaybackControls(
+              controller: _controller,
+              fps: widget.video.fps,
             ),
-          ),
-        ],
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                'Calibration reference: ${spec.referenceLabel.toLowerCase()} '
+                '${(spec.nominalSize * 100).toStringAsFixed(1)} cm (nominal) '
+                '· drag video to scrub frames',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

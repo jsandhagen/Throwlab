@@ -102,7 +102,7 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
           child: VideoPlayer(controller))
       : const Center(child: CircularProgressIndicator());
 
-  Widget _syncRow(String label, VideoPlayerController controller,
+  Widget _syncRow(String label, VideoPlayerController controller, double fps,
       Duration sync, ValueChanged<Duration> onSet) {
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: controller,
@@ -120,7 +120,8 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                   : value.duration.inMilliseconds.toDouble(),
               onChanged: (ms) {
                 controller.pause();
-                controller.seekTo(Duration(milliseconds: ms.round()));
+                controller.seekTo(
+                    snapToFrame(Duration(milliseconds: ms.round()), fps));
               },
             ),
           ),
@@ -167,90 +168,93 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
       ),
       body: !_ready
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: Container(
-                    color: Colors.black,
-                    alignment: Alignment.center,
-                    child: _mode == ComparisonMode.sideBySide
-                        ? Column(
-                            children: [
-                              Expanded(child: _player(_controllerA)),
-                              const Divider(height: 2),
-                              Expanded(child: _player(_controllerB)),
-                            ],
-                          )
-                        : Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              _player(_controllerA),
-                              Opacity(
-                                opacity: _overlayOpacity,
-                                child: _player(_controllerB),
-                              ),
-                            ],
-                          ),
+          : SafeArea(
+              top: false,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Container(
+                      color: Colors.black,
+                      alignment: Alignment.center,
+                      child: _mode == ComparisonMode.sideBySide
+                          ? Column(
+                              children: [
+                                Expanded(child: _player(_controllerA)),
+                                const Divider(height: 2),
+                                Expanded(child: _player(_controllerB)),
+                              ],
+                            )
+                          : Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                _player(_controllerA),
+                                Opacity(
+                                  opacity: _overlayOpacity,
+                                  child: _player(_controllerB),
+                                ),
+                              ],
+                            ),
+                    ),
                   ),
-                ),
-                if (_mode == ComparisonMode.overlay)
-                  Row(
-                    children: [
-                      const SizedBox(width: 12),
-                      const Text('Ghost'),
-                      Expanded(
-                        child: Slider(
-                          value: _overlayOpacity,
-                          onChanged: (v) =>
-                              setState(() => _overlayOpacity = v),
+                  if (_mode == ComparisonMode.overlay)
+                    Row(
+                      children: [
+                        const SizedBox(width: 12),
+                        const Text('Ghost'),
+                        Expanded(
+                          child: Slider(
+                            value: _overlayOpacity,
+                            onChanged: (v) =>
+                                setState(() => _overlayOpacity = v),
+                          ),
                         ),
+                        const SizedBox(width: 12),
+                      ],
+                    ),
+                  _syncRow('A', _controllerA, widget.videoA.fps, _syncA,
+                      (d) => setState(() => _syncA = d)),
+                  _syncRow('B', _controllerB, widget.videoB.fps, _syncB,
+                      (d) => setState(() => _syncB = d)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        tooltip: 'Both back one frame',
+                        icon: const Icon(Icons.skip_previous),
+                        onPressed: () => _stepBoth(-1),
                       ),
-                      const SizedBox(width: 12),
+                      IconButton(
+                        iconSize: 40,
+                        icon: Icon(_controllerA.value.isPlaying
+                            ? Icons.pause_circle
+                            : Icons.play_circle),
+                        onPressed: _togglePlay,
+                      ),
+                      IconButton(
+                        tooltip: 'Both forward one frame',
+                        icon: const Icon(Icons.skip_next),
+                        onPressed: () => _stepBoth(1),
+                      ),
+                      const SizedBox(width: 16),
+                      SpeedMenuButton(
+                        speed: _speed,
+                        onChanged: (s) {
+                          setState(() => _speed = s);
+                          _controllerA.setPlaybackSpeed(s);
+                          _controllerB.setPlaybackSpeed(s);
+                        },
+                      ),
+                      const SizedBox(width: 16),
+                      TextButton.icon(
+                        icon: const Icon(Icons.flag_circle),
+                        label: const Text('Go to release'),
+                        onPressed: () => _seekBoth(_syncA),
+                      ),
                     ],
                   ),
-                _syncRow('A', _controllerA, _syncA,
-                    (d) => setState(() => _syncA = d)),
-                _syncRow('B', _controllerB, _syncB,
-                    (d) => setState(() => _syncB = d)),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      tooltip: 'Both back one frame',
-                      icon: const Icon(Icons.skip_previous),
-                      onPressed: () => _stepBoth(-1),
-                    ),
-                    IconButton(
-                      iconSize: 40,
-                      icon: Icon(_controllerA.value.isPlaying
-                          ? Icons.pause_circle
-                          : Icons.play_circle),
-                      onPressed: _togglePlay,
-                    ),
-                    IconButton(
-                      tooltip: 'Both forward one frame',
-                      icon: const Icon(Icons.skip_next),
-                      onPressed: () => _stepBoth(1),
-                    ),
-                    const SizedBox(width: 16),
-                    SpeedMenuButton(
-                      speed: _speed,
-                      onChanged: (s) {
-                        setState(() => _speed = s);
-                        _controllerA.setPlaybackSpeed(s);
-                        _controllerB.setPlaybackSpeed(s);
-                      },
-                    ),
-                    const SizedBox(width: 16),
-                    TextButton.icon(
-                      icon: const Icon(Icons.flag_circle),
-                      label: const Text('Go to release'),
-                      onPressed: () => _seekBoth(_syncA),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-              ],
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
     );
   }

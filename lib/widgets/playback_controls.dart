@@ -5,6 +5,15 @@ import '../utils/time_format.dart';
 
 const kPlaybackSpeeds = [0.1, 0.25, 0.5, 0.75, 1.0];
 
+/// Rounds [position] to the nearest frame boundary so seeks land on exact
+/// frames instead of arbitrary milliseconds between them.
+Duration snapToFrame(Duration position, double fps) {
+  final frameUs = Duration.microsecondsPerSecond / fps;
+  return Duration(
+      microseconds: ((position.inMicroseconds / frameUs).round() * frameUs)
+          .round());
+}
+
 /// Scrubber + transport controls for a single video: play/pause,
 /// frame-by-frame stepping, and slow-motion speed selection.
 class PlaybackControls extends StatelessWidget {
@@ -47,7 +56,8 @@ class PlaybackControls extends StatelessWidget {
               max: duration == 0 ? 1 : duration.toDouble(),
               onChanged: (ms) {
                 controller.pause();
-                controller.seekTo(Duration(milliseconds: ms.round()));
+                controller.seekTo(
+                    snapToFrame(Duration(milliseconds: ms.round()), fps));
               },
             ),
             Row(
