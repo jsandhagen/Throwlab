@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
@@ -63,6 +64,51 @@ class VideoOptimizer {
   /// Abandons the in-flight optimization; the import then keeps the
   /// original file.
   static Future<void> cancel() => FFmpegKit.cancel();
+
+  /// Frame rates probed from the clip's metadata. [playback] is the
+  /// container rate that frame stepping must use; [capture] is the real
+  /// recorded rate — slow-mo clips often play at 30 fps while each frame
+  /// represents 1/240 s of real time, advertised by Android via the
+  /// com.android.capture.fps tag.
+  static Future<({double playback, double capture})?> probeFrameRates(
+      String path) async {
+    try {
+      final session = await FFprobeKit.getMediaInformation(path);
+      final info = session.getMediaInformation();
+      if (info == null) return null;
+      double? playback;
+      double? capture;
+      for (final stream in info.getStreams()) {
+        if (stream.getType() != 'video') continue;
+        playback ??= parseRate(stream.getAverageFrameRate()) ??
+            parseRate(stream.getRealFrameRate());
+        capture ??= parseRate(
+            '${stream.getTags()?['com.android.capture.fps'] ?? ''}');
+      }
+      capture ??=
+          parseRate('${info.getTags()?['com.android.capture.fps'] ?? ''}');
+      if (playback == null) return null;
+      return (
+        playback: playback,
+        capture: math.max(capture ?? playback, playback),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Parses ffprobe rate strings: "240", "240.000000", or "30000/1001".
+  @visibleForTesting
+  static double? parseRate(String? value) {
+    if (value == null || value.isEmpty) return null;
+    final parts = value.split('/');
+    final numerator = double.tryParse(parts[0]);
+    if (numerator == null || numerator <= 0) return null;
+    if (parts.length == 1) return numerator;
+    final denominator = double.tryParse(parts[1]);
+    if (denominator == null || denominator <= 0) return null;
+    return numerator / denominator;
+  }
 
   /// Extracts a still frame for the library list; null when it fails.
   static Future<String?> extractThumbnail(

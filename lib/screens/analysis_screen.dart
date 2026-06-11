@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,8 @@ import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/video_library.dart';
 import '../utils/frame_seeker.dart';
+import '../utils/projectile.dart';
+import '../utils/release_metrics.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
 
@@ -19,7 +22,18 @@ const kAnnotationColors = [
   Colors.white,
 ];
 
-/// Single-throw breakdown: slow motion, frame stepping, and drawing.
+/// Typical release heights (m) used for the vacuum-ballistics predictions.
+const _releaseHeights = {
+  ThrowEvent.shotPut: 2.1,
+  ThrowEvent.discus: 1.5,
+  ThrowEvent.hammer: 1.2,
+  ThrowEvent.javelin: 1.8,
+};
+
+enum _MeasureStep { refA, refB, pointA, pointB }
+
+/// Single-throw breakdown: slow motion, frame stepping, drawing, and
+/// tap-to-measure release metrics.
 class AnalysisScreen extends StatefulWidget {
   const AnalysisScreen({super.key, required this.video});
 
@@ -35,6 +49,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   final DrawingController _drawing = DrawingController();
 
   bool _openFailed = false;
+
+  _MeasureStep? _measureStep;
+  Offset? _refA, _refB, _pointA, _pointB;
+  double _measureDt = 0;
 
   @override
   void initState() {
@@ -67,8 +85,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   Future<void> _editFps() async {
-    final fieldController =
-        TextEditingController(text: widget.video.fps.toStringAsFixed(0));
+    final fieldController = TextEditingController(
+        text: widget.video.captureFps.toStringAsFixed(0));
     final fps = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
@@ -77,8 +95,9 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           controller: fieldController,
           keyboardType: TextInputType.number,
           decoration: const InputDecoration(
-            labelText: 'fps',
-            helperText: 'Slow-motion clips are usually 120 or 240 fps',
+            labelText: 'capture fps',
+            helperText: 'Auto-detected on import; override if the '
+                'slow-mo rate was read wrong (usually 120 or 240)',
           ),
         ),
         actions: [
@@ -95,11 +114,199 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ),
     );
     if (fps != null && fps > 0) {
-      widget.video.fps = fps;
+      widget.video.captureFps = fps;
       if (mounted) {
         await context.read<VideoLibrary>().update(widget.video);
         setState(() {});
       }
+    }
+  }
+
+  // ---- Release measurement ----
+
+  bool get _isJavelin => widget.video.event == ThrowEvent.javelin;
+
+  String get _refWord => switch (widget.video.event) {
+        ThrowEvent.discus => 'disc',
+        ThrowEvent.javelin => 'javelin',
+        _ => 'ball',
+      };
+
+  String get _measureInstruction => switch (_measureStep!) {
+        _MeasureStep.refA => _isJavelin
+            ? 'Pause on the release frame, then tap the javelin TIP'
+            : 'Pause on the release frame, then tap one edge of the '
+                '$_refWord',
+        _MeasureStep.refB => _isJavelin
+            ? 'Now tap the javelin TAIL'
+            : 'Tap the opposite edge of the $_refWord',
+        _MeasureStep.pointA => _isJavelin
+            ? 'Tap the grip (where the hand releases)'
+            : 'Tap the center of the $_refWord',
+        _MeasureStep.pointB =>
+          'Jumped ${(_measureDt * 1000).round()} ms forward — tap the '
+              'same spot on the $_refWord again',
+      };
+
+  void _startMeasure() {
+    if (!_controller.value.isInitialized) return;
+    _controller.pause();
+    setState(() {
+      _refA = _refB = _pointA = _pointB = null;
+      _measureStep = _MeasureStep.refA;
+    });
+  }
+
+  void _cancelMeasure() {
+    setState(() {
+      _measureStep = null;
+      _refA = _refB = _pointA = _pointB = null;
+    });
+  }
+
+  void _onMeasureTap(Offset position) {
+    switch (_measureStep!) {
+      case _MeasureStep.refA:
+        setState(() {
+          _refA = position;
+          _measureStep = _MeasureStep.refB;
+        });
+      case _MeasureStep.refB:
+        setState(() {
+          _refB = position;
+          _measureStep = _MeasureStep.pointA;
+        });
+      case _MeasureStep.pointA:
+        // Jump forward a fixed slice of REAL time (~50 ms) so the speed
+        // math uses the same dt regardless of frame rate. File frames each
+        // represent 1/captureFps s of real time.
+        final frames =
+            math.max(2, (widget.video.captureFps * 0.05).round());
+        _measureDt = frames / widget.video.captureFps;
+        _jogFrames(frames);
+        setState(() {
+          _pointA = position;
+          _measureStep = _MeasureStep.pointB;
+        });
+      case _MeasureStep.pointB:
+        setState(() {
+          _pointB = position;
+          _measureStep = null;
+        });
+        _showResults();
+    }
+  }
+
+  void _showResults() {
+    final metrics = computeReleaseMetrics(
+      refA: _refA!,
+      refB: _refB!,
+      pointA: _pointA!,
+      pointB: _pointB!,
+      referenceMeters: widget.video.implementSpec.nominalSize,
+      dtSeconds: _measureDt,
+      withAttackAngle: _isJavelin,
+    );
+    final event = widget.video.event;
+    final ballistic =
+        event == ThrowEvent.shotPut || event == ThrowEvent.hammer;
+    final height = _releaseHeights[event]!;
+    final optimal =
+        optimalAngleDeg(metrics.speed, releaseHeight: height);
+    final lost = distanceLostToAngle(
+        metrics.speed, metrics.releaseAngleDeg,
+        releaseHeight: height);
+    final predicted = predictedDistance(
+        metrics.speed, metrics.releaseAngleDeg,
+        releaseHeight: height);
+    final attack = metrics.attackAngleDeg;
+
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Release metrics',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              _metricRow('Release speed',
+                  '~${metrics.speed.toStringAsFixed(1)} m/s'),
+              _metricRow('Release angle',
+                  '${metrics.releaseAngleDeg.toStringAsFixed(1)}°'),
+              if (attack != null)
+                _metricRow(
+                    'Angle of attack',
+                    '${attack >= 0 ? '+' : ''}${attack.toStringAsFixed(1)}° '
+                        '(nose ${attack >= 0 ? 'up' : 'down'})'),
+              if (ballistic) ...[
+                _metricRow('Predicted distance',
+                    '~${predicted.toStringAsFixed(2)} m'),
+                _metricRow('Optimal angle',
+                    '${optimal.toStringAsFixed(1)}°'),
+                _metricRow('Lost to angle',
+                    '${lost.toStringAsFixed(2)} m'),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                ballistic
+                    ? 'Estimates assume a side-on tripod and '
+                        '~${height.toStringAsFixed(1)} m release height.'
+                    : 'Distance prediction is skipped for '
+                        '${event.label.toLowerCase()} — aerodynamic '
+                        'lift/drag isn\'t modeled yet. Estimates assume '
+                        'a side-on tripod.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => _saveToNote(metrics),
+                    child: const Text('Save to note'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).whenComplete(_cancelMeasure);
+  }
+
+  Widget _metricRow(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(child: Text(label)),
+            Text(value,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
+
+  Future<void> _saveToNote(ReleaseMetrics metrics) async {
+    final attack = metrics.attackAngleDeg;
+    final summary = '~${metrics.speed.toStringAsFixed(1)} m/s @ '
+        '${metrics.releaseAngleDeg.toStringAsFixed(1)}°'
+        '${attack == null ? '' : ', AoA ${attack >= 0 ? '+' : ''}${attack.toStringAsFixed(1)}°'}';
+    widget.video.note = widget.video.note.isEmpty
+        ? summary
+        : '${widget.video.note} · $summary';
+    await context.read<VideoLibrary>().update(widget.video);
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved to note: $summary')));
     }
   }
 
@@ -112,7 +319,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             '${widget.video.event.label} · ${widget.video.gender.label}'),
         actions: [
           IconButton(
-            tooltip: 'Set frame rate (${widget.video.fps.toStringAsFixed(0)} fps)',
+            tooltip: 'Measure release (speed & angles)',
+            icon: const Icon(Icons.speed),
+            onPressed: _measureStep == null ? _startMeasure : null,
+          ),
+          IconButton(
+            tooltip:
+                'Set capture frame rate (${widget.video.captureFps.toStringAsFixed(0)} fps)',
             icon: const Icon(Icons.shutter_speed),
             onPressed: _editFps,
           ),
@@ -154,12 +367,51 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                   controller: _drawing,
                                   onJogFrames: _jogFrames,
                                 ),
+                                IgnorePointer(
+                                  ignoring: _measureStep == null,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTapUp: (details) =>
+                                        _onMeasureTap(details.localPosition),
+                                    child: CustomPaint(
+                                      size: Size.infinite,
+                                      painter: _MeasurePainter(
+                                        refA: _refA,
+                                        refB: _refB,
+                                        pointA: _pointA,
+                                        pointB: _pointB,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ],
                             ),
                           )
                         : const CircularProgressIndicator(),
               ),
             ),
+            if (_measureStep != null)
+              Material(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.straighten, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_measureInstruction,
+                            style:
+                                Theme.of(context).textTheme.bodyMedium),
+                      ),
+                      TextButton(
+                        onPressed: _cancelMeasure,
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             _DrawingToolbar(controller: _drawing),
             PlaybackControls(
               controller: _controller,
@@ -179,6 +431,51 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       ),
     );
   }
+}
+
+/// Crosshairs and guide lines for the four measurement taps.
+class _MeasurePainter extends CustomPainter {
+  _MeasurePainter({this.refA, this.refB, this.pointA, this.pointB});
+
+  final Offset? refA, refB, pointA, pointB;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final refPaint = Paint()
+      ..color = Colors.lightBlueAccent
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+    final pointPaint = Paint()
+      ..color = Colors.orangeAccent
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke;
+
+    void crosshair(Offset p, Paint paint) {
+      canvas.drawCircle(p, 9, paint);
+      canvas.drawLine(p - const Offset(14, 0), p - const Offset(4, 0), paint);
+      canvas.drawLine(p + const Offset(4, 0), p + const Offset(14, 0), paint);
+      canvas.drawLine(p - const Offset(0, 14), p - const Offset(0, 4), paint);
+      canvas.drawLine(p + const Offset(0, 4), p + const Offset(0, 14), paint);
+    }
+
+    if (refA != null) crosshair(refA!, refPaint);
+    if (refB != null) crosshair(refB!, refPaint);
+    if (refA != null && refB != null) {
+      canvas.drawLine(refA!, refB!, refPaint);
+    }
+    if (pointA != null) crosshair(pointA!, pointPaint);
+    if (pointB != null) crosshair(pointB!, pointPaint);
+    if (pointA != null && pointB != null) {
+      canvas.drawLine(pointA!, pointB!, pointPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MeasurePainter oldDelegate) =>
+      refA != oldDelegate.refA ||
+      refB != oldDelegate.refB ||
+      pointA != oldDelegate.pointA ||
+      pointB != oldDelegate.pointB;
 }
 
 class _DrawingToolbar extends StatelessWidget {

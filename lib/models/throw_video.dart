@@ -9,10 +9,11 @@ class ThrowVideo {
     required this.gender,
     required this.importedAt,
     this.fps = 30,
+    double? captureFps,
     this.note = '',
     this.athlete = '',
     this.thumbnailPath,
-  });
+  }) : captureFps = captureFps ?? fps;
 
   final String id;
   final String path;
@@ -20,9 +21,14 @@ class ThrowVideo {
   final Gender gender;
   final DateTime importedAt;
 
-  /// Recorded frame rate. Drives frame-step size; slow-motion clips are
-  /// typically 120 or 240 fps.
+  /// Container/playback frame rate, probed from metadata on import.
+  /// Drives frame-step size and frame numbering.
   double fps;
+
+  /// Real recorded frame rate — the physics time base. Slow-mo clips often
+  /// play at 30 fps while each stored frame represents 1/240 s of real
+  /// time; equals [fps] for normal clips.
+  double captureFps;
 
   String note;
 
@@ -42,6 +48,7 @@ class ThrowVideo {
         'gender': gender.name,
         'importedAt': importedAt.toIso8601String(),
         'fps': fps,
+        'captureFps': captureFps,
         'note': note,
         'athlete': athlete,
         'thumbnailPath': thumbnailPath,
@@ -54,6 +61,7 @@ class ThrowVideo {
         gender: Gender.values.byName(json['gender'] as String),
         importedAt: DateTime.parse(json['importedAt'] as String),
         fps: (json['fps'] as num?)?.toDouble() ?? 30,
+        captureFps: (json['captureFps'] as num?)?.toDouble(),
         note: json['note'] as String? ?? '',
         athlete: json['athlete'] as String? ?? '',
         thumbnailPath: json['thumbnailPath'] as String?,

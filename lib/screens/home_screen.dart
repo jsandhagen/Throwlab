@@ -104,6 +104,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     final id = DateTime.now().microsecondsSinceEpoch.toString();
+    // Probe the original file: the re-encode preserves frame timing but
+    // drops the slow-mo capture-fps metadata tag.
+    final rates = await VideoOptimizer.probeFrameRates(picked.path);
     final path = await VideoOptimizer.optimizeForScrubbing(
       picked.path,
       id,
@@ -118,6 +121,8 @@ class _HomeScreenState extends State<HomeScreen> {
       event: details.event,
       gender: details.gender,
       importedAt: DateTime.now(),
+      fps: rates?.playback ?? 30,
+      captureFps: rates?.capture,
       athlete: details.athlete,
       thumbnailPath: thumbnail,
     );

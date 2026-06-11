@@ -66,5 +66,28 @@ void main() {
       expect(restored.athlete, '');
       expect(restored.thumbnailPath, isNull);
     });
+
+    test('captureFps round-trips and defaults to fps when missing', () {
+      final slowMo = ThrowVideo(
+        id: '2',
+        path: '/v.mp4',
+        event: ThrowEvent.javelin,
+        gender: Gender.women,
+        importedAt: DateTime.parse('2026-06-11T10:30:00'),
+        fps: 30,
+        captureFps: 240,
+      );
+      expect(ThrowVideo.fromJson(slowMo.toJson()).captureFps, 240);
+
+      final legacy = ThrowVideo.fromJson({
+        'id': '3',
+        'path': '/v.mp4',
+        'event': 'javelin',
+        'gender': 'men',
+        'importedAt': '2026-06-11T10:30:00',
+        'fps': 120,
+      });
+      expect(legacy.captureFps, 120);
+    });
   });
 }
