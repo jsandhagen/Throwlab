@@ -78,11 +78,12 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 const Spacer(),
                 IconButton(
                   tooltip: 'Back one frame',
+                  iconSize: 38,
                   icon: const Icon(Icons.skip_previous),
                   onPressed: () => _stepBy(-1),
                 ),
                 IconButton(
-                  iconSize: 36,
+                  iconSize: 56,
                   icon: Icon(value.isPlaying
                       ? Icons.pause_circle
                       : Icons.play_circle),
@@ -91,6 +92,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 ),
                 IconButton(
                   tooltip: 'Forward one frame',
+                  iconSize: 38,
                   icon: const Icon(Icons.skip_next),
                   onPressed: () => _stepBy(1),
                 ),
@@ -131,9 +133,10 @@ class SpeedMenuButton extends StatelessWidget {
           PopupMenuItem(value: s, child: Text('${s}x')),
       ],
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Text('${speed}x',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 17)),
       ),
     );
   }

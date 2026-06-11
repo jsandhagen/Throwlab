@@ -38,6 +38,8 @@ void main() {
         importedAt: DateTime.parse('2026-06-11T10:30:00'),
         fps: 240,
         note: 'PB attempt',
+        athlete: 'Sam',
+        thumbnailPath: '/thumbs/42.jpg',
       );
       final restored = ThrowVideo.fromJson(video.toJson());
       expect(restored.id, video.id);
@@ -47,6 +49,8 @@ void main() {
       expect(restored.importedAt, video.importedAt);
       expect(restored.fps, video.fps);
       expect(restored.note, video.note);
+      expect(restored.athlete, video.athlete);
+      expect(restored.thumbnailPath, video.thumbnailPath);
     });
 
     test('defaults fps to 30 when missing from stored JSON', () {
@@ -59,6 +63,8 @@ void main() {
       });
       expect(restored.fps, 30);
       expect(restored.note, '');
+      expect(restored.athlete, '');
+      expect(restored.thumbnailPath, isNull);
     });
   });
 }

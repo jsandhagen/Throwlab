@@ -10,6 +10,8 @@ class ThrowVideo {
     required this.importedAt,
     this.fps = 30,
     this.note = '',
+    this.athlete = '',
+    this.thumbnailPath,
   });
 
   final String id;
@@ -24,6 +26,13 @@ class ThrowVideo {
 
   String note;
 
+  /// Who threw it; empty when not assigned to anyone.
+  String athlete;
+
+  /// Still frame extracted on import; null for videos imported before
+  /// thumbnails existed or when extraction failed.
+  String? thumbnailPath;
+
   ImplementSpec get implementSpec => event.specFor(gender);
 
   Map<String, dynamic> toJson() => {
@@ -34,6 +43,8 @@ class ThrowVideo {
         'importedAt': importedAt.toIso8601String(),
         'fps': fps,
         'note': note,
+        'athlete': athlete,
+        'thumbnailPath': thumbnailPath,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -44,5 +55,7 @@ class ThrowVideo {
         importedAt: DateTime.parse(json['importedAt'] as String),
         fps: (json['fps'] as num?)?.toDouble() ?? 30,
         note: json['note'] as String? ?? '',
+        athlete: json['athlete'] as String? ?? '',
+        thumbnailPath: json['thumbnailPath'] as String?,
       );
 }

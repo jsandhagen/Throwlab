@@ -223,11 +223,12 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                     children: [
                       IconButton(
                         tooltip: 'Both back one frame',
+                        iconSize: 38,
                         icon: const Icon(Icons.skip_previous),
                         onPressed: () => _stepBoth(-1),
                       ),
                       IconButton(
-                        iconSize: 40,
+                        iconSize: 56,
                         icon: Icon(_controllerA.value.isPlaying
                             ? Icons.pause_circle
                             : Icons.play_circle),
@@ -235,6 +236,7 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                       ),
                       IconButton(
                         tooltip: 'Both forward one frame',
+                        iconSize: 38,
                         icon: const Icon(Icons.skip_next),
                         onPressed: () => _stepBoth(1),
                       ),

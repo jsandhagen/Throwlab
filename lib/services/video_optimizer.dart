@@ -28,4 +28,22 @@ class VideoOptimizer {
     }
     return outPath;
   }
+
+  /// Extracts a still frame for the library list; null when it fails.
+  static Future<String?> extractThumbnail(
+      String videoPath, String id) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/throws');
+    await dir.create(recursive: true);
+    final outPath = '${dir.path}/$id.jpg';
+    final session = await FFmpegKit.execute(
+      '-y -ss 0.3 -i "$videoPath" -frames:v 1 -vf scale=480:-2 '
+      '-q:v 4 "$outPath"',
+    );
+    if (!ReturnCode.isSuccess(await session.getReturnCode())) {
+      File(outPath).delete().ignore();
+      return null;
+    }
+    return outPath;
+  }
 }

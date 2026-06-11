@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +12,8 @@ import '../services/video_optimizer.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
+enum LibraryGrouping { athlete, event }
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -19,6 +23,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int? _availableBuild;
+  LibraryGrouping _grouping = LibraryGrouping.athlete;
 
   @override
   void initState() {
@@ -62,7 +67,8 @@ class _HomeScreenState extends State<HomeScreen> {
         await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (picked == null || !mounted) return;
 
-    final details = await showDialog<({ThrowEvent event, Gender gender})>(
+    final details = await showDialog<
+        ({ThrowEvent event, Gender gender, String athlete})>(
       context: context,
       builder: (context) => const _ImportDialog(),
     );
@@ -89,6 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     final path =
         await VideoOptimizer.optimizeForScrubbing(picked.path, id);
+    final thumbnail = await VideoOptimizer.extractThumbnail(path, id);
     if (mounted) Navigator.pop(context);
 
     final video = ThrowVideo(
@@ -97,6 +104,8 @@ class _HomeScreenState extends State<HomeScreen> {
       event: details.event,
       gender: details.gender,
       importedAt: DateTime.now(),
+      athlete: details.athlete,
+      thumbnailPath: thumbnail,
     );
     await library.add(video);
     if (mounted) {
@@ -136,6 +145,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ThrowEvent.hammer => Colors.purpleAccent,
         ThrowEvent.javelin => Colors.lightBlueAccent,
       };
+
+  Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
+    final map = <String, List<ThrowVideo>>{};
+    for (final video in videos) {
+      final key = _grouping == LibraryGrouping.athlete
+          ? (video.athlete.isEmpty ? 'Unassigned' : video.athlete)
+          : video.event.label;
+      map.putIfAbsent(key, () => []).add(video);
+    }
+    final keys = map.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return {for (final k in keys) k: map[k]!};
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -187,60 +209,53 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (library.videos.isEmpty) {
                     return const _EmptyState();
                   }
-                  return ListView.builder(
+                  final groups = _grouped(library.videos);
+                  return ListView(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-                    itemCount: library.videos.length,
-                    itemBuilder: (context, index) {
-                      final video = library.videos[index];
-                      final color = _eventColor(video.event);
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        child: ListTile(
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        leading: CircleAvatar(
-                          backgroundColor: color.withOpacity(0.18),
-                          child: Icon(video.event.icon, color: color),
-                        ),
-                        title: Text(
-                            '${video.event.label} · ${video.gender.label}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600)),
-                        subtitle: Text(
-                          '${video.importedAt.toLocal().toString().substring(0, 16)}'
-                          '${video.note.isEmpty ? '' : ' — ${video.note}'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (action) async {
-                            if (action == 'note') {
-                              final note =
-                                  await _editNote(context, video.note);
-                              if (note != null) {
-                                video.note = note;
-                                await library.update(video);
-                              }
-                            } else if (action == 'delete') {
-                              await library.remove(video.id);
-                            }
-                          },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                                value: 'note', child: Text('Edit note')),
-                            PopupMenuItem(
-                                value: 'delete', child: Text('Delete')),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: SegmentedButton<LibraryGrouping>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(
+                                value: LibraryGrouping.athlete,
+                                icon: Icon(Icons.person),
+                                label: Text('By athlete')),
+                            ButtonSegment(
+                                value: LibraryGrouping.event,
+                                icon: Icon(Icons.category),
+                                label: Text('By event')),
                           ],
+                          selected: {_grouping},
+                          onSelectionChanged: (selection) => setState(
+                              () => _grouping = selection.first),
                         ),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  AnalysisScreen(video: video)),
+                      ),
+                      for (final entry in groups.entries)
+                        Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          clipBehavior: Clip.antiAlias,
+                          child: ExpansionTile(
+                            initiallyExpanded: true,
+                            shape: const Border(),
+                            leading: Icon(
+                                _grouping == LibraryGrouping.athlete
+                                    ? Icons.person
+                                    : entry.value.first.event.icon),
+                            title: Text(entry.key,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                                '${entry.value.length} '
+                                'throw${entry.value.length == 1 ? '' : 's'}'),
+                            children: [
+                              for (final video in entry.value)
+                                _videoTile(context, video),
+                            ],
+                          ),
                         ),
-                        ),
-                      );
-                    },
+                    ],
                   );
                 },
               ),
@@ -256,16 +271,83 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<String?> _editNote(BuildContext context, String current) {
+  Widget _videoTile(BuildContext context, ThrowVideo video) {
+    final library = context.read<VideoLibrary>();
+    final title = _grouping == LibraryGrouping.athlete
+        ? '${video.event.label} · ${video.gender.label}'
+        : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete} '
+            '· ${video.gender.label}';
+    return ListTile(
+      leading: _thumbnail(video),
+      title: Text(title,
+          style: const TextStyle(fontWeight: FontWeight.w500)),
+      subtitle: Text(
+        '${video.importedAt.toLocal().toString().substring(0, 16)}'
+        '${video.note.isEmpty ? '' : ' — ${video.note}'}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (action) async {
+          if (action == 'note') {
+            final note = await _editText(
+                context, 'Note', video.note,
+                'e.g. "PB attempt, slight headwind"');
+            if (note != null) {
+              video.note = note;
+              await library.update(video);
+            }
+          } else if (action == 'athlete') {
+            final name = await _editText(
+                context, 'Athlete', video.athlete, 'e.g. "Sam"');
+            if (name != null) {
+              video.athlete = name.trim();
+              await library.update(video);
+            }
+          } else if (action == 'delete') {
+            await library.remove(video.id);
+          }
+        },
+        itemBuilder: (context) => const [
+          PopupMenuItem(value: 'athlete', child: Text('Set athlete')),
+          PopupMenuItem(value: 'note', child: Text('Edit note')),
+          PopupMenuItem(value: 'delete', child: Text('Delete')),
+        ],
+      ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
+      ),
+    );
+  }
+
+  Widget _thumbnail(ThrowVideo video) {
+    final color = _eventColor(video.event);
+    final path = video.thumbnailPath;
+    if (path != null && File(path).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(File(path),
+            width: 72, height: 48, fit: BoxFit.cover),
+      );
+    }
+    return CircleAvatar(
+      backgroundColor: color.withOpacity(0.18),
+      child: Icon(video.event.icon, color: color),
+    );
+  }
+
+  Future<String?> _editText(BuildContext context, String title,
+      String current, String hint) {
     final controller = TextEditingController(text: current);
     return showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Note'),
+        title: Text(title),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-              hintText: 'e.g. "PB attempt, slight headwind"'),
+          autofocus: true,
+          decoration: InputDecoration(hintText: hint),
         ),
         actions: [
           TextButton(
@@ -319,6 +401,13 @@ class _ImportDialog extends StatefulWidget {
 class _ImportDialogState extends State<_ImportDialog> {
   ThrowEvent _event = ThrowEvent.shotPut;
   Gender _gender = Gender.men;
+  final TextEditingController _athlete = TextEditingController();
+
+  @override
+  void dispose() {
+    _athlete.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -329,6 +418,15 @@ class _ImportDialogState extends State<_ImportDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          TextField(
+            controller: _athlete,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(
+              labelText: 'Athlete',
+              hintText: 'Who threw it (optional)',
+            ),
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<ThrowEvent>(
             value: _event,
             decoration: const InputDecoration(labelText: 'Event'),
@@ -362,8 +460,11 @@ class _ImportDialogState extends State<_ImportDialog> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel')),
         TextButton(
-          onPressed: () =>
-              Navigator.pop(context, (event: _event, gender: _gender)),
+          onPressed: () => Navigator.pop(context, (
+            event: _event,
+            gender: _gender,
+            athlete: _athlete.text.trim(),
+          )),
           child: const Text('Import'),
         ),
       ],
@@ -396,6 +497,7 @@ class _ComparePickerDialogState extends State<_ComparePickerDialog> {
               CheckboxListTile(
                 value: _selected.contains(video),
                 title: Text(
+                    '${video.athlete.isEmpty ? '' : '${video.athlete} · '}'
                     '${video.event.label} · ${video.gender.label}'),
                 subtitle: Text(video.importedAt
                     .toLocal()

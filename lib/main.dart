@@ -31,6 +31,7 @@ class ThrowLabApp extends StatelessWidget {
           ),
           sliderTheme: const SliderThemeData(
             showValueIndicator: ShowValueIndicator.never,
+            trackHeight: 6,
           ),
           cardTheme: CardThemeData(
             elevation: 0,
