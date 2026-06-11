@@ -4,18 +4,62 @@ import 'package:provider/provider.dart';
 
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  Future<void> _importVideo(BuildContext context) async {
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int? _availableBuild;
+
+  @override
+  void initState() {
+    super.initState();
+    AppUpdater.checkForUpdate().then((build) {
+      if (mounted && build != null) {
+        setState(() => _availableBuild = build);
+      }
+    });
+  }
+
+  Future<void> _installUpdate() async {
+    final progress = ValueNotifier<double?>(null);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Downloading update'),
+        content: ValueListenableBuilder<double?>(
+          valueListenable: progress,
+          builder: (context, value, _) =>
+              LinearProgressIndicator(value: value),
+        ),
+      ),
+    );
+    try {
+      await AppUpdater.downloadAndInstall((p) => progress.value = p);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      }
+    } finally {
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  Future<void> _importVideo() async {
     final library = context.read<VideoLibrary>();
     final picked =
         await ImagePicker().pickVideo(source: ImageSource.gallery);
-    if (picked == null || !context.mounted) return;
+    if (picked == null || !mounted) return;
 
     final details = await showDialog<({ThrowEvent event, Gender gender})>(
       context: context,
@@ -31,7 +75,7 @@ class HomeScreen extends StatelessWidget {
       importedAt: DateTime.now(),
     );
     await library.add(video);
-    if (context.mounted) {
+    if (mounted) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
@@ -39,7 +83,7 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _startComparison(BuildContext context) async {
+  Future<void> _startComparison() async {
     final library = context.read<VideoLibrary>();
     final videos = library.videos;
     if (videos.length < 2) {
@@ -51,7 +95,7 @@ class HomeScreen extends StatelessWidget {
       context: context,
       builder: (context) => _ComparePickerDialog(videos: videos),
     );
-    if (selection != null && selection.length == 2 && context.mounted) {
+    if (selection != null && selection.length == 2 && mounted) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -71,66 +115,93 @@ class HomeScreen extends StatelessWidget {
           IconButton(
             tooltip: 'Compare two throws',
             icon: const Icon(Icons.compare),
-            onPressed: () => _startComparison(context),
+            onPressed: _startComparison,
           ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: Consumer<VideoLibrary>(
-        builder: (context, library, _) {
-          if (!library.isLoaded) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (library.videos.isEmpty) {
-            return const _EmptyState();
-          }
-          return ListView.builder(
-            itemCount: library.videos.length,
-            itemBuilder: (context, index) {
-              final video = library.videos[index];
-              return ListTile(
-                leading: CircleAvatar(child: Icon(video.event.icon)),
-                title: Text(
-                    '${video.event.label} · ${video.gender.label}'),
-                subtitle: Text(
-                  '${video.importedAt.toLocal().toString().substring(0, 16)}'
-                  '${video.note.isEmpty ? '' : ' — ${video.note}'}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (action) async {
-                    if (action == 'note') {
-                      final note = await _editNote(context, video.note);
-                      if (note != null) {
-                        video.note = note;
-                        await library.update(video);
-                      }
-                    } else if (action == 'delete') {
-                      await library.remove(video.id);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'note', child: Text('Edit note')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                ),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => AnalysisScreen(video: video)),
-                ),
-              );
-            },
-          );
-          },
+        child: Column(
+          children: [
+            if (_availableBuild != null)
+              MaterialBanner(
+                leading: const Icon(Icons.system_update),
+                content: const Text('A new version of ThrowLab is ready.'),
+                actions: [
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _availableBuild = null),
+                    child: const Text('Later'),
+                  ),
+                  FilledButton(
+                    onPressed: _installUpdate,
+                    child: const Text('Update'),
+                  ),
+                ],
+              ),
+            Expanded(
+              child: Consumer<VideoLibrary>(
+                builder: (context, library, _) {
+                  if (!library.isLoaded) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (library.videos.isEmpty) {
+                    return const _EmptyState();
+                  }
+                  return ListView.builder(
+                    itemCount: library.videos.length,
+                    itemBuilder: (context, index) {
+                      final video = library.videos[index];
+                      return ListTile(
+                        leading:
+                            CircleAvatar(child: Icon(video.event.icon)),
+                        title: Text(
+                            '${video.event.label} · ${video.gender.label}'),
+                        subtitle: Text(
+                          '${video.importedAt.toLocal().toString().substring(0, 16)}'
+                          '${video.note.isEmpty ? '' : ' — ${video.note}'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (action) async {
+                            if (action == 'note') {
+                              final note =
+                                  await _editNote(context, video.note);
+                              if (note != null) {
+                                video.note = note;
+                                await library.update(video);
+                              }
+                            } else if (action == 'delete') {
+                              await library.remove(video.id);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                                value: 'note', child: Text('Edit note')),
+                            PopupMenuItem(
+                                value: 'delete', child: Text('Delete')),
+                          ],
+                        ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  AnalysisScreen(video: video)),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.video_library),
         label: const Text('Import throw'),
-        onPressed: () => _importVideo(context),
+        onPressed: _importVideo,
       ),
     );
   }

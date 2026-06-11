@@ -26,6 +26,10 @@ Every push to `main` builds an installable APK via GitHub Actions:
    (first time only: allow installs from your browser under
    Settings → Apps → Special app access → Install unknown apps)
 
+After the first install the app updates itself: on launch it checks the
+latest release and shows an **Update** banner that downloads and installs
+the new build in-app (Android still asks you to confirm the install).
+
 Updates install straight over the old version — builds are signed with the
 repo's committed debug keystore (`.github/android-debug.keystore`), which is
 for personal sideloading only, not Play Store distribution.

@@ -38,9 +38,17 @@ jobs:
         run: mkdir -p ~/.android && cp .github/android-debug.keystore ~/.android/debug.keystore
       - name: Generate Android platform folder
         run: flutter create . --platforms=android --project-name throwlab
+      # The in-app updater downloads the new APK (INTERNET) and hands it to
+      # the system installer (REQUEST_INSTALL_PACKAGES).
+      - name: Add updater permissions to manifest
+        run: |
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application|' android/app/src/main/AndroidManifest.xml
       - run: flutter pub get
-      - run: flutter build apk --release
+      # The run number becomes the APK's build number; the same number is
+      # published as version.txt so installed apps can detect newer builds.
+      - run: flutter build apk --release --build-number=${{ github.run_number }}
       - run: cp build/app/outputs/flutter-apk/app-release.apk ThrowLab.apk
+      - run: echo "${{ github.run_number }}" > version.txt
       - uses: actions/upload-artifact@v4
         with:
           name: ThrowLab-apk
@@ -51,6 +59,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --cleanup-tag -y || true
-          gh release create latest ThrowLab.apk \
-            --title "ThrowLab — latest build" \
-            --notes "APK built from main at ${GITHUB_SHA::7}. On your phone, download **ThrowLab.apk** below, open it, and allow the install."
+          gh release create latest ThrowLab.apk version.txt \
+            --title "ThrowLab — build ${{ github.run_number }}" \
+            --notes "APK built from main at ${GITHUB_SHA::7}. On your phone, download **ThrowLab.apk** below, open it, and allow the install. Installed apps offer this update automatically on launch."
