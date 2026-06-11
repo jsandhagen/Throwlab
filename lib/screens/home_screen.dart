@@ -6,6 +6,7 @@ import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
+import '../services/video_optimizer.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
@@ -65,11 +66,34 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => const _ImportDialog(),
     );
-    if (details == null) return;
+    if (details == null || !mounted) return;
+
+    // Re-encode for instant frame seeks; this is the slow part of importing.
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const AlertDialog(
+        title: Text('Optimizing video'),
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 20),
+            Expanded(
+                child: Text('Re-encoding for smooth frame-by-frame '
+                    'scrubbing. This can take a moment for long or '
+                    'high-fps clips.')),
+          ],
+        ),
+      ),
+    );
+    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final path =
+        await VideoOptimizer.optimizeForScrubbing(picked.path, id);
+    if (mounted) Navigator.pop(context);
 
     final video = ThrowVideo(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      path: picked.path,
+      id: id,
+      path: path,
       event: details.event,
       gender: details.gender,
       importedAt: DateTime.now(),
