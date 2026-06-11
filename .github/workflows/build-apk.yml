@@ -32,10 +32,6 @@ jobs:
         with:
           channel: stable
           cache: true
-      # Use the keystore committed in the repo so every build has the same
-      # signature — otherwise Android refuses to update over a previous install.
-      - name: Install signing key
-        run: mkdir -p ~/.android && cp .github/android-debug.keystore ~/.android/debug.keystore
       - name: Generate Android platform folder
         run: flutter create . --platforms=android --project-name throwlab
       # The in-app updater downloads the new APK (INTERNET) and hands it to
@@ -47,7 +43,22 @@ jobs:
       # The run number becomes the APK's build number; the same number is
       # published as version.txt so installed apps can detect newer builds.
       - run: flutter build apk --release --build-number=${{ github.run_number }}
-      - run: cp build/app/outputs/flutter-apk/app-release.apk ThrowLab.apk
+      # Gradle signs with a debug keystore generated per-runner, which changes
+      # the signature every build and makes Android reject updates over the
+      # previous install. Re-sign deterministically with the repo keystore,
+      # then fail the build if the certificate isn't the expected one.
+      - name: Re-sign APK with repo keystore
+        run: |
+          TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$TOOLS/apksigner" sign \
+            --ks .github/android-debug.keystore \
+            --ks-pass pass:android \
+            --ks-key-alias androiddebugkey \
+            --key-pass pass:android \
+            --out ThrowLab.apk \
+            build/app/outputs/flutter-apk/app-release.apk
+          "$TOOLS/apksigner" verify --print-certs ThrowLab.apk | tee certs.txt
+          grep -qi "2f1b1bc1341cc66aa69cd85e4cf72019a1b534895729978fa7b9bf0c73db6bab" certs.txt
       - run: echo "${{ github.run_number }}" > version.txt
       - uses: actions/upload-artifact@v4
         with:
