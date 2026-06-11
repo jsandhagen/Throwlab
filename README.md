@@ -16,7 +16,21 @@ This is the v0.1 scaffold focused on the core coaching workflow:
 
 The full feature plan (detection/calibration, release metrics, event-specific analysis, pose estimation, progress tracking, coach tools, export) lives in [ROADMAP.md](ROADMAP.md).
 
-## Getting started
+## Install on Android (no computer needed)
+
+Every push to `main` builds an installable APK via GitHub Actions:
+
+1. On your phone, open the repo's [**latest release**](https://github.com/jsandhagen/Throwlab/releases/tag/latest)
+2. Download **ThrowLab.apk**
+3. Open the downloaded file and allow the install when Android asks
+   (first time only: allow installs from your browser under
+   Settings → Apps → Special app access → Install unknown apps)
+
+Updates install straight over the old version — builds are signed with the
+repo's committed debug keystore (`.github/android-debug.keystore`), which is
+for personal sideloading only, not Play Store distribution.
+
+## Getting started (local development)
 
 This repo contains the Dart/Flutter source. Generate the platform folders, fetch packages, and run:
 
