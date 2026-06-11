@@ -23,9 +23,15 @@ class VideoLibrary extends ChangeNotifier {
     final raw = prefs.getString(_storageKey);
     _videos.clear();
     if (raw != null) {
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      _videos.addAll(decoded
-          .map((e) => ThrowVideo.fromJson(e as Map<String, dynamic>)));
+      try {
+        final decoded = jsonDecode(raw) as List<dynamic>;
+        _videos.addAll(decoded
+            .map((e) => ThrowVideo.fromJson(e as Map<String, dynamic>)));
+      } catch (_) {
+        // Corrupt store: recover with an empty library instead of leaving
+        // the app stuck on the loading spinner.
+        _videos.clear();
+      }
     }
     _loaded = true;
     notifyListeners();

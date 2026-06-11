@@ -34,13 +34,20 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   late final FrameSeeker _seeker = FrameSeeker(_controller);
   final DrawingController _drawing = DrawingController();
 
+  bool _openFailed = false;
+
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.file(File(widget.video.path))
-      ..initialize().then((_) {
+    _openFailed = !File(widget.video.path).existsSync();
+    _controller = VideoPlayerController.file(File(widget.video.path));
+    if (!_openFailed) {
+      _controller.initialize().then((_) {
         if (mounted) setState(() {});
+      }).catchError((Object _) {
+        if (mounted) setState(() => _openFailed = true);
       });
+    }
   }
 
   @override
@@ -126,21 +133,31 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               child: Container(
                 color: Colors.black,
                 alignment: Alignment.center,
-                child: _controller.value.isInitialized
-                    ? AspectRatio(
-                        aspectRatio: _controller.value.aspectRatio,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            VideoPlayer(_controller),
-                            DrawingCanvas(
-                              controller: _drawing,
-                              onJogFrames: _jogFrames,
-                            ),
-                          ],
+                child: _openFailed || _controller.value.hasError
+                    ? const Padding(
+                        padding: EdgeInsets.all(32),
+                        child: Text(
+                          'Couldn\'t open this video — the file may have '
+                          'been removed from the device. Delete this entry '
+                          'and re-import the clip.',
+                          textAlign: TextAlign.center,
                         ),
                       )
-                    : const CircularProgressIndicator(),
+                    : _controller.value.isInitialized
+                        ? AspectRatio(
+                            aspectRatio: _controller.value.aspectRatio,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                VideoPlayer(_controller),
+                                DrawingCanvas(
+                                  controller: _drawing,
+                                  onJogFrames: _jogFrames,
+                                ),
+                              ],
+                            ),
+                          )
+                        : const CircularProgressIndicator(),
               ),
             ),
             _DrawingToolbar(controller: _drawing),

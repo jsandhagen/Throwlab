@@ -75,26 +75,40 @@ class _HomeScreenState extends State<HomeScreen> {
     if (details == null || !mounted) return;
 
     // Re-encode for instant frame seeks; this is the slow part of importing.
+    final encodeProgress = ValueNotifier<double?>(null);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const AlertDialog(
-        title: Text('Optimizing video'),
-        content: Row(
+      builder: (context) => AlertDialog(
+        title: const Text('Optimizing video'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(width: 20),
-            Expanded(
-                child: Text('Re-encoding for smooth frame-by-frame '
-                    'scrubbing. This can take a moment for long or '
-                    'high-fps clips.')),
+            ValueListenableBuilder<double?>(
+              valueListenable: encodeProgress,
+              builder: (context, value, _) =>
+                  LinearProgressIndicator(value: value),
+            ),
+            const SizedBox(height: 16),
+            const Text('Re-encoding for instant frame-by-frame '
+                'scrubbing. Long or high-fps clips take a few minutes.'),
           ],
         ),
+        actions: [
+          TextButton(
+            onPressed: VideoOptimizer.cancel,
+            child: const Text('Skip'),
+          ),
+        ],
       ),
     );
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final path =
-        await VideoOptimizer.optimizeForScrubbing(picked.path, id);
+    final path = await VideoOptimizer.optimizeForScrubbing(
+      picked.path,
+      id,
+      onProgress: (p) => encodeProgress.value = p,
+    );
     final thumbnail = await VideoOptimizer.extractThumbnail(path, id);
     if (mounted) Navigator.pop(context);
 

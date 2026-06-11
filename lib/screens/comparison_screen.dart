@@ -43,9 +43,11 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
   void initState() {
     super.initState();
     _controllerA = VideoPlayerController.file(File(widget.videoA.path))
-      ..initialize().then((_) => mounted ? setState(() {}) : null);
+      ..initialize().then((_) => mounted ? setState(() {}) : null)
+          .catchError((Object _) => mounted ? setState(() {}) : null);
     _controllerB = VideoPlayerController.file(File(widget.videoB.path))
-      ..initialize().then((_) => mounted ? setState(() {}) : null);
+      ..initialize().then((_) => mounted ? setState(() {}) : null)
+          .catchError((Object _) => mounted ? setState(() {}) : null);
   }
 
   @override
@@ -56,7 +58,8 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
   }
 
   bool get _ready =>
-      _controllerA.value.isInitialized && _controllerB.value.isInitialized;
+      (_controllerA.value.isInitialized || _controllerA.value.hasError) &&
+      (_controllerB.value.isInitialized || _controllerB.value.hasError);
 
   Duration _clampToDuration(Duration position, VideoPlayerController c) =>
       Duration(
@@ -97,12 +100,22 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
     setState(() {});
   }
 
-  Widget _player(VideoPlayerController controller) => controller
-          .value.isInitialized
-      ? AspectRatio(
-          aspectRatio: controller.value.aspectRatio,
-          child: VideoPlayer(controller))
-      : const Center(child: CircularProgressIndicator());
+  Widget _player(VideoPlayerController controller) {
+    if (controller.value.hasError) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text('Couldn\'t open this video — the file may have '
+              'been removed. Re-import the clip.'),
+        ),
+      );
+    }
+    return controller.value.isInitialized
+        ? AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: VideoPlayer(controller))
+        : const Center(child: CircularProgressIndicator());
+  }
 
   Widget _syncRow(String label, FrameSeeker seeker, double fps,
       Duration sync, ValueChanged<Duration> onSet) {
