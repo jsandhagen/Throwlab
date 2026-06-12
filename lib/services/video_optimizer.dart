@@ -40,8 +40,13 @@ class VideoOptimizer {
 
     final done = Completer<bool>();
     await FFmpegKit.executeAsync(
-      '-y -i "$srcPath" -vf scale=-2:min(1080\\,ih) -c:v libx264 '
-      '-preset ultrafast -tune fastdecode -crf 21 -g 1 -bf 0 '
+      // superfast (not ultrafast) keeps CABAC and the deblocking filter
+      // on, and CRF 17 compensates for intra-only frames rating worse
+      // than inter ones at equal CRF; lanczos keeps 4K downscales sharp.
+      // 1440p (not 1080) keeps detail for pinch-zoom while staying well
+      // under the cost of all-intra 4K.
+      '-y -i "$srcPath" -vf scale=-2:min(1440\\,ih):flags=lanczos '
+      '-c:v libx264 -preset superfast -crf 17 -g 1 -bf 0 '
       '-pix_fmt yuv420p -c:a copy "$outPath"',
       (session) async {
         done.complete(ReturnCode.isSuccess(await session.getReturnCode()));
