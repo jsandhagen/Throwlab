@@ -969,18 +969,23 @@ class _MeasurePainter extends CustomPainter {
       canvas.drawLine(p + const Offset(4, 0), p + const Offset(14, 0), paint);
       canvas.drawLine(p - const Offset(0, 14), p - const Offset(0, 4), paint);
       canvas.drawLine(p + const Offset(0, 4), p + const Offset(0, 14), paint);
+      // Filled center dot over a dark halo: the exact measured point,
+      // readable against both bright sky and the implement itself.
+      canvas.drawCircle(p, 3, Paint()..color = Colors.black54);
+      canvas.drawCircle(p, 1.8, Paint()..color = paint.color);
     }
 
-    if (refA != null) crosshair(refA!, refPaint);
-    if (refB != null) crosshair(refB!, refPaint);
+    // Lines first so the precise center dots stay visible on top.
     if (refA != null && refB != null) {
       canvas.drawLine(refA!, refB!, refPaint);
     }
-    if (pointA != null) crosshair(pointA!, pointPaint);
-    if (pointB != null) crosshair(pointB!, pointPaint);
     if (pointA != null && pointB != null) {
       canvas.drawLine(pointA!, pointB!, pointPaint);
     }
+    if (refA != null) crosshair(refA!, refPaint);
+    if (refB != null) crosshair(refB!, refPaint);
+    if (pointA != null) crosshair(pointA!, pointPaint);
+    if (pointB != null) crosshair(pointB!, pointPaint);
   }
 
   @override
