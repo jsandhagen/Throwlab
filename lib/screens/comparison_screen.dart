@@ -12,8 +12,9 @@ import '../widgets/playback_controls.dart';
 enum ComparisonMode { sideBySide, overlay }
 
 /// Compares two throws. Scrub each video to its release frame and set the
-/// sync point; after that, all transport controls drive both videos with the
-/// release frames aligned.
+/// sync point; once both are set the clips link automatically and a single
+/// scrubber (plus all transport controls) drives both videos with the
+/// release frames aligned. The link can be toggled to re-adjust one clip.
 class ComparisonScreen extends StatefulWidget {
   const ComparisonScreen({super.key, required this.videoA, required this.videoB});
 
@@ -33,9 +34,19 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
   ComparisonMode _mode = ComparisonMode.sideBySide;
   double _overlayOpacity = 0.5;
   double _speed = 0.5;
+  bool _linked = false;
 
   Duration _syncA = Duration.zero;
   Duration _syncB = Duration.zero;
+
+  void _setSync({Duration? a, Duration? b}) {
+    setState(() {
+      _syncA = a ?? _syncA;
+      _syncB = b ?? _syncB;
+      // Both release frames marked → start driving the clips together.
+      if (_syncA != Duration.zero && _syncB != Duration.zero) _linked = true;
+    });
+  }
 
   double get _fps => widget.videoA.fps;
 
@@ -158,8 +169,40 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
     );
   }
 
+  /// Single scrubber shown while linked: drags both videos through their
+  /// sync points on A's timeline.
+  Widget _linkedRow() {
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: _controllerA,
+      builder: (context, value, _) {
+        final durationMs = value.duration.inMilliseconds;
+        return Row(
+          children: [
+            const SizedBox(width: 12),
+            const Icon(Icons.link, size: 18),
+            const SizedBox(width: 6),
+            const Text('A·B', style: TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Slider(
+                value: value.position.inMilliseconds
+                    .clamp(0, durationMs)
+                    .toDouble(),
+                max: durationMs == 0 ? 1 : durationMs.toDouble(),
+                onChanged: (ms) => _seekBoth(snapToFrame(
+                    Duration(milliseconds: ms.round()), widget.videoA.fps)),
+              ),
+            ),
+            const SizedBox(width: 12),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -195,13 +238,23 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                       color: Colors.black,
                       alignment: Alignment.center,
                       child: _mode == ComparisonMode.sideBySide
-                          ? Column(
-                              children: [
-                                Expanded(child: _player(_controllerA)),
-                                const Divider(height: 2),
-                                Expanded(child: _player(_controllerB)),
-                              ],
-                            )
+                          // Split along the screen's long edge so each
+                          // video gets a usable size in both orientations.
+                          ? (landscape
+                              ? Row(
+                                  children: [
+                                    Expanded(child: _player(_controllerA)),
+                                    const VerticalDivider(width: 2),
+                                    Expanded(child: _player(_controllerB)),
+                                  ],
+                                )
+                              : Column(
+                                  children: [
+                                    Expanded(child: _player(_controllerA)),
+                                    const Divider(height: 2),
+                                    Expanded(child: _player(_controllerB)),
+                                  ],
+                                ))
                           : Stack(
                               alignment: Alignment.center,
                               children: [
@@ -229,10 +282,29 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                         const SizedBox(width: 12),
                       ],
                     ),
-                  _syncRow('A', _seekerA, widget.videoA.fps, _syncA,
-                      (d) => setState(() => _syncA = d)),
-                  _syncRow('B', _seekerB, widget.videoB.fps, _syncB,
-                      (d) => setState(() => _syncB = d)),
+                  // Landscape height is scarce: the sync rows share a line
+                  // there instead of stacking.
+                  if (_linked)
+                    _linkedRow()
+                  else if (landscape)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _syncRow('A', _seekerA, widget.videoA.fps,
+                              _syncA, (d) => _setSync(a: d)),
+                        ),
+                        Expanded(
+                          child: _syncRow('B', _seekerB, widget.videoB.fps,
+                              _syncB, (d) => _setSync(b: d)),
+                        ),
+                      ],
+                    )
+                  else ...[
+                    _syncRow('A', _seekerA, widget.videoA.fps, _syncA,
+                        (d) => _setSync(a: d)),
+                    _syncRow('B', _seekerB, widget.videoB.fps, _syncB,
+                        (d) => _setSync(b: d)),
+                  ],
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -255,7 +327,16 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                         icon: const Icon(Icons.skip_next),
                         onPressed: () => _stepBoth(1),
                       ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        tooltip: _linked
+                            ? 'Unlink: scrub A and B separately'
+                            : 'Link A and B: one scrubber drives both',
+                        isSelected: _linked,
+                        icon: Icon(_linked ? Icons.link : Icons.link_off),
+                        onPressed: () => setState(() => _linked = !_linked),
+                      ),
+                      const SizedBox(width: 8),
                       SpeedMenuButton(
                         speed: _speed,
                         onChanged: (s) {

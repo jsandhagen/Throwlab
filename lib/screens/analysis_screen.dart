@@ -613,9 +613,92 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
-  /// Top scrim: back button, title, and the measure/fps actions, with the
-  /// measurement instruction banner underneath while measuring.
+  /// Back button, title, and the measure/fps actions, with the measurement
+  /// instruction banner underneath while measuring. Portrait gets a
+  /// full-width scrim; landscape gets a compact top-left pill so the short
+  /// screen keeps the video (and its upper-right action area) visible.
   Widget _topOverlay() {
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final title = Text(
+      '${widget.video.event.label} · '
+      '${widget.video.gender.label}',
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(fontWeight: FontWeight.w600),
+    );
+    final actions = [
+      IconButton(
+        tooltip: 'Back',
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () => Navigator.pop(context),
+      ),
+      if (landscape)
+        ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220), child: title)
+      else
+        Expanded(child: title),
+      IconButton(
+        tooltip: 'Measure release (speed & angles)',
+        icon: const Icon(Icons.speed),
+        onPressed: _measureStep == null ? _startMeasure : null,
+      ),
+      IconButton(
+        tooltip:
+            'Set capture frame rate (${widget.video.captureFps.toStringAsFixed(0)} fps)',
+        icon: const Icon(Icons.shutter_speed),
+        onPressed: _editFps,
+      ),
+    ];
+    final banner = _measureStep == null
+        ? null
+        : Material(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.straighten, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(_measureInstruction,
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ),
+                  TextButton(
+                    onPressed: _cancelMeasure,
+                    child: const Text('Cancel'),
+                  ),
+                  if (_measureStep == _MeasureStep.review)
+                    FilledButton(
+                      onPressed: _showResults,
+                      child: const Text('Calculate'),
+                    ),
+                ],
+              ),
+            ),
+          );
+
+    if (landscape) {
+      return SafeArea(
+        bottom: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 4, top: 4),
+              child: Material(
+                color:
+                    Theme.of(context).colorScheme.surface.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
+                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
+              ),
+            ),
+            if (banner != null) banner,
+          ],
+        ),
+      );
+    }
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -629,61 +712,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                IconButton(
-                  tooltip: 'Back',
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.pop(context),
-                ),
-                Expanded(
-                  child: Text(
-                    '${widget.video.event.label} · '
-                    '${widget.video.gender.label}',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Measure release (speed & angles)',
-                  icon: const Icon(Icons.speed),
-                  onPressed: _measureStep == null ? _startMeasure : null,
-                ),
-                IconButton(
-                  tooltip:
-                      'Set capture frame rate (${widget.video.captureFps.toStringAsFixed(0)} fps)',
-                  icon: const Icon(Icons.shutter_speed),
-                  onPressed: _editFps,
-                ),
-              ],
-            ),
-            if (_measureStep != null)
-              Material(
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.straighten, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(_measureInstruction,
-                            style:
-                                Theme.of(context).textTheme.bodyMedium),
-                      ),
-                      TextButton(
-                        onPressed: _cancelMeasure,
-                        child: const Text('Cancel'),
-                      ),
-                      if (_measureStep == _MeasureStep.review)
-                        FilledButton(
-                          onPressed: _showResults,
-                          child: const Text('Calculate'),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
+            Row(children: actions),
+            if (banner != null) banner,
           ],
         ),
       ),
@@ -691,7 +721,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   /// Bottom scrim: calibration hint, scrubber, and transport controls.
+  /// Landscape drops the hint and lays the controls on one line to give
+  /// the short screen back to the video.
   Widget _bottomOverlay(ImplementSpec spec) {
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -705,20 +739,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Ref: ${spec.referenceLabel.toLowerCase()} '
-              '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
-              '· drag video to scrub · pinch to zoom',
-              textAlign: TextAlign.center,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Colors.white70),
-            ),
+            if (!landscape)
+              Text(
+                'Ref: ${spec.referenceLabel.toLowerCase()} '
+                '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
+                '· drag video to scrub · pinch to zoom',
+                textAlign: TextAlign.center,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Colors.white70),
+              ),
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
               dense: true,
+              horizontal: landscape,
             ),
           ],
         ),
@@ -742,9 +778,22 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             right: 4,
             bottom: 0,
             child: SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  child: _DrawingRail(controller: _drawing),
+              child: Padding(
+                // Hugs the bottom-right corner: the throw action lives in
+                // the right-center and upper-right of the frame, and the
+                // inset keeps it clear of the scrubber/transport overlay
+                // (a single shorter row in landscape).
+                padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(context).orientation ==
+                            Orientation.landscape
+                        ? 76
+                        : 150),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: _DrawingRail(controller: _drawing),
+                  ),
                 ),
               ),
             ),
@@ -806,9 +855,10 @@ class _MeasurePainter extends CustomPainter {
       pointB != oldDelegate.pointB;
 }
 
-/// Vertical, collapsible tool rail floating over the right edge of the
-/// video: drawing tools, colors, undo/clear. Collapses to a single button
-/// so it never crowds the footage.
+/// Vertical, collapsible tool rail anchored to the bottom-right corner of
+/// the video: drawing tools, colors, undo/clear. The bottom arrow collapses
+/// it to a single button in the same corner, keeping the right-center and
+/// upper-right of the frame — where the throw happens — unobstructed.
 class _DrawingRail extends StatefulWidget {
   const _DrawingRail({required this.controller});
 
@@ -901,7 +951,7 @@ class _DrawingRailState extends State<_DrawingRail> {
                     IconButton(
                       tooltip: 'Hide tools',
                       visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.chevron_right),
+                      icon: const Icon(Icons.keyboard_arrow_down),
                       onPressed: () => setState(() => _open = false),
                     ),
                   ],
