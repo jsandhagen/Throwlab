@@ -23,11 +23,15 @@ class PlaybackControls extends StatefulWidget {
     required this.controller,
     required this.fps,
     this.trailing,
+    this.dense = false,
   });
 
   final VideoPlayerController controller;
   final double fps;
   final Widget? trailing;
+
+  /// Compact sizing for use as an overlay on top of the video.
+  final bool dense;
 
   @override
   State<PlaybackControls> createState() => _PlaybackControlsState();
@@ -55,18 +59,20 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         final duration = value.duration.inMilliseconds;
         final position =
             value.position.inMilliseconds.clamp(0, duration).toDouble();
+        final dense = widget.dense;
+        final slider = Slider(
+          value: duration == 0 ? 0 : position,
+          max: duration == 0 ? 1 : duration.toDouble(),
+          onChanged: (ms) {
+            controller.pause();
+            _seeker.seekTo(
+                snapToFrame(Duration(milliseconds: ms.round()), fps));
+          },
+        );
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Slider(
-              value: duration == 0 ? 0 : position,
-              max: duration == 0 ? 1 : duration.toDouble(),
-              onChanged: (ms) {
-                controller.pause();
-                _seeker.seekTo(
-                    snapToFrame(Duration(milliseconds: ms.round()), fps));
-              },
-            ),
+            if (dense) SizedBox(height: 36, child: slider) else slider,
             Row(
               children: [
                 const SizedBox(width: 12),
@@ -78,12 +84,12 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 const Spacer(),
                 IconButton(
                   tooltip: 'Back one frame',
-                  iconSize: 38,
+                  iconSize: dense ? 30 : 38,
                   icon: const Icon(Icons.skip_previous),
                   onPressed: () => _stepBy(-1),
                 ),
                 IconButton(
-                  iconSize: 56,
+                  iconSize: dense ? 44 : 56,
                   icon: Icon(value.isPlaying
                       ? Icons.pause_circle
                       : Icons.play_circle),
@@ -92,7 +98,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 ),
                 IconButton(
                   tooltip: 'Forward one frame',
-                  iconSize: 38,
+                  iconSize: dense ? 30 : 38,
                   icon: const Icon(Icons.skip_next),
                   onPressed: () => _stepBy(1),
                 ),

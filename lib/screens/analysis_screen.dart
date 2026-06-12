@@ -375,100 +375,144 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     );
   }
 
-  List<Widget> _controlWidgets(ImplementSpec spec) => [
-        if (_measureStep != null)
-          Material(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.straighten, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(_measureInstruction,
-                        style: Theme.of(context).textTheme.bodyMedium),
+  /// Top scrim: back button, title, and the measure/fps actions, with the
+  /// measurement instruction banner underneath while measuring.
+  Widget _topOverlay() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.black87, Colors.transparent],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Back',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                Expanded(
+                  child: Text(
+                    '${widget.video.event.label} · '
+                    '${widget.video.gender.label}',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  TextButton(
-                    onPressed: _cancelMeasure,
-                    child: const Text('Cancel'),
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: 'Measure release (speed & angles)',
+                  icon: const Icon(Icons.speed),
+                  onPressed: _measureStep == null ? _startMeasure : null,
+                ),
+                IconButton(
+                  tooltip:
+                      'Set capture frame rate (${widget.video.captureFps.toStringAsFixed(0)} fps)',
+                  icon: const Icon(Icons.shutter_speed),
+                  onPressed: _editFps,
+                ),
+              ],
             ),
-          ),
-        _DrawingToolbar(controller: _drawing),
-        PlaybackControls(
-          controller: _controller,
-          fps: widget.video.fps,
+            if (_measureStep != null)
+              Material(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.straighten, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_measureInstruction,
+                            style:
+                                Theme.of(context).textTheme.bodyMedium),
+                      ),
+                      TextButton(
+                        onPressed: _cancelMeasure,
+                        child: const Text('Cancel'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            'Calibration reference: ${spec.referenceLabel.toLowerCase()} '
-            '${(spec.nominalSize * 100).toStringAsFixed(1)} cm (nominal) '
-            '· drag video to scrub frames · pinch to zoom',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+      ),
+    );
+  }
+
+  /// Bottom scrim: calibration hint, scrubber, and transport controls.
+  Widget _bottomOverlay(ImplementSpec spec) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Colors.black87, Colors.transparent],
         ),
-      ];
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Ref: ${spec.referenceLabel.toLowerCase()} '
+              '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
+              '· drag video to scrub · pinch to zoom',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: Colors.white70),
+            ),
+            PlaybackControls(
+              controller: _controller,
+              fps: widget.video.fps,
+              dense: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final spec = widget.video.implementSpec;
-    final landscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
+    // Coach's Eye-style layout: the video owns the whole screen and the
+    // controls float over it — transport along the bottom, a collapsible
+    // drawing rail on the right.
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-            '${widget.video.event.label} · ${widget.video.gender.label}'),
-        actions: [
-          IconButton(
-            tooltip: 'Measure release (speed & angles)',
-            icon: const Icon(Icons.speed),
-            onPressed: _measureStep == null ? _startMeasure : null,
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(child: _videoArea()),
+          Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
+          Positioned(
+            top: 0,
+            right: 4,
+            bottom: 0,
+            child: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  child: _DrawingRail(controller: _drawing),
+                ),
+              ),
+            ),
           ),
-          IconButton(
-            tooltip:
-                'Set capture frame rate (${widget.video.captureFps.toStringAsFixed(0)} fps)',
-            icon: const Icon(Icons.shutter_speed),
-            onPressed: _editFps,
-          ),
-          IconButton(
-            tooltip: 'Clear drawings',
-            icon: const Icon(Icons.layers_clear),
-            onPressed: _drawing.clear,
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _bottomOverlay(widget.video.implementSpec),
           ),
         ],
-      ),
-      // top: false — the AppBar already handles the status bar; the bottom
-      // inset keeps controls above the Android gesture/taskbar area.
-      body: SafeArea(
-        top: false,
-        child: landscape
-            // Landscape: full-height video with the controls in a side
-            // panel instead of stacked underneath it.
-            ? Row(
-                children: [
-                  Expanded(child: _videoArea()),
-                  SizedBox(
-                    width: 340,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: _controlWidgets(spec),
-                      ),
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                children: [
-                  Expanded(child: _videoArea()),
-                  ..._controlWidgets(spec),
-                ],
-              ),
       ),
     );
   }
@@ -519,73 +563,107 @@ class _MeasurePainter extends CustomPainter {
       pointB != oldDelegate.pointB;
 }
 
-class _DrawingToolbar extends StatelessWidget {
-  const _DrawingToolbar({required this.controller});
+/// Vertical, collapsible tool rail floating over the right edge of the
+/// video: drawing tools, colors, undo/clear. Collapses to a single button
+/// so it never crowds the footage.
+class _DrawingRail extends StatefulWidget {
+  const _DrawingRail({required this.controller});
 
   final DrawingController controller;
 
   @override
+  State<_DrawingRail> createState() => _DrawingRailState();
+}
+
+class _DrawingRailState extends State<_DrawingRail> {
+  bool _open = true;
+
+  DrawingController get controller => widget.controller;
+
+  static const _tools = [
+    (DrawTool.none, Icons.pan_tool_alt, 'Scrub only'),
+    (DrawTool.pen, Icons.draw, 'Freehand pen'),
+    (DrawTool.line, Icons.timeline, 'Straight line'),
+    (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
+  ];
+
+  @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
       animation: controller,
-      // Wrap instead of Row so the toolbar flows onto a second line in the
-      // narrow landscape side panel.
-      builder: (context, _) => Wrap(
-        alignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runSpacing: 4,
-        children: [
-          SegmentedButton<DrawTool>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                  value: DrawTool.none,
-                  icon: Icon(Icons.pan_tool_alt),
-                  tooltip: 'Scrub only'),
-              ButtonSegment(
-                  value: DrawTool.pen,
-                  icon: Icon(Icons.draw),
-                  tooltip: 'Freehand pen'),
-              ButtonSegment(
-                  value: DrawTool.line,
-                  icon: Icon(Icons.timeline),
-                  tooltip: 'Straight line'),
-              ButtonSegment(
-                  value: DrawTool.angle,
-                  icon: Icon(Icons.square_foot),
-                  tooltip: 'Angle (tap 3 points, vertex second)'),
-            ],
-            selected: {controller.tool},
-            onSelectionChanged: (selection) =>
-                controller.tool = selection.first,
+      builder: (context, _) => Material(
+        color: scheme.surface.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(24),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: !_open
+                ? [
+                    IconButton(
+                      tooltip: 'Drawing tools',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.draw),
+                      onPressed: () => setState(() => _open = true),
+                    ),
+                  ]
+                : [
+                    for (final (tool, icon, tip) in _tools)
+                      IconButton(
+                        tooltip: tip,
+                        visualDensity: VisualDensity.compact,
+                        isSelected: controller.tool == tool,
+                        style: controller.tool == tool
+                            ? IconButton.styleFrom(
+                                backgroundColor: scheme.primaryContainer)
+                            : null,
+                        icon: Icon(icon),
+                        onPressed: () => controller.tool = tool,
+                      ),
+                    const SizedBox(height: 6),
+                    for (final color in kAnnotationColors)
+                      GestureDetector(
+                        onTap: () => controller.color = color,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          margin: const EdgeInsets.symmetric(vertical: 3),
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: controller.color == color
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    IconButton(
+                      tooltip: 'Undo',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.undo),
+                      onPressed: controller.undo,
+                    ),
+                    IconButton(
+                      tooltip: 'Clear drawings',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.layers_clear),
+                      onPressed: controller.clear,
+                    ),
+                    IconButton(
+                      tooltip: 'Hide tools',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: () => setState(() => _open = false),
+                    ),
+                  ],
           ),
-          const SizedBox(width: 12),
-          for (final color in kAnnotationColors)
-            GestureDetector(
-              onTap: () => controller.color = color,
-              child: Container(
-                width: 22,
-                height: 22,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: controller.color == color
-                        ? Colors.white
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-              ),
-            ),
-          const SizedBox(width: 4),
-          IconButton(
-            tooltip: 'Undo',
-            icon: const Icon(Icons.undo),
-            onPressed: controller.undo,
-          ),
-        ],
+        ),
       ),
     );
   }
