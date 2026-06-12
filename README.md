@@ -18,11 +18,18 @@ The full feature plan (detection/calibration, release metrics, event-specific an
 
 ## Install on Android (no computer needed)
 
-Every push to `main` builds an installable APK via GitHub Actions:
+[![Latest APK](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fjsandhagen%2FThrowlab%2Freleases%2Flatest&query=%24.name&label=APK&logo=android&color=3ddc84)](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk)
 
-1. On your phone, open the repo's [**latest release**](https://github.com/jsandhagen/Throwlab/releases/tag/latest)
-2. Download **ThrowLab.apk**
-3. Open the downloaded file and allow the install when Android asks
+Every push to `main` builds an installable APK via GitHub Actions and
+republishes it to the rolling **latest** release, so this link always
+downloads the newest build:
+
+> **[⬇ Download ThrowLab.apk — latest build](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk)**
+
+1. Open the link above on your phone (the badge shows which build you'll
+   get; the [release page](https://github.com/jsandhagen/Throwlab/releases/tag/latest)
+   has the same file plus build notes)
+2. Open the downloaded file and allow the install when Android asks
    (first time only: allow installs from your browser under
    Settings → Apps → Special app access → Install unknown apps)
 
