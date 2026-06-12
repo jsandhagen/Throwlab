@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -48,32 +49,50 @@ void main() {
       expect(m.releaseAngleDeg, closeTo(45, 1e-6));
     });
 
-    test('angle of attack is attitude minus flight path', () {
-      // Javelin axis horizontal, flying upward at 45° → nose 45° below
-      // the flight path.
+    test('javelin: midpoint speed, flight path, and attack angle', () {
+      // Axis horizontal on both frames; midpoint moves (50, -50) px →
+      // flying up at 45° with the nose 45° below the flight path.
       final m = computeReleaseMetrics(
         refA: tip,
         refB: tail,
-        pointA: const Offset(100, 200),
-        pointB: const Offset(150, 150),
+        pointA: tip + const Offset(50, -50),
+        pointB: tail + const Offset(50, -50),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
-        withAttackAngle: true,
+        javelin: true,
       );
+      expect(m.speed,
+          closeTo(math.sqrt(50 * 50 + 50 * 50) * 0.026 / 0.05, 1e-6));
+      expect(m.releaseAngleDeg, closeTo(45, 1e-6));
       expect(m.attackAngleDeg, closeTo(-45, 1e-6));
     });
 
-    test('attack angle tolerates swapped tip/tail taps', () {
+    test('javelin: tolerates swapped tip/tail taps on one frame', () {
       final swapped = computeReleaseMetrics(
-        refA: tail,
-        refB: tip,
-        pointA: const Offset(100, 200),
-        pointB: const Offset(150, 150),
+        refA: tip,
+        refB: tail,
+        pointA: tail + const Offset(50, -50), // tail tapped first here
+        pointB: tip + const Offset(50, -50),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
-        withAttackAngle: true,
+        javelin: true,
       );
+      expect(swapped.releaseAngleDeg, closeTo(45, 1e-6));
       expect(swapped.attackAngleDeg, closeTo(-45, 1e-6));
+    });
+
+    test('javelin: tolerates consistently reversed tap order', () {
+      final reversed = computeReleaseMetrics(
+        refA: tail,
+        refB: tip,
+        pointA: tail + const Offset(50, -50),
+        pointB: tip + const Offset(50, -50),
+        referenceMeters: 2.6,
+        dtSeconds: 0.05,
+        javelin: true,
+      );
+      expect(reversed.releaseAngleDeg, closeTo(45, 1e-6));
+      expect(reversed.attackAngleDeg, closeTo(-45, 1e-6));
     });
 
     test('degenerate input returns zeros instead of NaN', () {

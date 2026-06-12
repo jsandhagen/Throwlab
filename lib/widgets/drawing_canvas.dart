@@ -104,6 +104,10 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
   static const _pixelsPerFrame = 8.0;
   double _jogAccumulator = 0;
 
+  /// Two-finger gestures belong to the pinch-zoom viewer above this layer;
+  /// ignore them here so a pinch never jogs frames or leaves pen marks.
+  int _activePointers = 0;
+
   DrawingController get controller => widget.controller;
 
   Offset _normalize(Offset position, Size size) => Offset(
@@ -118,64 +122,73 @@ class _DrawingCanvasState extends State<DrawingCanvas> {
       builder: (context, _) {
         return LayoutBuilder(builder: (context, constraints) {
           final size = constraints.biggest;
-          return GestureDetector(
-            behavior: controller.tool == DrawTool.none
-                ? HitTestBehavior.translucent
-                : HitTestBehavior.opaque,
-            onTapUp: (details) {
-              if (controller.tool != DrawTool.angle) return;
-              final point = _normalize(details.localPosition, size);
-              final last = controller.annotations.lastOrNull;
-              if (last is AngleAnnotation && !last.isComplete) {
-                last.points.add(point);
-                controller.notifyChanged();
-              } else {
-                controller.add(AngleAnnotation(controller.color)
-                  ..points.add(point));
-              }
-            },
-            onPanStart: (details) {
-              final point = _normalize(details.localPosition, size);
-              switch (controller.tool) {
-                case DrawTool.pen:
-                  controller.add(PenStroke(controller.color, [point]));
-                case DrawTool.line:
-                  controller
-                      .add(LineAnnotation(controller.color, point, point));
-                case DrawTool.angle:
-                  break;
-                case DrawTool.none:
-                  _jogAccumulator = 0;
-              }
-            },
-            onPanUpdate: (details) {
-              final point = _normalize(details.localPosition, size);
-              final last = controller.annotations.lastOrNull;
-              switch (controller.tool) {
-                case DrawTool.pen:
-                  if (last is PenStroke) {
-                    last.points.add(point);
-                    controller.notifyChanged();
-                  }
-                case DrawTool.line:
-                  if (last is LineAnnotation) {
-                    last.end = point;
-                    controller.notifyChanged();
-                  }
-                case DrawTool.angle:
-                  break;
-                case DrawTool.none:
-                  _jogAccumulator += details.delta.dx;
-                  final frames = _jogAccumulator ~/ _pixelsPerFrame;
-                  if (frames != 0 && widget.onJogFrames != null) {
-                    _jogAccumulator -= frames * _pixelsPerFrame;
-                    widget.onJogFrames!(frames);
-                  }
-              }
-            },
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: _AnnotationPainter(controller.annotations),
+          return Listener(
+            onPointerDown: (_) => _activePointers++,
+            onPointerUp: (_) =>
+                _activePointers = math.max(0, _activePointers - 1),
+            onPointerCancel: (_) =>
+                _activePointers = math.max(0, _activePointers - 1),
+            child: GestureDetector(
+              behavior: controller.tool == DrawTool.none
+                  ? HitTestBehavior.translucent
+                  : HitTestBehavior.opaque,
+              onTapUp: (details) {
+                if (controller.tool != DrawTool.angle) return;
+                final point = _normalize(details.localPosition, size);
+                final last = controller.annotations.lastOrNull;
+                if (last is AngleAnnotation && !last.isComplete) {
+                  last.points.add(point);
+                  controller.notifyChanged();
+                } else {
+                  controller.add(AngleAnnotation(controller.color)
+                    ..points.add(point));
+                }
+              },
+              onPanStart: (details) {
+                if (_activePointers > 1) return;
+                final point = _normalize(details.localPosition, size);
+                switch (controller.tool) {
+                  case DrawTool.pen:
+                    controller.add(PenStroke(controller.color, [point]));
+                  case DrawTool.line:
+                    controller
+                        .add(LineAnnotation(controller.color, point, point));
+                  case DrawTool.angle:
+                    break;
+                  case DrawTool.none:
+                    _jogAccumulator = 0;
+                }
+              },
+              onPanUpdate: (details) {
+                if (_activePointers > 1) return;
+                final point = _normalize(details.localPosition, size);
+                final last = controller.annotations.lastOrNull;
+                switch (controller.tool) {
+                  case DrawTool.pen:
+                    if (last is PenStroke) {
+                      last.points.add(point);
+                      controller.notifyChanged();
+                    }
+                  case DrawTool.line:
+                    if (last is LineAnnotation) {
+                      last.end = point;
+                      controller.notifyChanged();
+                    }
+                  case DrawTool.angle:
+                    break;
+                  case DrawTool.none:
+                    _jogAccumulator += details.delta.dx;
+                    final frames = _jogAccumulator ~/ _pixelsPerFrame;
+                    if (frames != 0 && widget.onJogFrames != null) {
+                      _jogAccumulator -= frames * _pixelsPerFrame;
+                      widget.onJogFrames!(frames);
+                    }
+                }
+              },
+              child: CustomPaint(
+                size: Size.infinite,
+                painter: _AnnotationPainter(controller.annotations),
+              ),
             ),
           );
         });

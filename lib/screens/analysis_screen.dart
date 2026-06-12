@@ -81,7 +81,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final step = Duration(
         microseconds: (Duration.microsecondsPerSecond / widget.video.fps)
             .round());
-    _seeker.seekTo(_seeker.position + step * frames);
+    _seeker.seekBy(step * frames);
   }
 
   Future<void> _editFps() async {
@@ -141,11 +141,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ? 'Now tap the javelin TAIL'
             : 'Tap the opposite edge of the $_refWord',
         _MeasureStep.pointA => _isJavelin
-            ? 'Tap the grip (where the hand releases)'
+            ? 'Jumped ${(_measureDt * 1000).round()} ms forward — tap '
+                'the javelin TIP again'
             : 'Tap the center of the $_refWord',
-        _MeasureStep.pointB =>
-          'Jumped ${(_measureDt * 1000).round()} ms forward — tap the '
-              'same spot on the $_refWord again',
+        _MeasureStep.pointB => _isJavelin
+            ? 'Now tap the javelin TAIL again'
+            : 'Jumped ${(_measureDt * 1000).round()} ms forward — tap the '
+                'same spot on the $_refWord again',
       };
 
   void _startMeasure() {
@@ -164,6 +166,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     });
   }
 
+  /// Jumps forward a fixed slice of REAL time (~50 ms) so the speed math
+  /// uses the same dt regardless of frame rate. File frames each represent
+  /// 1/captureFps s of real time.
+  void _jumpForward() {
+    final frames = math.max(2, (widget.video.captureFps * 0.05).round());
+    _measureDt = frames / widget.video.captureFps;
+    _jogFrames(frames);
+  }
+
   void _onMeasureTap(Offset position) {
     switch (_measureStep!) {
       case _MeasureStep.refA:
@@ -172,18 +183,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           _measureStep = _MeasureStep.refB;
         });
       case _MeasureStep.refB:
+        // Javelin re-taps tip and tail on the later frame, so the jump
+        // happens as soon as the release-frame pair is done.
+        if (_isJavelin) _jumpForward();
         setState(() {
           _refB = position;
           _measureStep = _MeasureStep.pointA;
         });
       case _MeasureStep.pointA:
-        // Jump forward a fixed slice of REAL time (~50 ms) so the speed
-        // math uses the same dt regardless of frame rate. File frames each
-        // represent 1/captureFps s of real time.
-        final frames =
-            math.max(2, (widget.video.captureFps * 0.05).round());
-        _measureDt = frames / widget.video.captureFps;
-        _jogFrames(frames);
+        if (!_isJavelin) _jumpForward();
         setState(() {
           _pointA = position;
           _measureStep = _MeasureStep.pointB;
@@ -205,7 +213,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       pointB: _pointB!,
       referenceMeters: widget.video.implementSpec.nominalSize,
       dtSeconds: _measureDt,
-      withAttackAngle: _isJavelin,
+      javelin: _isJavelin,
     );
     final event = widget.video.event;
     final ballistic =
@@ -310,9 +318,107 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
   }
 
+  Widget _videoArea() {
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      child: _openFailed || _controller.value.hasError
+          ? const Padding(
+              padding: EdgeInsets.all(32),
+              child: Text(
+                'Couldn\'t open this video — the file may have '
+                'been removed from the device. Delete this entry '
+                'and re-import the clip.',
+                textAlign: TextAlign.center,
+              ),
+            )
+          : _controller.value.isInitialized
+              // Pinch with two fingers to zoom in on the implement; one
+              // finger keeps scrubbing/drawing/tapping. Coordinates stay in
+              // the video's own space, so measurements are zoom-proof.
+              ? InteractiveViewer(
+                  maxScale: 8,
+                  child: Center(
+                    child: AspectRatio(
+                      aspectRatio: _controller.value.aspectRatio,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          VideoPlayer(_controller),
+                          DrawingCanvas(
+                            controller: _drawing,
+                            onJogFrames: _jogFrames,
+                          ),
+                          IgnorePointer(
+                            ignoring: _measureStep == null,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTapUp: (details) =>
+                                  _onMeasureTap(details.localPosition),
+                              child: CustomPaint(
+                                size: Size.infinite,
+                                painter: _MeasurePainter(
+                                  refA: _refA,
+                                  refB: _refB,
+                                  pointA: _pointA,
+                                  pointB: _pointB,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              : const CircularProgressIndicator(),
+    );
+  }
+
+  List<Widget> _controlWidgets(ImplementSpec spec) => [
+        if (_measureStep != null)
+          Material(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.straighten, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(_measureInstruction,
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ),
+                  TextButton(
+                    onPressed: _cancelMeasure,
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        _DrawingToolbar(controller: _drawing),
+        PlaybackControls(
+          controller: _controller,
+          fps: widget.video.fps,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Text(
+            'Calibration reference: ${spec.referenceLabel.toLowerCase()} '
+            '${(spec.nominalSize * 100).toStringAsFixed(1)} cm (nominal) '
+            '· drag video to scrub frames · pinch to zoom',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+      ];
+
   @override
   Widget build(BuildContext context) {
     final spec = widget.video.implementSpec;
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -340,94 +446,29 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       // inset keeps controls above the Android gesture/taskbar area.
       body: SafeArea(
         top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: Container(
-                color: Colors.black,
-                alignment: Alignment.center,
-                child: _openFailed || _controller.value.hasError
-                    ? const Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Text(
-                          'Couldn\'t open this video — the file may have '
-                          'been removed from the device. Delete this entry '
-                          'and re-import the clip.',
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    : _controller.value.isInitialized
-                        ? AspectRatio(
-                            aspectRatio: _controller.value.aspectRatio,
-                            child: Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                VideoPlayer(_controller),
-                                DrawingCanvas(
-                                  controller: _drawing,
-                                  onJogFrames: _jogFrames,
-                                ),
-                                IgnorePointer(
-                                  ignoring: _measureStep == null,
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTapUp: (details) =>
-                                        _onMeasureTap(details.localPosition),
-                                    child: CustomPaint(
-                                      size: Size.infinite,
-                                      painter: _MeasurePainter(
-                                        refA: _refA,
-                                        refB: _refB,
-                                        pointA: _pointA,
-                                        pointB: _pointB,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : const CircularProgressIndicator(),
-              ),
-            ),
-            if (_measureStep != null)
-              Material(
-                color: Theme.of(context).colorScheme.secondaryContainer,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.straighten, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(_measureInstruction,
-                            style:
-                                Theme.of(context).textTheme.bodyMedium),
+        child: landscape
+            // Landscape: full-height video with the controls in a side
+            // panel instead of stacked underneath it.
+            ? Row(
+                children: [
+                  Expanded(child: _videoArea()),
+                  SizedBox(
+                    width: 340,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: _controlWidgets(spec),
                       ),
-                      TextButton(
-                        onPressed: _cancelMeasure,
-                        child: const Text('Cancel'),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
+              )
+            : Column(
+                children: [
+                  Expanded(child: _videoArea()),
+                  ..._controlWidgets(spec),
+                ],
               ),
-            _DrawingToolbar(controller: _drawing),
-            PlaybackControls(
-              controller: _controller,
-              fps: widget.video.fps,
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Calibration reference: ${spec.referenceLabel.toLowerCase()} '
-                '${(spec.nominalSize * 100).toStringAsFixed(1)} cm (nominal) '
-                '· drag video to scrub frames',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -487,8 +528,12 @@ class _DrawingToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: controller,
-      builder: (context, _) => Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      // Wrap instead of Row so the toolbar flows onto a second line in the
+      // narrow landscape side panel.
+      builder: (context, _) => Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        runSpacing: 4,
         children: [
           SegmentedButton<DrawTool>(
             showSelectedIcon: false,

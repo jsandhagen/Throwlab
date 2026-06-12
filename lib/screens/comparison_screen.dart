@@ -80,10 +80,10 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
     _seekerB.seekTo(_syncB + (positionA - _syncA));
   }
 
-  void _stepBoth(int frames) {
+  Future<void> _stepBoth(int frames) async {
     final step = Duration(
         microseconds: (Duration.microsecondsPerSecond / _fps).round());
-    _seekBoth(_seekerA.position + step * frames);
+    _seekBoth(await _seekerA.freshPosition() + step * frames);
   }
 
   void _togglePlay() {
@@ -148,7 +148,9 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
             label: Text(sync == Duration.zero
                 ? 'Set release'
                 : formatPosition(sync)),
-            onPressed: () => onSet(value.position),
+            // freshPosition: the cached position can lag the displayed
+            // frame right after pausing, mismarking the release.
+            onPressed: () async => onSet(await seeker.freshPosition()),
           ),
           const SizedBox(width: 8),
         ],

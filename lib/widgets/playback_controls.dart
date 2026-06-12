@@ -44,7 +44,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
   void _stepBy(int frames) {
     controller.pause();
-    _seeker.seekTo(_seeker.position + _frameStep * frames);
+    _seeker.seekBy(_frameStep * frames);
   }
 
   @override
