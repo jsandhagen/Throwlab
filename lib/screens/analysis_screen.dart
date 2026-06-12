@@ -815,9 +815,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         ? null
         : Material(
             color: Theme.of(context).colorScheme.secondaryContainer,
+            // Landscape shows the instructions as a pill beside the
+            // header pill instead of a full-width band over the video.
+            borderRadius: landscape ? BorderRadius.circular(24) : null,
+            clipBehavior: landscape ? Clip.antiAlias : Clip.none,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
+                mainAxisSize:
+                    landscape ? MainAxisSize.min : MainAxisSize.max,
                 children: [
                   if (_detecting)
                     const SizedBox(
@@ -828,7 +834,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                   else
                     const Icon(Icons.straighten, size: 20),
                   const SizedBox(width: 8),
-                  Expanded(
+                  Flexible(
+                    fit: landscape ? FlexFit.loose : FlexFit.tight,
                     child: Text(
                         _detecting
                             ? 'Finding the javelin…'
@@ -857,22 +864,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     if (landscape) {
       return SafeArea(
         bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 4, top: 4),
-              child: Material(
+        child: Padding(
+          padding: const EdgeInsets.only(left: 4, top: 4, right: 4),
+          child: Row(
+            children: [
+              Material(
                 color:
                     Theme.of(context).colorScheme.surface.withOpacity(0.7),
                 borderRadius: BorderRadius.circular(24),
                 clipBehavior: Clip.antiAlias,
                 child: Row(mainAxisSize: MainAxisSize.min, children: actions),
               ),
-            ),
-            if (banner != null) banner,
-          ],
+              if (banner != null) ...[
+                const SizedBox(width: 8),
+                Flexible(child: banner),
+              ],
+            ],
+          ),
         ),
       );
     }
