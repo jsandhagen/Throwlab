@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../services/javelin_detector.dart';
 import '../services/video_library.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/projectile.dart';
@@ -30,7 +31,7 @@ const _releaseHeights = {
   ThrowEvent.javelin: 1.8,
 };
 
-enum _MeasureStep { refA, refB, pointA, pointB, review }
+enum _MeasureStep { refA, refB, refConfirm, pointA, pointB, review }
 
 /// Single-throw breakdown: slow motion, frame stepping, drawing, and
 /// tap-to-measure release metrics.
@@ -53,6 +54,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   _MeasureStep? _measureStep;
   Offset? _refA, _refB, _pointA, _pointB;
   double _measureDt = 0;
+  bool _detecting = false;
+
+  /// Javelin tip/tail auto-detection failed once → plain tap flow.
+  bool _manualJavelin = false;
 
   @override
   void initState() {
@@ -129,6 +134,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         (canvasPoint.dy / r.height).clamp(0.0, 1.0));
   }
 
+  Offset _denormalizeCanvas(Offset normalized) {
+    final r = _videoRect;
+    return Offset(normalized.dx * r.width, normalized.dy * r.height);
+  }
+
   Offset _clampToVideo(Offset p) {
     final r = _videoRect;
     return Offset(p.dx.clamp(0.0, r.width), p.dy.clamp(0.0, r.height));
@@ -192,6 +202,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   }
 
   void _onVideoTap(Offset screenPos) {
+    if (_detecting) return;
     final canvasPoint = _toCanvas(screenPos);
     final r = _videoRect;
     if (canvasPoint.dx < 0 ||
@@ -361,9 +372,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   String get _measureInstruction => switch (_measureStep!) {
         _MeasureStep.refA => _isJavelin
-            ? 'Pause on the release frame, then tap the javelin TIP'
+            ? (_manualJavelin
+                ? 'Pause on the release frame, then tap the javelin TIP'
+                : 'Pause on the release frame, then tap near the javelin '
+                    'TIP')
             : 'Pause on the release frame, then tap one edge of the '
                 '$_refWord',
+        _MeasureStep.refConfirm =>
+          'Drag the tip/tail markers to fine-tune (re-tap near the tip to '
+              'retry), then tap Next',
         _MeasureStep.refB => _isJavelin
             ? 'Now tap the javelin TAIL'
             : 'Tap the opposite edge of the $_refWord',
@@ -384,6 +401,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     _controller.pause();
     setState(() {
       _refA = _refB = _pointA = _pointB = null;
+      _detecting = false;
+      _manualJavelin = false;
       _measureStep = _MeasureStep.refA;
     });
   }
@@ -391,26 +410,40 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   void _cancelMeasure() {
     setState(() {
       _measureStep = null;
+      _detecting = false;
       _refA = _refB = _pointA = _pointB = null;
     });
   }
 
-  /// Jumps forward a fixed slice of REAL time (~50 ms) so the speed math
-  /// uses the same dt regardless of frame rate. File frames each represent
-  /// 1/captureFps s of real time.
+  /// Frames spanning ~100 ms of real time. File frames each represent
+  /// 1/captureFps s.
+  int get _jumpFrames =>
+      math.max(2, (widget.video.captureFps * 0.1).round());
+
+  /// Jumps forward ~100 ms of REAL time so the speed math uses the same dt
+  /// regardless of frame rate. The longer baseline (vs 50 ms) halves
+  /// marker-noise error; the midpoint gravity correction in the metrics
+  /// removes the path-curvature cost of the wider interval.
   void _jumpForward() {
-    final frames = math.max(2, (widget.video.captureFps * 0.05).round());
-    _measureDt = frames / widget.video.captureFps;
-    _jogFrames(frames);
+    _measureDt = _jumpFrames / widget.video.captureFps;
+    _jogFrames(_jumpFrames);
   }
 
   void _onMeasureTap(Offset position) {
     switch (_measureStep!) {
       case _MeasureStep.refA:
+        if (_isJavelin && !_manualJavelin) {
+          _autoDetectRef(position);
+          return;
+        }
         setState(() {
           _refA = position;
           _measureStep = _MeasureStep.refB;
         });
+      case _MeasureStep.refConfirm:
+        // A re-tap re-runs detection seeded from the new tap, for when
+        // the first attempt latched onto the wrong edge.
+        _autoDetectRef(position);
       case _MeasureStep.refB:
         // Javelin re-taps tip and tail on the later frame, so the jump
         // happens as soon as the release-frame pair is done.
@@ -432,6 +465,91 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         });
       case _MeasureStep.review:
         break; // Markers are adjusted by dragging, not tapping.
+    }
+  }
+
+  /// Runs tip/tail detection on the release frame, seeded by a tap near
+  /// the tip. On failure the flow falls back to manual taps, reusing the
+  /// tap as the TIP.
+  Future<void> _autoDetectRef(Offset canvasPoint) async {
+    setState(() => _detecting = true);
+    JavelinDetection? found;
+    try {
+      found = await JavelinDetector.detect(
+        videoPath: widget.video.path,
+        position: await _seeker.freshPosition(),
+        nearPoint: _normalizeCanvas(canvasPoint),
+      );
+    } catch (_) {
+      found = null;
+    }
+    if (!mounted ||
+        (_measureStep != _MeasureStep.refA &&
+            _measureStep != _MeasureStep.refConfirm)) {
+      return;
+    }
+    setState(() {
+      _detecting = false;
+      if (found == null) {
+        _manualJavelin = true;
+        _refA = canvasPoint;
+        _refB = null;
+        _measureStep = _MeasureStep.refB;
+      } else {
+        _refA = _denormalizeCanvas(found.tip);
+        _refB = _denormalizeCanvas(found.tail);
+        _measureStep = _MeasureStep.refConfirm;
+      }
+    });
+    if (found == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Couldn't spot the javelin — your tap marks the "
+              'TIP; now tap the TAIL')));
+    }
+  }
+
+  /// Confirms the (possibly hand-adjusted) release markers, jumps the
+  /// measurement interval, and re-finds the shaft on the new frame.
+  Future<void> _confirmRefAndJump() async {
+    final tip = _refA, tail = _refB;
+    if (tip == null || tail == null) return;
+    setState(() => _detecting = true);
+    final pos = await _seeker.freshPosition();
+    _jumpForward();
+    // Extract the target frame directly rather than waiting on the
+    // player's seek; both land on the same frame.
+    final target = pos +
+        Duration(
+            microseconds: (_jumpFrames *
+                    Duration.microsecondsPerSecond /
+                    widget.video.fps)
+                .round());
+    JavelinDetection? found;
+    try {
+      found = await JavelinDetector.detect(
+        videoPath: widget.video.path,
+        position: target,
+        previousTip: _normalizeCanvas(tip),
+        previousTail: _normalizeCanvas(tail),
+      );
+    } catch (_) {
+      found = null;
+    }
+    if (!mounted || _measureStep != _MeasureStep.refConfirm) return;
+    setState(() {
+      _detecting = false;
+      if (found == null) {
+        _measureStep = _MeasureStep.pointA; // manual re-tap flow
+      } else {
+        _pointA = _denormalizeCanvas(found.tip);
+        _pointB = _denormalizeCanvas(found.tail);
+        _measureStep = _MeasureStep.review;
+      }
+    });
+    if (found == null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Couldn't re-find the javelin on this frame — "
+              'tap its TIP again')));
     }
   }
 
@@ -657,16 +775,31 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 children: [
-                  const Icon(Icons.straighten, size: 20),
+                  if (_detecting)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    const Icon(Icons.straighten, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(_measureInstruction,
+                    child: Text(
+                        _detecting
+                            ? 'Finding the javelin…'
+                            : _measureInstruction,
                         style: Theme.of(context).textTheme.bodyMedium),
                   ),
                   TextButton(
                     onPressed: _cancelMeasure,
                     child: const Text('Cancel'),
                   ),
+                  if (_measureStep == _MeasureStep.refConfirm)
+                    FilledButton(
+                      onPressed: _detecting ? null : _confirmRefAndJump,
+                      child: const Text('Next'),
+                    ),
                   if (_measureStep == _MeasureStep.review)
                     FilledButton(
                       onPressed: _showResults,

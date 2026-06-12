@@ -20,6 +20,7 @@ void main() {
         pointB: const Offset(150, 200),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
+        gravity: 0,
       );
       expect(m.speed, closeTo(50 * 0.026 / 0.05, 1e-6)); // 26 m/s
       expect(m.releaseAngleDeg, closeTo(0, 1e-6));
@@ -33,6 +34,7 @@ void main() {
         pointB: const Offset(150, 150),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
+        gravity: 0,
       );
       expect(m.releaseAngleDeg, closeTo(45, 1e-6));
     });
@@ -45,6 +47,7 @@ void main() {
         pointB: const Offset(100, 150),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
+        gravity: 0,
       );
       expect(m.releaseAngleDeg, closeTo(45, 1e-6));
     });
@@ -59,6 +62,7 @@ void main() {
         pointB: tail + const Offset(50, -50),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
+        gravity: 0,
         javelin: true,
       );
       expect(m.speed,
@@ -75,6 +79,7 @@ void main() {
         pointB: tip + const Offset(50, -50),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
+        gravity: 0,
         javelin: true,
       );
       expect(swapped.releaseAngleDeg, closeTo(45, 1e-6));
@@ -89,10 +94,32 @@ void main() {
         pointB: tip + const Offset(50, -50),
         referenceMeters: 2.6,
         dtSeconds: 0.05,
+        gravity: 0,
         javelin: true,
       );
       expect(reversed.releaseAngleDeg, closeTo(45, 1e-6));
       expect(reversed.attackAngleDeg, closeTo(-45, 1e-6));
+    });
+
+    test('midpoint gravity correction recovers release velocity', () {
+      // True release velocity (20 across, 10 up) m/s at 0.026 m/px over
+      // dt = 0.1 s. The measured chord is the midpoint velocity, whose
+      // vertical component gravity has already cut by g·dt/2.
+      const g = 9.80665, dt = 0.1, mpp = 0.026;
+      const vx = 20.0, vy = 10.0;
+      final dxPx = vx * dt / mpp;
+      final dyPx = -(vy - g * dt / 2) * dt / mpp; // screen y points down
+      final m = computeReleaseMetrics(
+        refA: tip,
+        refB: tail,
+        pointA: const Offset(100, 200),
+        pointB: Offset(100 + dxPx, 200 + dyPx),
+        referenceMeters: 2.6,
+        dtSeconds: dt,
+      );
+      expect(m.speed, closeTo(math.sqrt(vx * vx + vy * vy), 1e-6));
+      expect(m.releaseAngleDeg,
+          closeTo(math.atan2(vy, vx) * 180 / math.pi, 1e-6));
     });
 
     test('degenerate input returns zeros instead of NaN', () {

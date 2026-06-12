@@ -35,6 +35,11 @@ class ReleaseMetrics {
 ///
 /// Angles are mirrored so throws to the left read the same as throws to
 /// the right.
+///
+/// The chord between the two frames equals the instantaneous velocity at
+/// the interval's midpoint, by which time gravity has already removed
+/// g·dt/2 of vertical speed; that is added back so the result is the true
+/// release velocity. Pass [gravity] 0 to disable (e.g. geometry tests).
 ReleaseMetrics computeReleaseMetrics({
   required Offset refA,
   required Offset refB,
@@ -43,10 +48,11 @@ ReleaseMetrics computeReleaseMetrics({
   required double referenceMeters,
   required double dtSeconds,
   bool javelin = false,
+  double gravity = 9.80665,
 }) {
   if (javelin) {
     return _javelinMetrics(
-        refA, refB, pointA, pointB, referenceMeters, dtSeconds);
+        refA, refB, pointA, pointB, referenceMeters, dtSeconds, gravity);
   }
   final refPx = (refA - refB).distance;
   if (refPx == 0 || dtSeconds <= 0) {
@@ -54,12 +60,15 @@ ReleaseMetrics computeReleaseMetrics({
   }
   final metersPerPixel = referenceMeters / refPx;
   final d = pointB - pointA;
-  final speed = d.distance * metersPerPixel / dtSeconds;
+  // Screen y grows downward: gravity is +y, so the midpoint correction
+  // subtracts from the screen-space vertical velocity.
+  final vx = d.dx * metersPerPixel / dtSeconds;
+  final vy = d.dy * metersPerPixel / dtSeconds - gravity * dtSeconds / 2;
+  final speed = math.sqrt(vx * vx + vy * vy);
 
-  // Screen y grows downward, so negate it; mirror leftward throws.
-  final mirror = d.dx < 0 ? -1.0 : 1.0;
-  final releaseAngle =
-      math.atan2(-d.dy, d.dx * mirror) * 180 / math.pi;
+  // Negate y so up is positive; mirror leftward throws.
+  final mirror = vx < 0 ? -1.0 : 1.0;
+  final releaseAngle = math.atan2(-vy, vx * mirror) * 180 / math.pi;
 
   return ReleaseMetrics(speed: speed, releaseAngleDeg: releaseAngle);
 }
@@ -71,6 +80,7 @@ ReleaseMetrics _javelinMetrics(
   Offset tailB,
   double referenceMeters,
   double dtSeconds,
+  double gravity,
 ) {
   final axisA = tipA - tailA; // tail → tip
   var axisB = tipB - tailB;
@@ -84,11 +94,13 @@ ReleaseMetrics _javelinMetrics(
   final metersPerPixel =
       referenceMeters / ((axisA.distance + axisB.distance) / 2);
   final d = (tipB + tailB) / 2 - (tipA + tailA) / 2;
-  final speed = d.distance * metersPerPixel / dtSeconds;
+  // Midpoint gravity correction, as in computeReleaseMetrics.
+  final vx = d.dx * metersPerPixel / dtSeconds;
+  final vy = d.dy * metersPerPixel / dtSeconds - gravity * dtSeconds / 2;
+  final speed = math.sqrt(vx * vx + vy * vy);
 
-  final mirror = d.dx < 0 ? -1.0 : 1.0;
-  final releaseAngle =
-      math.atan2(-d.dy, d.dx * mirror) * 180 / math.pi;
+  final mirror = vx < 0 ? -1.0 : 1.0;
+  final releaseAngle = math.atan2(-vy, vx * mirror) * 180 / math.pi;
   final attitudeA =
       math.atan2(-axisA.dy, axisA.dx * mirror) * 180 / math.pi;
   final attitudeB =
