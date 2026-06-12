@@ -8,11 +8,12 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Re-encodes an imported clip so every frame is a keyframe (`-g 1`).
+/// Re-encodes an imported clip with a keyframe every few frames.
 /// Phone recordings keep keyframes seconds apart, so an exact seek has to
-/// decode every frame since the previous keyframe; all-intra video makes
-/// each seek decode exactly one frame, which is what lets frame-by-frame
-/// scrubbing feel instant.
+/// decode every frame since the previous keyframe; a tiny GOP caps that
+/// work at a handful of frames, which is what lets frame-by-frame
+/// scrubbing feel instant. (All-intra would cap it at one frame, but its
+/// ~100+ Mbps bitrate makes continuous playback stutter.)
 class VideoOptimizer {
   /// Returns the path of the optimized copy, or [srcPath] if encoding
   /// fails or is cancelled — the original still plays, scrubbing is just
@@ -41,12 +42,14 @@ class VideoOptimizer {
     final done = Completer<bool>();
     await FFmpegKit.executeAsync(
       // superfast (not ultrafast) keeps CABAC and the deblocking filter
-      // on, and CRF 17 compensates for intra-only frames rating worse
-      // than inter ones at equal CRF; lanczos keeps 4K downscales sharp.
-      // 1440p (not 1080) keeps detail for pinch-zoom while staying well
-      // under the cost of all-intra 4K.
+      // on; lanczos keeps 4K downscales sharp; 1440p (not 1080) keeps
+      // detail for pinch-zoom. g=6 over g=1: all-intra streams stuttered
+      // during playback, while a 6-frame GOP plays like normal video and
+      // an exact seek decodes at most 5 cheap P-frames. sc_threshold=0
+      // stops scene-cut keyframes from disturbing the uniform grid; bf=0
+      // keeps decode order = display order for clean frame stepping.
       '-y -i "$srcPath" -vf scale=-2:min(1440\\,ih):flags=lanczos '
-      '-c:v libx264 -preset superfast -crf 17 -g 1 -bf 0 '
+      '-c:v libx264 -preset superfast -crf 17 -g 6 -bf 0 -sc_threshold 0 '
       '-pix_fmt yuv420p -c:a copy "$outPath"',
       (session) async {
         done.complete(ReturnCode.isSuccess(await session.getReturnCode()));
