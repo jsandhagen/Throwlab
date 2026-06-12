@@ -9,6 +9,14 @@ import '../utils/time_format.dart';
 
 const kPlaybackSpeeds = [0.1, 0.25, 0.5, 0.75, 1.0];
 
+/// Drag distance that advances the video one frame when scrubbing:
+/// ~1 px per millisecond of REAL time the frame represents, so normal-speed
+/// clips (33 ms frames) advance gently enough for seeks to keep rendering,
+/// while slow-mo clips (4 ms frames) stay quick to traverse. Clamped so
+/// both extremes remain usable.
+double scrubPixelsPerFrame(double captureFps) =>
+    captureFps <= 0 ? 8.0 : (1000 / captureFps).clamp(4.0, 40.0);
+
 /// Rounds [position] to the nearest frame boundary so seeks land on exact
 /// frames instead of arbitrary milliseconds between them.
 Duration snapToFrame(Duration position, double fps) {
@@ -26,6 +34,7 @@ class PlaybackControls extends StatefulWidget {
     super.key,
     required this.controller,
     required this.fps,
+    this.captureFps,
     this.trailing,
     this.dense = false,
     this.horizontal = false,
@@ -33,6 +42,11 @@ class PlaybackControls extends StatefulWidget {
 
   final VideoPlayerController controller;
   final double fps;
+
+  /// Real recorded frame rate (slow-mo clips); defaults to [fps]. Sets the
+  /// scrub wheel's sensitivity via [scrubPixelsPerFrame].
+  final double? captureFps;
+
   final Widget? trailing;
 
   /// Compact sizing for use as an overlay on top of the video.
@@ -126,7 +140,11 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     SizedBox(height: 20, child: slider),
-                    ScrubWheel(controller: controller, fps: fps, height: 32),
+                    ScrubWheel(
+                        controller: controller,
+                        fps: fps,
+                        captureFps: widget.captureFps,
+                        height: 32),
                   ],
                 ),
               ),
@@ -143,7 +161,10 @@ class _PlaybackControlsState extends State<PlaybackControls> {
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(height: 26, child: slider),
-            ScrubWheel(controller: controller, fps: fps),
+            ScrubWheel(
+                controller: controller,
+                fps: fps,
+                captureFps: widget.captureFps),
             Row(
               children: [
                 Expanded(
@@ -177,17 +198,20 @@ class _PlaybackControlsState extends State<PlaybackControls> {
 
 /// Flywheel scrubber: drag to step through frames, flick to keep spinning
 /// with momentum. Dragging right moves forward, matching the drag-to-scrub
-/// gesture on the video itself.
+/// gesture on the video itself; sensitivity scales with the clip's real
+/// frame rate (see [scrubPixelsPerFrame]).
 class ScrubWheel extends StatefulWidget {
   const ScrubWheel({
     super.key,
     required this.controller,
     required this.fps,
+    this.captureFps,
     this.height = 44,
   });
 
   final VideoPlayerController controller;
   final double fps;
+  final double? captureFps;
   final double height;
 
   @override
@@ -196,9 +220,8 @@ class ScrubWheel extends StatefulWidget {
 
 class _ScrubWheelState extends State<ScrubWheel>
     with SingleTickerProviderStateMixin {
-  /// Drag distance that moves the video one frame (same feel as the
-  /// on-video jog).
-  static const _pixelsPerFrame = 8.0;
+  double get _pixelsPerFrame =>
+      scrubPixelsPerFrame(widget.captureFps ?? widget.fps);
 
   /// Fraction of fling velocity left after one second of coasting.
   static const _decayPerSecond = 0.02;
@@ -271,6 +294,7 @@ class _ScrubWheelState extends State<ScrubWheel>
               phase: value.position.inMicroseconds /
                   _frameStep.inMicroseconds *
                   _pixelsPerFrame,
+              spacing: _pixelsPerFrame,
               tickColor: Colors.white70,
               markerColor: scheme.primary,
             ),
@@ -287,26 +311,28 @@ class _ScrubWheelState extends State<ScrubWheel>
 class _WheelPainter extends CustomPainter {
   _WheelPainter({
     required this.phase,
+    required this.spacing,
     required this.tickColor,
     required this.markerColor,
   });
 
   /// Horizontal tick offset in pixels: current frame × pixels-per-frame.
   final double phase;
-  final Color tickColor;
-  final Color markerColor;
 
   /// One tick per frame, matching the wheel's drag ratio.
-  static const _spacing = 8.0;
+  final double spacing;
+
+  final Color tickColor;
+  final Color markerColor;
 
   @override
   void paint(Canvas canvas, Size size) {
     final mid = size.height / 2;
     final half = size.width / 2;
-    final first = ((-phase) / _spacing).ceil();
-    final last = ((size.width - phase) / _spacing).floor();
+    final first = ((-phase) / spacing).ceil();
+    final last = ((size.width - phase) / spacing).floor();
     for (var k = first; k <= last; k++) {
-      final x = k * _spacing + phase;
+      final x = k * spacing + phase;
       final isMajor = k % 5 == 0;
       final tall = isMajor ? 18.0 : 10.0;
       final fade =
@@ -328,6 +354,7 @@ class _WheelPainter extends CustomPainter {
   @override
   bool shouldRepaint(_WheelPainter oldDelegate) =>
       phase != oldDelegate.phase ||
+      spacing != oldDelegate.spacing ||
       tickColor != oldDelegate.tickColor ||
       markerColor != oldDelegate.markerColor;
 }

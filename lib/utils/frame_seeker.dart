@@ -60,6 +60,13 @@ class FrameSeeker {
     _pump();
   }
 
+  /// Minimum spacing between platform seeks. On Android, seekTo's future
+  /// completes when the command reaches ExoPlayer, not when the seek
+  /// finishes — back-to-back seeks flush the decoder before it can render,
+  /// so unpaced scrubbing leaps between distant frames whenever the finger
+  /// slows. ~20 renders/s still reads as continuous motion.
+  static const _seekSpacing = Duration(milliseconds: 50);
+
   Future<void> _pump() async {
     if (_pumping) return;
     _pumping = true;
@@ -69,6 +76,10 @@ class FrameSeeker {
         _pending = null;
         _inFlight = target;
         await controller.seekTo(target);
+        // Also keeps [_inFlight] (the truth about where the video is
+        // heading) alive while the platform finishes, so position reads
+        // during the window stay correct.
+        await Future<void>.delayed(_seekSpacing);
       }
     } finally {
       _inFlight = null;

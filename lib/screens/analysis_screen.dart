@@ -96,8 +96,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   // (InteractiveViewer's own recognizer used to race the drawing layer's,
   // which made pinch-zoom land unpredictably.)
 
-  /// Drag distance that advances the video by one frame in scrub mode.
-  static const _pixelsPerFrame = 8.0;
+  /// Drag distance that advances the video by one frame in scrub mode,
+  /// scaled to the clip's real frame duration like the wheel.
+  double get _pixelsPerFrame =>
+      scrubPixelsPerFrame(widget.video.captureFps);
 
   Size _viewport = Size.zero;
   double _zoomScale = 1;
@@ -886,6 +888,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
+              captureFps: widget.video.captureFps,
               dense: true,
               horizontal: landscape,
             ),
