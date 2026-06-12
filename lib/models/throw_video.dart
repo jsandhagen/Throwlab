@@ -8,6 +8,7 @@ class ThrowVideo {
     required this.event,
     required this.gender,
     required this.importedAt,
+    this.recordedAt,
     this.fps = 30,
     double? captureFps,
     this.note = '',
@@ -20,6 +21,14 @@ class ThrowVideo {
   final ThrowEvent event;
   final Gender gender;
   final DateTime importedAt;
+
+  /// When the camera recorded the clip (from the file's creation_time
+  /// metadata, UTC); null when the tag was absent or for old imports.
+  final DateTime? recordedAt;
+
+  /// The date shown for this throw: the recording time when known,
+  /// otherwise the import time.
+  DateTime get displayDate => recordedAt ?? importedAt;
 
   /// Container/playback frame rate, probed from metadata on import.
   /// Drives frame-step size and frame numbering.
@@ -47,6 +56,7 @@ class ThrowVideo {
         'event': event.name,
         'gender': gender.name,
         'importedAt': importedAt.toIso8601String(),
+        'recordedAt': recordedAt?.toIso8601String(),
         'fps': fps,
         'captureFps': captureFps,
         'note': note,
@@ -60,6 +70,9 @@ class ThrowVideo {
         event: ThrowEvent.values.byName(json['event'] as String),
         gender: Gender.values.byName(json['gender'] as String),
         importedAt: DateTime.parse(json['importedAt'] as String),
+        recordedAt: json['recordedAt'] == null
+            ? null
+            : DateTime.tryParse(json['recordedAt'] as String),
         fps: (json['fps'] as num?)?.toDouble() ?? 30,
         captureFps: (json['captureFps'] as num?)?.toDouble(),
         note: json['note'] as String? ?? '',

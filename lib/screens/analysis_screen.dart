@@ -324,6 +324,40 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     _nodeDrag = null;
   }
 
+  /// Read/edit the throw's note without leaving the video.
+  Future<void> _editNote() async {
+    final controller = TextEditingController(text: widget.video.note);
+    final note = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Note'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 2,
+          maxLines: 6,
+          textCapitalization: TextCapitalization.sentences,
+          decoration: const InputDecoration(
+              hintText: 'e.g. "PB attempt, slight headwind"'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (note == null || !mounted) return;
+    widget.video.note = note.trim();
+    await context.read<VideoLibrary>().update(widget.video);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _editFps() async {
     final fieldController = TextEditingController(
         text: widget.video.captureFps.toStringAsFixed(0));
@@ -662,6 +696,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         : '${widget.video.note} · $summary';
     await context.read<VideoLibrary>().update(widget.video);
     if (mounted) {
+      setState(() {}); // note icon switches to "has a note"
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Saved to note: $summary')));
@@ -757,6 +792,13 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             constraints: const BoxConstraints(maxWidth: 220), child: title)
       else
         Expanded(child: title),
+      IconButton(
+        tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
+        icon: Icon(widget.video.note.isEmpty
+            ? Icons.note_add_outlined
+            : Icons.sticky_note_2),
+        onPressed: _editNote,
+      ),
       IconButton(
         tooltip: 'Measure release (speed & angles)',
         icon: const Icon(Icons.speed),

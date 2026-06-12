@@ -73,25 +73,34 @@ class VideoOptimizer {
   /// original file.
   static Future<void> cancel() => FFmpegKit.cancel();
 
-  /// Frame rates probed from the clip's metadata. [playback] is the
-  /// container rate that frame stepping must use; [capture] is the real
-  /// recorded rate — slow-mo clips often play at 30 fps while each frame
-  /// represents 1/240 s of real time, advertised by Android via the
-  /// com.android.capture.fps tag.
-  static Future<({double playback, double capture})?> probeFrameRates(
-      String path) async {
+  /// Frame rates and recording time probed from the clip's metadata.
+  /// [playback] is the container rate that frame stepping must use;
+  /// [capture] is the real recorded rate — slow-mo clips often play at
+  /// 30 fps while each frame represents 1/240 s of real time, advertised
+  /// by Android via the com.android.capture.fps tag. [recordedAt] is the
+  /// camera's creation_time tag (UTC), null when absent.
+  static Future<
+      ({
+        double playback,
+        double capture,
+        DateTime? recordedAt,
+      })?> probeFrameRates(String path) async {
     try {
       final session = await FFprobeKit.getMediaInformation(path);
       final info = session.getMediaInformation();
       if (info == null) return null;
       double? playback;
       double? capture;
+      DateTime? recordedAt =
+          DateTime.tryParse('${info.getTags()?['creation_time'] ?? ''}');
       for (final stream in info.getStreams()) {
         if (stream.getType() != 'video') continue;
         playback ??= parseRate(stream.getAverageFrameRate()) ??
             parseRate(stream.getRealFrameRate());
         capture ??= parseRate(
             '${stream.getTags()?['com.android.capture.fps'] ?? ''}');
+        recordedAt ??= DateTime.tryParse(
+            '${stream.getTags()?['creation_time'] ?? ''}');
       }
       capture ??=
           parseRate('${info.getTags()?['com.android.capture.fps'] ?? ''}');
@@ -99,6 +108,7 @@ class VideoOptimizer {
       return (
         playback: playback,
         capture: math.max(capture ?? playback, playback),
+        recordedAt: recordedAt,
       );
     } catch (_) {
       return null;

@@ -121,6 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
       event: details.event,
       gender: details.gender,
       importedAt: DateTime.now(),
+      recordedAt: rates?.recordedAt,
       fps: rates?.playback ?? 30,
       captureFps: rates?.capture,
       athlete: details.athlete,
@@ -307,7 +308,7 @@ class _HomeScreenState extends State<HomeScreen> {
       title: Text(title,
           style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(
-        '${video.importedAt.toLocal().toString().substring(0, 16)}'
+        '${video.displayDate.toLocal().toString().substring(0, 16)}'
         '${video.note.isEmpty ? '' : ' — ${video.note}'}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
