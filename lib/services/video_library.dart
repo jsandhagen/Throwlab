@@ -14,27 +14,42 @@ class VideoLibrary extends ChangeNotifier {
 
   final List<ThrowVideo> _videos = [];
   bool _loaded = false;
+  String? _storageError;
 
   List<ThrowVideo> get videos => List.unmodifiable(_videos);
   bool get isLoaded => _loaded;
 
+  /// Non-null when reading or writing SharedPreferences failed; the library
+  /// still works in memory, but imports won't survive a restart.
+  String? get storageError => _storageError;
+
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
-    _videos.clear();
-    if (raw != null) {
-      try {
-        final decoded = jsonDecode(raw) as List<dynamic>;
-        _videos.addAll(decoded
-            .map((e) => ThrowVideo.fromJson(e as Map<String, dynamic>)));
-      } catch (_) {
-        // Corrupt store: recover with an empty library instead of leaving
-        // the app stuck on the loading spinner.
-        _videos.clear();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_storageKey);
+      _videos.clear();
+      if (raw != null) {
+        try {
+          final decoded = jsonDecode(raw) as List<dynamic>;
+          _videos.addAll(decoded
+              .map((e) => ThrowVideo.fromJson(e as Map<String, dynamic>)));
+        } catch (_) {
+          // Corrupt store: recover with an empty library.
+          _videos.clear();
+        }
       }
+      _storageError = null;
+    } catch (e) {
+      // getInstance() itself can throw (e.g. the storage plugin failed to
+      // register); start empty and surface the error in the UI.
+      _videos.clear();
+      _storageError = '$e';
+    } finally {
+      // Always leave the loading state, even when storage is broken, so the
+      // app never wedges on the startup spinner.
+      _loaded = true;
+      notifyListeners();
     }
-    _loaded = true;
-    notifyListeners();
   }
 
   Future<void> add(ThrowVideo video) async {
@@ -58,8 +73,14 @@ class VideoLibrary extends ChangeNotifier {
   }
 
   Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _storageKey, jsonEncode(_videos.map((v) => v.toJson()).toList()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          _storageKey, jsonEncode(_videos.map((v) => v.toJson()).toList()));
+      _storageError = null;
+    } catch (e) {
+      // Keep the in-memory library usable even when persistence is broken.
+      _storageError = '$e';
+    }
   }
 }

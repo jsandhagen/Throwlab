@@ -53,12 +53,32 @@ jobs:
           else
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/' android/app/build.gradle
           fi
+      # ffmpeg_kit_flutter_new ships no consumer ProGuard rules, so R8 (on by
+      # default in release builds) breaks plugin channel registration —
+      # shared_preferences fails with "Unable to establish connection" and the
+      # app hangs on the startup spinner (sk3llo/ffmpeg_kit_flutter#82). The
+      # package's own example app also builds release with minification off.
+      - name: Disable R8 minification (incompatible with ffmpeg-kit)
+        run: |
+          if [ -f android/app/build.gradle.kts ]; then
+            sed -i 's/^\([[:space:]]*\)release {/\1release {\n\1    isMinifyEnabled = false\n\1    isShrinkResources = false/' android/app/build.gradle.kts
+            grep -q "isMinifyEnabled = false" android/app/build.gradle.kts
+          else
+            sed -i 's/^\([[:space:]]*\)release {/\1release {\n\1    minifyEnabled false\n\1    shrinkResources false/' android/app/build.gradle
+            grep -q "minifyEnabled false" android/app/build.gradle
+          fi
       - run: flutter pub get
       - name: Generate launcher icons
         run: dart run flutter_launcher_icons
       # The run number becomes the APK's build number; the same number is
       # published as version.txt so installed apps can detect newer builds.
       - run: flutter build apk --release --build-number=${{ github.run_number }}
+      # If minification ever sneaks back in, plugin class names get obfuscated
+      # and the startup hang returns; fail the build instead of shipping it.
+      - name: Verify plugin classes survived unminified
+        run: |
+          unzip -p build/app/outputs/flutter-apk/app-release.apk 'classes*.dex' \
+            | grep -aq "io/flutter/plugins/sharedpreferences/SharedPreferencesPlugin"
       # Gradle signs with a debug keystore generated per-runner, which changes
       # the signature every build and makes Android reject updates over the
       # previous install. Re-sign deterministically with the repo keystore,

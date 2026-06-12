@@ -225,55 +225,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (!library.isLoaded) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (library.videos.isEmpty) {
-                    return const _EmptyState();
-                  }
-                  final groups = _grouped(library.videos);
-                  return ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+                  final content = library.videos.isEmpty
+                      ? const _EmptyState()
+                      : _libraryList(library);
+                  if (library.storageError == null) return content;
+                  return Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: SegmentedButton<LibraryGrouping>(
-                          showSelectedIcon: false,
-                          segments: const [
-                            ButtonSegment(
-                                value: LibraryGrouping.athlete,
-                                icon: Icon(Icons.person),
-                                label: Text('By athlete')),
-                            ButtonSegment(
-                                value: LibraryGrouping.event,
-                                icon: Icon(Icons.category),
-                                label: Text('By event')),
-                          ],
-                          selected: {_grouping},
-                          onSelectionChanged: (selection) => setState(
-                              () => _grouping = selection.first),
-                        ),
-                      ),
-                      for (final entry in groups.entries)
-                        Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          clipBehavior: Clip.antiAlias,
-                          child: ExpansionTile(
-                            initiallyExpanded: true,
-                            shape: const Border(),
-                            leading: Icon(
-                                _grouping == LibraryGrouping.athlete
-                                    ? Icons.person
-                                    : entry.value.first.event.icon),
-                            title: Text(entry.key,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600)),
-                            subtitle: Text(
-                                '${entry.value.length} '
-                                'throw${entry.value.length == 1 ? '' : 's'}'),
-                            children: [
-                              for (final video in entry.value)
-                                _videoTile(context, video),
-                            ],
-                          ),
-                        ),
+                      _StorageErrorBanner(error: library.storageError!),
+                      Expanded(child: content),
                     ],
                   );
                 },
@@ -287,6 +246,53 @@ class _HomeScreenState extends State<HomeScreen> {
         label: const Text('Import throw'),
         onPressed: _importVideo,
       ),
+    );
+  }
+
+  Widget _libraryList(VideoLibrary library) {
+    final groups = _grouped(library.videos);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: SegmentedButton<LibraryGrouping>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(
+                  value: LibraryGrouping.athlete,
+                  icon: Icon(Icons.person),
+                  label: Text('By athlete')),
+              ButtonSegment(
+                  value: LibraryGrouping.event,
+                  icon: Icon(Icons.category),
+                  label: Text('By event')),
+            ],
+            selected: {_grouping},
+            onSelectionChanged: (selection) =>
+                setState(() => _grouping = selection.first),
+          ),
+        ),
+        for (final entry in groups.entries)
+          Card(
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            clipBehavior: Clip.antiAlias,
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              shape: const Border(),
+              leading: Icon(_grouping == LibraryGrouping.athlete
+                  ? Icons.person
+                  : entry.value.first.event.icon),
+              title: Text(entry.key,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: Text('${entry.value.length} '
+                  'throw${entry.value.length == 1 ? '' : 's'}'),
+              children: [
+                for (final video in entry.value) _videoTile(context, video),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -376,6 +382,36 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(context, controller.text),
               child: const Text('Save')),
         ],
+      ),
+    );
+  }
+}
+
+class _StorageErrorBanner extends StatelessWidget {
+  const _StorageErrorBanner({required this.error});
+
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.errorContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.warning_amber, color: scheme.onErrorContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Storage unavailable — the library won\'t survive a '
+                'restart. ($error)',
+                style: TextStyle(color: scheme.onErrorContainer),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
