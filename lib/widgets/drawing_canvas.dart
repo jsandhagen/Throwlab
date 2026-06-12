@@ -85,114 +85,25 @@ class DrawingController extends ChangeNotifier {
   }
 }
 
-/// Transparent gesture + paint layer stacked over the video player.
-///
-/// In scrub mode ([DrawTool.none]) horizontal drags are reported through
-/// [onJogFrames] so the video underneath can be stepped frame by frame.
-class DrawingCanvas extends StatefulWidget {
-  const DrawingCanvas({super.key, required this.controller, this.onJogFrames});
+/// Paint-only annotation layer stacked over the video player. Gestures are
+/// handled by the screen, which owns a single recognizer for zooming,
+/// scrubbing, drawing, and node dragging — separate competing recognizers
+/// made pinch-zoom land unpredictably.
+class DrawingCanvas extends StatelessWidget {
+  const DrawingCanvas({super.key, required this.controller});
 
   final DrawingController controller;
-  final ValueChanged<int>? onJogFrames;
-
-  @override
-  State<DrawingCanvas> createState() => _DrawingCanvasState();
-}
-
-class _DrawingCanvasState extends State<DrawingCanvas> {
-  /// Drag distance that advances the video by one frame.
-  static const _pixelsPerFrame = 8.0;
-  double _jogAccumulator = 0;
-
-  /// Two-finger gestures belong to the pinch-zoom viewer above this layer;
-  /// ignore them here so a pinch never jogs frames or leaves pen marks.
-  int _activePointers = 0;
-
-  DrawingController get controller => widget.controller;
-
-  Offset _normalize(Offset position, Size size) => Offset(
-        (position.dx / size.width).clamp(0.0, 1.0),
-        (position.dy / size.height).clamp(0.0, 1.0),
-      );
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        return LayoutBuilder(builder: (context, constraints) {
-          final size = constraints.biggest;
-          return Listener(
-            onPointerDown: (_) => _activePointers++,
-            onPointerUp: (_) =>
-                _activePointers = math.max(0, _activePointers - 1),
-            onPointerCancel: (_) =>
-                _activePointers = math.max(0, _activePointers - 1),
-            child: GestureDetector(
-              behavior: controller.tool == DrawTool.none
-                  ? HitTestBehavior.translucent
-                  : HitTestBehavior.opaque,
-              onTapUp: (details) {
-                if (controller.tool != DrawTool.angle) return;
-                final point = _normalize(details.localPosition, size);
-                final last = controller.annotations.lastOrNull;
-                if (last is AngleAnnotation && !last.isComplete) {
-                  last.points.add(point);
-                  controller.notifyChanged();
-                } else {
-                  controller.add(AngleAnnotation(controller.color)
-                    ..points.add(point));
-                }
-              },
-              onPanStart: (details) {
-                if (_activePointers > 1) return;
-                final point = _normalize(details.localPosition, size);
-                switch (controller.tool) {
-                  case DrawTool.pen:
-                    controller.add(PenStroke(controller.color, [point]));
-                  case DrawTool.line:
-                    controller
-                        .add(LineAnnotation(controller.color, point, point));
-                  case DrawTool.angle:
-                    break;
-                  case DrawTool.none:
-                    _jogAccumulator = 0;
-                }
-              },
-              onPanUpdate: (details) {
-                if (_activePointers > 1) return;
-                final point = _normalize(details.localPosition, size);
-                final last = controller.annotations.lastOrNull;
-                switch (controller.tool) {
-                  case DrawTool.pen:
-                    if (last is PenStroke) {
-                      last.points.add(point);
-                      controller.notifyChanged();
-                    }
-                  case DrawTool.line:
-                    if (last is LineAnnotation) {
-                      last.end = point;
-                      controller.notifyChanged();
-                    }
-                  case DrawTool.angle:
-                    break;
-                  case DrawTool.none:
-                    _jogAccumulator += details.delta.dx;
-                    final frames = _jogAccumulator ~/ _pixelsPerFrame;
-                    if (frames != 0 && widget.onJogFrames != null) {
-                      _jogAccumulator -= frames * _pixelsPerFrame;
-                      widget.onJogFrames!(frames);
-                    }
-                }
-              },
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _AnnotationPainter(controller.annotations),
-              ),
-            ),
-          );
-        });
-      },
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: controller,
+        builder: (context, _) => CustomPaint(
+          size: Size.infinite,
+          painter: _AnnotationPainter(controller.annotations),
+        ),
+      ),
     );
   }
 }

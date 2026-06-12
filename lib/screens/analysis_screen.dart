@@ -30,7 +30,7 @@ const _releaseHeights = {
   ThrowEvent.javelin: 1.8,
 };
 
-enum _MeasureStep { refA, refB, pointA, pointB }
+enum _MeasureStep { refA, refB, pointA, pointB, review }
 
 /// Single-throw breakdown: slow motion, frame stepping, drawing, and
 /// tap-to-measure release metrics.
@@ -82,6 +82,233 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         microseconds: (Duration.microsecondsPerSecond / widget.video.fps)
             .round());
     _seeker.seekBy(step * frames);
+  }
+
+  // ---- Zoom + unified gestures ----
+  //
+  // One ScaleGestureRecognizer owns every touch on the video: two fingers
+  // zoom/pan, one finger scrubs, draws, or drags a measurement/angle node.
+  // (InteractiveViewer's own recognizer used to race the drawing layer's,
+  // which made pinch-zoom land unpredictably.)
+
+  /// Drag distance that advances the video by one frame in scrub mode.
+  static const _pixelsPerFrame = 8.0;
+
+  Size _viewport = Size.zero;
+  double _zoomScale = 1;
+  Offset _zoomOffset = Offset.zero;
+  double _gestureStartScale = 1;
+  Offset _gestureStartOffset = Offset.zero;
+  Offset _gestureStartFocal = Offset.zero;
+  double _jogAccumulator = 0;
+  bool _activeStroke = false;
+  void Function(Offset canvasPoint)? _nodeDrag;
+
+  /// Where the (aspect-fitted) video sits inside the viewport, pre-zoom.
+  Rect get _videoRect {
+    final ratio = _controller.value.aspectRatio;
+    var w = _viewport.width;
+    var h = w / ratio;
+    if (h > _viewport.height) {
+      h = _viewport.height;
+      w = h * ratio;
+    }
+    return Rect.fromLTWH(
+        (_viewport.width - w) / 2, (_viewport.height - h) / 2, w, h);
+  }
+
+  /// Screen position → position relative to the video's top-left corner,
+  /// in the video's own (unzoomed) coordinates. All stored points live in
+  /// this space, which is what makes measurements zoom-proof.
+  Offset _toCanvas(Offset screen) =>
+      (screen - _zoomOffset) / _zoomScale - _videoRect.topLeft;
+
+  Offset _normalizeCanvas(Offset canvasPoint) {
+    final r = _videoRect;
+    return Offset((canvasPoint.dx / r.width).clamp(0.0, 1.0),
+        (canvasPoint.dy / r.height).clamp(0.0, 1.0));
+  }
+
+  Offset _clampToVideo(Offset p) {
+    final r = _videoRect;
+    return Offset(p.dx.clamp(0.0, r.width), p.dy.clamp(0.0, r.height));
+  }
+
+  /// Keeps the zoomed content covering the viewport (no gaps at edges).
+  Offset _clampZoomOffset(Offset off, double scale) => Offset(
+        off.dx.clamp(_viewport.width * (1 - scale), 0.0),
+        off.dy.clamp(_viewport.height * (1 - scale), 0.0),
+      );
+
+  /// Finds a draggable node near [canvasPoint]: a measurement crosshair
+  /// while measuring, or an angle-annotation point when the angle tool is
+  /// active. Returns the setter that moves it, or null.
+  void Function(Offset)? _hitTestNode(Offset canvasPoint) {
+    var best = 28 / _zoomScale; // ~finger-sized in screen px
+    if (_measureStep != null) {
+      void Function(Offset)? hit;
+      void check(Offset? p, void Function(Offset) move) {
+        if (p == null) return;
+        final d = (p - canvasPoint).distance;
+        if (d < best) {
+          best = d;
+          hit = move;
+        }
+      }
+
+      check(_refA, (p) => _refA = p);
+      check(_refB, (p) => _refB = p);
+      check(_pointA, (p) => _pointA = p);
+      check(_pointB, (p) => _pointB = p);
+      final found = hit;
+      if (found == null) return null;
+      return (p) => setState(() => found(p));
+    }
+    if (_drawing.tool == DrawTool.angle) {
+      final r = _videoRect;
+      AngleAnnotation? hitAnnotation;
+      var hitIndex = 0;
+      for (final annotation in _drawing.annotations) {
+        if (annotation is! AngleAnnotation) continue;
+        for (var i = 0; i < annotation.points.length; i++) {
+          final p = Offset(annotation.points[i].dx * r.width,
+              annotation.points[i].dy * r.height);
+          final d = (p - canvasPoint).distance;
+          if (d < best) {
+            best = d;
+            hitAnnotation = annotation;
+            hitIndex = i;
+          }
+        }
+      }
+      if (hitAnnotation == null) return null;
+      final annotation = hitAnnotation;
+      return (p) {
+        annotation.points[hitIndex] = _normalizeCanvas(p);
+        _drawing.notifyChanged();
+      };
+    }
+    return null;
+  }
+
+  void _onVideoTap(Offset screenPos) {
+    final canvasPoint = _toCanvas(screenPos);
+    final r = _videoRect;
+    if (canvasPoint.dx < 0 ||
+        canvasPoint.dy < 0 ||
+        canvasPoint.dx > r.width ||
+        canvasPoint.dy > r.height) {
+      return;
+    }
+    if (_measureStep != null) {
+      _onMeasureTap(canvasPoint);
+      return;
+    }
+    if (_drawing.tool == DrawTool.angle) {
+      final point = _normalizeCanvas(canvasPoint);
+      final last = _drawing.annotations.lastOrNull;
+      if (last is AngleAnnotation && !last.isComplete) {
+        last.points.add(point);
+        _drawing.notifyChanged();
+      } else {
+        _drawing.add(AngleAnnotation(_drawing.color)..points.add(point));
+      }
+    }
+  }
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _gestureStartScale = _zoomScale;
+    _gestureStartOffset = _zoomOffset;
+    _gestureStartFocal = details.localFocalPoint;
+    _nodeDrag = null;
+    if (details.pointerCount > 1) {
+      // A pinch that began as a one-finger drag: discard the stray stroke.
+      if (_activeStroke) _drawing.undo();
+      _activeStroke = false;
+      return;
+    }
+    _activeStroke = false;
+    final canvasPoint = _toCanvas(details.localFocalPoint);
+    _nodeDrag = _hitTestNode(canvasPoint);
+    if (_nodeDrag != null) return;
+    if (_measureStep != null) {
+      // While reviewing, free drags scrub so both frames can be checked.
+      if (_measureStep == _MeasureStep.review) _jogAccumulator = 0;
+      return;
+    }
+    switch (_drawing.tool) {
+      case DrawTool.pen:
+        _drawing
+            .add(PenStroke(_drawing.color, [_normalizeCanvas(canvasPoint)]));
+        _activeStroke = true;
+      case DrawTool.line:
+        final p = _normalizeCanvas(canvasPoint);
+        _drawing.add(LineAnnotation(_drawing.color, p, p));
+        _activeStroke = true;
+      case DrawTool.angle:
+        break;
+      case DrawTool.none:
+        _jogAccumulator = 0;
+    }
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount > 1) {
+      final scale =
+          (_gestureStartScale * details.scale).clamp(1.0, 8.0);
+      // Keep the content point that started under the fingers under them.
+      final anchor =
+          (_gestureStartFocal - _gestureStartOffset) / _gestureStartScale;
+      setState(() {
+        _zoomScale = scale;
+        _zoomOffset = _clampZoomOffset(
+            details.localFocalPoint - anchor * scale, scale);
+      });
+      return;
+    }
+    final canvasPoint = _toCanvas(details.localFocalPoint);
+    if (_nodeDrag != null) {
+      _nodeDrag!(_clampToVideo(canvasPoint));
+      return;
+    }
+    if (_measureStep != null) {
+      if (_measureStep == _MeasureStep.review) {
+        _jogBy(details.focalPointDelta.dx);
+      }
+      return;
+    }
+    final last = _drawing.annotations.lastOrNull;
+    switch (_drawing.tool) {
+      case DrawTool.pen:
+        if (_activeStroke && last is PenStroke) {
+          last.points.add(_normalizeCanvas(canvasPoint));
+          _drawing.notifyChanged();
+        }
+      case DrawTool.line:
+        if (_activeStroke && last is LineAnnotation) {
+          last.end = _normalizeCanvas(canvasPoint);
+          _drawing.notifyChanged();
+        }
+      case DrawTool.angle:
+        break;
+      case DrawTool.none:
+        _jogBy(details.focalPointDelta.dx);
+    }
+  }
+
+  /// Jog by screen-space drag distance so scrubbing feels the same at any
+  /// zoom level.
+  void _jogBy(double dx) {
+    _jogAccumulator += dx;
+    final frames = _jogAccumulator ~/ _pixelsPerFrame;
+    if (frames != 0) {
+      _jogAccumulator -= frames * _pixelsPerFrame;
+      _jogFrames(frames);
+    }
+  }
+
+  void _onScaleEnd(ScaleEndDetails details) {
+    _nodeDrag = null;
   }
 
   Future<void> _editFps() async {
@@ -148,6 +375,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ? 'Now tap the javelin TAIL again'
             : 'Jumped ${(_measureDt * 1000).round()} ms forward — tap the '
                 'same spot on the $_refWord again',
+        _MeasureStep.review =>
+          'Drag any marker to fine-tune, then tap Calculate',
       };
 
   void _startMeasure() {
@@ -199,9 +428,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       case _MeasureStep.pointB:
         setState(() {
           _pointB = position;
-          _measureStep = null;
+          _measureStep = _MeasureStep.review;
         });
-        _showResults();
+      case _MeasureStep.review:
+        break; // Markers are adjusted by dragging, not tapping.
     }
   }
 
@@ -333,44 +563,52 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ),
             )
           : _controller.value.isInitialized
-              // Pinch with two fingers to zoom in on the implement; one
-              // finger keeps scrubbing/drawing/tapping. Coordinates stay in
-              // the video's own space, so measurements are zoom-proof.
-              ? InteractiveViewer(
-                  maxScale: 8,
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          VideoPlayer(_controller),
-                          DrawingCanvas(
-                            controller: _drawing,
-                            onJogFrames: _jogFrames,
-                          ),
-                          IgnorePointer(
-                            ignoring: _measureStep == null,
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTapUp: (details) =>
-                                  _onMeasureTap(details.localPosition),
-                              child: CustomPaint(
-                                size: Size.infinite,
-                                painter: _MeasurePainter(
-                                  refA: _refA,
-                                  refB: _refB,
-                                  pointA: _pointA,
-                                  pointB: _pointB,
-                                ),
+              ? LayoutBuilder(builder: (context, constraints) {
+                  _viewport = constraints.biggest;
+                  // Re-clamp in case the viewport changed (e.g. rotation).
+                  final offset = _clampZoomOffset(_zoomOffset, _zoomScale);
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapUp: (details) => _onVideoTap(details.localPosition),
+                    onScaleStart: _onScaleStart,
+                    onScaleUpdate: _onScaleUpdate,
+                    onScaleEnd: _onScaleEnd,
+                    child: ClipRect(
+                      child: Transform(
+                        transform: Matrix4.identity()
+                          ..translate(offset.dx, offset.dy)
+                          ..scale(_zoomScale),
+                        child: SizedBox(
+                          width: _viewport.width,
+                          height: _viewport.height,
+                          child: Center(
+                            child: AspectRatio(
+                              aspectRatio: _controller.value.aspectRatio,
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  VideoPlayer(_controller),
+                                  DrawingCanvas(controller: _drawing),
+                                  IgnorePointer(
+                                    child: CustomPaint(
+                                      size: Size.infinite,
+                                      painter: _MeasurePainter(
+                                        refA: _refA,
+                                        refB: _refB,
+                                        pointA: _pointA,
+                                        pointB: _pointB,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                )
+                  );
+                })
               : const CircularProgressIndicator(),
     );
   }
@@ -437,6 +675,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         onPressed: _cancelMeasure,
                         child: const Text('Cancel'),
                       ),
+                      if (_measureStep == _MeasureStep.review)
+                        FilledButton(
+                          onPressed: _showResults,
+                          child: const Text('Calculate'),
+                        ),
                     ],
                   ),
                 ),
