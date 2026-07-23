@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
 import '../utils/frame_seeker.dart';
+import '../utils/scrub.dart';
 import '../utils/time_format.dart';
 
 const kPlaybackSpeeds = [0.1, 0.25, 0.5, 0.75, 1.0];
@@ -231,7 +232,7 @@ class _ScrubWheelState extends State<ScrubWheel>
 
   late final FrameSeeker _seeker = FrameSeeker(widget.controller);
   late final Ticker _ticker = createTicker(_onTick);
-  double _accumulator = 0;
+  final ScrubAccumulator _scrub = ScrubAccumulator();
   double _velocity = 0;
   Duration _lastTick = Duration.zero;
 
@@ -244,24 +245,28 @@ class _ScrubWheelState extends State<ScrubWheel>
   Duration get _frameStep => Duration(
       microseconds: (Duration.microsecondsPerSecond / widget.fps).round());
 
-  void _scrollBy(double dx) {
-    _accumulator += dx;
-    final frames = _accumulator ~/ _pixelsPerFrame;
-    if (frames != 0) {
-      _accumulator -= frames * _pixelsPerFrame;
-      _seeker.seekBy(_frameStep * frames);
-    }
+  void _seekFrames(int frames) {
+    if (frames != 0) _seeker.seekBy(_frameStep * frames);
+  }
+
+  /// Accelerated step from a live finger drag on the wheel.
+  void _onDragUpdate(DragUpdateDetails details) {
+    _seekFrames(_scrub.addDrag(details.delta.dx, _pixelsPerFrame,
+        timestamp: details.sourceTimeStamp));
   }
 
   void _onDragStart(DragStartDetails details) {
     widget.controller.pause();
     _ticker.stop();
     _velocity = 0;
-    _accumulator = 0;
+    _scrub.reset();
   }
 
   void _onDragEnd(DragEndDetails details) {
-    _velocity = details.velocity.pixelsPerSecond.dx;
+    // Hand the fling off at the rate the finger was actually scrubbing —
+    // the drag's acceleration folded in — so momentum continues the motion
+    // instead of snapping back to 1× at release.
+    _velocity = details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
     if (_velocity.abs() < _restVelocity) return;
     _lastTick = Duration.zero;
     _ticker.start();
@@ -271,7 +276,8 @@ class _ScrubWheelState extends State<ScrubWheel>
     final dt = (elapsed - _lastTick).inMicroseconds /
         Duration.microsecondsPerSecond;
     _lastTick = elapsed;
-    _scrollBy(_velocity * dt);
+    // Coast at 1× — the velocity already carries the drag's acceleration.
+    _seekFrames(_scrub.addRaw(_velocity * dt, _pixelsPerFrame));
     _velocity *= math.pow(_decayPerSecond, dt);
     if (_velocity.abs() < _restVelocity) _ticker.stop();
   }
@@ -282,7 +288,7 @@ class _ScrubWheelState extends State<ScrubWheel>
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onHorizontalDragStart: _onDragStart,
-      onHorizontalDragUpdate: (details) => _scrollBy(details.delta.dx),
+      onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,
       child: ValueListenableBuilder<VideoPlayerValue>(
         valueListenable: widget.controller,

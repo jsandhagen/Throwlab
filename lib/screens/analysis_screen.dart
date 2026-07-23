@@ -12,6 +12,7 @@ import '../services/video_library.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
+import '../utils/scrub.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
 
@@ -107,7 +108,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double _gestureStartScale = 1;
   Offset _gestureStartOffset = Offset.zero;
   Offset _gestureStartFocal = Offset.zero;
-  double _jogAccumulator = 0;
+  final ScrubAccumulator _scrub = ScrubAccumulator();
   bool _activeStroke = false;
   void Function(Offset canvasPoint)? _nodeDrag;
 
@@ -246,7 +247,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     if (_nodeDrag != null) return;
     if (_measureStep != null) {
       // While reviewing, free drags scrub so both frames can be checked.
-      if (_measureStep == _MeasureStep.review) _jogAccumulator = 0;
+      if (_measureStep == _MeasureStep.review) _scrub.reset();
       return;
     }
     switch (_drawing.tool) {
@@ -261,7 +262,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       case DrawTool.angle:
         break;
       case DrawTool.none:
-        _jogAccumulator = 0;
+        _scrub.reset();
     }
   }
 
@@ -286,7 +287,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
     if (_measureStep != null) {
       if (_measureStep == _MeasureStep.review) {
-        _jogBy(details.focalPointDelta.dx);
+        _jogBy(details.focalPointDelta.dx, details.sourceTimeStamp);
       }
       return;
     }
@@ -305,19 +306,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       case DrawTool.angle:
         break;
       case DrawTool.none:
-        _jogBy(details.focalPointDelta.dx);
+        _jogBy(details.focalPointDelta.dx, details.sourceTimeStamp);
     }
   }
 
   /// Jog by screen-space drag distance so scrubbing feels the same at any
-  /// zoom level.
-  void _jogBy(double dx) {
-    _jogAccumulator += dx;
-    final frames = _jogAccumulator ~/ _pixelsPerFrame;
-    if (frames != 0) {
-      _jogAccumulator -= frames * _pixelsPerFrame;
-      _jogFrames(frames);
-    }
+  /// zoom level, accelerating the frame step with drag speed.
+  void _jogBy(double dx, Duration? timestamp) {
+    final frames =
+        _scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp);
+    if (frames != 0) _jogFrames(frames);
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
