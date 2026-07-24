@@ -32,9 +32,17 @@ class ScrubFrames {
   /// overlay never blanks mid-scrub.
   final ValueNotifier<ui.Image?> current = ValueNotifier<ui.Image?>(null);
 
-  /// Cap on decoded frames held in memory. At 640px each ui.Image is ~0.9 MB,
-  /// so this trades a bounded ~30 MB for gap-free scrubbing around the finger.
-  static const _maxCached = 32;
+  /// Byte budget for decoded frames held in memory. Sized in bytes rather
+  /// than a frame count so the extraction resolution can change without
+  /// re-tuning: 1440px stills are ~4.7 MB of RGBA each, so this holds ~20 of
+  /// them — comfortably more than the prefetch window — while smaller frames
+  /// simply cache deeper.
+  static const _cacheBudgetBytes = 96 << 20;
+
+  /// Never evict below this many frames, whatever their size: the prefetch
+  /// window (12 ahead + 4 behind + the target) must stay resident or the
+  /// cache would thrash against its own prefetching.
+  static const _minCached = 18;
 
   /// Ceiling on simultaneous decodes so a fast fling can't spawn a decode
   /// storm; the window fills nearest-first as slots free up.
@@ -53,7 +61,6 @@ class ScrubFrames {
   bool _freshStart = false;
 
   /// Maps a scrub [position] to an extracted-frame index.
-  @visibleForTesting
   int indexForPosition(Duration position) {
     if (count <= 0) return 0;
     final frame = position.inMicroseconds * fps / Duration.microsecondsPerSecond;
@@ -162,8 +169,16 @@ class ScrubFrames {
     if (best != null) current.value = best;
   }
 
+  int _cacheBytes() {
+    var bytes = 0;
+    for (final image in _cache.values) {
+      bytes += image.width * image.height * 4;
+    }
+    return bytes;
+  }
+
   void _evict() {
-    while (_cache.length > _maxCached) {
+    while (_cache.length > _minCached && _cacheBytes() > _cacheBudgetBytes) {
       int? farthest;
       var farDist = -1;
       _cache.forEach((index, _) {

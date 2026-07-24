@@ -17,6 +17,7 @@ class ThrowVideo {
     this.scrubFramesDir,
     this.scrubFrameCount = 0,
     this.scrubFrameStride = 1,
+    this.scrubFrameLongSide = 0,
   }) : captureFps = captureFps ?? fps;
 
   final String id;
@@ -63,6 +64,12 @@ class ThrowVideo {
   /// 1 means every frame is available.
   int scrubFrameStride;
 
+  /// Longest-side pixels the scrub frames were extracted at; 0 for clips
+  /// from before this was recorded. When it falls short of the current
+  /// extraction cap the stills are re-extracted on open so old imports
+  /// pick up the higher resolution.
+  int scrubFrameLongSide;
+
   ImplementSpec get implementSpec => event.specFor(gender);
 
   Map<String, dynamic> toJson() => {
@@ -80,6 +87,7 @@ class ThrowVideo {
         'scrubFramesDir': scrubFramesDir,
         'scrubFrameCount': scrubFrameCount,
         'scrubFrameStride': scrubFrameStride,
+        'scrubFrameLongSide': scrubFrameLongSide,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -99,5 +107,7 @@ class ThrowVideo {
         scrubFramesDir: json['scrubFramesDir'] as String?,
         scrubFrameCount: (json['scrubFrameCount'] as num?)?.toInt() ?? 0,
         scrubFrameStride: (json['scrubFrameStride'] as num?)?.toInt() ?? 1,
+        scrubFrameLongSide:
+            (json['scrubFrameLongSide'] as num?)?.toInt() ?? 0,
       );
 }

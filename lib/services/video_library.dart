@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/throw_video.dart';
@@ -59,9 +61,37 @@ class VideoLibrary extends ChangeNotifier {
   }
 
   Future<void> remove(String id) async {
+    final index = _videos.indexWhere((v) => v.id == id);
+    final removed = index == -1 ? null : _videos[index];
     _videos.removeWhere((v) => v.id == id);
     await _save();
     notifyListeners();
+    if (removed != null) await _deleteFiles(removed);
+  }
+
+  /// Reclaims a deleted clip's disk: the re-encoded video, its thumbnail,
+  /// and the pre-extracted scrub frames — which run to hundreds of MB per
+  /// clip, so leaving them behind fills the phone. Only paths inside the
+  /// app's own documents directory are touched, so a clip still pointing at
+  /// the user's gallery file (re-encoding failed at import) is left alone.
+  /// Best-effort: a failed delete costs space, never data.
+  Future<void> _deleteFiles(ThrowVideo video) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final owned = '${docs.path}/';
+      for (final path in [video.path, video.thumbnailPath]) {
+        if (path == null || !path.startsWith(owned)) continue;
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+      final frames = video.scrubFramesDir;
+      if (frames != null && frames.startsWith(owned)) {
+        final dir = Directory(frames);
+        if (await dir.exists()) await dir.delete(recursive: true);
+      }
+    } catch (_) {
+      // Leaves the files behind; the library entry is already gone.
+    }
   }
 
   Future<void> update(ThrowVideo video) async {

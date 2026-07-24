@@ -121,13 +121,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       }).catchError((Object _) {
         if (mounted) setState(() => _openFailed = true);
       });
-      if (_frames == null) _prepareScrubFrames();
+      if (_frames == null ||
+          widget.video.scrubFrameLongSide < VideoOptimizer.scrubFrameMax) {
+        _prepareScrubFrames();
+      }
     }
   }
 
-  /// Extracts scrub frames for a clip imported before the feature existed, so
-  /// its scrubbing gets the smooth still-overlay path too. Best-effort: on
-  /// failure the seek-based scrub stays.
+  /// Extracts scrub frames for a clip imported before the feature existed,
+  /// and re-extracts when the stored stills predate the current resolution
+  /// cap — the old set keeps serving scrubs until the new one is ready.
+  /// Best-effort: on failure whatever scrub path exists stays.
   Future<void> _prepareScrubFrames() async {
     final library = context.read<VideoLibrary>();
     // Called from initState, so set the flag directly — the first build picks
@@ -142,17 +146,32 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     widget.video.scrubFramesDir = result.dir;
     widget.video.scrubFrameCount = result.count;
     widget.video.scrubFrameStride = result.stride;
+    widget.video.scrubFrameLongSide = VideoOptimizer.scrubFrameMax;
     await library.update(widget.video);
-    if (!mounted) return;
+    final next = ScrubFrames(
+      dir: result.dir,
+      count: result.count,
+      stride: result.stride,
+      fps: widget.video.fps,
+    );
+    // Wait out any scrub in progress: the overlay is showing the old
+    // ScrubFrames mid-drag and it can't be torn down underneath.
+    while (mounted && (_scrubbing || _handoff || _scrubTicker.isActive)) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    if (!mounted) {
+      next.dispose();
+      return;
+    }
+    final old = _frames;
     setState(() {
-      _frames = ScrubFrames(
-        dir: result.dir,
-        count: result.count,
-        stride: result.stride,
-        fps: widget.video.fps,
-      );
+      _frames = next;
       _preparingFrames = false;
     });
+    // Release the old set only after the tree has rebound to the new one.
+    if (old != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
   }
 
   @override
@@ -1178,7 +1197,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   const SizedBox(width: 8),
-                  Text('Preparing smooth scrubbing…',
+                  Text(
+                      _frames == null
+                          ? 'Preparing smooth scrubbing…'
+                          : 'Sharpening scrub frames…',
                       style: Theme.of(context)
                           .textTheme
                           .bodySmall

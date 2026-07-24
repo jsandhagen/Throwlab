@@ -79,12 +79,19 @@ class VideoOptimizer {
   /// and exact frame steps still fall back to seeking.
   static const _maxScrubFrames = 720;
 
-  /// Longest-side cap for the extracted scrub frames. Smaller than the 1440p
-  /// playback copy: they're only shown while the finger is moving, then the
-  /// crisp video takes over, so a light, fast-to-decode preview is the right
-  /// call. Bounding the long side (not the width) keeps portrait and
-  /// landscape clips at the same modest per-frame memory.
-  static const _scrubFrameMax = 640;
+  /// Longest-side cap for the extracted scrub frames. Matches the 1440p
+  /// playback copy exactly, so the stills shown while scrubbing are
+  /// indistinguishable from the video they stand in for — the earlier 640
+  /// cap was a visible resolution drop the moment the finger moved. The
+  /// cost is disk: on detailed outdoor footage this is ~200 MB at the
+  /// [_maxScrubFrames] cap versus ~50 MB at 640, which is why deleting a
+  /// clip now reclaims its frame directory (see VideoLibrary.remove).
+  /// Bounding the long side (not the width) keeps portrait and landscape
+  /// clips at the same per-frame memory; ScrubFrames budgets its decoded
+  /// cache in bytes, so this can grow without exhausting RAM. Clips
+  /// extracted at an older, smaller cap are re-extracted on open (see
+  /// AnalysisScreen), which is why the value is public.
+  static const scrubFrameMax = 1440;
 
   /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
   /// display rate instead of waiting on the decoder to seek. Returns the
@@ -98,7 +105,11 @@ class VideoOptimizer {
     ValueChanged<double?>? onProgress,
   }) async {
     final docs = await getApplicationDocumentsDirectory();
-    final dir = Directory('${docs.path}/throws/frames/$id');
+    // Extract beside the live directory and swap in only when complete, so
+    // a re-extraction (resolution upgrade) can't destroy a working set of
+    // frames if it fails or is cancelled partway.
+    final finalDir = Directory('${docs.path}/throws/frames/$id');
+    final dir = Directory('${docs.path}/throws/frames/$id.tmp');
     if (await dir.exists()) await dir.delete(recursive: true);
     await dir.create(recursive: true);
 
@@ -118,12 +129,14 @@ class VideoOptimizer {
     // maps cleanly to source frame k*stride. The scale fits each frame inside
     // a square box, preserving aspect and only ever shrinking.
     final select = stride > 1 ? "select='not(mod(n\\,$stride))'," : '';
-    final vf = '${select}scale=w=$_scrubFrameMax:h=$_scrubFrameMax:'
+    final vf = '${select}scale=w=$scrubFrameMax:h=$scrubFrameMax:'
         'force_original_aspect_ratio=decrease';
 
     final done = Completer<bool>();
     final totalMs = (seconds ?? 0) * 1000;
     await FFmpegKit.executeAsync(
+      // q:v 5 at this resolution is already well past what the eye resolves
+      // mid-scrub; q:v 4 costs ~13% more disk for no visible gain.
       '-y -i "$videoPath" -vf "$vf" -vsync 0 -q:v 5 "${dir.path}/f%05d.jpg"',
       (session) async {
         done.complete(ReturnCode.isSuccess(await session.getReturnCode()));
@@ -146,7 +159,14 @@ class VideoOptimizer {
       dir.delete(recursive: true).ignore();
       return null;
     }
-    return (dir: dir.path, count: count, stride: stride);
+    try {
+      if (await finalDir.exists()) await finalDir.delete(recursive: true);
+      await dir.rename(finalDir.path);
+    } catch (_) {
+      dir.delete(recursive: true).ignore();
+      return null;
+    }
+    return (dir: finalDir.path, count: count, stride: stride);
   }
 
   /// Frame rates and recording time probed from the clip's metadata.

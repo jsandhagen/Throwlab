@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/services/video_optimizer.dart';
 
 void main() {
   group('ImplementSpec', () {
@@ -88,6 +89,61 @@ void main() {
         'fps': 120,
       });
       expect(legacy.captureFps, 120);
+    });
+
+    test('scrub frame details round-trip', () {
+      final video = ThrowVideo(
+        id: '4',
+        path: '/v.mp4',
+        event: ThrowEvent.discus,
+        gender: Gender.women,
+        importedAt: DateTime.parse('2026-06-11T10:30:00'),
+        fps: 60,
+        scrubFramesDir: '/frames/4',
+        scrubFrameCount: 300,
+        scrubFrameStride: 2,
+        scrubFrameLongSide: 1440,
+      );
+      final restored = ThrowVideo.fromJson(video.toJson());
+      expect(restored.scrubFramesDir, '/frames/4');
+      expect(restored.scrubFrameCount, 300);
+      expect(restored.scrubFrameStride, 2);
+      expect(restored.scrubFrameLongSide, 1440);
+    });
+
+    test('clips stored before scrub frames report none, at no resolution',
+        () {
+      final legacy = ThrowVideo.fromJson({
+        'id': '5',
+        'path': '/v.mp4',
+        'event': 'discus',
+        'gender': 'women',
+        'importedAt': '2026-06-11T10:30:00',
+        'fps': 60,
+      });
+      expect(legacy.scrubFramesDir, isNull);
+      expect(legacy.scrubFrameCount, 0);
+      expect(legacy.scrubFrameStride, 1);
+      // 0 < the current cap, so opening the clip re-extracts at full size.
+      expect(legacy.scrubFrameLongSide, 0);
+      expect(legacy.scrubFrameLongSide,
+          lessThan(VideoOptimizer.scrubFrameMax));
+    });
+
+    test('clips extracted at the old 640 cap are due for re-extraction', () {
+      final old = ThrowVideo.fromJson({
+        'id': '6',
+        'path': '/v.mp4',
+        'event': 'discus',
+        'gender': 'women',
+        'importedAt': '2026-06-11T10:30:00',
+        'fps': 60,
+        'scrubFramesDir': '/frames/6',
+        'scrubFrameCount': 300,
+        'scrubFrameLongSide': 640,
+      });
+      expect(old.scrubFrameLongSide,
+          lessThan(VideoOptimizer.scrubFrameMax));
     });
   });
 }
