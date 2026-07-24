@@ -23,18 +23,39 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int? _availableBuild;
+
+  /// A build the user tapped "Later" on: hidden until a still-newer build
+  /// shows up, so re-checks don't re-nag about the same one.
+  int? _dismissedBuild;
   LibraryGrouping _grouping = LibraryGrouping.athlete;
 
   @override
   void initState() {
     super.initState();
-    AppUpdater.checkForUpdate().then((build) {
-      if (mounted && build != null) {
-        setState(() => _availableBuild = build);
-      }
-    });
+    WidgetsBinding.instance.addObserver(this);
+    _checkForUpdate();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check on every return to the foreground: the one-shot check at launch
+    // misses builds published while the app was open or backgrounded, and
+    // covers a launch where the network wasn't ready yet.
+    if (state == AppLifecycleState.resumed) _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final build = await AppUpdater.checkForUpdate();
+    if (!mounted || build == null) return;
+    setState(() => _availableBuild = build);
   }
 
   Future<void> _installUpdate() async {
@@ -224,14 +245,15 @@ class _HomeScreenState extends State<HomeScreen> {
         top: false,
         child: Column(
           children: [
-            if (_availableBuild != null)
+            if (_availableBuild != null &&
+                _availableBuild != _dismissedBuild)
               MaterialBanner(
                 leading: const Icon(Icons.system_update),
                 content: const Text('A new version of ThrowLab is ready.'),
                 actions: [
                   TextButton(
                     onPressed: () =>
-                        setState(() => _availableBuild = null),
+                        setState(() => _dismissedBuild = _availableBuild),
                     child: const Text('Later'),
                   ),
                   FilledButton(
