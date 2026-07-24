@@ -308,7 +308,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   label: Text('By athlete')),
               ButtonSegment(
                   value: LibraryGrouping.event,
-                  icon: Icon(Icons.category),
+                  icon: EventGlyph(ThrowEvent.javelin, size: 18),
                   label: Text('By event')),
             ],
             selected: {_grouping},

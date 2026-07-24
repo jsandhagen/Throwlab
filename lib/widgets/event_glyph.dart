@@ -75,43 +75,43 @@ class _EventGlyphPainter extends CustomPainter {
     canvas.drawPath(path, _fill);
   }
 
-  /// Flat disc seen at a tilt: a wide, short ellipse — clearly not the round
-  /// shot — with a sheen punched near its upper edge.
+  /// Disc seen face-on: a solid ring with an open centre, the record-like
+  /// look of the original discus icon.
   void _discus(Canvas canvas, double s) {
-    canvas.save();
-    canvas.translate(s * 0.5, s * 0.5);
-    canvas.rotate(-0.32);
+    final center = Offset(s * 0.5, s * 0.5);
     final path = Path()..fillType = PathFillType.evenOdd;
-    path.addOval(Rect.fromCenter(
-        center: Offset.zero, width: s * 0.78, height: s * 0.32));
-    path.addOval(Rect.fromCenter(
-        center: Offset(-s * 0.14, -s * 0.02),
-        width: s * 0.12,
-        height: s * 0.06));
+    path.addOval(Rect.fromCircle(center: center, radius: s * 0.33));
+    path.addOval(Rect.fromCircle(center: center, radius: s * 0.075));
     canvas.drawPath(path, _fill);
-    canvas.restore();
   }
 
-  /// Long pointed shaft with a corded grip at its balance point and a
-  /// spear tip.
+  /// A real javelin: a long thin shaft, a slim metal spearhead at the front,
+  /// and the whipcord grip binding at the balance point behind it.
   void _javelin(Canvas canvas, double s) {
-    final tail = Offset(s * 0.17, s * 0.83);
-    final tip = Offset(s * 0.83, s * 0.17);
-    canvas.drawLine(tail, tip, _stroke(s * 0.055));
-    // Corded grip: a short, fatter band at the centre of gravity.
-    final gripA = Offset.lerp(tail, tip, 0.40)!;
-    final gripB = Offset.lerp(tail, tip, 0.55)!;
-    canvas.drawLine(gripA, gripB, _stroke(s * 0.12, cap: StrokeCap.butt));
-    // Spear point: a filled triangle over the shaft's end.
-    final u = (tip - tail) / (tip - tail).distance; // along the shaft
+    final tail = Offset(s * 0.12, s * 0.88);
+    final tip = Offset(s * 0.88, s * 0.12);
+    final u = (tip - tail) / (tip - tail).distance; // tail -> tip
     final p = Offset(-u.dy, u.dx); // perpendicular
-    final base = tip - u * (s * 0.19);
-    final point = Path()
+
+    // Thin shaft, stopping where the spearhead begins so the point reads.
+    final headBase = tip - u * (s * 0.26);
+    canvas.drawLine(tail, headBase, _stroke(s * 0.045));
+
+    // Slim, long spearhead.
+    final half = s * 0.05;
+    final head = Path()
       ..moveTo(tip.dx, tip.dy)
-      ..lineTo(base.dx + p.dx * s * 0.085, base.dy + p.dy * s * 0.085)
-      ..lineTo(base.dx - p.dx * s * 0.085, base.dy - p.dy * s * 0.085)
+      ..lineTo(headBase.dx + p.dx * half, headBase.dy + p.dy * half)
+      ..lineTo(headBase.dx - p.dx * half, headBase.dy - p.dy * half)
       ..close();
-    canvas.drawPath(point, _fill);
+    canvas.drawPath(head, _fill);
+
+    // Cord grip: a short, fatter bound section at the centre of gravity
+    // (~40% of the length back from the tip).
+    final gripMid = tip - u * (s * 0.44);
+    final gripA = gripMid - u * (s * 0.08);
+    final gripB = gripMid + u * (s * 0.08);
+    canvas.drawLine(gripA, gripB, _stroke(s * 0.11, cap: StrokeCap.butt));
   }
 
   /// Ball on a wire ending in a grip handle — the hammer's three parts.
