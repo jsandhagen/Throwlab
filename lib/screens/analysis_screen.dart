@@ -46,7 +46,8 @@ class AnalysisScreen extends StatefulWidget {
 
 class _AnalysisScreenState extends State<AnalysisScreen> {
   late final VideoPlayerController _controller;
-  late final FrameSeeker _seeker = FrameSeeker(_controller);
+  late final FrameSeeker _seeker =
+      FrameSeeker(_controller, fps: widget.video.fps);
   final DrawingController _drawing = DrawingController();
 
   bool _openFailed = false;
@@ -938,6 +939,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
+              seeker: _seeker,
               captureFps: widget.video.captureFps,
               dense: true,
               horizontal: landscape,

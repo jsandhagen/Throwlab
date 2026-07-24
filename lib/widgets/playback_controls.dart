@@ -34,6 +34,7 @@ class PlaybackControls extends StatefulWidget {
     super.key,
     required this.controller,
     required this.fps,
+    this.seeker,
     this.captureFps,
     this.trailing,
     this.dense = false,
@@ -42,6 +43,11 @@ class PlaybackControls extends StatefulWidget {
 
   final VideoPlayerController controller;
   final double fps;
+
+  /// Seek queue to share with whoever else scrubs [controller] (e.g. the
+  /// drag-to-scrub gesture on the video itself), so their seeks chain
+  /// instead of racing each other. Defaults to a private one.
+  final FrameSeeker? seeker;
 
   /// Real recorded frame rate (slow-mo clips); defaults to [fps]. Sets the
   /// scrub wheel's sensitivity via [scrubPixelsPerFrame].
@@ -61,7 +67,8 @@ class PlaybackControls extends StatefulWidget {
 }
 
 class _PlaybackControlsState extends State<PlaybackControls> {
-  late final FrameSeeker _seeker = FrameSeeker(widget.controller);
+  late final FrameSeeker _seeker =
+      widget.seeker ?? FrameSeeker(widget.controller, fps: widget.fps);
 
   VideoPlayerController get controller => widget.controller;
   double get fps => widget.fps;
@@ -143,6 +150,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                     ScrubWheel(
                         controller: controller,
                         fps: fps,
+                        seeker: _seeker,
                         captureFps: widget.captureFps,
                         height: 32),
                   ],
@@ -164,6 +172,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             ScrubWheel(
                 controller: controller,
                 fps: fps,
+                seeker: _seeker,
                 captureFps: widget.captureFps),
             Row(
               children: [
@@ -205,12 +214,17 @@ class ScrubWheel extends StatefulWidget {
     super.key,
     required this.controller,
     required this.fps,
+    this.seeker,
     this.captureFps,
     this.height = 44,
   });
 
   final VideoPlayerController controller;
   final double fps;
+
+  /// Shared seek queue; see [PlaybackControls.seeker].
+  final FrameSeeker? seeker;
+
   final double? captureFps;
   final double height;
 
@@ -229,7 +243,8 @@ class _ScrubWheelState extends State<ScrubWheel>
   /// Coasting stops below this speed (px/s) — about 5 frames/s.
   static const _restVelocity = 40.0;
 
-  late final FrameSeeker _seeker = FrameSeeker(widget.controller);
+  late final FrameSeeker _seeker =
+      widget.seeker ?? FrameSeeker(widget.controller, fps: widget.fps);
   late final Ticker _ticker = createTicker(_onTick);
   double _accumulator = 0;
   double _velocity = 0;
@@ -261,7 +276,12 @@ class _ScrubWheelState extends State<ScrubWheel>
   }
 
   void _onDragEnd(DragEndDetails details) {
-    _velocity = details.velocity.pixelsPerSecond.dx;
+    // Coast no faster than seeks can render, so a hard fling spins the
+    // video forward smoothly instead of leaping between distant frames.
+    final maxVelocity = FrameSeeker.maxSmoothFrameRate * _pixelsPerFrame;
+    _velocity = details.velocity.pixelsPerSecond.dx
+        .clamp(-maxVelocity, maxVelocity)
+        .toDouble();
     if (_velocity.abs() < _restVelocity) return;
     _lastTick = Duration.zero;
     _ticker.start();
