@@ -73,14 +73,14 @@ class ScrubFrames {
     current.value = null;
   }
 
-  /// Points the cache at [position]: notes the scrub direction, makes sure a
+  /// Shows extracted-frame [index]: notes the scrub direction, makes sure a
   /// window of frames around it is decoding, and publishes the best frame
   /// available right now.
-  void requestPosition(Duration position) {
+  void showIndex(int index) {
     if (_disposed) return;
-    final index = indexForPosition(position);
-    _dir = index >= _target ? 1 : -1;
-    _target = index;
+    final clamped = index.clamp(0, count - 1);
+    _dir = clamped >= _target ? 1 : -1;
+    _target = clamped;
     _ensureWindow();
     _publishNearest();
   }
