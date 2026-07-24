@@ -272,8 +272,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
     _handoffWatch = watch;
     _controller.addListener(watch);
-    // Give up and reveal the video regardless after a short grace period.
-    _handoffTimer = Timer(const Duration(milliseconds: 600), () {
+    // Hold the (correct) still until the video actually arrives. seekTo can
+    // take a second or more to render on some devices, so the fallback is
+    // generous — showing the right frame a touch soft beats flashing the
+    // wrong one and then jumping.
+    _handoffTimer = Timer(const Duration(milliseconds: 2500), () {
       _stopHandoff();
       if (mounted) setState(() => _handoff = false);
     });
