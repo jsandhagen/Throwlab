@@ -86,8 +86,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   static const _catchUp = 0.3;
 
   /// Ceiling on how many frames/second the shuttle plays through, so a huge
-  /// gap can't jump — it fast-forwards smoothly instead of skipping.
-  static const _maxCatchUpFramesPerSec = 210.0;
+  /// gap can't jump — it fast-forwards smoothly instead of skipping. At ~2x
+  /// the clip's own rate it shows roughly every other frame during a fast
+  /// spin, which reads as smooth speed-up rather than a stride.
+  static const _maxCatchUpFramesPerSec = 120.0;
 
   bool _openFailed = false;
 
@@ -528,13 +530,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// Jog by screen-space drag distance so scrubbing feels the same at any
   /// zoom level, accelerating the frame step with drag speed.
   void _jogBy(double dx, Duration? timestamp) {
-    final frames =
-        _scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp);
+    _scrubByFrames(_scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp));
+  }
+
+  /// Advances the scrub by [frames] source frames — from the video drag or
+  /// the scrub wheel. With the atlas active it moves the finger's target
+  /// (the shuttle plays the shown frame toward it, stride-aware); otherwise
+  /// it seeks directly.
+  void _scrubByFrames(int frames) {
     if (frames == 0) return;
     final atlas = _frames;
     if (_scrubbing && atlas != null) {
-      // Move the finger's target frame; the shuttle plays the shown frame
-      // toward it. Stride-aware: image indices advance per source frame.
       _fingerIndex = (_fingerIndex + frames / atlas.stride)
           .clamp(0.0, (atlas.count - 1).toDouble());
     } else {
@@ -1196,6 +1202,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               captureFps: widget.video.captureFps,
               dense: true,
               horizontal: landscape,
+              // Route the wheel through the same smooth shuttle the video
+              // drag uses, so fast wheel spins play through frames instead
+              // of hammering the slow decoder seek.
+              onScrubStart: _beginScrub,
+              onScrubBy: _scrubByFrames,
+              onScrubEnd: _endScrub,
             ),
           ],
         ),

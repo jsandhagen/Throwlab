@@ -39,6 +39,9 @@ class PlaybackControls extends StatefulWidget {
     this.trailing,
     this.dense = false,
     this.horizontal = false,
+    this.onScrubStart,
+    this.onScrubBy,
+    this.onScrubEnd,
   });
 
   final VideoPlayerController controller;
@@ -56,6 +59,14 @@ class PlaybackControls extends StatefulWidget {
   /// Lays everything out on a single line (slider and wheel stacked in the
   /// middle) so short landscape screens keep the video visible.
   final bool horizontal;
+
+  /// When set, the scrub wheel routes its motion through these instead of
+  /// seeking the player itself — letting the host drive the smooth
+  /// still-overlay scrub path (see AnalysisScreen). Left null (e.g. the
+  /// comparison screen) the wheel seeks the player directly as before.
+  final VoidCallback? onScrubStart;
+  final ValueChanged<int>? onScrubBy;
+  final VoidCallback? onScrubEnd;
 
   @override
   State<PlaybackControls> createState() => _PlaybackControlsState();
@@ -145,6 +156,9 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                         controller: controller,
                         fps: fps,
                         captureFps: widget.captureFps,
+                        onScrubStart: widget.onScrubStart,
+                        onScrubBy: widget.onScrubBy,
+                        onScrubEnd: widget.onScrubEnd,
                         height: 32),
                   ],
                 ),
@@ -165,7 +179,10 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             ScrubWheel(
                 controller: controller,
                 fps: fps,
-                captureFps: widget.captureFps),
+                captureFps: widget.captureFps,
+                onScrubStart: widget.onScrubStart,
+                onScrubBy: widget.onScrubBy,
+                onScrubEnd: widget.onScrubEnd),
             Row(
               children: [
                 Expanded(
@@ -208,12 +225,22 @@ class ScrubWheel extends StatefulWidget {
     required this.fps,
     this.captureFps,
     this.height = 44,
+    this.onScrubStart,
+    this.onScrubBy,
+    this.onScrubEnd,
   });
 
   final VideoPlayerController controller;
   final double fps;
   final double? captureFps;
   final double height;
+
+  /// When set, wheel motion is reported as frame steps through these instead
+  /// of seeking the player directly, so the host can drive the smooth scrub
+  /// overlay (and momentum feeds it too).
+  final VoidCallback? onScrubStart;
+  final ValueChanged<int>? onScrubBy;
+  final VoidCallback? onScrubEnd;
 
   @override
   State<ScrubWheel> createState() => _ScrubWheelState();
@@ -245,13 +272,20 @@ class _ScrubWheelState extends State<ScrubWheel>
   Duration get _frameStep => Duration(
       microseconds: (Duration.microsecondsPerSecond / widget.fps).round());
 
-  void _seekFrames(int frames) {
-    if (frames != 0) _seeker.seekBy(_frameStep * frames);
+  /// Routes a frame step either to the host's smooth scrub path (when wired)
+  /// or straight to the player's seeker.
+  void _emit(int frames) {
+    if (frames == 0) return;
+    if (widget.onScrubBy != null) {
+      widget.onScrubBy!(frames);
+    } else {
+      _seeker.seekBy(_frameStep * frames);
+    }
   }
 
   /// Accelerated step from a live finger drag on the wheel.
   void _onDragUpdate(DragUpdateDetails details) {
-    _seekFrames(_scrub.addDrag(details.delta.dx, _pixelsPerFrame,
+    _emit(_scrub.addDrag(details.delta.dx, _pixelsPerFrame,
         timestamp: details.sourceTimeStamp));
   }
 
@@ -260,6 +294,7 @@ class _ScrubWheelState extends State<ScrubWheel>
     _ticker.stop();
     _velocity = 0;
     _scrub.reset();
+    widget.onScrubStart?.call();
   }
 
   void _onDragEnd(DragEndDetails details) {
@@ -267,7 +302,10 @@ class _ScrubWheelState extends State<ScrubWheel>
     // the drag's acceleration folded in — so momentum continues the motion
     // instead of snapping back to 1× at release.
     _velocity = details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
-    if (_velocity.abs() < _restVelocity) return;
+    if (_velocity.abs() < _restVelocity) {
+      widget.onScrubEnd?.call();
+      return;
+    }
     _lastTick = Duration.zero;
     _ticker.start();
   }
@@ -277,9 +315,13 @@ class _ScrubWheelState extends State<ScrubWheel>
         Duration.microsecondsPerSecond;
     _lastTick = elapsed;
     // Coast at 1× — the velocity already carries the drag's acceleration.
-    _seekFrames(_scrub.addRaw(_velocity * dt, _pixelsPerFrame));
+    _emit(_scrub.addRaw(_velocity * dt, _pixelsPerFrame));
     _velocity *= math.pow(_decayPerSecond, dt);
-    if (_velocity.abs() < _restVelocity) _ticker.stop();
+    if (_velocity.abs() < _restVelocity) {
+      _ticker.stop();
+      // Momentum spent: the scrub session is over.
+      widget.onScrubEnd?.call();
+    }
   }
 
   @override
