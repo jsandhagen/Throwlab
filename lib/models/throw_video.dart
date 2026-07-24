@@ -14,6 +14,9 @@ class ThrowVideo {
     this.note = '',
     this.athlete = '',
     this.thumbnailPath,
+    this.scrubFramesDir,
+    this.scrubFrameCount = 0,
+    this.scrubFrameStride = 1,
   }) : captureFps = captureFps ?? fps;
 
   final String id;
@@ -48,6 +51,18 @@ class ThrowVideo {
   /// thumbnails existed or when extraction failed.
   String? thumbnailPath;
 
+  /// Directory of pre-extracted scrub frames (JPEGs) shown during dragging
+  /// for smooth, format-independent scrubbing; null for old imports or when
+  /// extraction was skipped/failed (the app then falls back to seeking).
+  String? scrubFramesDir;
+
+  /// Number of extracted scrub frames; 0 when none.
+  int scrubFrameCount;
+
+  /// Every Nth source frame was extracted, to cap disk use on long clips;
+  /// 1 means every frame is available.
+  int scrubFrameStride;
+
   ImplementSpec get implementSpec => event.specFor(gender);
 
   Map<String, dynamic> toJson() => {
@@ -62,6 +77,9 @@ class ThrowVideo {
         'note': note,
         'athlete': athlete,
         'thumbnailPath': thumbnailPath,
+        'scrubFramesDir': scrubFramesDir,
+        'scrubFrameCount': scrubFrameCount,
+        'scrubFrameStride': scrubFrameStride,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -78,5 +96,8 @@ class ThrowVideo {
         note: json['note'] as String? ?? '',
         athlete: json['athlete'] as String? ?? '',
         thumbnailPath: json['thumbnailPath'] as String?,
+        scrubFramesDir: json['scrubFramesDir'] as String?,
+        scrubFrameCount: (json['scrubFrameCount'] as num?)?.toInt() ?? 0,
+        scrubFrameStride: (json['scrubFrameStride'] as num?)?.toInt() ?? 1,
       );
 }

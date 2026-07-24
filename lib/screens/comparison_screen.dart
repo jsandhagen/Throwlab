@@ -28,10 +28,8 @@ class ComparisonScreen extends StatefulWidget {
 class _ComparisonScreenState extends State<ComparisonScreen> {
   late final VideoPlayerController _controllerA;
   late final VideoPlayerController _controllerB;
-  late final FrameSeeker _seekerA =
-      FrameSeeker(_controllerA, fps: widget.videoA.fps);
-  late final FrameSeeker _seekerB =
-      FrameSeeker(_controllerB, fps: widget.videoB.fps);
+  late final FrameSeeker _seekerA = FrameSeeker(_controllerA);
+  late final FrameSeeker _seekerB = FrameSeeker(_controllerB);
 
   ComparisonMode _mode = ComparisonMode.sideBySide;
   double _overlayOpacity = 0.5;

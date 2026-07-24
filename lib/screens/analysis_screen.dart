@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
@@ -9,9 +12,12 @@ import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/javelin_detector.dart';
 import '../services/video_library.dart';
+import '../services/video_optimizer.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
+import '../utils/scrub.dart';
+import '../utils/scrub_frames.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
 
@@ -44,11 +50,46 @@ class AnalysisScreen extends StatefulWidget {
   State<AnalysisScreen> createState() => _AnalysisScreenState();
 }
 
-class _AnalysisScreenState extends State<AnalysisScreen> {
+class _AnalysisScreenState extends State<AnalysisScreen>
+    with SingleTickerProviderStateMixin {
   late final VideoPlayerController _controller;
-  late final FrameSeeker _seeker =
-      FrameSeeker(_controller, fps: widget.video.fps);
+  late final FrameSeeker _seeker = FrameSeeker(_controller);
   final DrawingController _drawing = DrawingController();
+
+  /// Pre-extracted stills shown while dragging so scrubbing stays smooth
+  /// regardless of the codec's seek cost; null when the clip has none.
+  ScrubFrames? _frames;
+
+  /// Frames are being extracted for a clip imported before the feature; the
+  /// scrub overlay switches on once ready.
+  bool _preparingFrames = false;
+
+  /// A drag is actively scrubbing (show the still overlay), and the brief
+  /// hold afterwards while the real video catches up to the last frame.
+  bool _scrubbing = false;
+  bool _handoff = false;
+  Timer? _handoffTimer;
+  VoidCallback? _handoffWatch;
+
+  // Shuttle scrubbing: the finger sets a target frame, and a per-vsync
+  // follower advances the *shown* frame toward it at a rate that scales with
+  // the gap — so a fast scroll plays the frames through quickly (the video
+  // speeds up to match) instead of teleporting and skipping.
+  late final Ticker _scrubTicker = createTicker(_onScrubTick);
+  double _fingerIndex = 0;
+  double _displayIndex = 0;
+  int _lastShown = -1;
+  Duration _lastScrubTick = Duration.zero;
+
+  /// Fraction of the finger→display gap closed per vsync (proportional catch-
+  /// up: far gap plays fast, small gap tracks precisely).
+  static const _catchUp = 0.3;
+
+  /// Ceiling on how many frames/second the shuttle plays through, so a huge
+  /// gap can't jump — it fast-forwards smoothly instead of skipping. At ~2x
+  /// the clip's own rate it shows roughly every other frame during a fast
+  /// spin, which reads as smooth speed-up rather than a stride.
+  static const _maxCatchUpFramesPerSec = 120.0;
 
   bool _openFailed = false;
 
@@ -65,20 +106,192 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     super.initState();
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
+    final framesDir = widget.video.scrubFramesDir;
+    if (framesDir != null && widget.video.scrubFrameCount > 0) {
+      _frames = ScrubFrames(
+        dir: framesDir,
+        count: widget.video.scrubFrameCount,
+        stride: widget.video.scrubFrameStride,
+        fps: widget.video.fps,
+      );
+    }
     if (!_openFailed) {
       _controller.initialize().then((_) {
         if (mounted) setState(() {});
       }).catchError((Object _) {
         if (mounted) setState(() => _openFailed = true);
       });
+      if (_frames == null) _prepareScrubFrames();
     }
+  }
+
+  /// Extracts scrub frames for a clip imported before the feature existed, so
+  /// its scrubbing gets the smooth still-overlay path too. Best-effort: on
+  /// failure the seek-based scrub stays.
+  Future<void> _prepareScrubFrames() async {
+    final library = context.read<VideoLibrary>();
+    // Called from initState, so set the flag directly — the first build picks
+    // it up, and setState is only used once we're past initState (below).
+    _preparingFrames = true;
+    final result = await VideoOptimizer.extractScrubFrames(
+        widget.video.path, widget.video.id, widget.video.fps);
+    if (result == null) {
+      if (mounted) setState(() => _preparingFrames = false);
+      return;
+    }
+    widget.video.scrubFramesDir = result.dir;
+    widget.video.scrubFrameCount = result.count;
+    widget.video.scrubFrameStride = result.stride;
+    await library.update(widget.video);
+    if (!mounted) return;
+    setState(() {
+      _frames = ScrubFrames(
+        dir: result.dir,
+        count: result.count,
+        stride: result.stride,
+        fps: widget.video.fps,
+      );
+      _preparingFrames = false;
+    });
   }
 
   @override
   void dispose() {
+    _stopHandoff();
+    _scrubTicker.stop();
+    _scrubTicker.dispose();
+    _frames?.dispose();
     _controller.dispose();
     _drawing.dispose();
     super.dispose();
+  }
+
+  /// Shows the pre-extracted stills for the duration of a scrub drag. No-op
+  /// when the clip has no extracted frames, so scrubbing then falls back to
+  /// the seek path unchanged.
+  void _beginScrub() {
+    if (_frames == null) return;
+    _stopHandoff();
+    _controller.pause();
+    _scrub.reset();
+    if (!_scrubTicker.isActive) {
+      final start = _frames!.indexForPosition(_seeker.position).toDouble();
+      _fingerIndex = start;
+      _displayIndex = start;
+      _lastShown = -1;
+      _frames!.reset();
+      _frames!.showIndex(start.round());
+      _lastScrubTick = Duration.zero;
+      _scrubTicker.start();
+    } else {
+      // Grabbed again while the shuttle was still catching up: continue from
+      // the frame currently on screen.
+      _fingerIndex = _displayIndex;
+    }
+    setState(() {
+      _scrubbing = true;
+      _handoff = false;
+    });
+  }
+
+  /// Lets the shuttle finish playing to the finger's frame, then hands off to
+  /// live video. The still overlay stays up across the handoff.
+  void _endScrub() {
+    if (!_scrubbing) return;
+    setState(() {
+      _scrubbing = false;
+      _handoff = _frames != null;
+    });
+    if (_frames == null) return;
+    if (!_scrubTicker.isActive) _startVideoHandoff(_displayIndex.round());
+  }
+
+  /// Per-vsync shuttle: eases the shown frame toward the finger's target so a
+  /// fast scroll plays the frames through quickly (video speeds up to match)
+  /// instead of jumping, and a slow scroll tracks frame for frame. Also nudges
+  /// the hidden decoder along so the time/frame readout stays live and the
+  /// eventual handoff is quick.
+  void _onScrubTick(Duration elapsed) {
+    final frames = _frames;
+    if (frames == null) {
+      _scrubTicker.stop();
+      return;
+    }
+    final dt = ((elapsed - _lastScrubTick).inMicroseconds /
+            Duration.microsecondsPerSecond)
+        .clamp(0.0, 0.05);
+    _lastScrubTick = elapsed;
+    final gap = _fingerIndex - _displayIndex;
+    if (gap.abs() < 0.5) {
+      _displayIndex = _fingerIndex;
+      _showAndSeek(_displayIndex.round());
+      if (!_scrubbing) {
+        _scrubTicker.stop();
+        _startVideoHandoff(_displayIndex.round());
+      }
+      return;
+    }
+    final maxStep = _maxCatchUpFramesPerSec / frames.stride * dt;
+    var step = gap * _catchUp;
+    if (step > maxStep) step = maxStep;
+    if (step < -maxStep) step = -maxStep;
+    _displayIndex += step;
+    _showAndSeek(_displayIndex.round());
+  }
+
+  void _showAndSeek(int imageIndex) {
+    if (imageIndex == _lastShown) return;
+    _lastShown = imageIndex;
+    _frames!.showIndex(imageIndex);
+    _seeker.seekTo(_positionForImage(imageIndex));
+  }
+
+  Duration _positionForImage(int imageIndex) => Duration(
+      microseconds: (imageIndex *
+              _frames!.stride *
+              Duration.microsecondsPerSecond /
+              widget.video.fps)
+          .round());
+
+  /// Keeps the last still on screen when the finger lifts until the video
+  /// decoder has actually seeked to that frame, so the handoff from stills
+  /// back to live video is seamless instead of a visible jump.
+  void _startVideoHandoff(int imageIndex) {
+    _stopHandoff();
+    final target = _positionForImage(imageIndex);
+    _seeker.seekTo(target);
+    final toleranceUs =
+        1.5 * Duration.microsecondsPerSecond / widget.video.fps;
+    void watch() {
+      final delta =
+          (_controller.value.position.inMicroseconds - target.inMicroseconds)
+              .abs();
+      if (delta <= toleranceUs) {
+        _stopHandoff();
+        if (mounted) setState(() => _handoff = false);
+      }
+    }
+
+    _handoffWatch = watch;
+    _controller.addListener(watch);
+    // Hold the (correct) still until the video actually arrives. seekTo can
+    // take a second or more to render on some devices, so the fallback is
+    // generous — showing the right frame a touch soft beats flashing the
+    // wrong one and then jumping.
+    _handoffTimer = Timer(const Duration(milliseconds: 2500), () {
+      _stopHandoff();
+      if (mounted) setState(() => _handoff = false);
+    });
+    watch();
+  }
+
+  void _stopHandoff() {
+    if (_handoffWatch != null) {
+      _controller.removeListener(_handoffWatch!);
+      _handoffWatch = null;
+    }
+    _handoffTimer?.cancel();
+    _handoffTimer = null;
   }
 
   /// Steps the video by [frames] while dragging across it in scrub mode.
@@ -108,7 +321,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double _gestureStartScale = 1;
   Offset _gestureStartOffset = Offset.zero;
   Offset _gestureStartFocal = Offset.zero;
-  double _jogAccumulator = 0;
+  final ScrubAccumulator _scrub = ScrubAccumulator();
   bool _activeStroke = false;
   void Function(Offset canvasPoint)? _nodeDrag;
 
@@ -247,7 +460,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     if (_nodeDrag != null) return;
     if (_measureStep != null) {
       // While reviewing, free drags scrub so both frames can be checked.
-      if (_measureStep == _MeasureStep.review) _jogAccumulator = 0;
+      if (_measureStep == _MeasureStep.review) {
+        _scrub.reset();
+        _beginScrub();
+      }
       return;
     }
     switch (_drawing.tool) {
@@ -262,7 +478,8 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       case DrawTool.angle:
         break;
       case DrawTool.none:
-        _jogAccumulator = 0;
+        _scrub.reset();
+        _beginScrub();
     }
   }
 
@@ -287,7 +504,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     }
     if (_measureStep != null) {
       if (_measureStep == _MeasureStep.review) {
-        _jogBy(details.focalPointDelta.dx);
+        _jogBy(details.focalPointDelta.dx, details.sourceTimeStamp);
       }
       return;
     }
@@ -306,22 +523,33 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       case DrawTool.angle:
         break;
       case DrawTool.none:
-        _jogBy(details.focalPointDelta.dx);
+        _jogBy(details.focalPointDelta.dx, details.sourceTimeStamp);
     }
   }
 
   /// Jog by screen-space drag distance so scrubbing feels the same at any
-  /// zoom level.
-  void _jogBy(double dx) {
-    _jogAccumulator += dx;
-    final frames = _jogAccumulator ~/ _pixelsPerFrame;
-    if (frames != 0) {
-      _jogAccumulator -= frames * _pixelsPerFrame;
+  /// zoom level, accelerating the frame step with drag speed.
+  void _jogBy(double dx, Duration? timestamp) {
+    _scrubByFrames(_scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp));
+  }
+
+  /// Advances the scrub by [frames] source frames — from the video drag or
+  /// the scrub wheel. With the atlas active it moves the finger's target
+  /// (the shuttle plays the shown frame toward it, stride-aware); otherwise
+  /// it seeks directly.
+  void _scrubByFrames(int frames) {
+    if (frames == 0) return;
+    final atlas = _frames;
+    if (_scrubbing && atlas != null) {
+      _fingerIndex = (_fingerIndex + frames / atlas.stride)
+          .clamp(0.0, (atlas.count - 1).toDouble());
+    } else {
       _jogFrames(frames);
     }
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
+    _endScrub();
     _nodeDrag = null;
   }
 
@@ -744,6 +972,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 fit: StackFit.expand,
                                 children: [
                                   VideoPlayer(_controller),
+                                  // Smooth-scrub overlay: cached stills that
+                                  // track the finger, covering the video only
+                                  // while dragging (and the brief handoff).
+                                  if (_frames != null &&
+                                      (_scrubbing || _handoff))
+                                    Positioned.fill(
+                                      child: ValueListenableBuilder<ui.Image?>(
+                                        valueListenable: _frames!.current,
+                                        builder: (_, image, __) => image == null
+                                            ? const SizedBox.shrink()
+                                            : RawImage(
+                                                image: image,
+                                                fit: BoxFit.fill),
+                                      ),
+                                    ),
                                   DrawingCanvas(controller: _drawing),
                                   IgnorePointer(
                                     child: CustomPaint(
@@ -925,7 +1168,24 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!landscape)
+            if (_preparingFrames)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text('Preparing smooth scrubbing…',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.white70)),
+                ],
+              )
+            else if (!landscape)
               Text(
                 'Ref: ${spec.referenceLabel.toLowerCase()} '
                 '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
@@ -939,10 +1199,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
-              seeker: _seeker,
               captureFps: widget.video.captureFps,
               dense: true,
               horizontal: landscape,
+              // Route the wheel through the same smooth shuttle the video
+              // drag uses, so fast wheel spins play through frames instead
+              // of hammering the slow decoder seek.
+              onScrubStart: _beginScrub,
+              onScrubBy: _scrubByFrames,
+              onScrubEnd: _endScrub,
             ),
           ],
         ),

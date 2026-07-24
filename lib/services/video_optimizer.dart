@@ -73,6 +73,82 @@ class VideoOptimizer {
   /// original file.
   static Future<void> cancel() => FFmpegKit.cancel();
 
+  /// Largest number of frames to pre-extract per clip. Beyond this the
+  /// extraction strides over source frames so a long or very high-fps clip
+  /// can't blow up disk use — scrubbing stays smooth on the extracted grid
+  /// and exact frame steps still fall back to seeking.
+  static const _maxScrubFrames = 720;
+
+  /// Longest-side cap for the extracted scrub frames. Smaller than the 1440p
+  /// playback copy: they're only shown while the finger is moving, then the
+  /// crisp video takes over, so a light, fast-to-decode preview is the right
+  /// call. Bounding the long side (not the width) keeps portrait and
+  /// landscape clips at the same modest per-frame memory.
+  static const _scrubFrameMax = 640;
+
+  /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
+  /// display rate instead of waiting on the decoder to seek. Returns the
+  /// directory, the number of frames written, and the stride (1 = every
+  /// frame), or null if extraction failed or was cancelled — the caller then
+  /// keeps the seek-based scrub path. [onProgress] gets 0..1 while running.
+  static Future<({String dir, int count, int stride})?> extractScrubFrames(
+    String videoPath,
+    String id,
+    double fps, {
+    ValueChanged<double?>? onProgress,
+  }) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/throws/frames/$id');
+    if (await dir.exists()) await dir.delete(recursive: true);
+    await dir.create(recursive: true);
+
+    double? seconds;
+    try {
+      final probe = await FFprobeKit.getMediaInformation(videoPath);
+      seconds =
+          double.tryParse(probe.getMediaInformation()?.getDuration() ?? '');
+    } catch (_) {
+      // Total unknown → assume no striding is needed.
+    }
+    final total = (seconds != null && fps > 0) ? (seconds * fps).round() : 0;
+    final stride = total > _maxScrubFrames ? (total / _maxScrubFrames).ceil() : 1;
+
+    // select drops all but every Nth frame; -vsync 0 stops ffmpeg from
+    // re-timing (duplicating/dropping) what select left, so output image k
+    // maps cleanly to source frame k*stride. The scale fits each frame inside
+    // a square box, preserving aspect and only ever shrinking.
+    final select = stride > 1 ? "select='not(mod(n\\,$stride))'," : '';
+    final vf = '${select}scale=w=$_scrubFrameMax:h=$_scrubFrameMax:'
+        'force_original_aspect_ratio=decrease';
+
+    final done = Completer<bool>();
+    final totalMs = (seconds ?? 0) * 1000;
+    await FFmpegKit.executeAsync(
+      '-y -i "$videoPath" -vf "$vf" -vsync 0 -q:v 5 "${dir.path}/f%05d.jpg"',
+      (session) async {
+        done.complete(ReturnCode.isSuccess(await session.getReturnCode()));
+      },
+      null,
+      (statistics) {
+        if (totalMs <= 0) return;
+        onProgress?.call((statistics.getTime() / totalMs).clamp(0.0, 1.0));
+      },
+    );
+    if (!await done.future) {
+      dir.delete(recursive: true).ignore();
+      return null;
+    }
+    final count = dir
+        .listSync()
+        .where((e) => e.path.endsWith('.jpg'))
+        .length;
+    if (count == 0) {
+      dir.delete(recursive: true).ignore();
+      return null;
+    }
+    return (dir: dir.path, count: count, stride: stride);
+  }
+
   /// Frame rates and recording time probed from the clip's metadata.
   /// [playback] is the container rate that frame stepping must use;
   /// [capture] is the real recorded rate — slow-mo clips often play at

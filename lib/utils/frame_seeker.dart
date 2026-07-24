@@ -1,57 +1,32 @@
-import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:video_player/video_player.dart';
 
-/// Coalesces rapid seek requests so only one platform seek is in flight at
-/// a time. Jump seeks ([seekTo]) go straight to the newest target; scrub
-/// seeks ([seekBy]) chase it a few frames per platform seek, so the video
-/// plays through the frames at the scrub speed instead of teleporting
-/// between distant ones when the finger moves fast. Frame steps chain off
-/// the requested position rather than the player's reported position, so
+/// Coalesces rapid seek requests so only one platform seek is in flight at a
+/// time, always jumping straight to the most recent target. Frame steps chain
+/// off the requested position rather than the player's reported position, so
 /// scrubbing stays responsive while the player is still decoding.
 class FrameSeeker {
-  FrameSeeker(this.controller, {double? fps})
-      : _frameUs = fps != null && fps > 0
-            ? (Duration.microsecondsPerSecond / fps).round()
-            : null;
+  FrameSeeker(this.controller);
 
   final VideoPlayerController controller;
 
-  /// One frame of media time; null when the clip's rate is unknown, which
-  /// turns chasing off ([seekBy] then jumps like [seekTo]).
-  final int? _frameUs;
-
   Duration? _pending;
   Duration? _inFlight;
-  bool _smooth = false;
   bool _pumping = false;
   Duration? _accumulatedDelta;
-
-  /// Last position handed to the platform. While the player stays paused
-  /// and nothing else seeks it, [VideoPlayerValue.position] equals this
-  /// exactly, which lets [freshPosition] answer without a platform round
-  /// trip — mid-scrub, that round trip is what used to freeze the video
-  /// for hundreds of milliseconds and then leap.
-  Duration? _lastTarget;
 
   /// Where the video will be once pending seeks complete.
   Duration get position =>
       _pending ?? _inFlight ?? controller.value.position;
 
   /// Like [position], but asks the platform where the video actually is
-  /// when no seek is queued and no seek of ours still matches the cached
-  /// value. The cached [VideoPlayerValue.position] only refreshes every
-  /// ~500 ms during playback, so right after pausing it can lag the
-  /// displayed frame — relative jumps based on it land backwards.
+  /// when no seek is queued. The cached [VideoPlayerValue.position] only
+  /// refreshes every ~500 ms during playback, so right after pausing it can
+  /// lag the displayed frame — relative jumps based on it land backwards.
   Future<Duration> freshPosition() async {
     final queued = _pending ?? _inFlight;
     if (queued != null) return queued;
-    final cached = _lastTarget;
-    if (cached != null &&
-        !controller.value.isPlaying &&
-        cached == controller.value.position) {
-      return cached;
-    }
     try {
       return await controller.position ?? controller.value.position;
     } catch (_) {
@@ -65,7 +40,7 @@ class FrameSeeker {
   Future<void> seekBy(Duration delta) async {
     final queued = _pending ?? _inFlight;
     if (queued != null) {
-      _request(queued + delta, smooth: true);
+      seekTo(queued + delta);
       return;
     }
     if (_accumulatedDelta != null) {
@@ -76,13 +51,10 @@ class FrameSeeker {
     final base = await freshPosition();
     final total = _accumulatedDelta!;
     _accumulatedDelta = null;
-    _request(base + total, smooth: true);
+    seekTo(base + total);
   }
 
-  void seekTo(Duration target) => _request(target, smooth: false);
-
-  void _request(Duration target, {required bool smooth}) {
-    _smooth = smooth;
+  void seekTo(Duration target) {
     _pending = Duration(
       microseconds: target.inMicroseconds
           .clamp(0, controller.value.duration.inMicroseconds),
@@ -90,48 +62,33 @@ class FrameSeeker {
     _pump();
   }
 
-  /// Minimum spacing between platform seeks. On Android, seekTo's future
-  /// completes when the command reaches ExoPlayer, not when the seek
-  /// finishes — back-to-back seeks flush the decoder before it can render,
-  /// so unpaced scrubbing leaps between distant frames whenever the finger
-  /// slows. ~20 renders/s still reads as continuous motion.
-  static const _seekSpacing = Duration(milliseconds: 50);
+  /// Floor between platform seeks. Each seekTo flushes ExoPlayer's pipeline,
+  /// so firing faster than this just cancels frames before they can render;
+  /// ~60/s is the display's own ceiling anyway.
+  static const _minSpacing = Duration(milliseconds: 16);
 
-  /// Most frames a chasing seek may advance per platform seek. With
-  /// [_seekSpacing] this caps smooth scrubbing at [maxSmoothFrameRate];
-  /// under it every rendered step is small enough to read as motion.
-  static const _maxChaseFrames = 3;
+  /// How long to wait for a seek to actually show before giving up and
+  /// moving to the next target. This was the old fixed cadence; it's now
+  /// only the fallback for when the player never reports arrival, so most
+  /// seeks release far sooner and scrubbing renders well past 20 frames/s.
+  static const _maxSpacing = Duration(milliseconds: 50);
 
-  /// Furthest the rendered position may trail a scrub target before it
-  /// jumps ahead, bounding catch-up time when a gesture outruns
-  /// [maxSmoothFrameRate].
-  static const _maxLagFrames = 24;
-
-  /// Fastest media rate (frames per second) chasing can render; scrub
-  /// momentum should clamp to this so a fling coasts smoothly instead of
-  /// outrunning the decoder and skipping.
-  static double get maxSmoothFrameRate =>
-      _maxChaseFrames *
-      Duration.millisecondsPerSecond /
-      _seekSpacing.inMilliseconds;
+  /// A reported position this close to the target counts as rendered.
+  static const _arrivedTolerance = Duration(milliseconds: 12);
 
   Future<void> _pump() async {
     if (_pumping) return;
     _pumping = true;
     try {
       while (_pending != null) {
+        final startedAt = DateTime.now();
         final target = _pending!;
-        final next = _smooth
-            ? _chase(_inFlight ?? controller.value.position, target)
-            : target;
-        if (next == target) _pending = null;
-        // [_inFlight] (the truth about where the video is heading) stays
-        // alive while the platform finishes, so position reads during the
-        // window stay correct.
-        _inFlight = next;
-        await controller.seekTo(next);
-        _lastTarget = next;
-        await Future<void>.delayed(_seekSpacing);
+        _pending = null;
+        _inFlight = target;
+        await controller.seekTo(target);
+        // Keeps [_inFlight] (where the video is heading) alive across the
+        // wait so position reads stay correct.
+        await _settle(target, startedAt);
       }
     } finally {
       _inFlight = null;
@@ -139,21 +96,43 @@ class FrameSeeker {
     }
   }
 
-  /// Next bounded step from [from] toward [target]: at most
-  /// [_maxChaseFrames] of progress so intermediate frames get rendered,
-  /// but never more than [_maxLagFrames] behind the goal.
-  Duration _chase(Duration from, Duration target) {
-    final frameUs = _frameUs;
-    if (frameUs == null) return target;
-    final gapUs = target.inMicroseconds - from.inMicroseconds;
-    final stepUs = frameUs * _maxChaseFrames;
-    if (gapUs.abs() <= stepUs) return target;
-    final lagUs = frameUs * _maxLagFrames;
-    final nextUs = gapUs > 0
-        ? math.max(
-            from.inMicroseconds + stepUs, target.inMicroseconds - lagUs)
-        : math.min(
-            from.inMicroseconds - stepUs, target.inMicroseconds + lagUs);
-    return Duration(microseconds: nextUs);
+  /// Paces the next seek by real render feedback instead of a fixed sleep:
+  /// hold for at least [_minSpacing] so seeks can't machine-gun and cancel
+  /// each other, then release the moment the player reports it reached the
+  /// target frame — falling back to [_maxSpacing] if that report never
+  /// arrives. Every issued seek renders before the next fires (no flushed,
+  /// skipped frames), and the cadence tracks how fast the device can decode
+  /// rather than a worst-case constant.
+  Future<void> _settle(Duration target, DateTime startedAt) async {
+    final completer = Completer<void>();
+    void check() {
+      if (completer.isCompleted) return;
+      if (DateTime.now().difference(startedAt) < _minSpacing) return;
+      final delta =
+          controller.value.position.inMicroseconds - target.inMicroseconds;
+      if (delta.abs() <= _arrivedTolerance.inMicroseconds) {
+        completer.complete();
+      }
+    }
+
+    controller.addListener(check);
+    // Re-check once the floor elapses (the frame may already be showing) and
+    // once the ceiling elapses (release no matter what).
+    final minTimer = Timer(_minSpacing, check);
+    final maxRemaining = _maxSpacing - DateTime.now().difference(startedAt);
+    final maxTimer = Timer(
+      maxRemaining.isNegative ? Duration.zero : maxRemaining,
+      () {
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+    check();
+    try {
+      await completer.future;
+    } finally {
+      controller.removeListener(check);
+      minTimer.cancel();
+      maxTimer.cancel();
+    }
   }
 }
