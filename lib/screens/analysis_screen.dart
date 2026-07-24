@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +15,7 @@ import '../utils/frame_seeker.dart';
 import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
+import '../utils/scrub_frames.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
 
@@ -50,6 +53,17 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   late final FrameSeeker _seeker = FrameSeeker(_controller);
   final DrawingController _drawing = DrawingController();
 
+  /// Pre-extracted stills shown while dragging so scrubbing stays smooth
+  /// regardless of the codec's seek cost; null when the clip has none.
+  ScrubFrames? _frames;
+
+  /// A drag is actively scrubbing (show the still overlay), and the brief
+  /// hold afterwards while the real video catches up to the last frame.
+  bool _scrubbing = false;
+  bool _handoff = false;
+  Timer? _handoffTimer;
+  VoidCallback? _handoffWatch;
+
   bool _openFailed = false;
 
   _MeasureStep? _measureStep;
@@ -65,6 +79,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     super.initState();
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
+    final framesDir = widget.video.scrubFramesDir;
+    if (framesDir != null && widget.video.scrubFrameCount > 0) {
+      _frames = ScrubFrames(
+        dir: framesDir,
+        count: widget.video.scrubFrameCount,
+        stride: widget.video.scrubFrameStride,
+        fps: widget.video.fps,
+      );
+    }
     if (!_openFailed) {
       _controller.initialize().then((_) {
         if (mounted) setState(() {});
@@ -76,9 +99,67 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
   @override
   void dispose() {
+    _stopHandoff();
+    _frames?.dispose();
     _controller.dispose();
     _drawing.dispose();
     super.dispose();
+  }
+
+  /// Shows the pre-extracted stills for the duration of a scrub drag. No-op
+  /// when the clip has no extracted frames, so scrubbing then falls back to
+  /// the seek path unchanged.
+  void _beginScrub() {
+    if (_frames == null) return;
+    _stopHandoff();
+    setState(() {
+      _scrubbing = true;
+      _handoff = false;
+    });
+    _frames!.reset();
+    _frames!.requestPosition(_seeker.position);
+  }
+
+  /// Keeps the last still on screen when the finger lifts until the video
+  /// decoder has actually seeked to that frame, so the handoff from stills
+  /// back to live video is seamless instead of a visible jump.
+  void _endScrub() {
+    if (!_scrubbing) return;
+    final target = _seeker.position;
+    setState(() {
+      _scrubbing = false;
+      _handoff = _frames != null;
+    });
+    if (_frames == null) return;
+    final toleranceUs =
+        1.5 * Duration.microsecondsPerSecond / widget.video.fps;
+    void watch() {
+      final delta =
+          (_controller.value.position.inMicroseconds - target.inMicroseconds)
+              .abs();
+      if (delta <= toleranceUs) {
+        _stopHandoff();
+        if (mounted) setState(() => _handoff = false);
+      }
+    }
+
+    _handoffWatch = watch;
+    _controller.addListener(watch);
+    // Give up and reveal the video regardless after a short grace period.
+    _handoffTimer = Timer(const Duration(milliseconds: 600), () {
+      _stopHandoff();
+      if (mounted) setState(() => _handoff = false);
+    });
+    watch();
+  }
+
+  void _stopHandoff() {
+    if (_handoffWatch != null) {
+      _controller.removeListener(_handoffWatch!);
+      _handoffWatch = null;
+    }
+    _handoffTimer?.cancel();
+    _handoffTimer = null;
   }
 
   /// Steps the video by [frames] while dragging across it in scrub mode.
@@ -247,7 +328,10 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     if (_nodeDrag != null) return;
     if (_measureStep != null) {
       // While reviewing, free drags scrub so both frames can be checked.
-      if (_measureStep == _MeasureStep.review) _scrub.reset();
+      if (_measureStep == _MeasureStep.review) {
+        _scrub.reset();
+        _beginScrub();
+      }
       return;
     }
     switch (_drawing.tool) {
@@ -263,6 +347,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         break;
       case DrawTool.none:
         _scrub.reset();
+        _beginScrub();
     }
   }
 
@@ -316,9 +401,11 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     final frames =
         _scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp);
     if (frames != 0) _jogFrames(frames);
+    if (_scrubbing) _frames?.requestPosition(_seeker.position);
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
+    _endScrub();
     _nodeDrag = null;
   }
 
@@ -741,6 +828,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                 fit: StackFit.expand,
                                 children: [
                                   VideoPlayer(_controller),
+                                  // Smooth-scrub overlay: cached stills that
+                                  // track the finger, covering the video only
+                                  // while dragging (and the brief handoff).
+                                  if (_frames != null &&
+                                      (_scrubbing || _handoff))
+                                    Positioned.fill(
+                                      child: ValueListenableBuilder<ui.Image?>(
+                                        valueListenable: _frames!.current,
+                                        builder: (_, image, __) => image == null
+                                            ? const SizedBox.shrink()
+                                            : RawImage(
+                                                image: image,
+                                                fit: BoxFit.fill),
+                                      ),
+                                    ),
                                   DrawingCanvas(controller: _drawing),
                                   IgnorePointer(
                                     child: CustomPaint(

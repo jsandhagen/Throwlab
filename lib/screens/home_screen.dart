@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -75,8 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (details == null || !mounted) return;
 
-    // Re-encode for instant frame seeks; this is the slow part of importing.
+    // Re-encode for instant frame seeks, then pre-extract frames for smooth
+    // scrubbing; this is the slow part of importing.
     final encodeProgress = ValueNotifier<double?>(null);
+    final stage = ValueNotifier<String>(
+        'Re-encoding for instant frame-by-frame scrubbing. Long or '
+        'high-fps clips take a few minutes.');
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -92,8 +97,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   LinearProgressIndicator(value: value),
             ),
             const SizedBox(height: 16),
-            const Text('Re-encoding for instant frame-by-frame '
-                'scrubbing. Long or high-fps clips take a few minutes.'),
+            ValueListenableBuilder<String>(
+              valueListenable: stage,
+              builder: (context, text, _) => Text(text),
+            ),
           ],
         ),
         actions: [
@@ -108,9 +115,18 @@ class _HomeScreenState extends State<HomeScreen> {
     // Probe the original file: the re-encode preserves frame timing but
     // drops the slow-mo capture-fps metadata tag.
     final rates = await VideoOptimizer.probeFrameRates(picked.path);
+    final fps = rates?.playback ?? 30;
     final path = await VideoOptimizer.optimizeForScrubbing(
       picked.path,
       id,
+      onProgress: (p) => encodeProgress.value = p,
+    );
+    stage.value = 'Extracting frames for smooth scrubbing…';
+    encodeProgress.value = null;
+    final frames = await VideoOptimizer.extractScrubFrames(
+      path,
+      id,
+      fps,
       onProgress: (p) => encodeProgress.value = p,
     );
     final thumbnail = await VideoOptimizer.extractThumbnail(path, id);
@@ -123,10 +139,13 @@ class _HomeScreenState extends State<HomeScreen> {
       gender: details.gender,
       importedAt: DateTime.now(),
       recordedAt: rates?.recordedAt,
-      fps: rates?.playback ?? 30,
+      fps: fps,
       captureFps: rates?.capture,
       athlete: details.athlete,
       thumbnailPath: thumbnail,
+      scrubFramesDir: frames?.dir,
+      scrubFrameCount: frames?.count ?? 0,
+      scrubFrameStride: frames?.stride ?? 1,
     );
     await library.add(video);
     if (mounted) {
@@ -333,6 +352,11 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           } else if (action == 'delete') {
             await library.remove(video.id);
+            // Reclaim the (largest) artifact this import created.
+            final framesDir = video.scrubFramesDir;
+            if (framesDir != null) {
+              Directory(framesDir).delete(recursive: true).ignore();
+            }
           }
         },
         itemBuilder: (context) => const [
