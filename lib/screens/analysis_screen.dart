@@ -91,6 +91,21 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// spin, which reads as smooth speed-up rather than a stride.
   static const _maxCatchUpFramesPerSec = 120.0;
 
+  /// Wall-clock spacing between decoder nudges while the shuttle is running.
+  /// The extracted stills are what's on screen mid-scrub, so the player only
+  /// has to stay roughly nearby for a quick handoff at the end. Seeking it on
+  /// every shuttle frame meant a flick fired up to
+  /// [_maxCatchUpFramesPerSec] platform seeks a second, each one flushing
+  /// ExoPlayer's decode pipeline — which is what made a flick stutter and
+  /// stall. ~10/s keeps the time/frame readout and the wheel live for a
+  /// fraction of the work.
+  static const _nudgeSpacing = Duration(milliseconds: 100);
+
+  /// When the last decoder nudge was issued, and for which frame; null/-1
+  /// until the first.
+  DateTime? _lastNudge;
+  int _lastNudgedIndex = -1;
+
   bool _openFailed = false;
 
   _MeasureStep? _measureStep;
@@ -128,6 +143,20 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     }
   }
 
+  /// True once nothing has scrubbed for a clear stretch, so a resolution
+  /// upgrade can run without stealing CPU from an active scrub. Returns false
+  /// (having waited) whenever a scrub interrupts the stretch, so the caller
+  /// can poll it in a loop.
+  Future<bool> _idleForUpgrade() async {
+    const quiet = Duration(milliseconds: 400);
+    for (var i = 0; i < 5; i++) {
+      await Future<void>.delayed(quiet);
+      if (!mounted) return true;
+      if (_scrubbing || _handoff || _scrubTicker.isActive) return false;
+    }
+    return true;
+  }
+
   /// Extracts scrub frames for a clip imported before the feature existed,
   /// and re-extracts when the stored stills predate the current resolution
   /// cap — the old set keeps serving scrubs until the new one is ready.
@@ -137,6 +166,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     // Called from initState, so set the flag directly — the first build picks
     // it up, and setState is only used once we're past initState (below).
     _preparingFrames = true;
+    // An upgrade competes with a scrub it isn't needed for: the clip already
+    // has usable stills, while ffmpeg re-encoding at full resolution saturates
+    // the CPU the shuttle needs to decode them. Hold off until the scrub
+    // settles. A clip with no stills at all skips the wait — its scrubbing is
+    // bad until this finishes, so sooner is better.
+    if (_frames != null) {
+      while (mounted && !await _idleForUpgrade()) {}
+      if (!mounted) return;
+    }
     final result = await VideoOptimizer.extractScrubFrames(
         widget.video.path, widget.video.id, widget.video.fps);
     if (result == null) {
@@ -198,6 +236,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       _fingerIndex = start;
       _displayIndex = start;
       _lastShown = -1;
+      _lastNudge = null;
+      _lastNudgedIndex = -1;
       _frames!.reset();
       _frames!.showIndex(start.round());
       _lastScrubTick = Duration.zero;
@@ -243,7 +283,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final gap = _fingerIndex - _displayIndex;
     if (gap.abs() < 0.5) {
       _displayIndex = _fingerIndex;
-      _showAndSeek(_displayIndex.round());
+      // Caught up: seek for real, so the readout and any handoff are exact.
+      _showAndSeek(_displayIndex.round(), force: true);
       if (!_scrubbing) {
         _scrubTicker.stop();
         _startVideoHandoff(_displayIndex.round());
@@ -258,10 +299,25 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _showAndSeek(_displayIndex.round());
   }
 
-  void _showAndSeek(int imageIndex) {
-    if (imageIndex == _lastShown) return;
-    _lastShown = imageIndex;
-    _frames!.showIndex(imageIndex);
+  /// Shows an extracted still, and occasionally nudges the hidden decoder
+  /// toward it. [force] issues the seek regardless of spacing — used when the
+  /// shuttle settles, so the player ends up exactly where the scrub stopped.
+  void _showAndSeek(int imageIndex, {bool force = false}) {
+    if (imageIndex != _lastShown) {
+      _lastShown = imageIndex;
+      _frames!.showIndex(imageIndex);
+    }
+    // Tracked separately from [_lastShown]: a throttled tick still advances
+    // the shown still, so a later forced nudge for that same frame must not
+    // be mistaken for one already sent to the decoder.
+    if (imageIndex == _lastNudgedIndex) return;
+    final now = DateTime.now();
+    final last = _lastNudge;
+    if (!force && last != null && now.difference(last) < _nudgeSpacing) {
+      return;
+    }
+    _lastNudge = now;
+    _lastNudgedIndex = imageIndex;
     _seeker.seekTo(_positionForImage(imageIndex));
   }
 
