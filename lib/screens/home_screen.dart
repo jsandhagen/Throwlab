@@ -9,6 +9,7 @@ import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../widgets/event_glyph.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
@@ -281,9 +282,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ExpansionTile(
               initiallyExpanded: true,
               shape: const Border(),
-              leading: Icon(_grouping == LibraryGrouping.athlete
-                  ? Icons.person
-                  : entry.value.first.event.icon),
+              leading: _grouping == LibraryGrouping.athlete
+                  ? const Icon(Icons.person)
+                  : EventGlyph(entry.value.first.event),
               title: Text(entry.key,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text('${entry.value.length} '
@@ -359,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return CircleAvatar(
       backgroundColor: color.withOpacity(0.18),
-      child: Icon(video.event.icon, color: color),
+      child: EventGlyph(video.event, color: color),
     );
   }
 
