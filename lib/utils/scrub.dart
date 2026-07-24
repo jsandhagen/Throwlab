@@ -5,10 +5,10 @@ const double kScrubSlowSpeed = 450;
 /// At or above this drag speed the acceleration is fully applied.
 const double kScrubFastSpeed = 4500;
 
-/// Largest frames-per-pixel multiplier, reached at [kScrubFastSpeed]. A
-/// whole 2 s / 120-frame clip becomes reachable in a single flick without
-/// giving up single-frame precision when the finger slows.
-const double kScrubMaxGain = 8;
+/// Largest frames-per-pixel multiplier, reached at [kScrubFastSpeed]. Kept
+/// moderate so a normal analysis drag stays close to 1:1 and doesn't leap
+/// between frames, while a genuine flick still covers a whole clip.
+const double kScrubMaxGain = 6;
 
 /// Frames-per-pixel multiplier for a drag moving at [speed] logical px/s.
 /// Flat at 1.0 through [kScrubSlowSpeed], then eases in (t² so precision
