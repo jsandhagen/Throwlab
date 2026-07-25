@@ -103,12 +103,14 @@ void main() {
         scrubFrameCount: 300,
         scrubFrameStride: 2,
         scrubFrameLongSide: 1440,
+        scrubFramesVersion: VideoOptimizer.scrubFramesVersion,
       );
       final restored = ThrowVideo.fromJson(video.toJson());
       expect(restored.scrubFramesDir, '/frames/4');
       expect(restored.scrubFrameCount, 300);
       expect(restored.scrubFrameStride, 2);
       expect(restored.scrubFrameLongSide, 1440);
+      expect(restored.scrubFramesVersion, VideoOptimizer.scrubFramesVersion);
     });
 
     test('clips stored before scrub frames report none, at no resolution',
@@ -124,13 +126,16 @@ void main() {
       expect(legacy.scrubFramesDir, isNull);
       expect(legacy.scrubFrameCount, 0);
       expect(legacy.scrubFrameStride, 1);
-      // 0 < the current cap, so opening the clip re-extracts at full size.
       expect(legacy.scrubFrameLongSide, 0);
-      expect(legacy.scrubFrameLongSide,
-          lessThan(VideoOptimizer.scrubFrameMax));
+      // Version 0 < current, so opening the clip re-extracts.
+      expect(legacy.scrubFramesVersion, 0);
+      expect(legacy.scrubFramesVersion,
+          lessThan(VideoOptimizer.scrubFramesVersion));
     });
 
-    test('clips extracted at the old 640 cap are due for re-extraction', () {
+    test('stills from an older recipe are due for re-extraction', () {
+      // Full resolution, but extracted before the aspect-ratio fix: the
+      // version is what flags it, not the pixel count.
       final old = ThrowVideo.fromJson({
         'id': '6',
         'path': '/v.mp4',
@@ -140,10 +145,12 @@ void main() {
         'fps': 60,
         'scrubFramesDir': '/frames/6',
         'scrubFrameCount': 300,
-        'scrubFrameLongSide': 640,
+        'scrubFrameLongSide': VideoOptimizer.scrubFrameMax,
+        'scrubFramesVersion': 2,
       });
-      expect(old.scrubFrameLongSide,
-          lessThan(VideoOptimizer.scrubFrameMax));
+      expect(old.scrubFrameLongSide, VideoOptimizer.scrubFrameMax);
+      expect(old.scrubFramesVersion,
+          lessThan(VideoOptimizer.scrubFramesVersion));
     });
   });
 }

@@ -18,6 +18,7 @@ import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
+import '../widgets/athlete_picker.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
 
@@ -137,7 +138,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         if (mounted) setState(() => _openFailed = true);
       });
       if (_frames == null ||
-          widget.video.scrubFrameLongSide < VideoOptimizer.scrubFrameMax) {
+          widget.video.scrubFramesVersion <
+              VideoOptimizer.scrubFramesVersion) {
         _prepareScrubFrames();
       }
     }
@@ -185,6 +187,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     widget.video.scrubFrameCount = result.count;
     widget.video.scrubFrameStride = result.stride;
     widget.video.scrubFrameLongSide = VideoOptimizer.scrubFrameMax;
+    widget.video.scrubFramesVersion = VideoOptimizer.scrubFramesVersion;
     await library.update(widget.video);
     final next = ScrubFrames(
       dir: result.dir,
@@ -629,6 +632,41 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Read/edit the throw's note without leaving the video.
+  /// Tags (or re-tags) who threw it, picking from athletes already in the
+  /// library. Clips imported before tagging existed start out unassigned,
+  /// so this is the only way they ever get a name.
+  Future<void> _editAthlete() async {
+    final library = context.read<VideoLibrary>();
+    var name = widget.video.athlete;
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Athlete'),
+        content: SingleChildScrollView(
+          child: AthletePicker(
+            known: library.knownAthletes,
+            value: name,
+            onChanged: (value) => name = value,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, name),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (saved == null || !mounted) return;
+    widget.video.athlete = saved.trim();
+    await library.update(widget.video);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _editNote() async {
     final controller = TextEditingController(text: widget.video.note);
     final note = await showDialog<String>(
@@ -1057,9 +1095,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                         valueListenable: _frames!.current,
                                         builder: (_, image, __) => image == null
                                             ? const SizedBox.shrink()
+                                            // contain, not fill: the stills
+                                            // now carry the video's exact
+                                            // aspect, and preserving their
+                                            // own geometry means any future
+                                            // mismatch letterboxes by a
+                                            // pixel instead of stretching
+                                            // the picture mid-scrub.
                                             : RawImage(
                                                 image: image,
-                                                fit: BoxFit.fill),
+                                                fit: BoxFit.contain),
                                       ),
                                     ),
                                   DrawingCanvas(controller: _drawing),
@@ -1111,6 +1156,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             constraints: const BoxConstraints(maxWidth: 220), child: title)
       else
         Expanded(child: title),
+      IconButton(
+        tooltip: widget.video.athlete.isEmpty
+            ? 'Tag athlete'
+            : 'Athlete: ${widget.video.athlete}',
+        icon: Icon(widget.video.athlete.isEmpty
+            ? Icons.person_add_alt
+            : Icons.person),
+        onPressed: _editAthlete,
+      ),
       IconButton(
         tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
         icon: Icon(widget.video.note.isEmpty

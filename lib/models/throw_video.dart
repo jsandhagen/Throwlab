@@ -18,6 +18,7 @@ class ThrowVideo {
     this.scrubFrameCount = 0,
     this.scrubFrameStride = 1,
     this.scrubFrameLongSide = 0,
+    this.scrubFramesVersion = 0,
   }) : captureFps = captureFps ?? fps;
 
   final String id;
@@ -65,10 +66,14 @@ class ThrowVideo {
   int scrubFrameStride;
 
   /// Longest-side pixels the scrub frames were extracted at; 0 for clips
-  /// from before this was recorded. When it falls short of the current
-  /// extraction cap the stills are re-extracted on open so old imports
-  /// pick up the higher resolution.
+  /// from before this was recorded.
   int scrubFrameLongSide;
+
+  /// Which extraction recipe produced the stills. Bumped whenever their
+  /// resolution or geometry changes, so clips extracted by an older recipe
+  /// re-extract on open instead of scrubbing at the wrong size or shape.
+  /// See VideoOptimizer.scrubFramesVersion.
+  int scrubFramesVersion;
 
   ImplementSpec get implementSpec => event.specFor(gender);
 
@@ -88,6 +93,7 @@ class ThrowVideo {
         'scrubFrameCount': scrubFrameCount,
         'scrubFrameStride': scrubFrameStride,
         'scrubFrameLongSide': scrubFrameLongSide,
+        'scrubFramesVersion': scrubFramesVersion,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -109,5 +115,7 @@ class ThrowVideo {
         scrubFrameStride: (json['scrubFrameStride'] as num?)?.toInt() ?? 1,
         scrubFrameLongSide:
             (json['scrubFrameLongSide'] as num?)?.toInt() ?? 0,
+        scrubFramesVersion:
+            (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
       );
 }

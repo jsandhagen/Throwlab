@@ -10,6 +10,7 @@ import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../widgets/athlete_picker.dart';
 import '../widgets/event_glyph.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
@@ -169,6 +170,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       scrubFrameStride: frames?.stride ?? 1,
       scrubFrameLongSide:
           frames != null ? VideoOptimizer.scrubFrameMax : 0,
+      scrubFramesVersion:
+          frames != null ? VideoOptimizer.scrubFramesVersion : 0,
     );
     await library.add(video);
     if (mounted) {
@@ -506,30 +509,22 @@ class _ImportDialog extends StatefulWidget {
 class _ImportDialogState extends State<_ImportDialog> {
   ThrowEvent _event = ThrowEvent.shotPut;
   Gender _gender = Gender.men;
-  final TextEditingController _athlete = TextEditingController();
-
-  @override
-  void dispose() {
-    _athlete.dispose();
-    super.dispose();
-  }
+  String _athlete = '';
 
   @override
   Widget build(BuildContext context) {
     final spec = _event.specFor(_gender);
     return AlertDialog(
       title: const Text('Throw details'),
-      content: Column(
+      content: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _athlete,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Athlete',
-              hintText: 'Who threw it (optional)',
-            ),
+          AthletePicker(
+            known: context.read<VideoLibrary>().knownAthletes,
+            value: _athlete,
+            onChanged: (name) => setState(() => _athlete = name),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<ThrowEvent>(
@@ -559,6 +554,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+        ),
       ),
       actions: [
         TextButton(
@@ -568,7 +564,7 @@ class _ImportDialogState extends State<_ImportDialog> {
           onPressed: () => Navigator.pop(context, (
             event: _event,
             gender: _gender,
-            athlete: _athlete.text.trim(),
+            athlete: _athlete.trim(),
           )),
           child: const Text('Import'),
         ),

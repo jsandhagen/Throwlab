@@ -54,6 +54,21 @@ class VideoLibrary extends ChangeNotifier {
     }
   }
 
+  /// Every athlete already used in the library, most recently imported
+  /// first, so tagging a new clip is picking a name rather than typing it.
+  /// Matching is case-insensitive — "Sam" and "sam" are one athlete — and
+  /// the spelling from the most recent throw wins.
+  List<String> get knownAthletes {
+    final seen = <String>{};
+    final names = <String>[];
+    for (final video in _videos) {
+      final name = video.athlete.trim();
+      if (name.isEmpty) continue;
+      if (seen.add(name.toLowerCase())) names.add(name);
+    }
+    return names;
+  }
+
   Future<void> add(ThrowVideo video) async {
     _videos.insert(0, video);
     await _save();

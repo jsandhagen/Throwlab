@@ -93,6 +93,17 @@ class VideoOptimizer {
   /// AnalysisScreen), which is why the value is public.
   static const scrubFrameMax = 1440;
 
+  /// Current extraction recipe. Bump whenever the stills' resolution or
+  /// geometry changes: clips carry the version that produced theirs, and any
+  /// clip below this re-extracts when opened.
+  ///   1 — 640px long side.
+  ///   2 — [scrubFrameMax] long side.
+  ///   3 — even dimensions and square pixels, so the stills match the
+  ///       playback copy's aspect ratio exactly (a 1080x2340 clip yielded
+  ///       665px-wide stills against a 664px-wide video, which the overlay
+  ///       stretched to cover).
+  static const scrubFramesVersion = 3;
+
   /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
   /// display rate instead of waiting on the decoder to seek. Returns the
   /// directory, the number of frames written, and the stride (1 = every
@@ -128,9 +139,14 @@ class VideoOptimizer {
     // re-timing (duplicating/dropping) what select left, so output image k
     // maps cleanly to source frame k*stride. The scale fits each frame inside
     // a square box, preserving aspect and only ever shrinking.
+    // force_divisible_by=2 matches the playback copy's "-2" width rounding:
+    // without it a 1080x2340 clip yields 665x1440 stills against a 664x1440
+    // video, and the overlay stretched the still to cover that 0.15%
+    // difference. setsar=1 keeps the pixels square, so a source with a
+    // non-1 sample aspect can't skew the stills either.
     final select = stride > 1 ? "select='not(mod(n\\,$stride))'," : '';
     final vf = '${select}scale=w=$scrubFrameMax:h=$scrubFrameMax:'
-        'force_original_aspect_ratio=decrease';
+        'force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1';
 
     final done = Completer<bool>();
     final totalMs = (seconds ?? 0) * 1000;
