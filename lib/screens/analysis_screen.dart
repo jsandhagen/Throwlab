@@ -68,6 +68,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// A drag is actively scrubbing (show the still overlay), and the brief
   /// hold afterwards while the real video catches up to the last frame.
   bool _scrubbing = false;
+
+  /// The current touch has actually moved. Until it does no still is shown
+  /// and the player is not seeked, so a tap leaves the frame alone.
+  bool _scrubMoved = false;
+
   bool _handoff = false;
   Timer? _handoffTimer;
   VoidCallback? _handoffWatch;
@@ -248,13 +253,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       _lastNudge = null;
       _lastNudgedIndex = -1;
       _frames!.reset();
+      // Decode the starting still now so it is ready the instant the finger
+      // moves; nothing is shown until then.
       _frames!.showIndex(start.round());
-      _lastScrubTick = Duration.zero;
-      _scrubTicker.start();
+      _scrubMoved = false;
     } else {
       // Grabbed again while the shuttle was still catching up: continue from
-      // the frame currently on screen.
+      // the frame currently on screen, already in the moved state.
       _fingerIndex = _displayIndex;
+      _scrubMoved = true;
     }
     setState(() {
       _scrubbing = true;
@@ -262,10 +269,32 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     });
   }
 
+  /// Starts the shuttle the first time a scrub actually moves. Touching the
+  /// video is not a scrub: the stills only exist every [ScrubFrames.stride]
+  /// frames, so covering the video with the nearest one — and seeking the
+  /// player onto that grid — shifted the picture by up to a stride even
+  /// though the finger never travelled. Nothing happens until it does.
+  void _beginShuttle() {
+    if (_scrubMoved) return;
+    _scrubMoved = true;
+    _lastScrubTick = Duration.zero;
+    _scrubTicker.start();
+    setState(() {});
+  }
+
   /// Lets the shuttle finish playing to the finger's frame, then hands off to
   /// live video. The still overlay stays up across the handoff.
   void _endScrub() {
     if (!_scrubbing) return;
+    // A touch that never moved changed nothing — no overlay was raised and
+    // the player was never seeked, so there is nothing to hand back.
+    if (!_scrubMoved) {
+      setState(() {
+        _scrubbing = false;
+        _handoff = false;
+      });
+      return;
+    }
     setState(() {
       _scrubbing = false;
       _handoff = _frames != null;
@@ -641,6 +670,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     if (frames == 0) return;
     final atlas = _frames;
     if (_scrubbing && atlas != null) {
+      _beginShuttle();
       _fingerIndex = (_fingerIndex + frames / atlas.stride)
           .clamp(0.0, (atlas.count - 1).toDouble());
     } else {
@@ -1109,9 +1139,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                   VideoPlayer(_controller),
                                   // Smooth-scrub overlay: cached stills that
                                   // track the finger, covering the video only
-                                  // while dragging (and the brief handoff).
+                                  // once a drag actually moves (and across
+                                  // the brief handoff back). A touch that
+                                  // never travels leaves the video alone.
                                   if (_frames != null &&
-                                      (_scrubbing || _handoff))
+                                      ((_scrubbing && _scrubMoved) ||
+                                          _handoff))
                                     Positioned.fill(
                                       child: ValueListenableBuilder<ui.Image?>(
                                         valueListenable: _frames!.current,
