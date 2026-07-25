@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -60,18 +61,76 @@ class ScrubFrames {
   /// cached frame from a distant part of the clip.
   bool _freshStart = false;
 
+  /// Presentation time (seconds) of each still, read from the clip itself;
+  /// empty until [loadTimes] finishes or when the file is missing, in which
+  /// case the fps arithmetic stands in.
+  List<double> _times = const [];
+
+  /// Reads the timestamps written alongside the stills. Safe to call once
+  /// per instance; failures leave the arithmetic fallback in place.
+  Future<void> loadTimes(String fileName) async {
+    try {
+      final file = File('$dir/$fileName');
+      if (!await file.exists()) return;
+      final times = <double>[];
+      for (final line in const LineSplitter().convert(await file.readAsString())) {
+        final value = double.tryParse(line.trim());
+        if (value != null) times.add(value);
+      }
+      // A short or corrupt list would silently misalign every still past the
+      // gap, which is worse than the arithmetic it replaces.
+      if (times.length >= count && !_disposed) {
+        _times = times;
+      }
+    } catch (_) {
+      // Arithmetic fallback stands.
+    }
+  }
+
   /// Maps a scrub [position] to the extracted frame the video is showing at
-  /// that instant — the one whose display window contains [position], which
-  /// is a floor, not a round. Rounding picked the *next* frame past the
-  /// halfway point, so covering the video with a still (or handing back to
-  /// it) could swap in a neighbouring frame and the picture would twitch.
-  /// The epsilon keeps a position that lands exactly on a frame boundary
-  /// from falling back a frame on floating-point error.
+  /// that instant — the one whose display window contains [position]. With
+  /// real timestamps that is a search; without them it is a floor of the fps
+  /// arithmetic (a round picked the *next* frame past the halfway point, so
+  /// covering the video with a still could swap in its neighbour).
   int indexForPosition(Duration position) {
     if (count <= 0) return 0;
-    final frame = position.inMicroseconds * fps / Duration.microsecondsPerSecond;
+    final seconds = position.inMicroseconds / Duration.microsecondsPerSecond;
+    if (_times.isNotEmpty) {
+      // Last still whose time is at or before the position.
+      var lo = 0, hi = _times.length - 1, best = 0;
+      while (lo <= hi) {
+        final mid = (lo + hi) ~/ 2;
+        if (_times[mid] <= seconds + 1e-6) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      return best.clamp(0, count - 1);
+    }
+    final frame = seconds * fps;
     final index = (frame / stride + 1e-6).floor();
     return index.clamp(0, count - 1);
+  }
+
+  /// Where to seek so the video lands on still [index]. Aims between this
+  /// still's timestamp and the next so neither rounding to whole
+  /// milliseconds nor an inexact rate can tip it into an adjacent frame.
+  Duration positionForIndex(int index) {
+    final k = index.clamp(0, count - 1);
+    double seconds;
+    if (_times.isNotEmpty) {
+      final start = _times[k];
+      final next = k + 1 < _times.length
+          ? _times[k + 1]
+          : start + stride / (fps > 0 ? fps : 30);
+      seconds = start + (next - start) / 2;
+    } else {
+      seconds = (k * stride + 0.5) / (fps > 0 ? fps : 30);
+    }
+    return Duration(
+        microseconds: (seconds * Duration.microsecondsPerSecond).round());
   }
 
   String _pathFor(int index) =>

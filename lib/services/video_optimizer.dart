@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -111,7 +112,10 @@ class VideoOptimizer {
   ///       what the player does with the video. Measured on a real clip,
   ///       skipping this left the stills 0.78% narrower than the video, so
   ///       the picture shifted sideways when a scrub ended.
-  static const scrubFramesVersion = 4;
+  ///   5 — each still's real presentation time is recorded alongside it, so
+  ///       a scrub ends on the frame the still was showing instead of a
+  ///       neighbour on clips that aren't exactly constant-rate.
+  static const scrubFramesVersion = 5;
 
   /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
   /// display rate instead of waiting on the decoder to seek. Returns the
@@ -186,6 +190,7 @@ class VideoOptimizer {
       dir.delete(recursive: true).ignore();
       return null;
     }
+    await _writeFrameTimes(videoPath, dir, stride, count);
     try {
       if (await finalDir.exists()) await finalDir.delete(recursive: true);
       await dir.rename(finalDir.path);
@@ -194,6 +199,49 @@ class VideoOptimizer {
       return null;
     }
     return (dir: finalDir.path, count: count, stride: stride);
+  }
+
+  /// File written beside the stills holding each one's presentation time in
+  /// seconds, one per line. [ScrubFrames] uses it to map between a position
+  /// and a still exactly.
+  static const framesTimesFile = 'times.csv';
+
+  /// Records when each extracted still is actually shown, straight from the
+  /// clip's own timestamps.
+  ///
+  /// Deriving it as index*stride/fps instead assumes the clip is exactly
+  /// constant-rate, starts at zero, and was probed with the exact rate.
+  /// Phone slow-mo satisfies none of those dependably, and being wrong by a
+  /// fraction of a frame is enough to land the video on the neighbouring
+  /// frame when a scrub ends — consistently, in whichever direction the
+  /// error runs. Best-effort: without this file ScrubFrames falls back to
+  /// the arithmetic.
+  static Future<void> _writeFrameTimes(
+      String videoPath, Directory dir, int stride, int count) async {
+    try {
+      final session = await FFprobeKit.execute(
+          '-v error -select_streams v:0 -show_entries frame=pts_time '
+          '-of csv=p=0 "$videoPath"');
+      if (!ReturnCode.isSuccess(await session.getReturnCode())) return;
+      final output = await session.getOutput();
+      if (output == null || output.isEmpty) return;
+      final times = <double>[];
+      for (final line in const LineSplitter().convert(output)) {
+        final value = double.tryParse(line.trim().split(',').first);
+        // A stream can report frames without a timestamp; a gap would
+        // misalign every later still, so bail out rather than guess.
+        if (value == null) continue;
+        times.add(value);
+      }
+      final kept = <double>[
+        for (var i = 0; i < times.length; i += stride) times[i],
+      ];
+      if (kept.length < count) return;
+      await File('${dir.path}/$framesTimesFile')
+          .writeAsString(kept.take(count).join('\n'));
+    } catch (_) {
+      // Falls back to the fps arithmetic.
+    }
   }
 
   /// Frame rates and recording time probed from the clip's metadata.

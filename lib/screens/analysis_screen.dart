@@ -140,7 +140,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         count: widget.video.scrubFrameCount,
         stride: widget.video.scrubFrameStride,
         fps: widget.video.fps,
-      );
+      )..loadTimes(VideoOptimizer.framesTimesFile);
     }
     if (!_openFailed) {
       _controller.initialize().then((_) {
@@ -206,6 +206,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       stride: result.stride,
       fps: widget.video.fps,
     );
+    await next.loadTimes(VideoOptimizer.framesTimesFile);
     // Wait out any scrub in progress: the overlay is showing the old
     // ScrubFrames mid-drag and it can't be torn down underneath.
     while (mounted && (_scrubbing || _handoff || _scrubTicker.isActive)) {
@@ -359,15 +360,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _seeker.seekTo(_positionForImage(imageIndex));
   }
 
-  /// Seeks aim at the middle of a frame's display window, not its first
-  /// microsecond: a frame boundary rounded to whole microseconds can land
-  /// just below the frame it names, which decodes the frame before it. Half
-  /// a frame of slack puts the target unambiguously inside the intended one.
-  Duration _positionForImage(int imageIndex) => Duration(
-      microseconds: ((imageIndex * _frames!.stride + 0.5) *
-              Duration.microsecondsPerSecond /
-              widget.video.fps)
-          .round());
+  /// Where to seek so the video shows the still at [imageIndex]. ScrubFrames
+  /// answers from the clip's own frame timestamps where it has them, so the
+  /// handoff lands on the frame the still was showing rather than a
+  /// neighbour.
+  Duration _positionForImage(int imageIndex) =>
+      _frames!.positionForIndex(imageIndex);
 
   /// Keeps the last still on screen when the finger lifts until the video
   /// decoder has actually seeked to that frame, so the handoff from stills
