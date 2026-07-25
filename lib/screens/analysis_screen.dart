@@ -324,9 +324,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _seeker.seekTo(_positionForImage(imageIndex));
   }
 
+  /// Seeks aim at the middle of a frame's display window, not its first
+  /// microsecond: a frame boundary rounded to whole microseconds can land
+  /// just below the frame it names, which decodes the frame before it. Half
+  /// a frame of slack puts the target unambiguously inside the intended one.
   Duration _positionForImage(int imageIndex) => Duration(
-      microseconds: (imageIndex *
-              _frames!.stride *
+      microseconds: ((imageIndex * _frames!.stride + 0.5) *
               Duration.microsecondsPerSecond /
               widget.video.fps)
           .round());
@@ -338,8 +341,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _stopHandoff();
     final target = _positionForImage(imageIndex);
     _seeker.seekTo(target);
+    // Under one frame: at 1.5 the still was dropped while the player was
+    // still a whole frame away, so the picture stepped as the video took
+    // over. Targets sit mid-frame, so the player reporting either the
+    // requested time or the frame's own start is within this.
     final toleranceUs =
-        1.5 * Duration.microsecondsPerSecond / widget.video.fps;
+        0.6 * Duration.microsecondsPerSecond / widget.video.fps;
     void watch() {
       final delta =
           (_controller.value.position.inMicroseconds - target.inMicroseconds)

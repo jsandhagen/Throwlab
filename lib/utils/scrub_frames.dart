@@ -60,11 +60,17 @@ class ScrubFrames {
   /// cached frame from a distant part of the clip.
   bool _freshStart = false;
 
-  /// Maps a scrub [position] to an extracted-frame index.
+  /// Maps a scrub [position] to the extracted frame the video is showing at
+  /// that instant — the one whose display window contains [position], which
+  /// is a floor, not a round. Rounding picked the *next* frame past the
+  /// halfway point, so covering the video with a still (or handing back to
+  /// it) could swap in a neighbouring frame and the picture would twitch.
+  /// The epsilon keeps a position that lands exactly on a frame boundary
+  /// from falling back a frame on floating-point error.
   int indexForPosition(Duration position) {
     if (count <= 0) return 0;
     final frame = position.inMicroseconds * fps / Duration.microsecondsPerSecond;
-    final index = (frame / stride).round();
+    final index = (frame / stride + 1e-6).floor();
     return index.clamp(0, count - 1);
   }
 
