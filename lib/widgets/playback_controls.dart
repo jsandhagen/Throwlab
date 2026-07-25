@@ -111,12 +111,28 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             },
           ),
         );
-        final timeText = Text(
-          '${formatPosition(value.position)}  ·  '
-          'frame ${frameAt(value.position, fps)}',
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall,
-        );
+        // Stacked, not one line: on a phone the transport buttons squeezed
+        // this column until "frame 19" ellipsised away to "frame …", hiding
+        // the number that matters most for frame-by-frame work. Two short
+        // lines always fit. Landscape has the width for one line.
+        final timeStyle = Theme.of(context).textTheme.bodySmall;
+        final timeText = widget.horizontal
+            ? Text(
+                '${formatPosition(value.position)}  ·  '
+                'frame ${frameAt(value.position, fps)}',
+                overflow: TextOverflow.ellipsis,
+                style: timeStyle,
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(formatPosition(value.position),
+                      overflow: TextOverflow.ellipsis, style: timeStyle),
+                  Text('frame ${frameAt(value.position, fps)}',
+                      overflow: TextOverflow.ellipsis, style: timeStyle),
+                ],
+              );
         final stepBack = IconButton(
           tooltip: 'Back one frame',
           iconSize: widget.horizontal ? 26 : (dense ? 30 : 38),

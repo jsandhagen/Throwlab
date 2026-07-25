@@ -107,6 +107,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   DateTime? _lastNudge;
   int _lastNudgedIndex = -1;
 
+  /// How long the still is held after the player reports it reached the
+  /// target, covering the gap between a seek being accepted and its frame
+  /// reaching the surface. Short enough not to feel like lag, long enough
+  /// to cover a few frames of render latency.
+  static const _renderSettle = Duration(milliseconds: 120);
+
   bool _openFailed = false;
 
   _MeasureStep? _measureStep;
@@ -351,14 +357,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       final delta =
           (_controller.value.position.inMicroseconds - target.inMicroseconds)
               .abs();
-      if (delta <= toleranceUs) {
-        _stopHandoff();
+      if (delta > toleranceUs) return;
+      // Arrived — but only in the player's bookkeeping. The position is
+      // reported when the seek is accepted, not when the decoded frame
+      // reaches the surface, so dropping the still here uncovers whatever
+      // frame the texture still holds: the picture steps to the old frame
+      // and then snaps to the right one. Stop watching and give the
+      // texture a moment to actually show the frame we asked for.
+      _stopHandoff();
+      _handoffTimer = Timer(_renderSettle, () {
         if (mounted) setState(() => _handoff = false);
-      }
+      });
     }
 
     _handoffWatch = watch;
     _controller.addListener(watch);
+    // watch() may fire immediately below and replace this with the shorter
+    // render-settle timer; this is the ceiling for the seek never landing.
     // Hold the (correct) still until the video actually arrives. seekTo can
     // take a second or more to render on some devices, so the fallback is
     // generous — showing the right frame a touch soft beats flashing the
