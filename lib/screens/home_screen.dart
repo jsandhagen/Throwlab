@@ -172,6 +172,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           frames != null ? VideoOptimizer.scrubFrameMax : 0,
       scrubFramesVersion:
           frames != null ? VideoOptimizer.scrubFramesVersion : 0,
+      // Only a copy we made carries the current geometry; when the encode
+      // failed the original file stands in and still needs remaking.
+      playbackVersion:
+          path == picked.path ? 0 : VideoOptimizer.playbackVersion,
     );
     await library.add(video);
     if (mounted) {

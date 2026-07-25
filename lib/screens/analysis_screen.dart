@@ -150,7 +150,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       });
       if (_frames == null ||
           widget.video.scrubFramesVersion <
-              VideoOptimizer.scrubFramesVersion) {
+              VideoOptimizer.scrubFramesVersion ||
+          widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
         _prepareScrubFrames();
       }
     }
@@ -187,6 +188,20 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     if (_frames != null) {
       while (mounted && !await _idleForUpgrade()) {}
       if (!mounted) return;
+    }
+    // Bring the playback copy up to the current recipe first: the stills are
+    // extracted *from* it, so re-extracting against a stale copy would just
+    // reproduce the mismatch. Only clips with genuinely non-square pixels are
+    // re-encoded — the rest cost one probe — and the current player keeps
+    // showing the old file until the screen is reopened, so a scrub in flight
+    // is never pulled out from under the finger.
+    if (widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
+      final remade = await VideoOptimizer.remakePlaybackCopy(
+          widget.video.path, widget.video.id);
+      if (!mounted) return;
+      if (remade != null) widget.video.path = remade;
+      widget.video.playbackVersion = VideoOptimizer.playbackVersion;
+      await library.update(widget.video);
     }
     final result = await VideoOptimizer.extractScrubFrames(
         widget.video.path, widget.video.id, widget.video.fps);

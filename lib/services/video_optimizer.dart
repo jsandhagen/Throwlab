@@ -40,6 +40,32 @@ class VideoOptimizer {
       // Progress stays indeterminate.
     }
 
+    if (!await _encodePlaybackCopy(srcPath, outPath, onProgress,
+        totalMs: totalMs)) {
+      File(outPath).delete().ignore();
+      return srcPath;
+    }
+    return outPath;
+  }
+
+  /// The playback-copy recipe, shared by the import and by a later remake so
+  /// the two can't drift apart. Returns whether the encode succeeded.
+  static Future<bool> _encodePlaybackCopy(
+    String srcPath,
+    String outPath,
+    ValueChanged<double?>? onProgress, {
+    double? totalMs,
+  }) async {
+    if (totalMs == null) {
+      try {
+        final probe = await FFprobeKit.getMediaInformation(srcPath);
+        final seconds =
+            double.tryParse(probe.getMediaInformation()?.getDuration() ?? '');
+        if (seconds != null && seconds > 0) totalMs = seconds * 1000;
+      } catch (_) {
+        // Progress stays indeterminate.
+      }
+    }
     final done = Completer<bool>();
     await FFmpegKit.executeAsync(
       // superfast (not ultrafast) keeps CABAC and the deblocking filter
@@ -69,16 +95,73 @@ class VideoOptimizer {
         onProgress?.call((ms / total).clamp(0.0, 1.0));
       },
     );
-    if (!await done.future) {
-      File(outPath).delete().ignore();
-      return srcPath;
-    }
-    return outPath;
+    return done.future;
   }
 
   /// Abandons the in-flight optimization; the import then keeps the
   /// original file.
   static Future<void> cancel() => FFmpegKit.cancel();
+
+  /// The clip's sample (pixel) aspect ratio, 1.0 when square or unreadable.
+  ///
+  /// Anything but 1.0 means the file's stored pixels aren't the shape they
+  /// are displayed at, and every consumer has to agree about who applies the
+  /// correction — which is exactly what goes wrong between the player and a
+  /// square-pixel JPEG still.
+  static Future<double> probeSampleAspect(String path) async {
+    try {
+      final info =
+          (await FFprobeKit.getMediaInformation(path)).getMediaInformation();
+      if (info == null) return 1;
+      for (final stream in info.getStreams()) {
+        if (stream.getType() != 'video') continue;
+        final ratio = parseRate(stream.getSampleAspectRatio());
+        // "0:1" (unspecified) parses to 0 and means square, not degenerate.
+        if (ratio == null || ratio <= 0) return 1;
+        return ratio;
+      }
+    } catch (_) {
+      // Unreadable → assume square and leave the clip alone.
+    }
+    return 1;
+  }
+
+  /// Re-encodes [video]'s playback copy with the current recipe when it was
+  /// made by an older one, and returns its path — unchanged when nothing
+  /// needed doing.
+  ///
+  /// Only clips whose pixels really are non-square are re-encoded; the rest
+  /// are just stamped, so bringing an existing library up to date costs one
+  /// probe per clip instead of a full re-encode. The new copy is built beside
+  /// the old one and renamed over it, so a failure or a cancel leaves the
+  /// working file in place — and renaming under an open player is safe, since
+  /// the already-open handle keeps serving the old content until the screen
+  /// is reopened.
+  static Future<String?> remakePlaybackCopy(
+    String srcPath,
+    String id, {
+    ValueChanged<double?>? onProgress,
+  }) async {
+    if (await probeSampleAspect(srcPath) == 1) return null;
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/throws');
+    await dir.create(recursive: true);
+    final outPath = '${dir.path}/$id.mp4';
+    final staging = '${dir.path}/$id.remake.mp4';
+    File(staging).delete().ignore();
+    final made = await _encodePlaybackCopy(srcPath, staging, onProgress);
+    if (!made) {
+      File(staging).delete().ignore();
+      return null;
+    }
+    try {
+      await File(staging).rename(outPath);
+    } catch (_) {
+      File(staging).delete().ignore();
+      return null;
+    }
+    return outPath;
+  }
 
   /// Largest number of frames to pre-extract per clip. Beyond this the
   /// extraction strides over source frames so a long or very high-fps clip
@@ -99,6 +182,20 @@ class VideoOptimizer {
   /// extracted at an older, smaller cap are re-extracted on open (see
   /// AnalysisScreen), which is why the value is public.
   static const scrubFrameMax = 1440;
+
+  /// Current recipe for the playback copy. Bump whenever its *geometry*
+  /// changes, so clips encoded by an older recipe are re-made on open.
+  ///
+  /// The stills have had this since [scrubFramesVersion] existed; the video
+  /// they cover did not, and that asymmetry is a bug in its own right. A
+  /// clip imported before the playback copy started baking a non-square
+  /// sample aspect into pixels keeps that sample aspect live in the file,
+  /// while its stills re-extract at the current recipe with the aspect baked
+  /// in — so the still is wider than the video by exactly the sample aspect,
+  /// and the picture jumps sideways at every scrub handoff.
+  ///   1 — a non-square sample aspect is baked into real pixels, matching
+  ///       the stills (see [scrubFramesVersion] 4).
+  static const playbackVersion = 1;
 
   /// Current extraction recipe. Bump whenever the stills' resolution or
   /// geometry changes: clips carry the version that produced theirs, and any

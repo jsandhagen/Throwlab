@@ -19,10 +19,15 @@ class ThrowVideo {
     this.scrubFrameStride = 1,
     this.scrubFrameLongSide = 0,
     this.scrubFramesVersion = 0,
+    this.playbackVersion = 0,
   }) : captureFps = captureFps ?? fps;
 
   final String id;
-  final String path;
+
+  /// The file the app plays: the optimized copy when one was made, otherwise
+  /// the imported original. Reassigned when the copy is re-made under a newer
+  /// recipe.
+  String path;
   final ThrowEvent event;
   final Gender gender;
   final DateTime importedAt;
@@ -75,6 +80,12 @@ class ThrowVideo {
   /// See VideoOptimizer.scrubFramesVersion.
   int scrubFramesVersion;
 
+  /// Which recipe produced the playback copy. Bumped when its geometry
+  /// changes, so a clip encoded by an older one is re-made rather than left
+  /// disagreeing with the stills drawn over it.
+  /// See VideoOptimizer.playbackVersion.
+  int playbackVersion;
+
   ImplementSpec get implementSpec => event.specFor(gender);
 
   Map<String, dynamic> toJson() => {
@@ -94,6 +105,7 @@ class ThrowVideo {
         'scrubFrameStride': scrubFrameStride,
         'scrubFrameLongSide': scrubFrameLongSide,
         'scrubFramesVersion': scrubFramesVersion,
+        'playbackVersion': playbackVersion,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -117,5 +129,6 @@ class ThrowVideo {
             (json['scrubFrameLongSide'] as num?)?.toInt() ?? 0,
         scrubFramesVersion:
             (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
+        playbackVersion: (json['playbackVersion'] as num?)?.toInt() ?? 0,
       );
 }

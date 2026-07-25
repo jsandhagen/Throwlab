@@ -131,6 +131,28 @@ void main() {
       expect(legacy.scrubFramesVersion, 0);
       expect(legacy.scrubFramesVersion,
           lessThan(VideoOptimizer.scrubFramesVersion));
+      // Same for the video the stills are drawn over: a clip stored before
+      // the playback copy carried a recipe is due to be re-made, otherwise
+      // its square-pixel stills would keep covering a non-square video.
+      expect(legacy.playbackVersion, 0);
+      expect(
+          legacy.playbackVersion, lessThan(VideoOptimizer.playbackVersion));
+    });
+
+    test('a current playback copy survives a round trip and is not re-made',
+        () {
+      final video = ThrowVideo(
+        id: '7',
+        path: '/v.mp4',
+        event: ThrowEvent.discus,
+        gender: Gender.women,
+        importedAt: DateTime.parse('2026-06-11T10:30:00'),
+        playbackVersion: VideoOptimizer.playbackVersion,
+      );
+      final restored = ThrowVideo.fromJson(video.toJson());
+      expect(restored.playbackVersion, VideoOptimizer.playbackVersion);
+      expect(restored.playbackVersion,
+          isNot(lessThan(VideoOptimizer.playbackVersion)));
     });
 
     test('stills from an older recipe are due for re-extraction', () {
