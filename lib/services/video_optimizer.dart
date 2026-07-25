@@ -47,8 +47,14 @@ class VideoOptimizer {
       // during playback, while a 6-frame GOP plays like normal video and
       // an exact seek decodes at most 5 cheap P-frames. sc_threshold=0
       // stops scene-cut keyframes from disturbing the uniform grid; bf=0
-      // keeps decode order = display order for clean frame stepping.
-      '-y -i "$srcPath" -vf scale=-2:min(1440\\,ih):flags=lanczos '
+      // keeps decode order = display order for clean frame stepping. The
+      // leading scale=iw*sar bakes any non-square sample aspect into real
+      // pixels and setsar=1 clears the tag, so the player can't stretch the
+      // clip on playback — the extracted stills are square-pixel JPEGs and
+      // couldn't follow it, which made the picture jump horizontally at the
+      // scrub handoff. It also keeps on-screen measurements honest.
+      '-y -i "$srcPath" '
+      '-vf scale=iw*sar:ih,setsar=1,scale=-2:min(1440\\,ih):flags=lanczos '
       '-c:v libx264 -preset superfast -crf 17 -g 6 -bf 0 -sc_threshold 0 '
       '-pix_fmt yuv420p -c:a copy "$outPath"',
       (session) async {
@@ -98,11 +104,14 @@ class VideoOptimizer {
   /// clip below this re-extracts when opened.
   ///   1 — 640px long side.
   ///   2 — [scrubFrameMax] long side.
-  ///   3 — even dimensions and square pixels, so the stills match the
-  ///       playback copy's aspect ratio exactly (a 1080x2340 clip yielded
-  ///       665px-wide stills against a 664px-wide video, which the overlay
-  ///       stretched to cover).
-  static const scrubFramesVersion = 3;
+  ///   3 — even dimensions, so the stills match the playback copy's width
+  ///       rounding (a 1080x2340 clip yielded 665px-wide stills against a
+  ///       664px-wide video, which the overlay stretched to cover).
+  ///   4 — a non-square sample aspect is baked into real pixels, matching
+  ///       what the player does with the video. Measured on a real clip,
+  ///       skipping this left the stills 0.78% narrower than the video, so
+  ///       the picture shifted sideways when a scrub ended.
+  static const scrubFramesVersion = 4;
 
   /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
   /// display rate instead of waiting on the decoder to seek. Returns the
@@ -139,14 +148,16 @@ class VideoOptimizer {
     // re-timing (duplicating/dropping) what select left, so output image k
     // maps cleanly to source frame k*stride. The scale fits each frame inside
     // a square box, preserving aspect and only ever shrinking.
-    // force_divisible_by=2 matches the playback copy's "-2" width rounding:
-    // without it a 1080x2340 clip yields 665x1440 stills against a 664x1440
-    // video, and the overlay stretched the still to cover that 0.15%
-    // difference. setsar=1 keeps the pixels square, so a source with a
-    // non-1 sample aspect can't skew the stills either.
+    // scale=iw*sar,setsar=1 first: a non-square sample aspect has to become
+    // real pixels here, because the player applies it to the video while a
+    // JPEG has nowhere to carry it — leaving the stills a fraction narrower
+    // than the video they cover. force_divisible_by=2 then matches the
+    // playback copy's "-2" width rounding, so the two agree exactly rather
+    // than differing by the odd pixel.
     final select = stride > 1 ? "select='not(mod(n\\,$stride))'," : '';
-    final vf = '${select}scale=w=$scrubFrameMax:h=$scrubFrameMax:'
-        'force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1';
+    final vf = '${select}scale=iw*sar:ih,setsar=1,'
+        'scale=w=$scrubFrameMax:h=$scrubFrameMax:'
+        'force_original_aspect_ratio=decrease:force_divisible_by=2';
 
     final done = Completer<bool>();
     final totalMs = (seconds ?? 0) * 1000;
