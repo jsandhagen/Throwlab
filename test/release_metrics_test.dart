@@ -135,6 +135,35 @@ void main() {
     });
   });
 
+  group('VideoOptimizer.isPlaybackGeometryCurrent', () {
+    bool current(double sar, int w, int h) =>
+        VideoOptimizer.isPlaybackGeometryCurrent(
+            sampleAspect: sar, width: w, height: h);
+
+    test('macroblock-sized square-pixel clips need no remake', () {
+      expect(current(1, 800, 1440), isTrue);
+      expect(current(1, 1920, 1072), isTrue);
+    });
+
+    test('off-macroblock dimensions are coded with a crop rectangle', () {
+      // 810 codes as 816, 1080 as 1088: the padding rides along in the
+      // texture and squeezes the picture inside its box.
+      expect(current(1, 810, 1440), isFalse);
+      expect(current(1, 1080, 1920), isFalse);
+      // Height counts too.
+      expect(current(1, 800, 1450), isFalse);
+    });
+
+    test('non-square pixels need a remake whatever the size', () {
+      expect(current(1.00744, 800, 1440), isFalse);
+      expect(current(0.9, 800, 1440), isFalse);
+    });
+
+    test('an unreadable size is left alone rather than re-encoded blindly', () {
+      expect(current(1, 0, 0), isTrue);
+    });
+  });
+
   group('VideoOptimizer.parseRate', () {
     test('parses plain and decimal rates', () {
       expect(VideoOptimizer.parseRate('240'), 240);

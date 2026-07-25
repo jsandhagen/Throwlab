@@ -80,8 +80,21 @@ class VideoOptimizer {
       // clip on playback — the extracted stills are square-pixel JPEGs and
       // couldn't follow it, which made the picture jump horizontally at the
       // scrub handoff. It also keeps on-screen measurements honest.
+      //
+      // The trailing crop takes both dimensions down to a multiple of 16, a
+      // macroblock. H.264 codes anything else up to the next multiple and
+      // marks the difference in a crop rectangle — and the texture the
+      // player hands Flutter carries the *coded* frame, so the picture gets
+      // squeezed into the part of the box that isn't padding. Measured on
+      // the reported clip: an 8 px band of edge-replicated padding down the
+      // right of every video frame, making the picture 0.74% narrower than
+      // the square-pixel still drawn over it. Sized to the macroblock there
+      // is no crop rectangle and nothing to disagree about. It costs up to
+      // 15 px off the right and bottom — a crop, so nothing is distorted
+      // and measurements stay honest.
       '-y -i "$srcPath" '
-      '-vf scale=iw*sar:ih,setsar=1,scale=-2:min(1440\\,ih):flags=lanczos '
+      '-vf scale=iw*sar:ih,setsar=1,scale=-2:min(1440\\,ih):flags=lanczos,'
+      'crop=trunc(iw/16)*16:trunc(ih/16)*16:0:0,setsar=1 '
       '-c:v libx264 -preset superfast -crf 17 -g 6 -bf 0 -sc_threshold 0 '
       '-pix_fmt yuv420p -c:a copy "$outPath"',
       (session) async {
@@ -102,36 +115,49 @@ class VideoOptimizer {
   /// original file.
   static Future<void> cancel() => FFmpegKit.cancel();
 
-  /// The clip's sample (pixel) aspect ratio, 1.0 when square or unreadable.
+  /// Whether [path] is already shaped the way the current recipe produces:
+  /// square pixels, and both dimensions on a macroblock so the coded frame
+  /// is the displayed frame.
   ///
-  /// Anything but 1.0 means the file's stored pixels aren't the shape they
-  /// are displayed at, and every consumer has to agree about who applies the
-  /// correction — which is exactly what goes wrong between the player and a
-  /// square-pixel JPEG still.
-  static Future<double> probeSampleAspect(String path) async {
+  /// Either miss means the file's stored pixels aren't the shape they are
+  /// displayed at, and every consumer has to agree about who corrects for it
+  /// — which is exactly what goes wrong between the player's texture and a
+  /// square-pixel JPEG still. Unreadable files are left alone.
+  @visibleForTesting
+  static bool isPlaybackGeometryCurrent(
+      {required double sampleAspect, required int width, required int height}) {
+    if (sampleAspect != 1) return false;
+    if (width <= 0 || height <= 0) return true;
+    return width % 16 == 0 && height % 16 == 0;
+  }
+
+  static Future<bool> _playbackGeometryCurrent(String path) async {
     try {
       final info =
           (await FFprobeKit.getMediaInformation(path)).getMediaInformation();
-      if (info == null) return 1;
+      if (info == null) return true;
       for (final stream in info.getStreams()) {
         if (stream.getType() != 'video') continue;
-        final ratio = parseRate(stream.getSampleAspectRatio());
         // "0:1" (unspecified) parses to 0 and means square, not degenerate.
-        if (ratio == null || ratio <= 0) return 1;
-        return ratio;
+        final ratio = parseRate(stream.getSampleAspectRatio());
+        return isPlaybackGeometryCurrent(
+          sampleAspect: (ratio == null || ratio <= 0) ? 1 : ratio,
+          width: stream.getWidth()?.toInt() ?? 0,
+          height: stream.getHeight()?.toInt() ?? 0,
+        );
       }
     } catch (_) {
-      // Unreadable → assume square and leave the clip alone.
+      // Unreadable → leave the clip alone.
     }
-    return 1;
+    return true;
   }
 
   /// Re-encodes [video]'s playback copy with the current recipe when it was
   /// made by an older one, and returns its path — unchanged when nothing
   /// needed doing.
   ///
-  /// Only clips whose pixels really are non-square are re-encoded; the rest
-  /// are just stamped, so bringing an existing library up to date costs one
+  /// Only clips that are actually shaped wrong are re-encoded; the rest are
+  /// just stamped, so bringing an existing library up to date costs one
   /// probe per clip instead of a full re-encode. The new copy is built beside
   /// the old one and renamed over it, so a failure or a cancel leaves the
   /// working file in place — and renaming under an open player is safe, since
@@ -142,7 +168,7 @@ class VideoOptimizer {
     String id, {
     ValueChanged<double?>? onProgress,
   }) async {
-    if (await probeSampleAspect(srcPath) == 1) return null;
+    if (await _playbackGeometryCurrent(srcPath)) return null;
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/throws');
     await dir.create(recursive: true);
@@ -195,7 +221,12 @@ class VideoOptimizer {
   /// and the picture jumps sideways at every scrub handoff.
   ///   1 — a non-square sample aspect is baked into real pixels, matching
   ///       the stills (see [scrubFramesVersion] 4).
-  static const playbackVersion = 1;
+  ///   2 — both dimensions are a multiple of 16, so the coded frame is the
+  ///       displayed frame and there is no crop rectangle for the player's
+  ///       texture to ignore. Measured on a real clip, the padding showed as
+  ///       an 8 px replicated band down the right edge and left the video
+  ///       0.74% narrower than the stills covering it.
+  static const playbackVersion = 2;
 
   /// Current extraction recipe. Bump whenever the stills' resolution or
   /// geometry changes: clips carry the version that produced theirs, and any
