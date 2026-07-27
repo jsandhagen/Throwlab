@@ -28,6 +28,16 @@ dev_dependencies:
   video_player_platform_interface: ^6.3.0
   flutter_launcher_icons: ^0.14.1
 
+# The APK build resolves dependencies fresh every time, so a bad release of
+# any transitive package breaks it. path_provider_android 2.3.x pulls in jni,
+# and jni 1.0.1 (2026-07-27) added a top-level `kotlin {}` block to its
+# build.gradle while only applying the Kotlin plugin when AGP is older than 9
+# — so evaluating :jni dies with "Could not find method kotlin()" and the
+# release build fails. Nothing here needs 2.3; stay on the last line without
+# that dependency until jni's Gradle is fixed.
+dependency_overrides:
+  path_provider_android: ">=2.2.23 <2.3.0"
+
 flutter_launcher_icons:
   android: true
   ios: false
