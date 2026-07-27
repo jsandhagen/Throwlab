@@ -81,7 +81,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   // follower advances the *shown* frame toward it at a rate that scales with
   // the gap — so a fast scroll plays the frames through quickly (the video
   // speeds up to match) instead of teleporting and skipping.
-  late final Ticker _scrubTicker = createTicker(_onScrubTick);
+  late final Ticker _scrubTicker;
   double _fingerIndex = 0;
   double _displayIndex = 0;
   int _lastShown = -1;
@@ -131,6 +131,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   @override
   void initState() {
     super.initState();
+    // Created eagerly: a lazy ticker on a screen left without scrubbing
+    // would be created inside dispose(), when looking up the TickerMode is
+    // illegal.
+    _scrubTicker = createTicker(_onScrubTick);
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
     final framesDir = widget.video.scrubFramesDir;
