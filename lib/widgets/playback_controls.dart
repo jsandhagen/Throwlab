@@ -274,10 +274,18 @@ class _ScrubWheelState extends State<ScrubWheel>
   static const _restVelocity = 40.0;
 
   late final FrameSeeker _seeker = FrameSeeker(widget.controller);
-  late final Ticker _ticker = createTicker(_onTick);
+  late final Ticker _ticker;
   final ScrubAccumulator _scrub = ScrubAccumulator();
   double _velocity = 0;
   Duration _lastTick = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    // Created eagerly: a lazy ticker that is never flung would be created
+    // during dispose(), when looking up the TickerMode is illegal.
+    _ticker = createTicker(_onTick);
+  }
 
   @override
   void dispose() {

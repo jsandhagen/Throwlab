@@ -467,39 +467,47 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   bool _activeStroke = false;
   void Function(Offset canvasPoint)? _nodeDrag;
 
-  /// Where the (aspect-fitted) video sits inside the viewport, pre-zoom.
-  Rect get _videoRect {
-    final ratio = _controller.value.aspectRatio;
-    var w = _viewport.width;
-    var h = w / ratio;
-    if (h > _viewport.height) {
-      h = _viewport.height;
-      w = h * ratio;
-    }
-    return Rect.fromLTWH(
-        (_viewport.width - w) / 2, (_viewport.height - h) / 2, w, h);
+  /// The annotation layer itself — the aspect-fitted video box the strokes
+  /// and markers are painted into.
+  final GlobalKey _canvasKey = GlobalKey();
+
+  RenderBox? get _canvasBox {
+    final object = _canvasKey.currentContext?.findRenderObject();
+    return object is RenderBox && object.hasSize ? object : null;
   }
 
-  /// Screen position → position relative to the video's top-left corner,
-  /// in the video's own (unzoomed) coordinates. All stored points live in
-  /// this space, which is what makes measurements zoom-proof.
-  Offset _toCanvas(Offset screen) =>
-      (screen - _zoomOffset) / _zoomScale - _videoRect.topLeft;
+  /// Size of the painted video box. Everything stored is normalized to it.
+  Size get _canvasSize => _canvasBox?.size ?? Size.zero;
+
+  /// Touch position → position relative to the video's top-left corner, in
+  /// the video's own (unzoomed) coordinates — the space the annotations and
+  /// measurement markers are painted in, which is what makes them
+  /// zoom-proof.
+  ///
+  /// Asking the painted layer where the touch landed (rather than
+  /// re-deriving the letterbox rect and undoing the zoom transform by hand)
+  /// keeps ink under the finger even when the stage's geometry isn't what
+  /// the gesture math assumed — a stale pan offset after the viewport
+  /// changed, say. [globalPosition] must be a global (screen) position.
+  Offset? _toCanvas(Offset globalPosition) =>
+      _canvasBox?.globalToLocal(globalPosition);
 
   Offset _normalizeCanvas(Offset canvasPoint) {
-    final r = _videoRect;
-    return Offset((canvasPoint.dx / r.width).clamp(0.0, 1.0),
-        (canvasPoint.dy / r.height).clamp(0.0, 1.0));
+    final size = _canvasSize;
+    if (size.isEmpty) return Offset.zero;
+    return Offset((canvasPoint.dx / size.width).clamp(0.0, 1.0),
+        (canvasPoint.dy / size.height).clamp(0.0, 1.0));
   }
 
   Offset _denormalizeCanvas(Offset normalized) {
-    final r = _videoRect;
-    return Offset(normalized.dx * r.width, normalized.dy * r.height);
+    final size = _canvasSize;
+    return Offset(normalized.dx * size.width, normalized.dy * size.height);
   }
 
   Offset _clampToVideo(Offset p) {
-    final r = _videoRect;
-    return Offset(p.dx.clamp(0.0, r.width), p.dy.clamp(0.0, r.height));
+    final size = _canvasSize;
+    return Offset(
+        p.dx.clamp(0.0, size.width), p.dy.clamp(0.0, size.height));
   }
 
   /// Keeps the zoomed content covering the viewport (no gaps at edges).
@@ -533,14 +541,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       return (p) => setState(() => found(p));
     }
     if (_drawing.tool == DrawTool.angle) {
-      final r = _videoRect;
       AngleAnnotation? hitAnnotation;
       var hitIndex = 0;
       for (final annotation in _drawing.annotations) {
         if (annotation is! AngleAnnotation) continue;
         for (var i = 0; i < annotation.points.length; i++) {
-          final p = Offset(annotation.points[i].dx * r.width,
-              annotation.points[i].dy * r.height);
+          final p = _denormalizeCanvas(annotation.points[i]);
           final d = (p - canvasPoint).distance;
           if (d < best) {
             best = d;
@@ -559,14 +565,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     return null;
   }
 
-  void _onVideoTap(Offset screenPos) {
+  void _onVideoTap(Offset globalPosition) {
     if (_detecting) return;
-    final canvasPoint = _toCanvas(screenPos);
-    final r = _videoRect;
+    final canvasPoint = _toCanvas(globalPosition);
+    if (canvasPoint == null) return;
+    final size = _canvasSize;
     if (canvasPoint.dx < 0 ||
         canvasPoint.dy < 0 ||
-        canvasPoint.dx > r.width ||
-        canvasPoint.dy > r.height) {
+        canvasPoint.dx > size.width ||
+        canvasPoint.dy > size.height) {
       return;
     }
     if (_measureStep != null) {
@@ -597,7 +604,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       return;
     }
     _activeStroke = false;
-    final canvasPoint = _toCanvas(details.localFocalPoint);
+    final canvasPoint = _toCanvas(details.focalPoint);
+    if (canvasPoint == null) return;
     _nodeDrag = _hitTestNode(canvasPoint);
     if (_nodeDrag != null) return;
     if (_measureStep != null) {
@@ -639,7 +647,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       });
       return;
     }
-    final canvasPoint = _toCanvas(details.localFocalPoint);
+    final canvasPoint = _toCanvas(details.focalPoint);
+    if (canvasPoint == null) return;
     if (_nodeDrag != null) {
       _nodeDrag!(_clampToVideo(canvasPoint));
       return;
@@ -1127,11 +1136,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           : _controller.value.isInitialized
               ? LayoutBuilder(builder: (context, constraints) {
                   _viewport = constraints.biggest;
-                  // Re-clamp in case the viewport changed (e.g. rotation).
-                  final offset = _clampZoomOffset(_zoomOffset, _zoomScale);
+                  // Re-clamp in case the viewport changed (e.g. rotation),
+                  // and keep the stored pan equal to the one being drawn:
+                  // the pinch anchor reads it back on the next gesture.
+                  _zoomOffset = _clampZoomOffset(_zoomOffset, _zoomScale);
+                  final offset = _zoomOffset;
                   return GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapUp: (details) => _onVideoTap(details.localPosition),
+                    onTapUp: (details) => _onVideoTap(details.globalPosition),
                     onScaleStart: _onScaleStart,
                     onScaleUpdate: _onScaleUpdate,
                     onScaleEnd: _onScaleEnd,
@@ -1147,6 +1159,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                             child: AspectRatio(
                               aspectRatio: _controller.value.aspectRatio,
                               child: Stack(
+                                key: _canvasKey,
                                 fit: StackFit.expand,
                                 children: [
                                   VideoPlayer(_controller),
