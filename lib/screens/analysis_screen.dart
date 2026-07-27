@@ -587,7 +587,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         last.points.add(point);
         _drawing.notifyChanged();
       } else {
-        _drawing.add(AngleAnnotation(_drawing.color)..points.add(point));
+        _drawing.add(AngleAnnotation(_drawing.color, _drawing.strokeWidth)
+          ..points.add(point));
       }
     }
   }
@@ -618,12 +619,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     }
     switch (_drawing.tool) {
       case DrawTool.pen:
-        _drawing
-            .add(PenStroke(_drawing.color, [_normalizeCanvas(canvasPoint)]));
+        _drawing.add(PenStroke(_drawing.color, _drawing.strokeWidth,
+            [_normalizeCanvas(canvasPoint)]));
         _activeStroke = true;
       case DrawTool.line:
         final p = _normalizeCanvas(canvasPoint);
-        _drawing.add(LineAnnotation(_drawing.color, p, p));
+        _drawing.add(LineAnnotation(_drawing.color, _drawing.strokeWidth, p, p));
         _activeStroke = true;
       case DrawTool.angle:
         break;
@@ -1551,6 +1552,8 @@ class _DrawingRailState extends State<_DrawingRail> {
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
   ];
 
+  static const _thicknessLabels = ['Thin', 'Medium', 'Thick'];
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -1585,6 +1588,37 @@ class _DrawingRailState extends State<_DrawingRail> {
                             : null,
                         icon: Icon(icon),
                         onPressed: () => controller.tool = tool,
+                      ),
+                    const SizedBox(height: 6),
+                    // Thickness: each swatch is a bar of the pen's own
+                    // weight, in the pen's own color. Kept short — the rail
+                    // is already taller than a landscape phone.
+                    for (final (index, width) in kStrokeWidths.indexed)
+                      Tooltip(
+                        message: '${_thicknessLabels[index]} line',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => controller.strokeWidth = width,
+                          child: Container(
+                            width: 34,
+                            height: 14,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: controller.strokeWidth == width
+                                  ? scheme.primaryContainer
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                            child: Container(
+                              width: 20,
+                              height: math.max(2, width),
+                              decoration: BoxDecoration(
+                                color: controller.color,
+                                borderRadius: BorderRadius.circular(width),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     const SizedBox(height: 6),
                     for (final color in kAnnotationColors)

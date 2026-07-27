@@ -4,20 +4,28 @@ import 'package:flutter/material.dart';
 
 enum DrawTool { none, pen, line, angle }
 
+/// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
+/// middle one is the default.
+const kStrokeWidths = [1.5, 3.0, 6.0];
+
 /// All annotation points are stored normalized to the canvas (0..1 in both
 /// axes) so drawings stay anchored when the video is resized or rotated.
 sealed class Annotation {
-  Annotation(this.color);
+  Annotation(this.color, this.width);
   final Color color;
+
+  /// Stroke thickness, kept per annotation so changing the pen doesn't
+  /// re-weight drawings that are already on the frame.
+  final double width;
 }
 
 class PenStroke extends Annotation {
-  PenStroke(super.color, this.points);
+  PenStroke(super.color, super.width, this.points);
   final List<Offset> points;
 }
 
 class LineAnnotation extends Annotation {
-  LineAnnotation(super.color, this.start, this.end);
+  LineAnnotation(super.color, super.width, this.start, this.end);
   Offset start;
   Offset end;
 }
@@ -25,7 +33,7 @@ class LineAnnotation extends Annotation {
 /// Three taps: first arm point, vertex, second arm point. The measured angle
 /// is at the vertex.
 class AngleAnnotation extends Annotation {
-  AngleAnnotation(super.color);
+  AngleAnnotation(super.color, super.width);
   final List<Offset> points = [];
 
   bool get isComplete => points.length == 3;
@@ -44,10 +52,12 @@ class AngleAnnotation extends Annotation {
 class DrawingController extends ChangeNotifier {
   DrawTool _tool = DrawTool.none;
   Color _color = Colors.orangeAccent;
+  double _strokeWidth = kStrokeWidths[1];
   final List<Annotation> _annotations = [];
 
   DrawTool get tool => _tool;
   Color get color => _color;
+  double get strokeWidth => _strokeWidth;
   List<Annotation> get annotations => List.unmodifiable(_annotations);
 
   set tool(DrawTool value) {
@@ -57,6 +67,11 @@ class DrawingController extends ChangeNotifier {
 
   set color(Color value) {
     _color = value;
+    notifyListeners();
+  }
+
+  set strokeWidth(double value) {
+    _strokeWidth = value;
     notifyListeners();
   }
 
@@ -121,7 +136,7 @@ class _AnnotationPainter extends CustomPainter {
     for (final annotation in annotations) {
       final paint = Paint()
         ..color = annotation.color
-        ..strokeWidth = 3
+        ..strokeWidth = annotation.width
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
@@ -150,8 +165,11 @@ class _AnnotationPainter extends CustomPainter {
     final points =
         angle.points.map((p) => _denormalize(p, size)).toList();
     final dotPaint = Paint()..color = angle.color;
+    // Vertex dots grow with the pen so a thin angle stays precise and a
+    // thick one stays visible.
+    final dotRadius = 2.5 + angle.width / 2;
     for (final point in points) {
-      canvas.drawCircle(point, 4, dotPaint);
+      canvas.drawCircle(point, dotRadius, dotPaint);
     }
     if (points.length >= 2) {
       canvas.drawLine(points[1], points[0], paint);
