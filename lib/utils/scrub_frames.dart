@@ -35,6 +35,15 @@ class ScrubFrames {
   /// overlay never blanks mid-scrub.
   final ValueNotifier<ui.Image?> current = ValueNotifier<ui.Image?>(null);
 
+  /// Which still [current] is actually showing, or null while the overlay is
+  /// showing nothing. It lags [showIndex] whenever the asked-for frame is
+  /// still decoding and a neighbour is standing in for it, which is why the
+  /// handoff back to live video waits for this to reach the frame it is
+  /// seeking to: dropping the overlay while a neighbour is on screen *is* the
+  /// jump it was there to prevent.
+  int? get shownIndex => _shownIndex;
+  int? _shownIndex;
+
   /// Byte budget for decoded frames held in memory. Sized in bytes rather
   /// than a frame count so the extraction resolution can change without
   /// re-tuning: 1440px stills are ~4.7 MB of RGBA each, so this holds ~20 of
@@ -169,6 +178,7 @@ class ScrubFrames {
   void reset() {
     if (_disposed) return;
     _freshStart = true;
+    _shownIndex = null;
     current.value = null;
   }
 
@@ -231,6 +241,7 @@ class ScrubFrames {
     final exact = _cache[_target];
     if (exact != null) {
       _freshStart = false;
+      _shownIndex = _target;
       current.value = exact;
       return;
     }
@@ -241,6 +252,7 @@ class ScrubFrames {
         final near = _cache[_target + d];
         if (near != null) {
           _freshStart = false;
+          _shownIndex = _target + d;
           current.value = near;
           return;
         }
@@ -250,15 +262,20 @@ class ScrubFrames {
     // Mid-drag: any nearest decoded frame beats a gap, and prefetch keeps it
     // within a frame or two of the finger.
     ui.Image? best;
+    int? bestIndex;
     var bestDist = 1 << 30;
     _cache.forEach((index, image) {
       final dist = (index - _target).abs();
       if (dist < bestDist) {
         bestDist = dist;
+        bestIndex = index;
         best = image;
       }
     });
-    if (best != null) current.value = best;
+    if (best != null) {
+      _shownIndex = bestIndex;
+      current.value = best;
+    }
   }
 
   int _cacheBytes() {

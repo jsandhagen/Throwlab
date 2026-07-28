@@ -78,6 +78,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   bool _handoff = false;
   Timer? _handoffTimer;
   VoidCallback? _handoffWatch;
+  ScrubFrames? _handoffFrames;
 
   // Shuttle scrubbing: the finger sets a target frame, and a per-vsync
   // follower advances the *shown* frame toward it at a rate that scales with
@@ -394,6 +395,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// back to live video is seamless instead of a visible jump.
   void _startVideoHandoff(int imageIndex) {
     _stopHandoff();
+    final frames = _frames;
     final target = _positionForImage(imageIndex);
     _seeker.seekTo(target);
     // Under one frame: at 1.5 the still was dropped while the player was
@@ -404,6 +406,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final toleranceUs =
         0.6 * Duration.microsecondsPerSecond / widget.video.fps;
     void watch() {
+      // The still on screen has to be the one being handed back. A scrub
+      // ends faster than 1440p JPEGs decode, so the overlay is often still
+      // showing the neighbour that stood in for the frame the finger stopped
+      // on — and swapping *that* for the video is itself the frame the
+      // picture appears to skip. Waiting costs nothing: the still and the
+      // video then show the same frame, so the switch is invisible.
+      if (frames != null && frames.shownIndex != imageIndex) return;
       final delta =
           (_controller.value.position.inMicroseconds - target.inMicroseconds)
               .abs();
@@ -422,6 +431,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
     _handoffWatch = watch;
     _controller.addListener(watch);
+    // The decode that finally puts the right still on screen is the other
+    // half of the condition above, and it arrives on its own notifier.
+    _handoffFrames = frames;
+    frames?.current.addListener(watch);
     // watch() may fire immediately below and replace this with the shorter
     // render-settle timer; this is the ceiling for the seek never landing.
     // Hold the (correct) still until the video actually arrives. seekTo can
@@ -438,6 +451,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   void _stopHandoff() {
     if (_handoffWatch != null) {
       _controller.removeListener(_handoffWatch!);
+      // The instance the listener went on, not whatever _frames is now: a
+      // re-extraction can swap the set out between arming and stopping.
+      _handoffFrames?.current.removeListener(_handoffWatch!);
+      _handoffFrames = null;
       _handoffWatch = null;
     }
     _handoffTimer?.cancel();
