@@ -20,6 +20,7 @@ import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/drawing_canvas.dart';
+import '../widgets/event_glyph.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/throw_picker.dart';
 import 'comparison_screen.dart';
@@ -1300,28 +1301,33 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  /// Back button, title, and the measure/fps actions, with the measurement
-  /// instruction banner underneath while measuring. Portrait gets a
-  /// full-width scrim; landscape gets a compact top-left pill so the short
-  /// screen keeps the video (and its upper-right action area) visible.
-  Widget _topOverlay() {
-    final landscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+  String get _throwLabel =>
+      '${widget.video.event.label} · ${widget.video.gender.label}';
+
+  /// Back, then the per-throw actions. [vertical] lays them out for the
+  /// left rail, where the title is carried by the implement glyph's tooltip
+  /// rather than a line of text a 56px rail has no room for.
+  List<Widget> _headerActions({required bool vertical}) {
     final title = Text(
-      '${widget.video.event.label} · '
-      '${widget.video.gender.label}',
+      _throwLabel,
       overflow: TextOverflow.ellipsis,
       style: const TextStyle(fontWeight: FontWeight.w600),
     );
-    final actions = [
+    return [
       IconButton(
         tooltip: 'Back',
         icon: const Icon(Icons.arrow_back),
         onPressed: () => Navigator.pop(context),
       ),
-      if (landscape)
-        ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220), child: title)
+      if (vertical)
+        Tooltip(
+          message: _throwLabel,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: EventGlyph(widget.video.event,
+                color: eventColor(widget.video.event)),
+          ),
+        )
       else
         Expanded(child: title),
       IconButton(
@@ -1357,19 +1363,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         onPressed: _editFps,
       ),
     ];
-    final banner = _measureStep == null
-        ? null
-        : Material(
+  }
+
+  /// The measuring instructions, as a full-width band (portrait) or a
+  /// rounded [pill] that sits beside the left rail (landscape).
+  Widget? _measureBanner({required bool pill}) {
+    if (_measureStep == null) return null;
+    return Material(
             color: Theme.of(context).colorScheme.secondaryContainer,
-            // Landscape shows the instructions as a pill beside the
-            // header pill instead of a full-width band over the video.
-            borderRadius: landscape ? BorderRadius.circular(24) : null,
-            clipBehavior: landscape ? Clip.antiAlias : Clip.none,
+            // Landscape shows the instructions as a pill beside the left
+            // rail instead of a full-width band over the video.
+            borderRadius: pill ? BorderRadius.circular(24) : null,
+            clipBehavior: pill ? Clip.antiAlias : Clip.none,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisSize:
-                    landscape ? MainAxisSize.min : MainAxisSize.max,
+                    pill ? MainAxisSize.min : MainAxisSize.max,
                 children: [
                   if (_detecting)
                     const SizedBox(
@@ -1381,7 +1391,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     const Icon(Icons.straighten, size: 20),
                   const SizedBox(width: 8),
                   Flexible(
-                    fit: landscape ? FlexFit.loose : FlexFit.tight,
+                    fit: pill ? FlexFit.loose : FlexFit.tight,
                     child: Text(
                         _detecting
                             ? 'Finding the javelin…'
@@ -1406,30 +1416,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               ),
             ),
           );
+  }
 
-    if (landscape) {
-      return SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 4, top: 4, right: 4),
-          child: Row(
-            children: [
-              Material(
-                color:
-                    Theme.of(context).colorScheme.surface.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(24),
-                clipBehavior: Clip.antiAlias,
-                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
-              ),
-              if (banner != null) ...[
-                const SizedBox(width: 8),
-                Flexible(child: banner),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
+  /// Portrait header: back, title and the per-throw actions across the top,
+  /// with the measuring instructions underneath.
+  Widget _topOverlay() {
+    final banner = _measureBanner(pill: false);
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1443,9 +1435,35 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(children: actions),
+            Row(children: _headerActions(vertical: false)),
             if (banner != null) banner,
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Landscape header: the same actions as a rail down the left edge, back
+  /// arrow at the top. A landscape phone is ~360px tall — every row across
+  /// the top costs a tenth of the frame, while the left edge is where a
+  /// right-handed thumb isn't and where a pillarboxed clip leaves black.
+  Widget _leftRail() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4, top: 4, bottom: 4),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            color: Theme.of(context).colorScheme.surface.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(24),
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _headerActions(vertical: true),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1470,6 +1488,30 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Landscape carries the drawing tools here, above the
+            // transport: the screen has width to spare and no height.
+            if (landscape)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                // Centred while it fits, scrollable when a narrow phone
+                // can't hold the whole bar.
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints:
+                          BoxConstraints(minWidth: constraints.maxWidth),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _DrawingRail(
+                              controller: _drawing, axis: Axis.horizontal),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (_preparingFrames)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1523,39 +1565,54 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   @override
   Widget build(BuildContext context) {
     // Coach's Eye-style layout: the video owns the whole screen and the
-    // controls float over it — transport along the bottom, a collapsible
-    // drawing rail on the right.
+    // controls float over it. Portrait puts the header across the top and
+    // the drawing tools down the right; landscape has ~360px of height to
+    // spend, so both move to edges that cost none of it — the header
+    // becomes a left rail, the tools a bar above the transport.
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final banner = landscape ? _measureBanner(pill: true) : null;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(child: _videoArea()),
-          Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
-          Positioned(
-            top: 0,
-            right: 4,
-            bottom: 0,
-            child: SafeArea(
-              child: Padding(
-                // Hugs the bottom-right corner: the throw action lives in
-                // the right-center and upper-right of the frame, and the
-                // inset keeps it clear of the scrubber/transport overlay
-                // (a single shorter row in landscape).
-                padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).orientation ==
-                            Orientation.landscape
-                        ? 76
-                        : 150),
-                child: Align(
-                  alignment: Alignment.bottomRight,
-                  child: SingleChildScrollView(
-                    reverse: true,
-                    child: _DrawingRail(controller: _drawing),
+          if (landscape) ...[
+            Positioned(top: 0, left: 0, bottom: 0, child: _leftRail()),
+            if (banner != null)
+              Positioned(
+                top: 4,
+                left: 64,
+                right: 8,
+                child: SafeArea(
+                  bottom: false,
+                  child: Align(
+                      alignment: Alignment.topLeft, child: banner),
+                ),
+              ),
+          ] else
+            Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
+          if (!landscape)
+            Positioned(
+              top: 0,
+              right: 4,
+              bottom: 0,
+              child: SafeArea(
+                child: Padding(
+                  // Hugs the bottom-right corner: the throw action lives in
+                  // the right-center and upper-right of the frame, and the
+                  // inset keeps it clear of the scrubber/transport overlay.
+                  padding: const EdgeInsets.only(bottom: 150),
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      child: _DrawingRail(controller: _drawing),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           Positioned(
             left: 0,
             right: 0,
@@ -1636,9 +1693,13 @@ class _MeasurePainter extends CustomPainter {
 /// it to a single button in the same corner, keeping the right-center and
 /// upper-right of the frame — where the throw happens — unobstructed.
 class _DrawingRail extends StatefulWidget {
-  const _DrawingRail({required this.controller});
+  const _DrawingRail({required this.controller, this.axis = Axis.vertical});
 
   final DrawingController controller;
+
+  /// Vertical down the right edge (portrait), or a bar across the bottom
+  /// (landscape, where the column runs off a ~360px-tall screen).
+  final Axis axis;
 
   @override
   State<_DrawingRail> createState() => _DrawingRailState();
@@ -1664,6 +1725,9 @@ class _DrawingRailState extends State<_DrawingRail> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final horizontal = widget.axis == Axis.horizontal;
+    final gap =
+        horizontal ? const SizedBox(width: 6) : const SizedBox(height: 6);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) => Material(
@@ -1671,8 +1735,10 @@ class _DrawingRailState extends State<_DrawingRail> {
         borderRadius: BorderRadius.circular(24),
         clipBehavior: Clip.antiAlias,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
+          padding: EdgeInsets.symmetric(
+              vertical: horizontal ? 0 : 4, horizontal: horizontal ? 4 : 0),
+          child: Flex(
+            direction: widget.axis,
             mainAxisSize: MainAxisSize.min,
             children: !_open
                 ? [
@@ -1696,7 +1762,7 @@ class _DrawingRailState extends State<_DrawingRail> {
                         icon: Icon(icon),
                         onPressed: () => controller.tool = tool,
                       ),
-                    const SizedBox(height: 6),
+                    gap,
                     // Thickness: each swatch is a bar of the pen's own
                     // weight, in the pen's own color. Kept short — the rail
                     // is already taller than a landscape phone.
@@ -1727,14 +1793,16 @@ class _DrawingRailState extends State<_DrawingRail> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 6),
+                    gap,
                     for (final color in kAnnotationColors)
                       GestureDetector(
                         onTap: () => controller.color = color,
                         child: Container(
                           width: 20,
                           height: 20,
-                          margin: const EdgeInsets.symmetric(vertical: 3),
+                          margin: EdgeInsets.symmetric(
+                              vertical: horizontal ? 0 : 3,
+                              horizontal: horizontal ? 3 : 0),
                           decoration: BoxDecoration(
                             color: color,
                             shape: BoxShape.circle,
@@ -1747,7 +1815,7 @@ class _DrawingRailState extends State<_DrawingRail> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 6),
+                    gap,
                     IconButton(
                       tooltip: 'Undo',
                       visualDensity: VisualDensity.compact,
