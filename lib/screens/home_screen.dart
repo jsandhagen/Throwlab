@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,9 @@ import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../widgets/athlete_picker.dart';
+import '../widgets/event_glyph.dart';
+import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
@@ -21,18 +25,39 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int? _availableBuild;
+
+  /// A build the user tapped "Later" on: hidden until a still-newer build
+  /// shows up, so re-checks don't re-nag about the same one.
+  int? _dismissedBuild;
   LibraryGrouping _grouping = LibraryGrouping.athlete;
 
   @override
   void initState() {
     super.initState();
-    AppUpdater.checkForUpdate().then((build) {
-      if (mounted && build != null) {
-        setState(() => _availableBuild = build);
-      }
-    });
+    WidgetsBinding.instance.addObserver(this);
+    _checkForUpdate();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check on every return to the foreground: the one-shot check at launch
+    // misses builds published while the app was open or backgrounded, and
+    // covers a launch where the network wasn't ready yet.
+    if (state == AppLifecycleState.resumed) _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final build = await AppUpdater.checkForUpdate();
+    if (!mounted || build == null) return;
+    setState(() => _availableBuild = build);
   }
 
   Future<void> _installUpdate() async {
@@ -74,8 +99,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (details == null || !mounted) return;
 
-    // Re-encode for instant frame seeks; this is the slow part of importing.
+    // Re-encode for instant frame seeks, then pre-extract frames for smooth
+    // scrubbing; this is the slow part of importing.
     final encodeProgress = ValueNotifier<double?>(null);
+    final stage = ValueNotifier<String>(
+        'Re-encoding for instant frame-by-frame scrubbing. Long or '
+        'high-fps clips take a few minutes.');
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -91,8 +120,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   LinearProgressIndicator(value: value),
             ),
             const SizedBox(height: 16),
-            const Text('Re-encoding for instant frame-by-frame '
-                'scrubbing. Long or high-fps clips take a few minutes.'),
+            ValueListenableBuilder<String>(
+              valueListenable: stage,
+              builder: (context, text, _) => Text(text),
+            ),
           ],
         ),
         actions: [
@@ -107,9 +138,18 @@ class _HomeScreenState extends State<HomeScreen> {
     // Probe the original file: the re-encode preserves frame timing but
     // drops the slow-mo capture-fps metadata tag.
     final rates = await VideoOptimizer.probeFrameRates(picked.path);
+    final fps = rates?.playback ?? 30;
     final path = await VideoOptimizer.optimizeForScrubbing(
       picked.path,
       id,
+      onProgress: (p) => encodeProgress.value = p,
+    );
+    stage.value = 'Extracting frames for smooth scrubbing…';
+    encodeProgress.value = null;
+    final frames = await VideoOptimizer.extractScrubFrames(
+      path,
+      id,
+      fps,
       onProgress: (p) => encodeProgress.value = p,
     );
     final thumbnail = await VideoOptimizer.extractThumbnail(path, id);
@@ -122,10 +162,21 @@ class _HomeScreenState extends State<HomeScreen> {
       gender: details.gender,
       importedAt: DateTime.now(),
       recordedAt: rates?.recordedAt,
-      fps: rates?.playback ?? 30,
+      fps: fps,
       captureFps: rates?.capture,
       athlete: details.athlete,
       thumbnailPath: thumbnail,
+      scrubFramesDir: frames?.dir,
+      scrubFrameCount: frames?.count ?? 0,
+      scrubFrameStride: frames?.stride ?? 1,
+      scrubFrameLongSide:
+          frames != null ? VideoOptimizer.scrubFrameMax : 0,
+      scrubFramesVersion:
+          frames != null ? VideoOptimizer.scrubFramesVersion : 0,
+      // Only a copy we made carries the current geometry; when the encode
+      // failed the original file stands in and still needs remaking.
+      playbackVersion:
+          path == picked.path ? 0 : VideoOptimizer.playbackVersion,
     );
     await library.add(video);
     if (mounted) {
@@ -158,13 +209,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
   }
-
-  Color _eventColor(ThrowEvent event) => switch (event) {
-        ThrowEvent.shotPut => Colors.orangeAccent,
-        ThrowEvent.discus => Colors.greenAccent,
-        ThrowEvent.hammer => Colors.purpleAccent,
-        ThrowEvent.javelin => Colors.lightBlueAccent,
-      };
 
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
@@ -204,14 +248,15 @@ class _HomeScreenState extends State<HomeScreen> {
         top: false,
         child: Column(
           children: [
-            if (_availableBuild != null)
+            if (_availableBuild != null &&
+                _availableBuild != _dismissedBuild)
               MaterialBanner(
                 leading: const Icon(Icons.system_update),
                 content: const Text('A new version of ThrowLab is ready.'),
                 actions: [
                   TextButton(
                     onPressed: () =>
-                        setState(() => _availableBuild = null),
+                        setState(() => _dismissedBuild = _availableBuild),
                     child: const Text('Later'),
                   ),
                   FilledButton(
@@ -266,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   label: Text('By athlete')),
               ButtonSegment(
                   value: LibraryGrouping.event,
-                  icon: Icon(Icons.category),
+                  icon: EventGlyph(ThrowEvent.javelin, size: 18),
                   label: Text('By event')),
             ],
             selected: {_grouping},
@@ -281,9 +326,9 @@ class _HomeScreenState extends State<HomeScreen> {
             child: ExpansionTile(
               initiallyExpanded: true,
               shape: const Border(),
-              leading: Icon(_grouping == LibraryGrouping.athlete
-                  ? Icons.person
-                  : entry.value.first.event.icon),
+              leading: _grouping == LibraryGrouping.athlete
+                  ? const Icon(Icons.person)
+                  : EventGlyph(entry.value.first.event),
               title: Text(entry.key,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text('${entry.value.length} '
@@ -304,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete} '
             '· ${video.gender.label}';
     return ListTile(
-      leading: _thumbnail(video),
+      leading: ThrowThumbnail(video),
       title: Text(title,
           style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(
@@ -332,6 +377,11 @@ class _HomeScreenState extends State<HomeScreen> {
             }
           } else if (action == 'delete') {
             await library.remove(video.id);
+            // Reclaim the (largest) artifact this import created.
+            final framesDir = video.scrubFramesDir;
+            if (framesDir != null) {
+              Directory(framesDir).delete(recursive: true).ignore();
+            }
           }
         },
         itemBuilder: (context) => const [
@@ -344,22 +394,6 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
       ),
-    );
-  }
-
-  Widget _thumbnail(ThrowVideo video) {
-    final color = _eventColor(video.event);
-    final path = video.thumbnailPath;
-    if (path != null && File(path).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.file(File(path),
-            width: 72, height: 48, fit: BoxFit.cover),
-      );
-    }
-    return CircleAvatar(
-      backgroundColor: color.withOpacity(0.18),
-      child: Icon(video.event.icon, color: color),
     );
   }
 
@@ -457,30 +491,22 @@ class _ImportDialog extends StatefulWidget {
 class _ImportDialogState extends State<_ImportDialog> {
   ThrowEvent _event = ThrowEvent.shotPut;
   Gender _gender = Gender.men;
-  final TextEditingController _athlete = TextEditingController();
-
-  @override
-  void dispose() {
-    _athlete.dispose();
-    super.dispose();
-  }
+  String _athlete = '';
 
   @override
   Widget build(BuildContext context) {
     final spec = _event.specFor(_gender);
     return AlertDialog(
       title: const Text('Throw details'),
-      content: Column(
+      content: SingleChildScrollView(
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: _athlete,
-            textCapitalization: TextCapitalization.words,
-            decoration: const InputDecoration(
-              labelText: 'Athlete',
-              hintText: 'Who threw it (optional)',
-            ),
+          AthletePicker(
+            known: context.read<VideoLibrary>().knownAthletes,
+            value: _athlete,
+            onChanged: (name) => setState(() => _athlete = name),
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<ThrowEvent>(
@@ -510,6 +536,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
+        ),
       ),
       actions: [
         TextButton(
@@ -519,7 +546,7 @@ class _ImportDialogState extends State<_ImportDialog> {
           onPressed: () => Navigator.pop(context, (
             event: _event,
             gender: _gender,
-            athlete: _athlete.text.trim(),
+            athlete: _athlete.trim(),
           )),
           child: const Text('Import'),
         ),
@@ -540,25 +567,33 @@ class _ComparePickerDialog extends StatefulWidget {
 class _ComparePickerDialogState extends State<_ComparePickerDialog> {
   final List<ThrowVideo> _selected = [];
 
+  /// Once one throw is picked the list narrows to its event: comparing a
+  /// javelin release against a shot put says nothing, and the narrowing is
+  /// what makes a long library usable on the second pick.
+  ThrowEvent? get _event => _selected.isEmpty ? null : _selected.first.event;
+
   @override
   Widget build(BuildContext context) {
+    final event = _event;
+    final shown = event == null
+        ? widget.videos
+        : widget.videos.where((video) => video.event == event).toList();
     return AlertDialog(
-      title: const Text('Pick two throws'),
+      title: Text(event == null
+          ? 'Pick two throws'
+          : 'Pick another ${event.label.toLowerCase()} throw'),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView(
           shrinkWrap: true,
           children: [
-            for (final video in widget.videos)
+            for (final video in shown)
               CheckboxListTile(
                 value: _selected.contains(video),
-                title: Text(
-                    '${video.athlete.isEmpty ? '' : '${video.athlete} · '}'
-                    '${video.event.label} · ${video.gender.label}'),
-                subtitle: Text(video.importedAt
-                    .toLocal()
-                    .toString()
-                    .substring(0, 16)),
+                secondary: ThrowThumbnail(video),
+                title: Text(throwTitle(video)),
+                subtitle: Text(throwSubtitle(video),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
                 onChanged: (checked) => setState(() {
                   if (checked == true) {
                     if (_selected.length < 2) _selected.add(video);

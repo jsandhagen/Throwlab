@@ -14,10 +14,20 @@ class ThrowVideo {
     this.note = '',
     this.athlete = '',
     this.thumbnailPath,
+    this.scrubFramesDir,
+    this.scrubFrameCount = 0,
+    this.scrubFrameStride = 1,
+    this.scrubFrameLongSide = 0,
+    this.scrubFramesVersion = 0,
+    this.playbackVersion = 0,
   }) : captureFps = captureFps ?? fps;
 
   final String id;
-  final String path;
+
+  /// The file the app plays: the optimized copy when one was made, otherwise
+  /// the imported original. Reassigned when the copy is re-made under a newer
+  /// recipe.
+  String path;
   final ThrowEvent event;
   final Gender gender;
   final DateTime importedAt;
@@ -48,6 +58,34 @@ class ThrowVideo {
   /// thumbnails existed or when extraction failed.
   String? thumbnailPath;
 
+  /// Directory of pre-extracted scrub frames (JPEGs) shown during dragging
+  /// for smooth, format-independent scrubbing; null for old imports or when
+  /// extraction was skipped/failed (the app then falls back to seeking).
+  String? scrubFramesDir;
+
+  /// Number of extracted scrub frames; 0 when none.
+  int scrubFrameCount;
+
+  /// Every Nth source frame was extracted, to cap disk use on long clips;
+  /// 1 means every frame is available.
+  int scrubFrameStride;
+
+  /// Longest-side pixels the scrub frames were extracted at; 0 for clips
+  /// from before this was recorded.
+  int scrubFrameLongSide;
+
+  /// Which extraction recipe produced the stills. Bumped whenever their
+  /// resolution or geometry changes, so clips extracted by an older recipe
+  /// re-extract on open instead of scrubbing at the wrong size or shape.
+  /// See VideoOptimizer.scrubFramesVersion.
+  int scrubFramesVersion;
+
+  /// Which recipe produced the playback copy. Bumped when its geometry
+  /// changes, so a clip encoded by an older one is re-made rather than left
+  /// disagreeing with the stills drawn over it.
+  /// See VideoOptimizer.playbackVersion.
+  int playbackVersion;
+
   ImplementSpec get implementSpec => event.specFor(gender);
 
   Map<String, dynamic> toJson() => {
@@ -62,6 +100,12 @@ class ThrowVideo {
         'note': note,
         'athlete': athlete,
         'thumbnailPath': thumbnailPath,
+        'scrubFramesDir': scrubFramesDir,
+        'scrubFrameCount': scrubFrameCount,
+        'scrubFrameStride': scrubFrameStride,
+        'scrubFrameLongSide': scrubFrameLongSide,
+        'scrubFramesVersion': scrubFramesVersion,
+        'playbackVersion': playbackVersion,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -78,5 +122,13 @@ class ThrowVideo {
         note: json['note'] as String? ?? '',
         athlete: json['athlete'] as String? ?? '',
         thumbnailPath: json['thumbnailPath'] as String?,
+        scrubFramesDir: json['scrubFramesDir'] as String?,
+        scrubFrameCount: (json['scrubFrameCount'] as num?)?.toInt() ?? 0,
+        scrubFrameStride: (json['scrubFrameStride'] as num?)?.toInt() ?? 1,
+        scrubFrameLongSide:
+            (json['scrubFrameLongSide'] as num?)?.toInt() ?? 0,
+        scrubFramesVersion:
+            (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
+        playbackVersion: (json['playbackVersion'] as num?)?.toInt() ?? 0,
       );
 }

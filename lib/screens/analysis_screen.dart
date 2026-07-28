@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -9,19 +10,21 @@ import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/javelin_detector.dart';
 import '../services/video_library.dart';
+import '../services/video_optimizer.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
+import '../utils/scrub.dart';
+import '../utils/scrub_frames.dart';
+import '../utils/scrub_shuttle.dart';
+import '../widgets/athlete_picker.dart';
 import '../widgets/drawing_canvas.dart';
+import '../widgets/drawing_rail.dart';
+import '../widgets/event_glyph.dart';
 import '../widgets/playback_controls.dart';
-
-const kAnnotationColors = [
-  Colors.orangeAccent,
-  Colors.lightGreenAccent,
-  Colors.cyanAccent,
-  Colors.pinkAccent,
-  Colors.white,
-];
+import '../widgets/scrub_still.dart';
+import '../widgets/throw_picker.dart';
+import 'comparison_screen.dart';
 
 /// Typical release heights (m) used for the vacuum-ballistics predictions.
 const _releaseHeights = {
@@ -44,10 +47,26 @@ class AnalysisScreen extends StatefulWidget {
   State<AnalysisScreen> createState() => _AnalysisScreenState();
 }
 
-class _AnalysisScreenState extends State<AnalysisScreen> {
+class _AnalysisScreenState extends State<AnalysisScreen>
+    with SingleTickerProviderStateMixin {
   late final VideoPlayerController _controller;
   late final FrameSeeker _seeker = FrameSeeker(_controller);
   final DrawingController _drawing = DrawingController();
+
+  /// Pre-extracted stills shown while dragging so scrubbing stays smooth
+  /// regardless of the codec's seek cost; null when the clip has none.
+  ScrubFrames? _frames;
+
+  /// The smooth-scrub path — still overlay, shuttle, handoff — shared with
+  /// the comparison screen so a drag behaves the same on both. Built in
+  /// initState, not lazily: it owns a ticker, and a screen closed without
+  /// ever scrubbing would otherwise create that ticker inside dispose(),
+  /// when looking up the TickerMode is illegal.
+  late final ScrubShuttle _shuttle;
+
+  /// Frames are being extracted for a clip imported before the feature; the
+  /// scrub overlay switches on once ready.
+  bool _preparingFrames = false;
 
   bool _openFailed = false;
 
@@ -64,21 +83,140 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     super.initState();
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
+    final framesDir = widget.video.scrubFramesDir;
+    if (framesDir != null && widget.video.scrubFrameCount > 0) {
+      _frames = ScrubFrames(
+        dir: framesDir,
+        count: widget.video.scrubFrameCount,
+        stride: widget.video.scrubFrameStride,
+        fps: widget.video.fps,
+      )..loadTimes(VideoOptimizer.framesTimesFile);
+    }
+    _shuttle = ScrubShuttle(
+      controller: _controller,
+      seeker: _seeker,
+      fps: widget.video.fps,
+      vsync: this,
+      frames: _frames,
+    );
     if (!_openFailed) {
       _controller.initialize().then((_) {
         if (mounted) setState(() {});
       }).catchError((Object _) {
         if (mounted) setState(() => _openFailed = true);
       });
+      if (_frames == null ||
+          widget.video.scrubFramesVersion <
+              VideoOptimizer.scrubFramesVersion ||
+          widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
+        _prepareScrubFrames();
+      }
+    }
+  }
+
+  /// True once nothing has scrubbed for a clear stretch, so a resolution
+  /// upgrade can run without stealing CPU from an active scrub. Returns false
+  /// (having waited) whenever a scrub interrupts the stretch, so the caller
+  /// can poll it in a loop.
+  Future<bool> _idleForUpgrade() async {
+    const quiet = Duration(milliseconds: 400);
+    for (var i = 0; i < 5; i++) {
+      await Future<void>.delayed(quiet);
+      if (!mounted) return true;
+      if (_shuttle.busy) return false;
+    }
+    return true;
+  }
+
+  /// Extracts scrub frames for a clip imported before the feature existed,
+  /// and re-extracts when the stored stills predate the current resolution
+  /// cap — the old set keeps serving scrubs until the new one is ready.
+  /// Best-effort: on failure whatever scrub path exists stays.
+  Future<void> _prepareScrubFrames() async {
+    final library = context.read<VideoLibrary>();
+    // Called from initState, so set the flag directly — the first build picks
+    // it up, and setState is only used once we're past initState (below).
+    _preparingFrames = true;
+    // An upgrade competes with a scrub it isn't needed for: the clip already
+    // has usable stills, while ffmpeg re-encoding at full resolution saturates
+    // the CPU the shuttle needs to decode them. Hold off until the scrub
+    // settles. A clip with no stills at all skips the wait — its scrubbing is
+    // bad until this finishes, so sooner is better.
+    if (_frames != null) {
+      while (mounted && !await _idleForUpgrade()) {}
+      if (!mounted) return;
+    }
+    // Bring the playback copy up to the current recipe first: the stills are
+    // extracted *from* it, so re-extracting against a stale copy would just
+    // reproduce the mismatch. Only clips with genuinely non-square pixels are
+    // re-encoded — the rest cost one probe — and the current player keeps
+    // showing the old file until the screen is reopened, so a scrub in flight
+    // is never pulled out from under the finger.
+    if (widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
+      final remade = await VideoOptimizer.remakePlaybackCopy(
+          widget.video.path, widget.video.id);
+      if (!mounted) return;
+      if (remade != null) widget.video.path = remade;
+      widget.video.playbackVersion = VideoOptimizer.playbackVersion;
+      await library.update(widget.video);
+    }
+    final result = await VideoOptimizer.extractScrubFrames(
+        widget.video.path, widget.video.id, widget.video.fps);
+    if (result == null) {
+      if (mounted) setState(() => _preparingFrames = false);
+      return;
+    }
+    widget.video.scrubFramesDir = result.dir;
+    widget.video.scrubFrameCount = result.count;
+    widget.video.scrubFrameStride = result.stride;
+    widget.video.scrubFrameLongSide = VideoOptimizer.scrubFrameMax;
+    widget.video.scrubFramesVersion = VideoOptimizer.scrubFramesVersion;
+    await library.update(widget.video);
+    final next = ScrubFrames(
+      dir: result.dir,
+      count: result.count,
+      stride: result.stride,
+      fps: widget.video.fps,
+    );
+    await next.loadTimes(VideoOptimizer.framesTimesFile);
+    // Wait out any scrub in progress: the overlay is showing the old
+    // ScrubFrames mid-drag and it can't be torn down underneath.
+    while (mounted && _shuttle.busy) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    if (!mounted) {
+      next.dispose();
+      return;
+    }
+    final old = _frames;
+    setState(() {
+      _frames = next;
+      _shuttle.frames = next;
+      _preparingFrames = false;
+    });
+    // Release the old set only after the tree has rebound to the new one.
+    if (old != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
     }
   }
 
   @override
   void dispose() {
+    _shuttle.dispose();
+    _frames?.dispose();
     _controller.dispose();
     _drawing.dispose();
     super.dispose();
   }
+
+  /// Starts a scrub: the shuttle raises the still overlay, and the drag
+  /// accumulator that turns finger travel into frame steps starts fresh.
+  void _beginScrub() {
+    _scrub.reset();
+    _shuttle.begin();
+  }
+
+  void _endScrub() => _shuttle.end();
 
   /// Steps the video by [frames] while dragging across it in scrub mode.
   void _jogFrames(int frames) {
@@ -107,43 +245,56 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   double _gestureStartScale = 1;
   Offset _gestureStartOffset = Offset.zero;
   Offset _gestureStartFocal = Offset.zero;
-  double _jogAccumulator = 0;
+  final ScrubAccumulator _scrub = ScrubAccumulator();
   bool _activeStroke = false;
   void Function(Offset canvasPoint)? _nodeDrag;
 
-  /// Where the (aspect-fitted) video sits inside the viewport, pre-zoom.
-  Rect get _videoRect {
-    final ratio = _controller.value.aspectRatio;
-    var w = _viewport.width;
-    var h = w / ratio;
-    if (h > _viewport.height) {
-      h = _viewport.height;
-      w = h * ratio;
-    }
-    return Rect.fromLTWH(
-        (_viewport.width - w) / 2, (_viewport.height - h) / 2, w, h);
+  /// Global position of the last touch-down on the video, captured before
+  /// the gesture arena resolves so a stroke can start where the finger
+  /// actually landed.
+  Offset? _pointerDown;
+
+  /// The annotation layer itself — the aspect-fitted video box the strokes
+  /// and markers are painted into.
+  final GlobalKey _canvasKey = GlobalKey();
+
+  RenderBox? get _canvasBox {
+    final object = _canvasKey.currentContext?.findRenderObject();
+    return object is RenderBox && object.hasSize ? object : null;
   }
 
-  /// Screen position → position relative to the video's top-left corner,
-  /// in the video's own (unzoomed) coordinates. All stored points live in
-  /// this space, which is what makes measurements zoom-proof.
-  Offset _toCanvas(Offset screen) =>
-      (screen - _zoomOffset) / _zoomScale - _videoRect.topLeft;
+  /// Size of the painted video box. Everything stored is normalized to it.
+  Size get _canvasSize => _canvasBox?.size ?? Size.zero;
+
+  /// Touch position → position relative to the video's top-left corner, in
+  /// the video's own (unzoomed) coordinates — the space the annotations and
+  /// measurement markers are painted in, which is what makes them
+  /// zoom-proof.
+  ///
+  /// Asking the painted layer where the touch landed (rather than
+  /// re-deriving the letterbox rect and undoing the zoom transform by hand)
+  /// keeps ink under the finger even when the stage's geometry isn't what
+  /// the gesture math assumed — a stale pan offset after the viewport
+  /// changed, say. [globalPosition] must be a global (screen) position.
+  Offset? _toCanvas(Offset globalPosition) =>
+      _canvasBox?.globalToLocal(globalPosition);
 
   Offset _normalizeCanvas(Offset canvasPoint) {
-    final r = _videoRect;
-    return Offset((canvasPoint.dx / r.width).clamp(0.0, 1.0),
-        (canvasPoint.dy / r.height).clamp(0.0, 1.0));
+    final size = _canvasSize;
+    if (size.isEmpty) return Offset.zero;
+    return Offset((canvasPoint.dx / size.width).clamp(0.0, 1.0),
+        (canvasPoint.dy / size.height).clamp(0.0, 1.0));
   }
 
   Offset _denormalizeCanvas(Offset normalized) {
-    final r = _videoRect;
-    return Offset(normalized.dx * r.width, normalized.dy * r.height);
+    final size = _canvasSize;
+    return Offset(normalized.dx * size.width, normalized.dy * size.height);
   }
 
   Offset _clampToVideo(Offset p) {
-    final r = _videoRect;
-    return Offset(p.dx.clamp(0.0, r.width), p.dy.clamp(0.0, r.height));
+    final size = _canvasSize;
+    return Offset(
+        p.dx.clamp(0.0, size.width), p.dy.clamp(0.0, size.height));
   }
 
   /// Keeps the zoomed content covering the viewport (no gaps at edges).
@@ -177,14 +328,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return (p) => setState(() => found(p));
     }
     if (_drawing.tool == DrawTool.angle) {
-      final r = _videoRect;
       AngleAnnotation? hitAnnotation;
       var hitIndex = 0;
       for (final annotation in _drawing.annotations) {
         if (annotation is! AngleAnnotation) continue;
         for (var i = 0; i < annotation.points.length; i++) {
-          final p = Offset(annotation.points[i].dx * r.width,
-              annotation.points[i].dy * r.height);
+          final p = _denormalizeCanvas(annotation.points[i]);
           final d = (p - canvasPoint).distance;
           if (d < best) {
             best = d;
@@ -203,14 +352,15 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
     return null;
   }
 
-  void _onVideoTap(Offset screenPos) {
+  void _onVideoTap(Offset globalPosition) {
     if (_detecting) return;
-    final canvasPoint = _toCanvas(screenPos);
-    final r = _videoRect;
+    final canvasPoint = _toCanvas(globalPosition);
+    if (canvasPoint == null) return;
+    final size = _canvasSize;
     if (canvasPoint.dx < 0 ||
         canvasPoint.dy < 0 ||
-        canvasPoint.dx > r.width ||
-        canvasPoint.dy > r.height) {
+        canvasPoint.dx > size.width ||
+        canvasPoint.dy > size.height) {
       return;
     }
     if (_measureStep != null) {
@@ -218,14 +368,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return;
     }
     if (_drawing.tool == DrawTool.angle) {
-      final point = _normalizeCanvas(canvasPoint);
-      final last = _drawing.annotations.lastOrNull;
-      if (last is AngleAnnotation && !last.isComplete) {
-        last.points.add(point);
-        _drawing.notifyChanged();
-      } else {
-        _drawing.add(AngleAnnotation(_drawing.color)..points.add(point));
-      }
+      addAngleVertex(_drawing, _normalizeCanvas(canvasPoint));
     }
   }
 
@@ -241,28 +384,29 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       return;
     }
     _activeStroke = false;
-    final canvasPoint = _toCanvas(details.localFocalPoint);
+    // Where the finger actually landed, not where the recognizer won the
+    // arena: a scale gesture is only granted once the touch has travelled,
+    // so details.focalPoint is already a slop's worth along the drag. That
+    // offset hides inside a pen scribble but plants an arrow's tail (and a
+    // line's start) somewhere the user didn't touch.
+    final canvasPoint = _toCanvas(_pointerDown ?? details.focalPoint);
+    if (canvasPoint == null) return;
     _nodeDrag = _hitTestNode(canvasPoint);
     if (_nodeDrag != null) return;
     if (_measureStep != null) {
       // While reviewing, free drags scrub so both frames can be checked.
-      if (_measureStep == _MeasureStep.review) _jogAccumulator = 0;
+      if (_measureStep == _MeasureStep.review) {
+        _scrub.reset();
+        _beginScrub();
+      }
       return;
     }
-    switch (_drawing.tool) {
-      case DrawTool.pen:
-        _drawing
-            .add(PenStroke(_drawing.color, [_normalizeCanvas(canvasPoint)]));
-        _activeStroke = true;
-      case DrawTool.line:
-        final p = _normalizeCanvas(canvasPoint);
-        _drawing.add(LineAnnotation(_drawing.color, p, p));
-        _activeStroke = true;
-      case DrawTool.angle:
-        break;
-      case DrawTool.none:
-        _jogAccumulator = 0;
+    if (_drawing.tool == DrawTool.none) {
+      _scrub.reset();
+      _beginScrub();
+      return;
     }
+    _activeStroke = beginAnnotation(_drawing, _normalizeCanvas(canvasPoint));
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
@@ -279,52 +423,102 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
       });
       return;
     }
-    final canvasPoint = _toCanvas(details.localFocalPoint);
+    final canvasPoint = _toCanvas(details.focalPoint);
+    if (canvasPoint == null) return;
     if (_nodeDrag != null) {
       _nodeDrag!(_clampToVideo(canvasPoint));
       return;
     }
     if (_measureStep != null) {
       if (_measureStep == _MeasureStep.review) {
-        _jogBy(details.focalPointDelta.dx);
+        _jogBy(details.focalPointDelta.dx, details.sourceTimeStamp);
       }
       return;
     }
-    final last = _drawing.annotations.lastOrNull;
-    switch (_drawing.tool) {
-      case DrawTool.pen:
-        if (_activeStroke && last is PenStroke) {
-          last.points.add(_normalizeCanvas(canvasPoint));
-          _drawing.notifyChanged();
-        }
-      case DrawTool.line:
-        if (_activeStroke && last is LineAnnotation) {
-          last.end = _normalizeCanvas(canvasPoint);
-          _drawing.notifyChanged();
-        }
-      case DrawTool.angle:
-        break;
-      case DrawTool.none:
-        _jogBy(details.focalPointDelta.dx);
+    if (_drawing.tool == DrawTool.none) {
+      _jogBy(details.focalPointDelta.dx, details.sourceTimeStamp);
+      return;
+    }
+    if (_activeStroke) {
+      extendAnnotation(_drawing, _normalizeCanvas(canvasPoint));
     }
   }
 
   /// Jog by screen-space drag distance so scrubbing feels the same at any
-  /// zoom level.
-  void _jogBy(double dx) {
-    _jogAccumulator += dx;
-    final frames = _jogAccumulator ~/ _pixelsPerFrame;
-    if (frames != 0) {
-      _jogAccumulator -= frames * _pixelsPerFrame;
-      _jogFrames(frames);
-    }
+  /// zoom level, accelerating the frame step with drag speed.
+  void _jogBy(double dx, Duration? timestamp) {
+    _scrubByFrames(_scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp));
   }
 
+  /// Advances the scrub by [frames] source frames — from the video drag or
+  /// the scrub wheel.
+  void _scrubByFrames(int frames) => _shuttle.by(frames);
+
   void _onScaleEnd(ScaleEndDetails details) {
+    _endScrub();
     _nodeDrag = null;
+    // The stroke is finished. Leaving this set made the next pinch — which
+    // discards the stray stroke a one-finger drag may have started — delete
+    // the annotation just drawn, whenever both fingers landed together and
+    // no one-finger start ran in between.
+    _activeStroke = false;
+  }
+
+  /// Picks a second throw and opens them side by side, without going back
+  /// to the library first — the comparison you want is usually the one you
+  /// think of while watching.
+  Future<void> _compareWithAnother() async {
+    _controller.pause();
+    final other = await pickThrowToCompare(
+      context,
+      videos: context.read<VideoLibrary>().videos,
+      against: widget.video,
+    );
+    if (other == null || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ComparisonScreen(videoA: widget.video, videoB: other),
+      ),
+    );
   }
 
   /// Read/edit the throw's note without leaving the video.
+  /// Tags (or re-tags) who threw it, picking from athletes already in the
+  /// library. Clips imported before tagging existed start out unassigned,
+  /// so this is the only way they ever get a name.
+  Future<void> _editAthlete() async {
+    final library = context.read<VideoLibrary>();
+    var name = widget.video.athlete;
+    final saved = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Athlete'),
+        content: SingleChildScrollView(
+          child: AthletePicker(
+            known: library.knownAthletes,
+            value: name,
+            onChanged: (value) => name = value,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, name),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (saved == null || !mounted) return;
+    widget.video.athlete = saved.trim();
+    await library.update(widget.video);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _editNote() async {
     final controller = TextEditingController(text: widget.video.note);
     final note = await showDialog<String>(
@@ -720,11 +914,16 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
           : _controller.value.isInitialized
               ? LayoutBuilder(builder: (context, constraints) {
                   _viewport = constraints.biggest;
-                  // Re-clamp in case the viewport changed (e.g. rotation).
-                  final offset = _clampZoomOffset(_zoomOffset, _zoomScale);
-                  return GestureDetector(
+                  // Re-clamp in case the viewport changed (e.g. rotation),
+                  // and keep the stored pan equal to the one being drawn:
+                  // the pinch anchor reads it back on the next gesture.
+                  _zoomOffset = _clampZoomOffset(_zoomOffset, _zoomScale);
+                  final offset = _zoomOffset;
+                  return Listener(
+                    onPointerDown: (event) => _pointerDown = event.position,
+                    child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
-                    onTapUp: (details) => _onVideoTap(details.localPosition),
+                    onTapUp: (details) => _onVideoTap(details.globalPosition),
                     onScaleStart: _onScaleStart,
                     onScaleUpdate: _onScaleUpdate,
                     onScaleEnd: _onScaleEnd,
@@ -740,10 +939,21 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                             child: AspectRatio(
                               aspectRatio: _controller.value.aspectRatio,
                               child: Stack(
+                                key: _canvasKey,
                                 fit: StackFit.expand,
                                 children: [
                                   VideoPlayer(_controller),
-                                  DrawingCanvas(controller: _drawing),
+                                  // Smooth-scrub overlay: cached stills
+                                  // that track the finger, covering the video
+                                  // only once a drag actually moves (and
+                                  // across the brief handoff back). A touch
+                                  // that never travels leaves the video alone.
+                                  Positioned.fill(
+                                      child: ScrubStill(shuttle: _shuttle)),
+                                  DrawingCanvas(
+                                    controller: _drawing,
+                                    zoomScale: _zoomScale,
+                                  ),
                                   IgnorePointer(
                                     child: CustomPaint(
                                       size: Size.infinite,
@@ -752,6 +962,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                                         refB: _refB,
                                         pointA: _pointA,
                                         pointB: _pointB,
+                                        zoomScale: _zoomScale,
                                       ),
                                     ),
                                   ),
@@ -762,42 +973,62 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                         ),
                       ),
                     ),
+                    ),
                   );
                 })
               : const CircularProgressIndicator(),
     );
   }
 
-  /// Back button, title, and the measure/fps actions, with the measurement
-  /// instruction banner underneath while measuring. Portrait gets a
-  /// full-width scrim; landscape gets a compact top-left pill so the short
-  /// screen keeps the video (and its upper-right action area) visible.
-  Widget _topOverlay() {
-    final landscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+  String get _throwLabel =>
+      '${widget.video.event.label} · ${widget.video.gender.label}';
+
+  /// Back, then the per-throw actions. [vertical] lays them out for the
+  /// left rail, where the title is carried by the implement glyph's tooltip
+  /// rather than a line of text a 56px rail has no room for.
+  List<Widget> _headerActions({required bool vertical}) {
     final title = Text(
-      '${widget.video.event.label} · '
-      '${widget.video.gender.label}',
+      _throwLabel,
       overflow: TextOverflow.ellipsis,
       style: const TextStyle(fontWeight: FontWeight.w600),
     );
-    final actions = [
+    return [
       IconButton(
         tooltip: 'Back',
         icon: const Icon(Icons.arrow_back),
         onPressed: () => Navigator.pop(context),
       ),
-      if (landscape)
-        ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 220), child: title)
+      if (vertical)
+        Tooltip(
+          message: _throwLabel,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: EventGlyph(widget.video.event,
+                color: eventColor(widget.video.event)),
+          ),
+        )
       else
         Expanded(child: title),
+      IconButton(
+        tooltip: widget.video.athlete.isEmpty
+            ? 'Tag athlete'
+            : 'Athlete: ${widget.video.athlete}',
+        icon: Icon(widget.video.athlete.isEmpty
+            ? Icons.person_add_alt
+            : Icons.person),
+        onPressed: _editAthlete,
+      ),
       IconButton(
         tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
         icon: Icon(widget.video.note.isEmpty
             ? Icons.note_add_outlined
             : Icons.sticky_note_2),
         onPressed: _editNote,
+      ),
+      IconButton(
+        tooltip: 'Compare with another throw',
+        icon: const Icon(Icons.compare),
+        onPressed: _compareWithAnother,
       ),
       IconButton(
         tooltip: 'Measure release (speed & angles)',
@@ -811,19 +1042,23 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         onPressed: _editFps,
       ),
     ];
-    final banner = _measureStep == null
-        ? null
-        : Material(
+  }
+
+  /// The measuring instructions, as a full-width band (portrait) or a
+  /// rounded [pill] that sits beside the left rail (landscape).
+  Widget? _measureBanner({required bool pill}) {
+    if (_measureStep == null) return null;
+    return Material(
             color: Theme.of(context).colorScheme.secondaryContainer,
-            // Landscape shows the instructions as a pill beside the
-            // header pill instead of a full-width band over the video.
-            borderRadius: landscape ? BorderRadius.circular(24) : null,
-            clipBehavior: landscape ? Clip.antiAlias : Clip.none,
+            // Landscape shows the instructions as a pill beside the left
+            // rail instead of a full-width band over the video.
+            borderRadius: pill ? BorderRadius.circular(24) : null,
+            clipBehavior: pill ? Clip.antiAlias : Clip.none,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisSize:
-                    landscape ? MainAxisSize.min : MainAxisSize.max,
+                    pill ? MainAxisSize.min : MainAxisSize.max,
                 children: [
                   if (_detecting)
                     const SizedBox(
@@ -835,7 +1070,7 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                     const Icon(Icons.straighten, size: 20),
                   const SizedBox(width: 8),
                   Flexible(
-                    fit: landscape ? FlexFit.loose : FlexFit.tight,
+                    fit: pill ? FlexFit.loose : FlexFit.tight,
                     child: Text(
                         _detecting
                             ? 'Finding the javelin…'
@@ -860,30 +1095,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               ),
             ),
           );
+  }
 
-    if (landscape) {
-      return SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 4, top: 4, right: 4),
-          child: Row(
-            children: [
-              Material(
-                color:
-                    Theme.of(context).colorScheme.surface.withOpacity(0.7),
-                borderRadius: BorderRadius.circular(24),
-                clipBehavior: Clip.antiAlias,
-                child: Row(mainAxisSize: MainAxisSize.min, children: actions),
-              ),
-              if (banner != null) ...[
-                const SizedBox(width: 8),
-                Flexible(child: banner),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
+  /// Portrait header: back, title and the per-throw actions across the top,
+  /// with the measuring instructions underneath.
+  Widget _topOverlay() {
+    final banner = _measureBanner(pill: false);
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -897,9 +1114,35 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(children: actions),
+            Row(children: _headerActions(vertical: false)),
             if (banner != null) banner,
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Landscape header: the same actions as a rail down the left edge, back
+  /// arrow at the top. A landscape phone is ~360px tall — every row across
+  /// the top costs a tenth of the frame, while the left edge is where a
+  /// right-handed thumb isn't and where a pillarboxed clip leaves black.
+  Widget _leftRail() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4, top: 4, bottom: 4),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            color: Theme.of(context).colorScheme.surface.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(24),
+            clipBehavior: Clip.antiAlias,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: _headerActions(vertical: true),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -924,7 +1167,27 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (!landscape)
+            if (_preparingFrames)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                      _frames == null
+                          ? 'Preparing smooth scrubbing…'
+                          : 'Sharpening scrub frames…',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.white70)),
+                ],
+              )
+            else if (!landscape)
               Text(
                 'Ref: ${spec.referenceLabel.toLowerCase()} '
                 '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
@@ -941,6 +1204,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
               captureFps: widget.video.captureFps,
               dense: true,
               horizontal: landscape,
+              // Route the wheel through the same smooth shuttle the video
+              // drag uses, so fast wheel spins play through frames instead
+              // of hammering the slow decoder seek.
+              onScrubStart: _beginScrub,
+              onScrubBy: _scrubByFrames,
+              onScrubEnd: _endScrub,
             ),
           ],
         ),
@@ -951,14 +1220,33 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
   @override
   Widget build(BuildContext context) {
     // Coach's Eye-style layout: the video owns the whole screen and the
-    // controls float over it — transport along the bottom, a collapsible
-    // drawing rail on the right.
+    // controls float over it. Portrait puts the header across the top and
+    // the drawing tools down the right; landscape has ~360px of height to
+    // spend, so both move to edges that cost none of it — the header
+    // becomes a left rail, the tools a bar above the transport.
+    final landscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+    final banner = landscape ? _measureBanner(pill: true) : null;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           Positioned.fill(child: _videoArea()),
-          Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
+          if (landscape) ...[
+            Positioned(top: 0, left: 0, bottom: 0, child: _leftRail()),
+            if (banner != null)
+              Positioned(
+                top: 4,
+                left: 64,
+                right: 8,
+                child: SafeArea(
+                  bottom: false,
+                  child: Align(
+                      alignment: Alignment.topLeft, child: banner),
+                ),
+              ),
+          ] else
+            Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
           Positioned(
             top: 0,
             right: 4,
@@ -969,16 +1257,12 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
                 // the right-center and upper-right of the frame, and the
                 // inset keeps it clear of the scrubber/transport overlay
                 // (a single shorter row in landscape).
-                padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).orientation ==
-                            Orientation.landscape
-                        ? 76
-                        : 150),
+                padding: EdgeInsets.only(bottom: landscape ? 60 : 150),
                 child: Align(
                   alignment: Alignment.bottomRight,
                   child: SingleChildScrollView(
                     reverse: true,
-                    child: _DrawingRail(controller: _drawing),
+                    child: DrawingRail(controller: _drawing),
                   ),
                 ),
               ),
@@ -998,31 +1282,43 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
 
 /// Crosshairs and guide lines for the four measurement taps.
 class _MeasurePainter extends CustomPainter {
-  _MeasurePainter({this.refA, this.refB, this.pointA, this.pointB});
+  _MeasurePainter({
+    this.refA,
+    this.refB,
+    this.pointA,
+    this.pointB,
+    this.zoomScale = 1,
+  });
 
   final Offset? refA, refB, pointA, pointB;
 
+  /// Markers keep a fixed size on screen: zooming in is how a marker gets
+  /// placed precisely, so one that grew with the picture would cover the
+  /// pixel it marks.
+  final double zoomScale;
+
   @override
   void paint(Canvas canvas, Size size) {
+    double px(double pixels) => pixels / zoomScale;
     final refPaint = Paint()
       ..color = Colors.lightBlueAccent
-      ..strokeWidth = 2
+      ..strokeWidth = px(2)
       ..style = PaintingStyle.stroke;
     final pointPaint = Paint()
       ..color = Colors.orangeAccent
-      ..strokeWidth = 2
+      ..strokeWidth = px(2)
       ..style = PaintingStyle.stroke;
 
     void crosshair(Offset p, Paint paint) {
-      canvas.drawCircle(p, 9, paint);
-      canvas.drawLine(p - const Offset(14, 0), p - const Offset(4, 0), paint);
-      canvas.drawLine(p + const Offset(4, 0), p + const Offset(14, 0), paint);
-      canvas.drawLine(p - const Offset(0, 14), p - const Offset(0, 4), paint);
-      canvas.drawLine(p + const Offset(0, 4), p + const Offset(0, 14), paint);
+      canvas.drawCircle(p, px(9), paint);
+      canvas.drawLine(p - Offset(px(14), 0), p - Offset(px(4), 0), paint);
+      canvas.drawLine(p + Offset(px(4), 0), p + Offset(px(14), 0), paint);
+      canvas.drawLine(p - Offset(0, px(14)), p - Offset(0, px(4)), paint);
+      canvas.drawLine(p + Offset(0, px(4)), p + Offset(0, px(14)), paint);
       // Filled center dot over a dark halo: the exact measured point,
       // readable against both bright sky and the implement itself.
-      canvas.drawCircle(p, 3, Paint()..color = Colors.black54);
-      canvas.drawCircle(p, 1.8, Paint()..color = paint.color);
+      canvas.drawCircle(p, px(3), Paint()..color = Colors.black54);
+      canvas.drawCircle(p, px(1.8), Paint()..color = paint.color);
     }
 
     // Lines first so the precise center dots stay visible on top.
@@ -1043,112 +1339,6 @@ class _MeasurePainter extends CustomPainter {
       refA != oldDelegate.refA ||
       refB != oldDelegate.refB ||
       pointA != oldDelegate.pointA ||
-      pointB != oldDelegate.pointB;
-}
-
-/// Vertical, collapsible tool rail anchored to the bottom-right corner of
-/// the video: drawing tools, colors, undo/clear. The bottom arrow collapses
-/// it to a single button in the same corner, keeping the right-center and
-/// upper-right of the frame — where the throw happens — unobstructed.
-class _DrawingRail extends StatefulWidget {
-  const _DrawingRail({required this.controller});
-
-  final DrawingController controller;
-
-  @override
-  State<_DrawingRail> createState() => _DrawingRailState();
-}
-
-class _DrawingRailState extends State<_DrawingRail> {
-  bool _open = true;
-
-  DrawingController get controller => widget.controller;
-
-  static const _tools = [
-    (DrawTool.none, Icons.pan_tool_alt, 'Scrub only'),
-    (DrawTool.pen, Icons.draw, 'Freehand pen'),
-    (DrawTool.line, Icons.timeline, 'Straight line'),
-    (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) => Material(
-        color: scheme.surface.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(24),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: !_open
-                ? [
-                    IconButton(
-                      tooltip: 'Drawing tools',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.draw),
-                      onPressed: () => setState(() => _open = true),
-                    ),
-                  ]
-                : [
-                    for (final (tool, icon, tip) in _tools)
-                      IconButton(
-                        tooltip: tip,
-                        visualDensity: VisualDensity.compact,
-                        isSelected: controller.tool == tool,
-                        style: controller.tool == tool
-                            ? IconButton.styleFrom(
-                                backgroundColor: scheme.primaryContainer)
-                            : null,
-                        icon: Icon(icon),
-                        onPressed: () => controller.tool = tool,
-                      ),
-                    const SizedBox(height: 6),
-                    for (final color in kAnnotationColors)
-                      GestureDetector(
-                        onTap: () => controller.color = color,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          margin: const EdgeInsets.symmetric(vertical: 3),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: controller.color == color
-                                  ? Colors.white
-                                  : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 6),
-                    IconButton(
-                      tooltip: 'Undo',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.undo),
-                      onPressed: controller.undo,
-                    ),
-                    IconButton(
-                      tooltip: 'Clear drawings',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.layers_clear),
-                      onPressed: controller.clear,
-                    ),
-                    IconButton(
-                      tooltip: 'Hide tools',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                      onPressed: () => setState(() => _open = false),
-                    ),
-                  ],
-          ),
-        ),
-      ),
-    );
-  }
+      pointB != oldDelegate.pointB ||
+      zoomScale != oldDelegate.zoomScale;
 }

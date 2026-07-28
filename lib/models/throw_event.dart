@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 enum Gender { men, women }
 
 extension GenderLabel on Gender {
@@ -37,19 +35,6 @@ extension ThrowEventInfo on ThrowEvent {
         return 'Hammer';
       case ThrowEvent.javelin:
         return 'Javelin';
-    }
-  }
-
-  IconData get icon {
-    switch (this) {
-      case ThrowEvent.shotPut:
-        return Icons.sports_baseball;
-      case ThrowEvent.discus:
-        return Icons.album;
-      case ThrowEvent.hammer:
-        return Icons.sports_handball;
-      case ThrowEvent.javelin:
-        return Icons.arrow_outward;
     }
   }
 

@@ -14,7 +14,14 @@ WALL_W = 28
 # Javelin: tail lower-left, tip upper-right, piercing the flask body.
 TAIL = (150, 790)
 TIP = (880, 235)
-SHAFT_W = 18
+# Silhouette of a real javelin: a needle that is widest just behind the head
+# and tapers over the whole back half to a hairline tail, with the wrapped
+# cord grip bulging slightly at the balance point.
+WMAX = 9.5          # half-width of the widest section of the shaft
+SHOULDER = 0.55     # where the taper from the tail reaches full width
+GRIP = (0.655, 0.745)  # cord binding, just ahead of where the shaft exits
+HEAD = 0.855        # where the metal head joins the shaft
+CORD = 3.0          # extra half-width contributed by the wrapped cord
 
 
 def pt(p):
@@ -67,35 +74,56 @@ def along_javelin(t):
     return (TAIL[0] + (TIP[0] - TAIL[0]) * t, TAIL[1] + (TIP[1] - TAIL[1]) * t)
 
 
+def axis():
+    """Unit vector along the javelin and its perpendicular."""
+    ux, uy = TIP[0] - TAIL[0], TIP[1] - TAIL[1]
+    length = math.hypot(ux, uy)
+    ux, uy = ux / length, uy / length
+    return (ux, uy), (-uy, ux)
+
+
+def half_width(t):
+    """Half-width of the javelin at fraction t along its axis (0 = tail,
+    1 = point): a long slow taper up from the tail, a constant widest
+    section, the cord grip bulge, then the metal head drawn to a point."""
+    if t >= HEAD:
+        w = WMAX * (1 - (t - HEAD) / (1 - HEAD)) ** 0.85
+    elif t >= SHOULDER:
+        w = WMAX
+    else:
+        w = WMAX * (t / SHOULDER) ** 1.15
+    if GRIP[0] <= t <= GRIP[1]:
+        # Rounded shoulders so the binding reads as a wrap, not a box.
+        w += CORD * min(1.0, min(t - GRIP[0], GRIP[1] - t) / 0.02)
+    return w
+
+
+def javelin_outline(n=400):
+    """Closed silhouette: one side of the profile, then the other back."""
+    (ux, uy), (px, py) = axis()
+    side_a, side_b = [], []
+    for i in range(n + 1):
+        t = i / n
+        cx, cy = along_javelin(t)
+        w = half_width(t)
+        side_a.append((cx + px * w, cy + py * w))
+        side_b.append((cx - px * w, cy - py * w))
+    return side_a + side_b[::-1]
+
+
 def render(background):
     img = Image.new("RGBA", (W, W), background)
     draw = ImageDraw.Draw(img)
 
     # Javelin first, so the flask walls can pass "in front" of it.
-    ux, uy = TIP[0] - TAIL[0], TIP[1] - TAIL[1]
-    length = math.hypot(ux, uy)
-    ux, uy = ux / length, uy / length
-    px, py = -uy, ux  # perpendicular
-
-    # Slim shaft with long tapered metal head and tapered tail — no
-    # arrowhead or fletching; javelins are pointed at both ends.
-    head_base = (TIP[0] - 150 * ux, TIP[1] - 150 * uy)
-    tail_base = (TAIL[0] + 90 * ux, TAIL[1] + 90 * uy)
-    stroke(draw, [tail_base, head_base], SHAFT_W, BLUE)
-    draw.polygon([pt(TIP),
-                  pt((head_base[0] + px * 10, head_base[1] + py * 10)),
-                  pt((head_base[0] - px * 10, head_base[1] - py * 10))],
-                 fill=BLUE)
-    draw.polygon([pt(TAIL),
-                  pt((tail_base[0] + px * 9, tail_base[1] + py * 9)),
-                  pt((tail_base[0] - px * 9, tail_base[1] - py * 9))],
-                 fill=BLUE)
-    # Cord grip: three thin ticks just ahead of where the shaft exits the
-    # flask, like the wrapped binding at a javelin's balance point.
-    for t in (0.63, 0.665, 0.70):
+    _, (px, py) = axis()
+    draw.polygon([pt(p) for p in javelin_outline()], fill=BLUE)
+    # Binding lines across the cord grip.
+    for t in (0.675, 0.700, 0.725):
         cx, cy = along_javelin(t)
-        stroke(draw, [(cx + px * 14, cy + py * 14),
-                      (cx - px * 14, cy - py * 14)], 7, BLUE)
+        w = half_width(t) - 1
+        stroke(draw, [(cx + px * w, cy + py * w),
+                      (cx - px * w, cy - py * w)], 5, LIGHT)
 
     # Erase a halo along the flask walls so the shaft reads as piercing
     # through the glass rather than lying on top of it.
