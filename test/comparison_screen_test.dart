@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/utils/frame_timing.dart';
 import 'package:throwlab/screens/comparison_screen.dart';
 import 'package:throwlab/widgets/playback_controls.dart';
 import 'package:video_player/video_player.dart';
@@ -137,6 +138,77 @@ void main() {
       await pumpFrames(tester);
 
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1});
+    });
+  });
+
+  group('smooth scrubbing', () {
+    /// How far a seek sits from the nearest frame boundary, in frames. The
+    /// stills' targets aim [kSeekLead] of a frame short of the frame they
+    /// name; a plain frame step lands on the boundary itself.
+    double leadOf(Duration position, double fps) {
+      final frames = position.inMicroseconds * fps / 1e6;
+      return (frames - frames.roundToDouble()).abs();
+    }
+
+    testWidgets('a wheel drag runs through the shuttle, like the analysis '
+        'screen', (tester) async {
+      // The clip has stills extracted, so scrubbing plays them rather than
+      // hammering the decoder with a seek per frame.
+      videoA.scrubFramesDir = '${temp.path}/frames-a';
+      videoA.scrubFrameCount = 300;
+      videoA.scrubFrameStride = 1;
+      await mount(tester);
+
+      platform.seeks.clear();
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
+      await pumpFrames(tester, 40);
+
+      // The scrub starts at zero, where a still's lead is clamped away;
+      // every seek past it comes off the extracted-frame grid.
+      final moved =
+          platform.seeks.where((seek) => seek.position > Duration.zero);
+      expect(moved, isNotEmpty);
+      for (final seek in moved) {
+        expect(seek.playerId, 1);
+        expect(leadOf(seek.position, videoA.fps), closeTo(kSeekLead, 0.02),
+            reason: '${seek.position} is not a still-grid seek target');
+      }
+    });
+
+    testWidgets('without stills it still scrubs, straight to the decoder',
+        (tester) async {
+      await mount(tester);
+
+      platform.seeks.clear();
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
+      await pumpFrames(tester, 40);
+
+      expect(platform.seeks, isNotEmpty);
+      // Frame steps off the player's own position land on the frame
+      // boundary, without the stills' quarter-frame lead.
+      expect(leadOf(platform.seeks.last.position, videoA.fps),
+          closeTo(0, 0.02));
+    });
+
+    testWidgets('linked, both clips move by the same time even at different '
+        'frame rates', (tester) async {
+      videoB.fps = 60;
+      videoB.captureFps = 60;
+      await mount(tester);
+      await tester.tap(find.byIcon(Icons.link_off)); // drive them together
+      await pumpFrames(tester);
+
+      platform.seeks.clear();
+      await tester.drag(find.byType(ScrubWheel), const Offset(120, 0));
+      await pumpFrames(tester, 40);
+
+      Duration lastFor(int playerId) => platform.seeks
+          .lastWhere((seek) => seek.playerId == playerId)
+          .position;
+      // B's clip runs at twice A's frame rate, so the same scrub is twice as
+      // many frames of B — and the same amount of time.
+      expect(lastFor(2).inMilliseconds,
+          closeTo(lastFor(1).inMilliseconds, 1000 / videoB.fps));
     });
   });
 }

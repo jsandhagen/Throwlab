@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
@@ -18,10 +16,12 @@ import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
+import '../utils/scrub_shuttle.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/playback_controls.dart';
+import '../widgets/scrub_still.dart';
 import '../widgets/throw_picker.dart';
 import 'comparison_screen.dart';
 
@@ -64,63 +64,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// regardless of the codec's seek cost; null when the clip has none.
   ScrubFrames? _frames;
 
+  /// The smooth-scrub path — still overlay, shuttle, handoff — shared with
+  /// the comparison screen so a drag behaves the same on both. Built in
+  /// initState, not lazily: it owns a ticker, and a screen closed without
+  /// ever scrubbing would otherwise create that ticker inside dispose(),
+  /// when looking up the TickerMode is illegal.
+  late final ScrubShuttle _shuttle;
+
   /// Frames are being extracted for a clip imported before the feature; the
   /// scrub overlay switches on once ready.
   bool _preparingFrames = false;
-
-  /// A drag is actively scrubbing (show the still overlay), and the brief
-  /// hold afterwards while the real video catches up to the last frame.
-  bool _scrubbing = false;
-
-  /// The current touch has actually moved. Until it does no still is shown
-  /// and the player is not seeked, so a tap leaves the frame alone.
-  bool _scrubMoved = false;
-
-  bool _handoff = false;
-  Timer? _handoffTimer;
-  VoidCallback? _handoffWatch;
-  ScrubFrames? _handoffFrames;
-
-  // Shuttle scrubbing: the finger sets a target frame, and a per-vsync
-  // follower advances the *shown* frame toward it at a rate that scales with
-  // the gap — so a fast scroll plays the frames through quickly (the video
-  // speeds up to match) instead of teleporting and skipping.
-  late final Ticker _scrubTicker;
-  double _fingerIndex = 0;
-  double _displayIndex = 0;
-  int _lastShown = -1;
-  Duration _lastScrubTick = Duration.zero;
-
-  /// Fraction of the finger→display gap closed per vsync (proportional catch-
-  /// up: far gap plays fast, small gap tracks precisely).
-  static const _catchUp = 0.3;
-
-  /// Ceiling on how many frames/second the shuttle plays through, so a huge
-  /// gap can't jump — it fast-forwards smoothly instead of skipping. At ~2x
-  /// the clip's own rate it shows roughly every other frame during a fast
-  /// spin, which reads as smooth speed-up rather than a stride.
-  static const _maxCatchUpFramesPerSec = 120.0;
-
-  /// Wall-clock spacing between decoder nudges while the shuttle is running.
-  /// The extracted stills are what's on screen mid-scrub, so the player only
-  /// has to stay roughly nearby for a quick handoff at the end. Seeking it on
-  /// every shuttle frame meant a flick fired up to
-  /// [_maxCatchUpFramesPerSec] platform seeks a second, each one flushing
-  /// ExoPlayer's decode pipeline — which is what made a flick stutter and
-  /// stall. ~10/s keeps the time/frame readout and the wheel live for a
-  /// fraction of the work.
-  static const _nudgeSpacing = Duration(milliseconds: 100);
-
-  /// When the last decoder nudge was issued, and for which frame; null/-1
-  /// until the first.
-  DateTime? _lastNudge;
-  int _lastNudgedIndex = -1;
-
-  /// How long the still is held after the player reports it reached the
-  /// target, covering the gap between a seek being accepted and its frame
-  /// reaching the surface. Short enough not to feel like lag, long enough
-  /// to cover a few frames of render latency.
-  static const _renderSettle = Duration(milliseconds: 120);
 
   bool _openFailed = false;
 
@@ -135,10 +88,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   @override
   void initState() {
     super.initState();
-    // Created eagerly: a lazy ticker on a screen left without scrubbing
-    // would be created inside dispose(), when looking up the TickerMode is
-    // illegal.
-    _scrubTicker = createTicker(_onScrubTick);
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
     final framesDir = widget.video.scrubFramesDir;
@@ -150,6 +99,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         fps: widget.video.fps,
       )..loadTimes(VideoOptimizer.framesTimesFile);
     }
+    _shuttle = ScrubShuttle(
+      controller: _controller,
+      seeker: _seeker,
+      fps: widget.video.fps,
+      vsync: this,
+      frames: _frames,
+    );
     if (!_openFailed) {
       _controller.initialize().then((_) {
         if (mounted) setState(() {});
@@ -174,7 +130,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     for (var i = 0; i < 5; i++) {
       await Future<void>.delayed(quiet);
       if (!mounted) return true;
-      if (_scrubbing || _handoff || _scrubTicker.isActive) return false;
+      if (_shuttle.busy) return false;
     }
     return true;
   }
@@ -232,7 +188,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     await next.loadTimes(VideoOptimizer.framesTimesFile);
     // Wait out any scrub in progress: the overlay is showing the old
     // ScrubFrames mid-drag and it can't be torn down underneath.
-    while (mounted && (_scrubbing || _handoff || _scrubTicker.isActive)) {
+    while (mounted && _shuttle.busy) {
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
     if (!mounted) {
@@ -242,6 +198,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final old = _frames;
     setState(() {
       _frames = next;
+      _shuttle.frames = next;
       _preparingFrames = false;
     });
     // Release the old set only after the tree has rebound to the new one.
@@ -252,215 +209,21 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   @override
   void dispose() {
-    _stopHandoff();
-    _scrubTicker.stop();
-    _scrubTicker.dispose();
+    _shuttle.dispose();
     _frames?.dispose();
     _controller.dispose();
     _drawing.dispose();
     super.dispose();
   }
 
-  /// Shows the pre-extracted stills for the duration of a scrub drag. No-op
-  /// when the clip has no extracted frames, so scrubbing then falls back to
-  /// the seek path unchanged.
+  /// Starts a scrub: the shuttle raises the still overlay, and the drag
+  /// accumulator that turns finger travel into frame steps starts fresh.
   void _beginScrub() {
-    if (_frames == null) return;
-    _stopHandoff();
-    _controller.pause();
     _scrub.reset();
-    if (!_scrubTicker.isActive) {
-      final start = _frames!.indexForPosition(_seeker.position).toDouble();
-      _fingerIndex = start;
-      _displayIndex = start;
-      _lastShown = -1;
-      _lastNudge = null;
-      _lastNudgedIndex = -1;
-      _frames!.reset();
-      // Decode the starting still now so it is ready the instant the finger
-      // moves; nothing is shown until then.
-      _frames!.showIndex(start.round());
-      _scrubMoved = false;
-    } else {
-      // Grabbed again while the shuttle was still catching up: continue from
-      // the frame currently on screen, already in the moved state.
-      _fingerIndex = _displayIndex;
-      _scrubMoved = true;
-    }
-    setState(() {
-      _scrubbing = true;
-      _handoff = false;
-    });
+    _shuttle.begin();
   }
 
-  /// Starts the shuttle the first time a scrub actually moves. Touching the
-  /// video is not a scrub: the stills only exist every [ScrubFrames.stride]
-  /// frames, so covering the video with the nearest one — and seeking the
-  /// player onto that grid — shifted the picture by up to a stride even
-  /// though the finger never travelled. Nothing happens until it does.
-  void _beginShuttle() {
-    if (_scrubMoved) return;
-    _scrubMoved = true;
-    _lastScrubTick = Duration.zero;
-    _scrubTicker.start();
-    setState(() {});
-  }
-
-  /// Lets the shuttle finish playing to the finger's frame, then hands off to
-  /// live video. The still overlay stays up across the handoff.
-  void _endScrub() {
-    if (!_scrubbing) return;
-    // A touch that never moved changed nothing — no overlay was raised and
-    // the player was never seeked, so there is nothing to hand back.
-    if (!_scrubMoved) {
-      setState(() {
-        _scrubbing = false;
-        _handoff = false;
-      });
-      return;
-    }
-    setState(() {
-      _scrubbing = false;
-      _handoff = _frames != null;
-    });
-    if (_frames == null) return;
-    if (!_scrubTicker.isActive) _startVideoHandoff(_displayIndex.round());
-  }
-
-  /// Per-vsync shuttle: eases the shown frame toward the finger's target so a
-  /// fast scroll plays the frames through quickly (video speeds up to match)
-  /// instead of jumping, and a slow scroll tracks frame for frame. Also nudges
-  /// the hidden decoder along so the time/frame readout stays live and the
-  /// eventual handoff is quick.
-  void _onScrubTick(Duration elapsed) {
-    final frames = _frames;
-    if (frames == null) {
-      _scrubTicker.stop();
-      return;
-    }
-    final dt = ((elapsed - _lastScrubTick).inMicroseconds /
-            Duration.microsecondsPerSecond)
-        .clamp(0.0, 0.05);
-    _lastScrubTick = elapsed;
-    final gap = _fingerIndex - _displayIndex;
-    if (gap.abs() < 0.5) {
-      _displayIndex = _fingerIndex;
-      // Caught up: seek for real, so the readout and any handoff are exact.
-      _showAndSeek(_displayIndex.round(), force: true);
-      if (!_scrubbing) {
-        _scrubTicker.stop();
-        _startVideoHandoff(_displayIndex.round());
-      }
-      return;
-    }
-    final maxStep = _maxCatchUpFramesPerSec / frames.stride * dt;
-    var step = gap * _catchUp;
-    if (step > maxStep) step = maxStep;
-    if (step < -maxStep) step = -maxStep;
-    _displayIndex += step;
-    _showAndSeek(_displayIndex.round());
-  }
-
-  /// Shows an extracted still, and occasionally nudges the hidden decoder
-  /// toward it. [force] issues the seek regardless of spacing — used when the
-  /// shuttle settles, so the player ends up exactly where the scrub stopped.
-  void _showAndSeek(int imageIndex, {bool force = false}) {
-    if (imageIndex != _lastShown) {
-      _lastShown = imageIndex;
-      _frames!.showIndex(imageIndex);
-    }
-    // Tracked separately from [_lastShown]: a throttled tick still advances
-    // the shown still, so a later forced nudge for that same frame must not
-    // be mistaken for one already sent to the decoder.
-    if (imageIndex == _lastNudgedIndex) return;
-    final now = DateTime.now();
-    final last = _lastNudge;
-    if (!force && last != null && now.difference(last) < _nudgeSpacing) {
-      return;
-    }
-    _lastNudge = now;
-    _lastNudgedIndex = imageIndex;
-    _seeker.seekTo(_positionForImage(imageIndex));
-  }
-
-  /// Where to seek so the video shows the still at [imageIndex]. ScrubFrames
-  /// answers from the clip's own frame timestamps where it has them, and aims
-  /// just short of the still's timestamp because the player renders the first
-  /// frame at or after a seek — so the handoff lands on the frame the still
-  /// was showing rather than the one after it.
-  Duration _positionForImage(int imageIndex) =>
-      _frames!.positionForIndex(imageIndex);
-
-  /// Keeps the last still on screen when the finger lifts until the video
-  /// decoder has actually seeked to that frame, so the handoff from stills
-  /// back to live video is seamless instead of a visible jump.
-  void _startVideoHandoff(int imageIndex) {
-    _stopHandoff();
-    final frames = _frames;
-    final target = _positionForImage(imageIndex);
-    _seeker.seekTo(target);
-    // Under one frame: at 1.5 the still was dropped while the player was
-    // still a whole frame away, so the picture stepped as the video took
-    // over. A target sits a quarter frame short of the frame it names, so
-    // the player reporting either the requested time or the frame's own
-    // timestamp is within this.
-    final toleranceUs =
-        0.6 * Duration.microsecondsPerSecond / widget.video.fps;
-    void watch() {
-      // The still on screen has to be the one being handed back. A scrub
-      // ends faster than 1440p JPEGs decode, so the overlay is often still
-      // showing the neighbour that stood in for the frame the finger stopped
-      // on — and swapping *that* for the video is itself the frame the
-      // picture appears to skip. Waiting costs nothing: the still and the
-      // video then show the same frame, so the switch is invisible.
-      if (frames != null && frames.shownIndex != imageIndex) return;
-      final delta =
-          (_controller.value.position.inMicroseconds - target.inMicroseconds)
-              .abs();
-      if (delta > toleranceUs) return;
-      // Arrived — but only in the player's bookkeeping. The position is
-      // reported when the seek is accepted, not when the decoded frame
-      // reaches the surface, so dropping the still here uncovers whatever
-      // frame the texture still holds: the picture steps to the old frame
-      // and then snaps to the right one. Stop watching and give the
-      // texture a moment to actually show the frame we asked for.
-      _stopHandoff();
-      _handoffTimer = Timer(_renderSettle, () {
-        if (mounted) setState(() => _handoff = false);
-      });
-    }
-
-    _handoffWatch = watch;
-    _controller.addListener(watch);
-    // The decode that finally puts the right still on screen is the other
-    // half of the condition above, and it arrives on its own notifier.
-    _handoffFrames = frames;
-    frames?.current.addListener(watch);
-    // watch() may fire immediately below and replace this with the shorter
-    // render-settle timer; this is the ceiling for the seek never landing.
-    // Hold the (correct) still until the video actually arrives. seekTo can
-    // take a second or more to render on some devices, so the fallback is
-    // generous — showing the right frame a touch soft beats flashing the
-    // wrong one and then jumping.
-    _handoffTimer = Timer(const Duration(milliseconds: 2500), () {
-      _stopHandoff();
-      if (mounted) setState(() => _handoff = false);
-    });
-    watch();
-  }
-
-  void _stopHandoff() {
-    if (_handoffWatch != null) {
-      _controller.removeListener(_handoffWatch!);
-      // The instance the listener went on, not whatever _frames is now: a
-      // re-extraction can swap the set out between arming and stopping.
-      _handoffFrames?.current.removeListener(_handoffWatch!);
-      _handoffFrames = null;
-      _handoffWatch = null;
-    }
-    _handoffTimer?.cancel();
-    _handoffTimer = null;
-  }
+  void _endScrub() => _shuttle.end();
 
   /// Steps the video by [frames] while dragging across it in scrub mode.
   void _jogFrames(int frames) {
@@ -742,20 +505,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Advances the scrub by [frames] source frames — from the video drag or
-  /// the scrub wheel. With the atlas active it moves the finger's target
-  /// (the shuttle plays the shown frame toward it, stride-aware); otherwise
-  /// it seeks directly.
-  void _scrubByFrames(int frames) {
-    if (frames == 0) return;
-    final atlas = _frames;
-    if (_scrubbing && atlas != null) {
-      _beginShuttle();
-      _fingerIndex = (_fingerIndex + frames / atlas.stride)
-          .clamp(0.0, (atlas.count - 1).toDouble());
-    } else {
-      _jogFrames(frames);
-    }
-  }
+  /// the scrub wheel.
+  void _scrubByFrames(int frames) => _shuttle.by(frames);
 
   void _onScaleEnd(ScaleEndDetails details) {
     _endScrub();
@@ -1246,31 +997,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                 fit: StackFit.expand,
                                 children: [
                                   VideoPlayer(_controller),
-                                  // Smooth-scrub overlay: cached stills that
-                                  // track the finger, covering the video only
-                                  // once a drag actually moves (and across
-                                  // the brief handoff back). A touch that
-                                  // never travels leaves the video alone.
-                                  if (_frames != null &&
-                                      ((_scrubbing && _scrubMoved) ||
-                                          _handoff))
-                                    Positioned.fill(
-                                      child: ValueListenableBuilder<ui.Image?>(
-                                        valueListenable: _frames!.current,
-                                        builder: (_, image, __) => image == null
-                                            ? const SizedBox.shrink()
-                                            // contain, not fill: the stills
-                                            // now carry the video's exact
-                                            // aspect, and preserving their
-                                            // own geometry means any future
-                                            // mismatch letterboxes by a
-                                            // pixel instead of stretching
-                                            // the picture mid-scrub.
-                                            : RawImage(
-                                                image: image,
-                                                fit: BoxFit.contain),
-                                      ),
-                                    ),
+                                  // Smooth-scrub overlay: cached stills
+                                  // that track the finger, covering the video
+                                  // only once a drag actually moves (and
+                                  // across the brief handoff back). A touch
+                                  // that never travels leaves the video alone.
+                                  Positioned.fill(
+                                      child: ScrubStill(shuttle: _shuttle)),
                                   DrawingCanvas(
                                     controller: _drawing,
                                     zoomScale: _zoomScale,

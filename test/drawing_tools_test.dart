@@ -166,7 +166,8 @@ void main() {
       expect(inkFor(tester, arrow.points.last),
           within(distance: 1, from: path.last));
       expect(arrow.width, kStrokeWidths[1]);
-      // A curved shaft plus a filled head.
+      // A curved shaft that stops where the filled head starts — drawn to
+      // the tip, the shaft's round cap bulges out past the point as a blob.
       expect(find.byType(DrawingCanvas), paints..path()..path());
     });
 
@@ -178,6 +179,55 @@ void main() {
 
       await tapRail(tester, find.byIcon(Icons.undo));
       expect(annotationsOf<ArrowAnnotation>(tester), isEmpty);
+    });
+  });
+
+  group('trimPathEnd', () {
+    double lengthOf(List<Offset> points) {
+      var total = 0.0;
+      for (var i = 1; i < points.length; i++) {
+        total += (points[i] - points[i - 1]).distance;
+      }
+      return total;
+    }
+
+    test('takes the asked-for distance off the end', () {
+      const drawn = [Offset(0, 0), Offset(100, 0)];
+      final trimmed = trimPathEnd(drawn, 30);
+      expect(trimmed.last, within(distance: 0.01, from: const Offset(70, 0)));
+      expect(lengthOf(trimmed), closeTo(70, 0.01));
+    });
+
+    test('cuts across whichever segment the distance lands in', () {
+      const drawn = [Offset(0, 0), Offset(0, 40), Offset(60, 40)];
+      // 30 back from the end is 30 along the second segment.
+      final trimmed = trimPathEnd(drawn, 30);
+      expect(trimmed.last, within(distance: 0.01, from: const Offset(30, 40)));
+      // The corner it walked past is kept, so the curve still bends there.
+      expect(trimmed, hasLength(3));
+      expect(lengthOf(trimmed), closeTo(70, 0.01));
+    });
+
+    test('keeps the start when asked for more than the path has', () {
+      const drawn = [Offset(0, 0), Offset(10, 0), Offset(20, 0)];
+      expect(trimPathEnd(drawn, 500), [const Offset(0, 0)]);
+    });
+
+    test('walks past repeated samples instead of stalling on them', () {
+      const drawn = [
+        Offset(0, 0),
+        Offset(50, 0),
+        Offset(50, 0),
+        Offset(50, 0),
+      ];
+      final trimmed = trimPathEnd(drawn, 20);
+      expect(trimmed.last, within(distance: 0.01, from: const Offset(30, 0)));
+    });
+
+    test('trimming nothing leaves the path where it ended', () {
+      const drawn = [Offset(0, 0), Offset(40, 30)];
+      expect(trimPathEnd(drawn, 0).last,
+          within(distance: 0.01, from: const Offset(40, 30)));
     });
   });
 

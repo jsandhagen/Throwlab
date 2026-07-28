@@ -16,6 +16,25 @@ const kStrokeWidths = [1.5, 3.0, 6.0];
 double inkScaleFor(double zoomScale) =>
     zoomScale <= 1 ? 1 : math.sqrt(zoomScale);
 
+/// The path with its last [distance] trimmed off, cut mid-segment where it
+/// has to be. An arrow's shaft stops where its head begins: drawn to the tip
+/// instead, the stroke's round cap bulges out past the head's point as a
+/// blob, which is why the straight arrow shortens its line too.
+List<Offset> trimPathEnd(List<Offset> points, double distance) {
+  var remaining = distance;
+  for (var i = points.length - 1; i > 0; i--) {
+    final segment = points[i - 1] - points[i];
+    final step = segment.distance;
+    if (step >= remaining) {
+      final cut =
+          step == 0 ? points[i - 1] : points[i] + segment / step * remaining;
+      return [...points.take(i), cut];
+    }
+    remaining -= step;
+  }
+  return [points.first];
+}
+
 /// Rounds a sampled freehand path into a curve: each touch sample becomes
 /// the control point of a quadratic through its neighbours' midpoints. The
 /// stroke follows the same route, without the flat facets a raw polyline
@@ -243,10 +262,12 @@ class _AnnotationPainter extends CustomPainter {
     // Aim the head down the last stretch of the path rather than the final
     // pair of samples, which are a pixel apart and jitter with the finger.
     final head = math.min(_ink(arrow.width) * 5, _length(points) * 0.5);
-    final shaftEnd = _walkBack(points, head);
-    final delta = tip - shaftEnd;
+    // The shaft stops where the head starts, so the stroke's round cap stays
+    // under the filled head instead of poking through its point.
+    final shaft = trimPathEnd(points, head);
+    final delta = tip - shaft.last;
     if (delta.distance == 0) return;
-    canvas.drawPath(smoothPath(points), paint);
+    if (shaft.length >= 2) canvas.drawPath(smoothPath(shaft), paint);
     _paintHead(canvas, tip, delta / delta.distance, head, arrow.color);
   }
 
@@ -273,20 +294,6 @@ class _AnnotationPainter extends CustomPainter {
       total += (points[i] - points[i - 1]).distance;
     }
     return total;
-  }
-
-  /// The point [distance] back along the path from its end.
-  Offset _walkBack(List<Offset> points, double distance) {
-    var remaining = distance;
-    for (var i = points.length - 1; i > 0; i--) {
-      final segment = points[i - 1] - points[i];
-      final step = segment.distance;
-      if (step >= remaining) {
-        return step == 0 ? points[i - 1] : points[i] + segment / step * remaining;
-      }
-      remaining -= step;
-    }
-    return points.first;
   }
 
   void _paintAngle(

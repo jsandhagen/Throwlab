@@ -5,9 +5,13 @@ import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../services/video_optimizer.dart';
 import '../utils/frame_seeker.dart';
+import '../utils/scrub_frames.dart';
+import '../utils/scrub_shuttle.dart';
 import '../utils/time_format.dart';
 import '../widgets/playback_controls.dart';
+import '../widgets/scrub_still.dart';
 
 enum ComparisonMode { sideBySide, overlay }
 
@@ -25,11 +29,25 @@ class ComparisonScreen extends StatefulWidget {
   State<ComparisonScreen> createState() => _ComparisonScreenState();
 }
 
-class _ComparisonScreenState extends State<ComparisonScreen> {
+class _ComparisonScreenState extends State<ComparisonScreen>
+    with TickerProviderStateMixin {
   late final VideoPlayerController _controllerA;
   late final VideoPlayerController _controllerB;
   late final FrameSeeker _seekerA = FrameSeeker(_controllerA);
   late final FrameSeeker _seekerB = FrameSeeker(_controllerB);
+
+  /// The same still-overlay scrub path the analysis screen uses, one per
+  /// clip: dragging a wheel here plays the pre-extracted frames rather than
+  /// hammering the decoder with seeks. Clips imported before the stills
+  /// existed have none, and fall back to seeking as before.
+  ///
+  /// Both are built in initState rather than lazily: each owns a ticker, and
+  /// a comparison closed before the clips finished loading would otherwise
+  /// create those tickers inside dispose(), when looking up the TickerMode is
+  /// illegal.
+  ScrubFrames? _framesA, _framesB;
+  late final ScrubShuttle _shuttleA;
+  late final ScrubShuttle _shuttleB;
 
   ComparisonMode _mode = ComparisonMode.sideBySide;
 
@@ -55,19 +73,52 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
 
   double get _fps => widget.videoA.fps;
 
+  /// The stills a clip already has, or null: the comparison screen consumes
+  /// what the analysis screen extracted rather than extracting its own.
+  ScrubFrames? _framesFor(ThrowVideo video) {
+    final dir = video.scrubFramesDir;
+    if (dir == null || video.scrubFrameCount <= 0) return null;
+    return ScrubFrames(
+      dir: dir,
+      count: video.scrubFrameCount,
+      stride: video.scrubFrameStride,
+      fps: video.fps,
+    )..loadTimes(VideoOptimizer.framesTimesFile);
+  }
+
   @override
   void initState() {
     super.initState();
+    _framesA = _framesFor(widget.videoA);
+    _framesB = _framesFor(widget.videoB);
     _controllerA = VideoPlayerController.file(File(widget.videoA.path))
       ..initialize().then((_) => mounted ? setState(() {}) : null)
           .catchError((Object _) => mounted ? setState(() {}) : null);
     _controllerB = VideoPlayerController.file(File(widget.videoB.path))
       ..initialize().then((_) => mounted ? setState(() {}) : null)
           .catchError((Object _) => mounted ? setState(() {}) : null);
+    _shuttleA = ScrubShuttle(
+      controller: _controllerA,
+      seeker: _seekerA,
+      fps: widget.videoA.fps,
+      vsync: this,
+      frames: _framesA,
+    );
+    _shuttleB = ScrubShuttle(
+      controller: _controllerB,
+      seeker: _seekerB,
+      fps: widget.videoB.fps,
+      vsync: this,
+      frames: _framesB,
+    );
   }
 
   @override
   void dispose() {
+    _shuttleA.dispose();
+    _shuttleB.dispose();
+    _framesA?.dispose();
+    _framesB?.dispose();
     _controllerA.dispose();
     _controllerB.dispose();
     super.dispose();
@@ -116,7 +167,8 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
     setState(() {});
   }
 
-  Widget _player(VideoPlayerController controller) {
+  Widget _player(ScrubShuttle shuttle) {
+    final controller = shuttle.controller;
     if (controller.value.hasError) {
       return const Center(
         child: Padding(
@@ -127,46 +179,60 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
       );
     }
     return controller.value.isInitialized
-        ? _VideoPane(controller: controller, fill: _fill)
+        ? _VideoPane(shuttle: shuttle, fill: _fill)
         : const Center(child: CircularProgressIndicator());
   }
 
-  /// Frame steps from the wheel while the clips are linked. Stepping off a
-  /// running target rather than the player's reported position keeps a fast
-  /// spin from stalling on a seek that hasn't landed yet.
-  Duration? _scrubTarget;
+  /// Fractional frame of B carried between linked steps: the clips can have
+  /// been shot at different rates, so A's whole frames scale to a fraction of
+  /// B's and the remainder has to survive to the next step or the two drift
+  /// apart over a long scrub.
+  double _linkedRemainderB = 0;
 
   void _startLinkedScrub() {
-    _controllerA.pause();
+    _linkedRemainderB = 0;
+    // The wheel pauses the clip it is attached to; the other one is ours.
     _controllerB.pause();
-    _scrubTarget = _controllerA.value.position;
+    _shuttleA.begin();
+    _shuttleB.begin();
   }
 
+  /// One wheel, both clips: A moves by the frames the finger asked for and B
+  /// by the same amount of *time*, so they stay aligned on their sync points.
   void _linkedScrubBy(int frames) {
-    final step = Duration(
-        microseconds: (Duration.microsecondsPerSecond / _fps).round());
-    final base = _scrubTarget ?? _controllerA.value.position;
-    final target = _clampToDuration(base + step * frames, _controllerA);
-    _scrubTarget = target;
-    _seekBoth(target);
+    _shuttleA.by(frames);
+    final scaled =
+        frames * widget.videoB.fps / widget.videoA.fps + _linkedRemainderB;
+    final whole = scaled.truncate();
+    _linkedRemainderB = scaled - whole;
+    _shuttleB.by(whole);
   }
 
-  Widget _wheel(VideoPlayerController controller, ThrowVideo video,
+  void _endLinkedScrub() {
+    _shuttleA.end();
+    _shuttleB.end();
+  }
+
+  Widget _wheel(ScrubShuttle shuttle, ThrowVideo video,
       {bool linked = false, double height = 36}) {
     return ScrubWheel(
-      controller: controller,
+      controller: shuttle.controller,
       fps: video.fps,
       captureFps: video.captureFps,
       height: height,
-      onScrubStart: linked ? _startLinkedScrub : null,
-      onScrubBy: linked ? _linkedScrubBy : null,
-      onScrubEnd: linked ? () => _scrubTarget = null : null,
+      // Linked, one wheel drives both clips; unlinked, each wheel scrubs its
+      // own clip — either way through the shuttle, so the stills carry the
+      // drag instead of the decoder.
+      onScrubStart: linked ? _startLinkedScrub : shuttle.begin,
+      onScrubBy: linked ? _linkedScrubBy : shuttle.by,
+      onScrubEnd: linked ? _endLinkedScrub : shuttle.end,
     );
   }
 
-  Widget _syncRow(String label, FrameSeeker seeker, ThrowVideo video,
+  Widget _syncRow(String label, ScrubShuttle shuttle, ThrowVideo video,
       Duration sync, ValueChanged<Duration> onSet) {
-    final controller = seeker.controller;
+    final seeker = shuttle.seeker;
+    final controller = shuttle.controller;
     final fps = video.fps;
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: controller,
@@ -196,7 +262,7 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                 ),
                 // Frame-precise scrubbing per clip while they're unlinked —
                 // the slider can't resolve single frames.
-                _wheel(controller, video, height: 30),
+                _wheel(shuttle, video, height: 30),
               ],
             ),
           ),
@@ -247,7 +313,7 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                     ),
                   ),
                   // One wheel through both clips, on A's timeline.
-                  _wheel(_controllerA, widget.videoA, linked: true),
+                  _wheel(_shuttleA, widget.videoA, linked: true),
                 ],
               ),
             ),
@@ -309,25 +375,25 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                           ? (landscape
                               ? Row(
                                   children: [
-                                    Expanded(child: _player(_controllerA)),
+                                    Expanded(child: _player(_shuttleA)),
                                     const VerticalDivider(width: 2),
-                                    Expanded(child: _player(_controllerB)),
+                                    Expanded(child: _player(_shuttleB)),
                                   ],
                                 )
                               : Column(
                                   children: [
-                                    Expanded(child: _player(_controllerA)),
+                                    Expanded(child: _player(_shuttleA)),
                                     const Divider(height: 2),
-                                    Expanded(child: _player(_controllerB)),
+                                    Expanded(child: _player(_shuttleB)),
                                   ],
                                 ))
                           : Stack(
                               alignment: Alignment.center,
                               children: [
-                                _player(_controllerA),
+                                _player(_shuttleA),
                                 Opacity(
                                   opacity: _overlayOpacity,
-                                  child: _player(_controllerB),
+                                  child: _player(_shuttleB),
                                 ),
                               ],
                             ),
@@ -356,19 +422,19 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: _syncRow('A', _seekerA, widget.videoA,
+                          child: _syncRow('A', _shuttleA, widget.videoA,
                               _syncA, (d) => _setSync(a: d)),
                         ),
                         Expanded(
-                          child: _syncRow('B', _seekerB, widget.videoB,
+                          child: _syncRow('B', _shuttleB, widget.videoB,
                               _syncB, (d) => _setSync(b: d)),
                         ),
                       ],
                     )
                   else ...[
-                    _syncRow('A', _seekerA, widget.videoA, _syncA,
+                    _syncRow('A', _shuttleA, widget.videoA, _syncA,
                         (d) => _setSync(a: d)),
-                    _syncRow('B', _seekerB, widget.videoB, _syncB,
+                    _syncRow('B', _shuttleB, widget.videoB, _syncB,
                         (d) => _setSync(b: d)),
                   ],
                   // Wrap, not Row: on a narrow phone the transport plus the
@@ -441,9 +507,13 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
 /// recentre. The clip's own aspect ratio is never touched, so nothing is
 /// ever stretched.
 class _VideoPane extends StatefulWidget {
-  const _VideoPane({required this.controller, required this.fill});
+  const _VideoPane({required this.shuttle, required this.fill});
 
-  final VideoPlayerController controller;
+  /// The clip's scrub path; the pane shows the player and, while a scrub is
+  /// running, the still the shuttle has raised over it.
+  final ScrubShuttle shuttle;
+
+  VideoPlayerController get controller => shuttle.controller;
 
   /// Cover the pane (cropping the overflow) rather than fit inside it.
   final bool fill;
@@ -520,7 +590,15 @@ class _VideoPaneState extends State<_VideoPane> {
                 top: (pane.height - content.height) / 2 + pan.dy,
                 width: content.width,
                 height: content.height,
-                child: VideoPlayer(widget.controller),
+                // The still sits in the same rect as the player, so the
+                // frame it covers lands exactly where the video was.
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    VideoPlayer(widget.controller),
+                    ScrubStill(shuttle: widget.shuttle),
+                  ],
+                ),
               ),
             ],
           ),
