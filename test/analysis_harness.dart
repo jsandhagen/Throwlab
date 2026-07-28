@@ -128,10 +128,44 @@ Future<void> mountAnalysisScreen(
   await pumpFrames(tester);
 }
 
-/// Taps a drawing-rail control (tool icon, thickness swatch, …).
+/// Taps a drawing-rail control (tool button, menu entry, …).
 Future<void> tapRail(WidgetTester tester, Finder control) async {
   await tester.tap(control);
-  await pumpFrames(tester);
+  // Long enough for a menu to finish opening or closing: a tap that lands
+  // while the route is still animating hits the modal barrier instead.
+  await pumpFrames(tester, 30);
+}
+
+/// Tools that live behind the rail's shape menu rather than on the rail.
+const shapeToolIcons = [
+  Icons.timeline,
+  Icons.arrow_right_alt,
+  Icons.turn_slight_right,
+  Icons.square_foot,
+];
+
+/// Selects a drawing tool, opening the shape menu when the tool lives
+/// there. [icon] is the tool's rail/menu icon.
+Future<void> selectTool(WidgetTester tester, IconData icon) async {
+  if (shapeToolIcons.contains(icon)) {
+    // The button's icon is whichever shape is selected, so find it by key.
+    await tapRail(tester, find.byKey(const ValueKey('rail-shapes')));
+    await tapRail(tester, find.byIcon(icon).last);
+    return;
+  }
+  await tapRail(tester, find.byIcon(icon));
+}
+
+/// Picks a colour from the rail's colour menu.
+Future<void> selectColour(WidgetTester tester, String name) async {
+  await tapRail(tester, find.byKey(const ValueKey('rail-colour')));
+  await tapRail(tester, find.text(name));
+}
+
+/// Picks a pen width from the rail's width menu.
+Future<void> selectWidth(WidgetTester tester, String label) async {
+  await tapRail(tester, find.byKey(const ValueKey('rail-width')));
+  await tapRail(tester, find.text('$label line'));
 }
 
 List<T> annotationsOf<T extends Annotation>(WidgetTester tester) {

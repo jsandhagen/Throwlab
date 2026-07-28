@@ -29,14 +29,16 @@ void main() {
         videoSize: const Size(1920, 1080),
       );
 
-  /// Every drawing tool, in rail order.
-  const tools = [
-    Icons.pan_tool_alt,
-    Icons.draw,
-    Icons.timeline,
-    Icons.arrow_right_alt,
-    Icons.turn_slight_right,
-    Icons.square_foot,
+  /// Everything the rail shows at rest, top to bottom: scrub, pen, the
+  /// shape menu, width, colour, undo, more.
+  final railControls = <Finder>[
+    find.byIcon(Icons.pan_tool_alt),
+    find.byIcon(Icons.draw),
+    find.byKey(const ValueKey('rail-shapes')),
+    find.byKey(const ValueKey('rail-width')),
+    find.byKey(const ValueKey('rail-colour')),
+    find.byIcon(Icons.undo),
+    find.byKey(const ValueKey('rail-more')),
   ];
 
   void expectOnScreen(WidgetTester tester, Finder finder, Size screen,
@@ -51,22 +53,22 @@ void main() {
   }
 
   group('landscape', () {
-    testWidgets('every drawing tool is reachable without scrolling the rail',
+    testWidgets('the whole rail is on screen, not scrolled off the top',
         (tester) async {
       await mount(tester, _landscapePhone);
-      for (final tool in tools) {
-        expectOnScreen(tester, find.byIcon(tool), _landscapePhone,
-            what: '$tool');
+      for (final control in railControls) {
+        expectOnScreen(tester, control, _landscapePhone, what: '$control');
       }
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the tools lie along a row, not a column', (tester) async {
+    testWidgets('the rail stays a column down the right edge', (tester) async {
       await mount(tester, _landscapePhone);
-      final first = tester.getCenter(find.byIcon(tools.first));
-      final last = tester.getCenter(find.byIcon(tools.last));
-      expect(last.dx, greaterThan(first.dx));
-      expect(last.dy, closeTo(first.dy, 1));
+      final first = tester.getRect(railControls.first);
+      final last = tester.getRect(railControls.last);
+      expect(last.top, greaterThan(first.top));
+      expect(first.left, greaterThan(_landscapePhone.width * 0.8));
+      expect(last.left, greaterThan(_landscapePhone.width * 0.8));
     });
 
     testWidgets('the header is a rail down the left, back arrow on top',
@@ -86,8 +88,6 @@ void main() {
 
     testWidgets('the top of the frame is left to the video', (tester) async {
       await mount(tester, _landscapePhone);
-      // Nothing but the back/glyph corner sits in the top strip: the
-      // per-throw actions have moved down the rail.
       final compare = tester.getRect(find.byIcon(Icons.compare));
       expect(compare.top, greaterThan(60));
     });
@@ -108,9 +108,9 @@ void main() {
 
       // Tools stacked down the right edge.
       final pen = tester.getRect(find.byIcon(Icons.draw));
-      final angle = tester.getRect(find.byIcon(Icons.square_foot));
+      final more = tester.getRect(find.byKey(const ValueKey('rail-more')));
       expect(pen.left, greaterThan(_portraitPhone.width / 2));
-      expect(angle.top, greaterThan(pen.top));
+      expect(more.top, greaterThan(pen.top));
       expect(tester.takeException(), isNull);
     });
   });

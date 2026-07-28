@@ -1488,30 +1488,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Landscape carries the drawing tools here, above the
-            // transport: the screen has width to spare and no height.
-            if (landscape)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                // Centred while it fits, scrollable when a narrow phone
-                // can't hold the whole bar.
-                child: LayoutBuilder(
-                  builder: (context, constraints) => SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints:
-                          BoxConstraints(minWidth: constraints.maxWidth),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _DrawingRail(
-                              controller: _drawing, axis: Axis.horizontal),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             if (_preparingFrames)
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1592,27 +1568,27 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               ),
           ] else
             Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
-          if (!landscape)
-            Positioned(
-              top: 0,
-              right: 4,
-              bottom: 0,
-              child: SafeArea(
-                child: Padding(
-                  // Hugs the bottom-right corner: the throw action lives in
-                  // the right-center and upper-right of the frame, and the
-                  // inset keeps it clear of the scrubber/transport overlay.
-                  padding: const EdgeInsets.only(bottom: 150),
-                  child: Align(
-                    alignment: Alignment.bottomRight,
-                    child: SingleChildScrollView(
-                      reverse: true,
-                      child: _DrawingRail(controller: _drawing),
-                    ),
+          Positioned(
+            top: 0,
+            right: 4,
+            bottom: 0,
+            child: SafeArea(
+              child: Padding(
+                // Hugs the bottom-right corner: the throw action lives in
+                // the right-center and upper-right of the frame, and the
+                // inset keeps it clear of the scrubber/transport overlay
+                // (a single shorter row in landscape).
+                padding: EdgeInsets.only(bottom: landscape ? 76 : 150),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: SingleChildScrollView(
+                    reverse: true,
+                    child: _DrawingRail(controller: _drawing),
                   ),
                 ),
               ),
             ),
+          ),
           Positioned(
             left: 0,
             right: 0,
@@ -1689,17 +1665,16 @@ class _MeasurePainter extends CustomPainter {
 }
 
 /// Vertical, collapsible tool rail anchored to the bottom-right corner of
-/// the video: drawing tools, colors, undo/clear. The bottom arrow collapses
-/// it to a single button in the same corner, keeping the right-center and
-/// upper-right of the frame — where the throw happens — unobstructed.
+/// the video, kept short enough for a landscape phone: the tools that build
+/// on a drag (line, arrow, curved arrow) share one menu button, and the pen
+/// weight and colour are menus too, so the column stays ~7 buttons instead
+/// of the 17 controls it offers. The chevron collapses it to a single
+/// button in the same corner, keeping the right-center and upper-right of
+/// the frame — where the throw happens — unobstructed.
 class _DrawingRail extends StatefulWidget {
-  const _DrawingRail({required this.controller, this.axis = Axis.vertical});
+  const _DrawingRail({required this.controller});
 
   final DrawingController controller;
-
-  /// Vertical down the right edge (portrait), or a bar across the bottom
-  /// (landscape, where the column runs off a ~360px-tall screen).
-  final Axis axis;
 
   @override
   State<_DrawingRail> createState() => _DrawingRailState();
@@ -1710,134 +1685,275 @@ class _DrawingRailState extends State<_DrawingRail> {
 
   DrawingController get controller => widget.controller;
 
-  static const _tools = [
+  /// The two modes worth a button of their own: scrubbing without drawing,
+  /// and the freehand pen.
+  static const _directTools = [
     (DrawTool.none, Icons.pan_tool_alt, 'Scrub only'),
     (DrawTool.pen, Icons.draw, 'Freehand pen'),
+  ];
+
+  /// The measured shapes, sharing one menu button that shows whichever is
+  /// selected — four more icons on the rail is what ran it off a landscape
+  /// screen.
+  static const _shapeTools = [
     (DrawTool.line, Icons.timeline, 'Straight line'),
     (DrawTool.arrow, Icons.arrow_right_alt, 'Arrow (drag tail to head)'),
-    (DrawTool.curvedArrow, Icons.turn_slight_right,
-        'Curved arrow (trace a path, head where you lift)'),
+    (
+      DrawTool.curvedArrow,
+      Icons.turn_slight_right,
+      'Curved arrow (trace a path, head where you lift)'
+    ),
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
   ];
 
   static const _thicknessLabels = ['Thin', 'Medium', 'Thick'];
 
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final horizontal = widget.axis == Axis.horizontal;
-    final gap =
-        horizontal ? const SizedBox(width: 6) : const SizedBox(height: 6);
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) => Material(
-        color: scheme.surface.withOpacity(0.8),
-        borderRadius: BorderRadius.circular(24),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              vertical: horizontal ? 0 : 4, horizontal: horizontal ? 4 : 0),
-          child: Flex(
-            direction: widget.axis,
-            mainAxisSize: MainAxisSize.min,
-            children: !_open
-                ? [
-                    IconButton(
-                      tooltip: 'Drawing tools',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.draw),
-                      onPressed: () => setState(() => _open = true),
-                    ),
-                  ]
-                : [
-                    for (final (tool, icon, tip) in _tools)
-                      IconButton(
-                        tooltip: tip,
-                        visualDensity: VisualDensity.compact,
-                        isSelected: controller.tool == tool,
-                        style: controller.tool == tool
-                            ? IconButton.styleFrom(
-                                backgroundColor: scheme.primaryContainer)
-                            : null,
-                        icon: Icon(icon),
-                        onPressed: () => controller.tool = tool,
-                      ),
-                    gap,
-                    // Thickness: each swatch is a bar of the pen's own
-                    // weight, in the pen's own color. Kept short — the rail
-                    // is already taller than a landscape phone.
-                    for (final (index, width) in kStrokeWidths.indexed)
-                      Tooltip(
-                        message: '${_thicknessLabels[index]} line',
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => controller.strokeWidth = width,
-                          child: Container(
-                            width: 34,
-                            height: 14,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: controller.strokeWidth == width
-                                  ? scheme.primaryContainer
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(7),
-                            ),
-                            child: Container(
-                              width: 20,
-                              height: math.max(2, width),
-                              decoration: BoxDecoration(
-                                color: controller.color,
-                                borderRadius: BorderRadius.circular(width),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    gap,
-                    for (final color in kAnnotationColors)
-                      GestureDetector(
-                        onTap: () => controller.color = color,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          margin: EdgeInsets.symmetric(
-                              vertical: horizontal ? 0 : 3,
-                              horizontal: horizontal ? 3 : 0),
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: controller.color == color
-                                  ? Colors.white
-                                  : Colors.transparent,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    gap,
-                    IconButton(
-                      tooltip: 'Undo',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.undo),
-                      onPressed: controller.undo,
-                    ),
-                    IconButton(
-                      tooltip: 'Clear drawings',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.layers_clear),
-                      onPressed: controller.clear,
-                    ),
-                    IconButton(
-                      tooltip: 'Hide tools',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.keyboard_arrow_down),
-                      onPressed: () => setState(() => _open = false),
-                    ),
-                  ],
-          ),
+  /// The shape the menu button offers on a single tap — whichever shape is
+  /// active, or the plain arrow before one has been chosen.
+  (DrawTool, IconData, String) get _shape => _shapeTools.firstWhere(
+        (entry) => entry.$1 == controller.tool,
+        orElse: () => _shapeTools[1],
+      );
+
+  ButtonStyle? _styleFor(bool selected, ColorScheme scheme) => selected
+      ? IconButton.styleFrom(backgroundColor: scheme.primaryContainer)
+      : null;
+
+  Widget _toolButton(DrawTool tool, IconData icon, String tip,
+      ColorScheme scheme) {
+    return IconButton(
+      tooltip: tip,
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 40, height: 36),
+      isSelected: controller.tool == tool,
+      style: _styleFor(controller.tool == tool, scheme),
+      icon: Icon(icon),
+      onPressed: () => controller.tool = tool,
+    );
+  }
+
+  /// A rail-sized menu button: tapping the icon picks [onTap] straight
+  /// away, the small chevron opens the rest.
+  Widget _menuButton<T>({
+    required Key key,
+    required String tooltip,
+    required Widget icon,
+    required bool selected,
+    required List<PopupMenuEntry<T>> items,
+    required ValueChanged<T> onSelected,
+    VoidCallback? onTap,
+    ColorScheme? scheme,
+  }) {
+    final button = PopupMenuButton<T>(
+      key: key,
+      tooltip: tooltip,
+      padding: EdgeInsets.zero,
+      position: PopupMenuPosition.under,
+      itemBuilder: (context) => items,
+      onSelected: onSelected,
+      child: Container(
+        width: 40,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected && scheme != null
+              ? scheme.primaryContainer
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            icon,
+            const Icon(Icons.arrow_drop_down, size: 14),
+          ],
         ),
       ),
     );
+    return button;
+  }
+
+  /// A bar drawn at [width], the way that pen paints.
+  Widget _weightPreview(double width, Color color) => Container(
+        width: 18,
+        height: math.max(2, width),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(width),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final (shapeTool, shapeIcon, shapeTip) = _shape;
+        return Material(
+          color: scheme.surface.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(24),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: !_open
+                  ? [
+                      IconButton(
+                        tooltip: 'Drawing tools',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.draw),
+                        onPressed: () => setState(() => _open = true),
+                      ),
+                    ]
+                  : [
+                      _toolButton(_directTools[0].$1, _directTools[0].$2,
+                          _directTools[0].$3, scheme),
+                      _toolButton(_directTools[1].$1, _directTools[1].$2,
+                          _directTools[1].$3, scheme),
+                      // Lines and arrows share a button: same gesture, and
+                      // three more icons is what ran the rail off a
+                      // landscape screen.
+                      _menuButton<DrawTool>(
+                        key: const ValueKey('rail-shapes'),
+                        tooltip: shapeTip,
+                        icon: Icon(shapeIcon, size: 20),
+                        selected: controller.tool == shapeTool,
+                        scheme: scheme,
+                        items: [
+                          for (final (tool, icon, tip) in _shapeTools)
+                            PopupMenuItem(
+                              value: tool,
+                              child: Row(
+                                children: [
+                                  Icon(icon, size: 20),
+                                  const SizedBox(width: 12),
+                                  Flexible(child: Text(tip.split(' (').first)),
+                                ],
+                              ),
+                            ),
+                        ],
+                        onSelected: (tool) => controller.tool = tool,
+                      ),
+                      const SizedBox(height: 2),
+                      _menuButton<double>(
+                        key: const ValueKey('rail-width'),
+                        tooltip: 'Line width',
+                        icon: _weightPreview(
+                            controller.strokeWidth, controller.color),
+                        selected: false,
+                        items: [
+                          for (final (index, width) in kStrokeWidths.indexed)
+                            PopupMenuItem(
+                              value: width,
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                      width: 24,
+                                      child: _weightPreview(
+                                          width, controller.color)),
+                                  const SizedBox(width: 12),
+                                  Text('${_thicknessLabels[index]} line'),
+                                ],
+                              ),
+                            ),
+                        ],
+                        onSelected: (width) => controller.strokeWidth = width,
+                      ),
+                      _menuButton<Color>(
+                        key: const ValueKey('rail-colour'),
+                        tooltip: 'Colour',
+                        icon: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: controller.color,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24),
+                          ),
+                        ),
+                        selected: false,
+                        items: [
+                          for (final (index, color)
+                              in kAnnotationColors.indexed)
+                            PopupMenuItem(
+                              value: color,
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 16,
+                                    height: 16,
+                                    decoration: BoxDecoration(
+                                      color: color,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: controller.color == color
+                                            ? Colors.white
+                                            : Colors.transparent,
+                                        width: 2,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(_colorNames[index]),
+                                ],
+                              ),
+                            ),
+                        ],
+                        onSelected: (color) => controller.color = color,
+                      ),
+                      const SizedBox(height: 2),
+                      IconButton(
+                        tooltip: 'Undo',
+                        iconSize: 20,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                            width: 40, height: 36),
+                        icon: const Icon(Icons.undo),
+                        onPressed: controller.undo,
+                      ),
+                      _menuButton<String>(
+                        key: const ValueKey('rail-more'),
+                        tooltip: 'More',
+                        icon: const Icon(Icons.more_horiz, size: 20),
+                        selected: false,
+                        items: const [
+                          PopupMenuItem(
+                            value: 'clear',
+                            child: Row(children: [
+                              Icon(Icons.layers_clear, size: 20),
+                              SizedBox(width: 12),
+                              Text('Clear drawings'),
+                            ]),
+                          ),
+                          PopupMenuItem(
+                            value: 'hide',
+                            child: Row(children: [
+                              Icon(Icons.keyboard_arrow_down, size: 20),
+                              SizedBox(width: 12),
+                              Text('Hide tools'),
+                            ]),
+                          ),
+                        ],
+                        onSelected: (choice) {
+                          if (choice == 'clear') {
+                            controller.clear();
+                          } else {
+                            setState(() => _open = false);
+                          }
+                        },
+                      ),
+                    ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
+
+/// Names for the annotation colours, in [kAnnotationColors] order, for the
+/// rail's colour menu.
+const _colorNames = ['Orange', 'Green', 'Cyan', 'Pink', 'White'];

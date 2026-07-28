@@ -25,7 +25,7 @@ void main() {
   }) async {
     await mountAnalysisScreen(tester,
         video: video, screen: screen, videoSize: videoSize);
-    await tapRail(tester, find.byIcon(Icons.draw)); // pen tool
+    await selectTool(tester, Icons.draw);
   }
 
   /// Where the last point of the stroke just drawn is painted.

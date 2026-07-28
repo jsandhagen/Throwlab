@@ -40,7 +40,7 @@ void main() {
           video: video,
           screen: const Size(800, 600),
           videoSize: const Size(1920, 1080));
-      await tapRail(tester, find.byIcon(Icons.draw));
+      await selectTool(tester, Icons.draw);
     }
 
     const strokePath = [
@@ -56,11 +56,11 @@ void main() {
       await drawAlong(tester, strokePath);
       expect(annotationsOf<PenStroke>(tester).last.width, kStrokeWidths[1]);
 
-      await tapRail(tester, find.byTooltip('Thick line'));
+      await selectWidth(tester, 'Thick');
       await drawAlong(tester, strokePath);
       expect(annotationsOf<PenStroke>(tester).last.width, kStrokeWidths.last);
 
-      await tapRail(tester, find.byTooltip('Thin line'));
+      await selectWidth(tester, 'Thin');
       await drawAlong(tester, strokePath);
       expect(annotationsOf<PenStroke>(tester).last.width, kStrokeWidths.first);
 
@@ -71,9 +71,9 @@ void main() {
 
     testWidgets('each stroke paints at its own weight', (tester) async {
       await mountWithPen(tester);
-      await tapRail(tester, find.byTooltip('Thin line'));
+      await selectWidth(tester, 'Thin');
       await drawAlong(tester, strokePath);
-      await tapRail(tester, find.byTooltip('Thick line'));
+      await selectWidth(tester, 'Thick');
       await drawAlong(tester, strokePath);
 
       expect(
@@ -87,14 +87,14 @@ void main() {
     testWidgets('straight lines and angles use the selected weight',
         (tester) async {
       await mountWithPen(tester);
-      await tapRail(tester, find.byTooltip('Thick line'));
+      await selectWidth(tester, 'Thick');
 
-      await tapRail(tester, find.byIcon(Icons.timeline)); // line tool
+      await selectTool(tester, Icons.timeline);
       await drawAlong(tester, strokePath);
       expect(annotationsOf<LineAnnotation>(tester).single.width,
           kStrokeWidths.last);
 
-      await tapRail(tester, find.byIcon(Icons.square_foot)); // angle tool
+      await selectTool(tester, Icons.square_foot);
       await tester.tapAt(const Offset(300, 200));
       await pumpFrames(tester);
       expect(annotationsOf<AngleAnnotation>(tester).single.width,
@@ -118,7 +118,7 @@ void main() {
           video: video,
           screen: const Size(800, 600),
           videoSize: const Size(1920, 1080));
-      await tapRail(tester, find.byIcon(Icons.arrow_right_alt));
+      await selectTool(tester, Icons.arrow_right_alt);
     }
 
     testWidgets('drags tail to head', (tester) async {
@@ -145,7 +145,7 @@ void main() {
           video: video,
           screen: const Size(800, 600),
           videoSize: const Size(1920, 1080));
-      await tapRail(tester, find.byIcon(Icons.turn_slight_right));
+      await selectTool(tester, Icons.turn_slight_right);
 
       // An arc, like the path of a pull.
       const path = [
@@ -247,7 +247,7 @@ void main() {
           video: video,
           screen: const Size(800, 600),
           videoSize: const Size(1920, 1080));
-      await tapRail(tester, find.byIcon(Icons.draw));
+      await selectTool(tester, Icons.draw);
       await drawAlong(tester, const [
         Offset(340, 200),
         Offset(360, 240),
