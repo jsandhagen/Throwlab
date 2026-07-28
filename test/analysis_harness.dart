@@ -54,10 +54,15 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   Future<void> dispose(int playerId) async {}
   @override
   Future<void> setLooping(int playerId, bool looping) async {}
+  /// Which players were told to run, in order, so a test can prove that
+  /// both clips of a comparison actually started.
+  final List<int> plays = [];
+  final List<int> pauses = [];
+
   @override
-  Future<void> play(int playerId) async {}
+  Future<void> play(int playerId) async => plays.add(playerId);
   @override
-  Future<void> pause(int playerId) async {}
+  Future<void> pause(int playerId) async => pauses.add(playerId);
   @override
   Future<void> setVolume(int playerId, double volume) async {}
   @override

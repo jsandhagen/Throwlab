@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
@@ -126,6 +127,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     );
     _drawA.addListener(_syncToolsFromA);
     _drawB.addListener(_syncToolsFromB);
+    // Eagerly, like the shuttles': a screen closed without ever pressing
+    // play must not create a ticker inside dispose().
+    _loopTicker = createTicker(_onLoopTick);
   }
 
   void _syncToolsFromA() => _copyTools(_drawA, _drawB);
@@ -152,6 +156,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   @override
   void dispose() {
+    _loopTicker.stop();
+    _loopTicker.dispose();
     _drawA.removeListener(_syncToolsFromA);
     _drawB.removeListener(_syncToolsFromB);
     _drawA.dispose();
@@ -175,13 +181,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
             .clamp(0, c.value.duration.inMicroseconds),
       );
 
-  /// Seeks B so both videos sit at the same offset from their sync points.
-  void _followWithB() {
-    final offset = _controllerA.value.position - _syncA;
-    _controllerB.seekTo(_clampToDuration(_syncB + offset, _controllerB));
-  }
-
   void _seekBoth(Duration positionA) {
+    _stopLoop();
     _controllerA.pause();
     _controllerB.pause();
     _seekerA.seekTo(positionA);
@@ -194,16 +195,120 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     _seekBoth(await _seekerA.freshPosition() + step * frames);
   }
 
-  void _togglePlay() {
-    if (_controllerA.value.isPlaying) {
-      _controllerA.pause();
-      _controllerB.pause();
-    } else {
-      _controllerA.setPlaybackSpeed(_speed);
-      _controllerB.setPlaybackSpeed(_speed);
-      _followWithB();
+  // ---------------------------------------------------------------------
+  // The release loop: once both releases are marked, play runs the same
+  // stretch of time around each one, over and over, with the two clips
+  // started together. Watching a throw twice is how a difference shows up,
+  // and normalising the window on the release is what makes the two
+  // comparable — the clips were filmed at different moments in their own
+  // timelines, so playing them from where they happen to be sitting shows
+  // two unrelated instants side by side.
+
+  /// The run-up and the flight the loop aims to include, before trimming to
+  /// what the clips actually hold.
+  static const _loopLead = Duration(milliseconds: 2000);
+  static const _loopTail = Duration(milliseconds: 1500);
+
+  static Duration _shorter(Duration a, Duration b) => a < b ? a : b;
+
+  /// The lead-in both clips can afford: whichever has less footage before
+  /// its release sets it, so the two show the same approach.
+  Duration get _loopLeadIn {
+    final lead = _shorter(_shorter(_loopLead, _syncA), _syncB);
+    return lead < Duration.zero ? Duration.zero : lead;
+  }
+
+  /// Likewise for the follow-through after the release.
+  Duration get _loopFollowThrough {
+    final tail = _shorter(
+        _shorter(_loopTail, _controllerA.value.duration - _syncA),
+        _controllerB.value.duration - _syncB);
+    return tail < Duration.zero ? Duration.zero : tail;
+  }
+
+  Duration get _loopWindow => _loopLeadIn + _loopFollowThrough;
+
+  late final Ticker _loopTicker;
+
+  /// Clip time played since this pass through the window began, and the
+  /// ticker stamp it was last measured at.
+  double _loopPlayed = 0;
+  Duration _loopTickAt = Duration.zero;
+
+  bool get _looping => _loopTicker.isActive;
+
+  /// Puts both clips at the top of the window — the same lead-in before each
+  /// release, which is what lets them run as one.
+  Future<void> _rewindLoop() async {
+    final lead = _loopLeadIn;
+    _loopPlayed = 0;
+    await Future.wait([
+      _controllerA.seekTo(_clampToDuration(_syncA - lead, _controllerA)),
+      _controllerB.seekTo(_clampToDuration(_syncB - lead, _controllerB)),
+    ]);
+  }
+
+  Future<void> _playLoop() async {
+    _controllerA.setPlaybackSpeed(_speed);
+    _controllerB.setPlaybackSpeed(_speed);
+    await _rewindLoop();
+    if (!mounted) return;
+    await _controllerA.play();
+    await _controllerB.play();
+    if (!mounted) return;
+    _loopTickAt = Duration.zero;
+    if (!_loopTicker.isActive) _loopTicker.start();
+    setState(() {});
+  }
+
+  /// Wall time, converted to clip time — at 0.25x a second of watching is a
+  /// quarter second of throw — so the loop comes round when the window has
+  /// actually played, whatever speed it is running at.
+  void _onLoopTick(Duration elapsed) {
+    final dt =
+        ((elapsed - _loopTickAt).inMicroseconds / Duration.microsecondsPerSecond)
+            .clamp(0.0, 0.25);
+    _loopTickAt = elapsed;
+    _loopPlayed += dt * _speed;
+    if (_loopPlayed <
+        _loopWindow.inMicroseconds / Duration.microsecondsPerSecond) {
+      return;
+    }
+    _rewindLoop().then((_) {
+      if (!mounted || !_looping) return;
+      // A clip that ran to its end is left paused by the player, so both are
+      // started again rather than resumed.
       _controllerA.play();
       _controllerB.play();
+    });
+  }
+
+  void _stopLoop() {
+    if (_loopTicker.isActive) _loopTicker.stop();
+  }
+
+  void _togglePlay() {
+    if (_controllerA.value.isPlaying || _controllerB.value.isPlaying) {
+      _stopLoop();
+      _controllerA.pause();
+      _controllerB.pause();
+      setState(() {});
+      return;
+    }
+    // Both releases marked: play the same window around each, on a loop.
+    if (_linked && _loopWindow > Duration.zero) {
+      _playLoop();
+      return;
+    }
+    _controllerA.setPlaybackSpeed(_speed);
+    _controllerB.setPlaybackSpeed(_speed);
+    // A clip parked at its last frame ignores play(), which is what left one
+    // of the two sitting still while the other ran.
+    for (final controller in [_controllerA, _controllerB]) {
+      if (controller.value.position >= controller.value.duration) {
+        controller.seekTo(Duration.zero);
+      }
+      controller.play();
     }
     setState(() {});
   }
@@ -238,6 +343,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   double _linkedRemainderB = 0;
 
   void _startLinkedScrub() {
+    _stopLoop();
     _linkedRemainderB = 0;
     // The wheel pauses the clip it is attached to; the other one is ours.
     _controllerB.pause();
@@ -271,7 +377,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       // Linked, one wheel drives both clips; unlinked, each wheel scrubs its
       // own clip — either way through the shuttle, so the stills carry the
       // drag instead of the decoder.
-      onScrubStart: linked ? _startLinkedScrub : shuttle.begin,
+      onScrubStart: linked
+          ? _startLinkedScrub
+          : () {
+              _stopLoop();
+              shuttle.begin();
+            },
       onScrubBy: linked ? _linkedScrubBy : shuttle.by,
       onScrubEnd: linked ? _endLinkedScrub : shuttle.end,
     );
@@ -523,6 +634,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       ),
                       IconButton(
                         iconSize: 56,
+                        tooltip: _linked
+                            ? 'Play both around the release, on a loop'
+                            : 'Play both',
                         icon: Icon(_controllerA.value.isPlaying
                             ? Icons.pause_circle
                             : Icons.play_circle),
@@ -541,7 +655,10 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                             : 'Link A and B: one scrubber drives both',
                         isSelected: _linked,
                         icon: Icon(_linked ? Icons.link : Icons.link_off),
-                        onPressed: () => setState(() => _linked = !_linked),
+                        onPressed: () {
+                          _stopLoop();
+                          setState(() => _linked = !_linked);
+                        },
                       ),
                       const SizedBox(width: 8),
                       SpeedMenuButton(

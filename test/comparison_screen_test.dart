@@ -142,6 +142,87 @@ void main() {
     });
   });
 
+  group('the release loop', () {
+    Duration lastSeek(int playerId) => platform.seeks
+        .lastWhere((seek) => seek.playerId == playerId)
+        .position;
+
+    /// Scrubs each clip somewhere different and marks it as the release,
+    /// which is what links the two.
+    Future<({Duration a, Duration b})> markReleases(WidgetTester tester) async {
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(400, 0));
+      await pumpFrames(tester, 20);
+      final releaseA = lastSeek(1);
+      await tester.tap(find.text('Set release').first);
+      await pumpFrames(tester, 10);
+
+      await tester.drag(find.byType(ScrubWheel).last, const Offset(250, 0));
+      await pumpFrames(tester, 20);
+      final releaseB = lastSeek(2);
+      await tester.tap(find.text('Set release'));
+      await pumpFrames(tester, 10);
+
+      expect(releaseA, greaterThan(Duration.zero));
+      expect(releaseB, greaterThan(Duration.zero));
+      expect(releaseA, isNot(releaseB));
+      return (a: releaseA, b: releaseB);
+    }
+
+    testWidgets('play starts both clips, the same run-up before each release',
+        (tester) async {
+      await mount(tester);
+      final release = await markReleases(tester);
+
+      platform.plays.clear();
+      platform.seeks.clear();
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 10);
+
+      // Both running — not just the one the transport is wired to.
+      expect(platform.plays.toSet(), {1, 2});
+      // And started at the same distance before their own release, which is
+      // what makes the two comparable.
+      expect(release.a - lastSeek(1), release.b - lastSeek(2));
+    });
+
+    testWidgets('it comes back round instead of running off the end',
+        (tester) async {
+      await mount(tester);
+      final release = await markReleases(tester);
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 10);
+      final startA = lastSeek(1);
+      final startB = lastSeek(2);
+
+      platform.seeks.clear();
+      // The window is ~1.7 s of clip time, played at the default half speed.
+      for (var i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(lastSeek(1), startA);
+      expect(lastSeek(2), startB);
+      // Still the same run-up on the way round.
+      expect(release.a - lastSeek(1), release.b - lastSeek(2));
+    });
+
+    testWidgets('pause stops the loop where it is', (tester) async {
+      await mount(tester);
+      await markReleases(tester);
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 10);
+
+      await tester.tap(find.byIcon(Icons.pause_circle));
+      await pumpFrames(tester, 10);
+      platform.seeks.clear();
+      for (var i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(platform.seeks, isEmpty);
+    });
+  });
+
   group('drawing', () {
     /// The annotations painted over pane [index] (0 = A, 1 = B).
     List<T> paneAnnotations<T extends Annotation>(
