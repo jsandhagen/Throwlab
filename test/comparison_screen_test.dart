@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/utils/frame_timing.dart';
 import 'package:throwlab/screens/comparison_screen.dart';
+import 'package:throwlab/widgets/drawing_canvas.dart';
 import 'package:throwlab/widgets/playback_controls.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -138,6 +139,82 @@ void main() {
       await pumpFrames(tester);
 
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1});
+    });
+  });
+
+  group('drawing', () {
+    /// The annotations painted over pane [index] (0 = A, 1 = B).
+    List<T> paneAnnotations<T extends Annotation>(
+        WidgetTester tester, int index) {
+      final paint = tester.widget<CustomPaint>(find.descendant(
+          of: find.byType(DrawingCanvas).at(index),
+          matching: find.byType(CustomPaint)));
+      return ((paint.painter as dynamic).annotations as List)
+          .whereType<T>()
+          .toList();
+    }
+
+    /// The rail starts collapsed here — the video area is already split
+    /// between two clips.
+    Future<void> openRail(WidgetTester tester) =>
+        tapRail(tester, find.byKey(const ValueKey('rail-collapse')));
+
+    /// A stroke across the middle of pane [index].
+    Future<void> drawInPane(WidgetTester tester, int index) async {
+      final pane = tester.getRect(find.byType(VideoPlayer).at(index));
+      await drawAlong(tester, [
+        pane.center - const Offset(40, 20),
+        pane.center,
+        pane.center + const Offset(40, 20),
+      ]);
+    }
+
+    testWidgets('a stroke lands on the pane it was drawn in', (tester) async {
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+
+      await drawInPane(tester, 0);
+      expect(paneAnnotations<PenStroke>(tester, 0), hasLength(1));
+      expect(paneAnnotations<PenStroke>(tester, 1), isEmpty);
+    });
+
+    testWidgets('the tool picked once arms both panes', (tester) async {
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+
+      // Never drawn in B, and the tool was chosen while A was the active
+      // pane — B still draws rather than reframing its crop.
+      await drawInPane(tester, 1);
+      expect(paneAnnotations<PenStroke>(tester, 1), hasLength(1));
+      expect(paneAnnotations<PenStroke>(tester, 0), isEmpty);
+    });
+
+    testWidgets('undo takes back the mark from the pane it was made in',
+        (tester) async {
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+      await drawInPane(tester, 0);
+      await drawInPane(tester, 1);
+
+      await tapRail(tester, find.byIcon(Icons.undo));
+      // B was drawn in last, so B is what undo acts on.
+      expect(paneAnnotations<PenStroke>(tester, 1), isEmpty);
+      expect(paneAnnotations<PenStroke>(tester, 0), hasLength(1));
+    });
+
+    testWidgets('with no tool selected a drag still reframes the crop',
+        (tester) async {
+      await mount(tester);
+      final before = tester.getRect(find.byType(VideoPlayer).first);
+
+      await drawInPane(tester, 0);
+
+      expect(paneAnnotations<Annotation>(tester, 0), isEmpty);
+      expect(tester.getRect(find.byType(VideoPlayer).first).left,
+          isNot(closeTo(before.left, 1)));
     });
   });
 

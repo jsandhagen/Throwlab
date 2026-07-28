@@ -8,6 +8,16 @@ enum DrawTool { none, pen, line, arrow, curvedArrow, angle }
 /// middle one is the default.
 const kStrokeWidths = [1.5, 3.0, 6.0];
 
+/// Annotation colours, in the order the rail offers them: bright against
+/// grass, sky and a runway alike.
+const kAnnotationColors = [
+  Colors.orangeAccent,
+  Colors.lightGreenAccent,
+  Colors.cyanAccent,
+  Colors.pinkAccent,
+  Colors.white,
+];
+
 /// How much of a zoom the ink takes on. Annotations are painted inside the
 /// zoom transform, so left alone a stroke thickens one-for-one — at 8x a
 /// hairline is a 24 px slab covering the very detail it was drawn to point
@@ -161,6 +171,79 @@ class DrawingController extends ChangeNotifier {
   void clear() {
     _annotations.clear();
     notifyListeners();
+  }
+}
+
+/// Starts whatever the active tool draws at normalized [point], and reports
+/// whether an annotation was begun — a pinch that started life as a
+/// one-finger drag undoes the stray stroke. The tap-driven angle tool (and
+/// scrub-only mode) start nothing here.
+bool beginAnnotation(DrawingController controller, Offset point) {
+  switch (controller.tool) {
+    case DrawTool.pen:
+      controller.add(
+          PenStroke(controller.color, controller.strokeWidth, [point]));
+      return true;
+    case DrawTool.line:
+      controller.add(LineAnnotation(
+          controller.color, controller.strokeWidth, point, point));
+      return true;
+    case DrawTool.arrow:
+      // Tail where the drag starts, head where it ends.
+      controller.add(ArrowAnnotation(
+          controller.color, controller.strokeWidth, point, point));
+      return true;
+    case DrawTool.curvedArrow:
+      controller.add(CurvedArrowAnnotation(
+          controller.color, controller.strokeWidth, [point]));
+      return true;
+    case DrawTool.angle:
+    case DrawTool.none:
+      return false;
+  }
+}
+
+/// Carries the annotation [beginAnnotation] started on to [point].
+void extendAnnotation(DrawingController controller, Offset point) {
+  final last = controller.annotations.lastOrNull;
+  switch (controller.tool) {
+    case DrawTool.pen:
+      if (last is PenStroke) {
+        last.points.add(point);
+        controller.notifyChanged();
+      }
+    case DrawTool.line:
+      if (last is LineAnnotation) {
+        last.end = point;
+        controller.notifyChanged();
+      }
+    case DrawTool.arrow:
+      if (last is ArrowAnnotation) {
+        last.end = point;
+        controller.notifyChanged();
+      }
+    case DrawTool.curvedArrow:
+      if (last is CurvedArrowAnnotation) {
+        last.points.add(point);
+        controller.notifyChanged();
+      }
+    case DrawTool.angle:
+    case DrawTool.none:
+      break;
+  }
+}
+
+/// Adds a vertex to the angle being tapped out, beginning a new angle once
+/// the last one has all three of its points.
+void addAngleVertex(DrawingController controller, Offset point) {
+  final last = controller.annotations.lastOrNull;
+  if (last is AngleAnnotation && !last.isComplete) {
+    last.points.add(point);
+    controller.notifyChanged();
+  } else {
+    controller.add(
+        AngleAnnotation(controller.color, controller.strokeWidth)
+          ..points.add(point));
   }
 }
 

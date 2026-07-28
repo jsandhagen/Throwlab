@@ -10,6 +10,8 @@ import '../utils/frame_seeker.dart';
 import '../utils/scrub_frames.dart';
 import '../utils/scrub_shuttle.dart';
 import '../utils/time_format.dart';
+import '../widgets/drawing_canvas.dart';
+import '../widgets/drawing_rail.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/scrub_still.dart';
 
@@ -48,6 +50,17 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   ScrubFrames? _framesA, _framesB;
   late final ScrubShuttle _shuttleA;
   late final ScrubShuttle _shuttleB;
+
+  /// One set of annotations per clip — they are different videos, so a mark
+  /// on A has no meaning on B. The tool, colour and weight are shared: the
+  /// rail sets them on whichever pane was drawn on last, and a listener
+  /// carries them to the other, so picking the pen once arms both panes.
+  final DrawingController _drawA = DrawingController();
+  final DrawingController _drawB = DrawingController();
+
+  /// The pane the rail acts on: the last one drawn in, so undo and clear go
+  /// where the marks just went.
+  late DrawingController _activeDrawing = _drawA;
 
   ComparisonMode _mode = ComparisonMode.sideBySide;
 
@@ -111,10 +124,38 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       vsync: this,
       frames: _framesB,
     );
+    _drawA.addListener(_syncToolsFromA);
+    _drawB.addListener(_syncToolsFromB);
+  }
+
+  void _syncToolsFromA() => _copyTools(_drawA, _drawB);
+  void _syncToolsFromB() => _copyTools(_drawB, _drawA);
+
+  /// Mirrors the pen settings onto the other pane. Guarded on equality so the
+  /// two controllers' listeners can't bounce a change back and forth.
+  void _copyTools(DrawingController from, DrawingController to) {
+    if (to.tool == from.tool &&
+        to.color == from.color &&
+        to.strokeWidth == from.strokeWidth) {
+      return;
+    }
+    to.tool = from.tool;
+    to.color = from.color;
+    to.strokeWidth = from.strokeWidth;
+  }
+
+  /// The rail follows the finger: draw in a pane and undo/clear act on it.
+  void _activateDrawing(DrawingController controller) {
+    if (identical(controller, _activeDrawing)) return;
+    setState(() => _activeDrawing = controller);
   }
 
   @override
   void dispose() {
+    _drawA.removeListener(_syncToolsFromA);
+    _drawB.removeListener(_syncToolsFromB);
+    _drawA.dispose();
+    _drawB.dispose();
     _shuttleA.dispose();
     _shuttleB.dispose();
     _framesA?.dispose();
@@ -167,7 +208,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     setState(() {});
   }
 
-  Widget _player(ScrubShuttle shuttle) {
+  Widget _player(ScrubShuttle shuttle, DrawingController drawing,
+      {double opacity = 1}) {
     final controller = shuttle.controller;
     if (controller.value.hasError) {
       return const Center(
@@ -179,7 +221,13 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       );
     }
     return controller.value.isInitialized
-        ? _VideoPane(shuttle: shuttle, fill: _fill)
+        ? _VideoPane(
+            shuttle: shuttle,
+            drawing: drawing,
+            fill: _fill,
+            videoOpacity: opacity,
+            onDraw: () => _activateDrawing(drawing),
+          )
         : const Center(child: CircularProgressIndicator());
   }
 
@@ -324,6 +372,43 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     );
   }
 
+  /// The two clips, side by side along the screen's long edge or stacked as
+  /// a ghost overlay.
+  Widget _panes(bool landscape) {
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      child: _mode == ComparisonMode.sideBySide
+          // Split along the screen's long edge so each video gets a usable
+          // size in both orientations.
+          ? (landscape
+              ? Row(
+                  children: [
+                    Expanded(child: _player(_shuttleA, _drawA)),
+                    const VerticalDivider(width: 2),
+                    Expanded(child: _player(_shuttleB, _drawB)),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Expanded(child: _player(_shuttleA, _drawA)),
+                    const Divider(height: 2),
+                    Expanded(child: _player(_shuttleB, _drawB)),
+                  ],
+                ))
+          : Stack(
+              alignment: Alignment.center,
+              children: [
+                _player(_shuttleA, _drawA),
+                // The ghost fades the clip, not the marks drawn on it — an
+                // annotation you can barely see is no use for pointing
+                // something out.
+                _player(_shuttleB, _drawB, opacity: _overlayOpacity),
+              ],
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final landscape =
@@ -366,37 +451,23 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               child: Column(
                 children: [
                   Expanded(
-                    child: Container(
-                      color: Colors.black,
-                      alignment: Alignment.center,
-                      child: _mode == ComparisonMode.sideBySide
-                          // Split along the screen's long edge so each
-                          // video gets a usable size in both orientations.
-                          ? (landscape
-                              ? Row(
-                                  children: [
-                                    Expanded(child: _player(_shuttleA)),
-                                    const VerticalDivider(width: 2),
-                                    Expanded(child: _player(_shuttleB)),
-                                  ],
-                                )
-                              : Column(
-                                  children: [
-                                    Expanded(child: _player(_shuttleA)),
-                                    const Divider(height: 2),
-                                    Expanded(child: _player(_shuttleB)),
-                                  ],
-                                ))
-                          : Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                _player(_shuttleA),
-                                Opacity(
-                                  opacity: _overlayOpacity,
-                                  child: _player(_shuttleB),
-                                ),
-                              ],
-                            ),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(child: _panes(landscape)),
+                        // Same rail as the analysis screen, in the same
+                        // corner: it acts on the pane last drawn in, and the
+                        // tool it sets arms both.
+                        Positioned(
+                          right: 4,
+                          bottom: 4,
+                          child: SingleChildScrollView(
+                            reverse: true,
+                            child: DrawingRail(
+                                controller: _activeDrawing,
+                                initiallyOpen: false),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (_mode == ComparisonMode.overlay)
@@ -507,16 +578,32 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 /// recentre. The clip's own aspect ratio is never touched, so nothing is
 /// ever stretched.
 class _VideoPane extends StatefulWidget {
-  const _VideoPane({required this.shuttle, required this.fill});
+  const _VideoPane({
+    required this.shuttle,
+    required this.drawing,
+    required this.fill,
+    this.videoOpacity = 1,
+    this.onDraw,
+  });
 
   /// The clip's scrub path; the pane shows the player and, while a scrub is
   /// running, the still the shuttle has raised over it.
   final ScrubShuttle shuttle;
 
+  /// This clip's annotations. While a drawing tool is selected the pane's
+  /// drags draw instead of reframing the crop.
+  final DrawingController drawing;
+
   VideoPlayerController get controller => shuttle.controller;
 
   /// Cover the pane (cropping the overflow) rather than fit inside it.
   final bool fill;
+
+  /// Fades the clip (the ghost overlay), leaving the annotations solid.
+  final double videoOpacity;
+
+  /// Called when a mark is made here, so the rail can act on this pane.
+  final VoidCallback? onDraw;
 
   @override
   State<_VideoPane> createState() => _VideoPaneState();
@@ -527,6 +614,66 @@ class _VideoPaneState extends State<_VideoPane> {
   double _zoom = 1;
   Offset _pan = Offset.zero;
   double _zoomAtGestureStart = 1;
+
+  /// The clip's rect inside the pane at the moment of the last build, so a
+  /// touch anywhere in the pane can be placed on the frame it landed on.
+  Rect _videoRect = Rect.zero;
+
+  /// A one-finger drag started an annotation, so a second finger arriving
+  /// (a pinch) has a stray stroke to throw away.
+  bool _activeStroke = false;
+
+  /// Where the finger actually landed. A scale gesture is only granted once
+  /// the touch has travelled, so its focal point is already a slop's worth
+  /// along the drag — which plants an arrow's tail where nobody touched.
+  Offset? _pointerDown;
+
+  /// A pane touch as a fraction of the clip's frame (0..1 on both axes), the
+  /// space annotations are stored in so they stay put when the pane is
+  /// resized, reframed or zoomed.
+  Offset _normalize(Offset local) => Offset(
+        (local.dx - _videoRect.left) / _videoRect.width,
+        (local.dy - _videoRect.top) / _videoRect.height,
+      );
+
+  bool get _drawingActive => widget.drawing.tool != DrawTool.none;
+
+  void _onScaleStart(ScaleStartDetails details) {
+    _zoomAtGestureStart = _zoom;
+    if (details.pointerCount > 1) {
+      // A pinch that began as a one-finger drag: discard the stray stroke.
+      if (_activeStroke) widget.drawing.undo();
+      _activeStroke = false;
+      return;
+    }
+    _activeStroke = false;
+    if (!_drawingActive || _videoRect.isEmpty) return;
+    _activeStroke = beginAnnotation(
+        widget.drawing, _normalize(_pointerDown ?? details.localFocalPoint));
+    if (_activeStroke) widget.onDraw?.call();
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails details, Size pane) {
+    // Two fingers pinch and reframe whatever the tool is, so a drawing can
+    // still be lined up on the detail it is marking.
+    if (details.pointerCount > 1 || !_drawingActive) {
+      setState(() {
+        _zoom = (_zoomAtGestureStart * details.scale).clamp(1.0, 4.0);
+        _pan = _clampPan(
+            _pan + details.focalPointDelta, pane, _contentSize(pane));
+      });
+      return;
+    }
+    if (_activeStroke) {
+      extendAnnotation(widget.drawing, _normalize(details.localFocalPoint));
+    }
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    if (widget.drawing.tool != DrawTool.angle || _videoRect.isEmpty) return;
+    addAngleVertex(widget.drawing, _normalize(details.localPosition));
+    widget.onDraw?.call();
+  }
 
   /// The clip's size inside the pane at the current fit and zoom.
   Size _contentSize(Size pane) {
@@ -570,37 +717,51 @@ class _VideoPaneState extends State<_VideoPane> {
       final pane = constraints.biggest;
       final content = _contentSize(pane);
       final pan = _clampPan(_pan, pane, content);
+      _videoRect = Rect.fromLTWH(
+        (pane.width - content.width) / 2 + pan.dx,
+        (pane.height - content.height) / 2 + pan.dy,
+        content.width,
+        content.height,
+      );
       return ClipRect(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onScaleStart: (_) => _zoomAtGestureStart = _zoom,
-          onScaleUpdate: (details) => setState(() {
-            _zoom = (_zoomAtGestureStart * details.scale).clamp(1.0, 4.0);
-            _pan = _clampPan(_pan + details.focalPointDelta, pane,
-                _contentSize(pane));
-          }),
-          onDoubleTap: () => setState(() {
-            _zoom = 1;
-            _pan = Offset.zero;
-          }),
-          child: Stack(
-            children: [
-              Positioned(
-                left: (pane.width - content.width) / 2 + pan.dx,
-                top: (pane.height - content.height) / 2 + pan.dy,
-                width: content.width,
-                height: content.height,
-                // The still sits in the same rect as the player, so the
-                // frame it covers lands exactly where the video was.
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    VideoPlayer(widget.controller),
-                    ScrubStill(shuttle: widget.shuttle),
-                  ],
+        child: Listener(
+          onPointerDown: (event) => _pointerDown = event.localPosition,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: _onTapUp,
+            onScaleStart: _onScaleStart,
+            onScaleUpdate: (details) => _onScaleUpdate(details, pane),
+            onScaleEnd: (_) => _activeStroke = false,
+            onDoubleTap: () => setState(() {
+              _zoom = 1;
+              _pan = Offset.zero;
+            }),
+            child: Stack(
+              children: [
+                Positioned.fromRect(
+                  rect: _videoRect,
+                  // The still and the annotations share the player's rect,
+                  // so both land exactly on the frame underneath.
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Opacity(
+                        opacity: widget.videoOpacity,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            VideoPlayer(widget.controller),
+                            ScrubStill(shuttle: widget.shuttle),
+                          ],
+                        ),
+                      ),
+                      DrawingCanvas(
+                          controller: widget.drawing, zoomScale: _zoom),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
