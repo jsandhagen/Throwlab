@@ -30,7 +30,7 @@ void main() {
       );
 
   /// Everything the rail shows at rest, top to bottom: scrub, pen, the
-  /// shape menu, width, colour, undo, more.
+  /// shape menu, width, colour, undo, more, and the collapse chevron.
   final railControls = <Finder>[
     find.byIcon(Icons.pan_tool_alt),
     find.byIcon(Icons.draw),
@@ -39,6 +39,7 @@ void main() {
     find.byKey(const ValueKey('rail-colour')),
     find.byIcon(Icons.undo),
     find.byKey(const ValueKey('rail-more')),
+    find.byKey(const ValueKey('rail-collapse')),
   ];
 
   void expectOnScreen(WidgetTester tester, Finder finder, Size screen,
@@ -60,6 +61,26 @@ void main() {
         expectOnScreen(tester, control, _landscapePhone, what: '$control');
       }
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the collapse button hides the tools and brings them back',
+        (tester) async {
+      await mount(tester, _landscapePhone);
+      final collapse = find.byKey(const ValueKey('rail-collapse'));
+
+      await tester.tap(collapse);
+      await tester.pump();
+      // Only the collapse button is left, still in the bottom-right corner.
+      expect(find.byIcon(Icons.undo), findsNothing);
+      expect(find.byKey(const ValueKey('rail-more')), findsNothing);
+      expect(collapse, findsOneWidget);
+      expectOnScreen(tester, collapse, _landscapePhone, what: 'collapsed rail');
+
+      await tester.tap(collapse);
+      await tester.pump();
+      for (final control in railControls) {
+        expect(control, findsOneWidget);
+      }
     });
 
     testWidgets('the rail stays a column down the right edge', (tester) async {

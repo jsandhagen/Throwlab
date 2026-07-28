@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/throw_event.dart';
@@ -56,12 +58,12 @@ class _EventGlyphPainter extends CustomPainter {
     ..isAntiAlias = true
     ..style = PaintingStyle.fill;
 
-  Paint _stroke(double width, {StrokeCap cap = StrokeCap.round}) => Paint()
+  Paint _stroke(double width) => Paint()
     ..color = color
     ..isAntiAlias = true
     ..style = PaintingStyle.stroke
     ..strokeWidth = width
-    ..strokeCap = cap
+    ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
 
   /// Solid metal sphere with a punched specular highlight — a heavy ball,
@@ -85,33 +87,52 @@ class _EventGlyphPainter extends CustomPainter {
     canvas.drawPath(path, _fill);
   }
 
-  /// A real javelin: a long thin shaft, a slim metal spearhead at the front,
-  /// and the whipcord grip binding at the balance point behind it.
+  /// The silhouette of a real javelin rather than a shaft with a triangle on
+  /// the end: a hairline tail thickening over the back half, a constant
+  /// widest section, the cord grip bulging at the balance point, then a long
+  /// metal head drawn out to a needle point.
   void _javelin(Canvas canvas, double s) {
     final tail = Offset(s * 0.12, s * 0.88);
     final tip = Offset(s * 0.88, s * 0.12);
-    final u = (tip - tail) / (tip - tail).distance; // tail -> tip
+    final length = (tip - tail).distance;
+    final u = (tip - tail) / length; // tail -> tip
     final p = Offset(-u.dy, u.dx); // perpendicular
 
-    // Thin shaft, stopping where the spearhead begins so the point reads.
-    final headBase = tip - u * (s * 0.26);
-    canvas.drawLine(tail, headBase, _stroke(s * 0.045));
+    // Fractions of the length, measured from the tail.
+    const shoulder = 0.55; // where the taper up from the tail tops out
+    const grip = (0.58, 0.68); // the bound section, at the balance point
+    const headJoin = 0.84; // where the metal head meets the shaft
+    final wMax = s * 0.028; // half-width of the widest part of the shaft
+    final cord = s * 0.020; // extra half-width from the wrapped cord
 
-    // Slim, long spearhead.
-    final half = s * 0.05;
-    final head = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(headBase.dx + p.dx * half, headBase.dy + p.dy * half)
-      ..lineTo(headBase.dx - p.dx * half, headBase.dy - p.dy * half)
-      ..close();
-    canvas.drawPath(head, _fill);
+    double halfWidth(double t) {
+      double w;
+      if (t >= headJoin) {
+        w = wMax * math.pow(1 - (t - headJoin) / (1 - headJoin), 0.8);
+      } else if (t >= shoulder) {
+        w = wMax;
+      } else {
+        w = wMax * math.pow(t / shoulder, 1.35);
+      }
+      if (t >= grip.$1 && t <= grip.$2) {
+        // Rounded shoulders so the binding reads as a wrap, not a box.
+        w += cord * math.min(1.0, math.min(t - grip.$1, grip.$2 - t) / 0.025);
+      }
+      return w;
+    }
 
-    // Cord grip: a short, fatter bound section at the centre of gravity
-    // (~40% of the length back from the tip).
-    final gripMid = tip - u * (s * 0.44);
-    final gripA = gripMid - u * (s * 0.08);
-    final gripB = gripMid + u * (s * 0.08);
-    canvas.drawLine(gripA, gripB, _stroke(s * 0.11, cap: StrokeCap.butt));
+    const steps = 48;
+    final left = <Offset>[];
+    final right = <Offset>[];
+    for (var i = 0; i <= steps; i++) {
+      final t = i / steps;
+      final centre = tail + u * (length * t);
+      final w = halfWidth(t);
+      left.add(centre + p * w);
+      right.add(centre - p * w);
+    }
+    canvas.drawPath(
+        Path()..addPolygon([...left, ...right.reversed], true), _fill);
   }
 
   /// Ball on a wire ending in a grip handle — the hammer's three parts.
