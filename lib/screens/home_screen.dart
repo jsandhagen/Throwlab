@@ -12,6 +12,7 @@ import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/event_glyph.dart';
+import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
@@ -209,13 +210,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Color _eventColor(ThrowEvent event) => switch (event) {
-        ThrowEvent.shotPut => Colors.orangeAccent,
-        ThrowEvent.discus => Colors.greenAccent,
-        ThrowEvent.hammer => Colors.purpleAccent,
-        ThrowEvent.javelin => Colors.lightBlueAccent,
-      };
-
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
     for (final video in videos) {
@@ -355,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete} '
             '· ${video.gender.label}';
     return ListTile(
-      leading: _thumbnail(video),
+      leading: ThrowThumbnail(video),
       title: Text(title,
           style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(
@@ -400,22 +394,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         context,
         MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
       ),
-    );
-  }
-
-  Widget _thumbnail(ThrowVideo video) {
-    final color = _eventColor(video.event);
-    final path = video.thumbnailPath;
-    if (path != null && File(path).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.file(File(path),
-            width: 72, height: 48, fit: BoxFit.cover),
-      );
-    }
-    return CircleAvatar(
-      backgroundColor: color.withOpacity(0.18),
-      child: EventGlyph(video.event, color: color),
     );
   }
 
@@ -589,25 +567,33 @@ class _ComparePickerDialog extends StatefulWidget {
 class _ComparePickerDialogState extends State<_ComparePickerDialog> {
   final List<ThrowVideo> _selected = [];
 
+  /// Once one throw is picked the list narrows to its event: comparing a
+  /// javelin release against a shot put says nothing, and the narrowing is
+  /// what makes a long library usable on the second pick.
+  ThrowEvent? get _event => _selected.isEmpty ? null : _selected.first.event;
+
   @override
   Widget build(BuildContext context) {
+    final event = _event;
+    final shown = event == null
+        ? widget.videos
+        : widget.videos.where((video) => video.event == event).toList();
     return AlertDialog(
-      title: const Text('Pick two throws'),
+      title: Text(event == null
+          ? 'Pick two throws'
+          : 'Pick another ${event.label.toLowerCase()} throw'),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView(
           shrinkWrap: true,
           children: [
-            for (final video in widget.videos)
+            for (final video in shown)
               CheckboxListTile(
                 value: _selected.contains(video),
-                title: Text(
-                    '${video.athlete.isEmpty ? '' : '${video.athlete} · '}'
-                    '${video.event.label} · ${video.gender.label}'),
-                subtitle: Text(video.importedAt
-                    .toLocal()
-                    .toString()
-                    .substring(0, 16)),
+                secondary: ThrowThumbnail(video),
+                title: Text(throwTitle(video)),
+                subtitle: Text(throwSubtitle(video),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
                 onChanged: (checked) => setState(() {
                   if (checked == true) {
                     if (_selected.length < 2) _selected.add(video);

@@ -21,6 +21,8 @@ import '../utils/scrub_frames.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/playback_controls.dart';
+import '../widgets/throw_picker.dart';
+import 'comparison_screen.dart';
 
 const kAnnotationColors = [
   Colors.orangeAccent,
@@ -745,6 +747,25 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _activeStroke = false;
   }
 
+  /// Picks a second throw and opens them side by side, without going back
+  /// to the library first — the comparison you want is usually the one you
+  /// think of while watching.
+  Future<void> _compareWithAnother() async {
+    _controller.pause();
+    final other = await pickThrowToCompare(
+      context,
+      videos: context.read<VideoLibrary>().videos,
+      against: widget.video,
+    );
+    if (other == null || !mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ComparisonScreen(videoA: widget.video, videoB: other),
+      ),
+    );
+  }
+
   /// Read/edit the throw's note without leaving the video.
   /// Tags (or re-tags) who threw it, picking from athletes already in the
   /// library. Clips imported before tagging existed start out unassigned,
@@ -1299,6 +1320,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             ? Icons.note_add_outlined
             : Icons.sticky_note_2),
         onPressed: _editNote,
+      ),
+      IconButton(
+        tooltip: 'Compare with another throw',
+        icon: const Icon(Icons.compare),
+        onPressed: _compareWithAnother,
       ),
       IconButton(
         tooltip: 'Measure release (speed & angles)',

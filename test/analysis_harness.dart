@@ -22,26 +22,32 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   FakeVideoPlayerPlatform(this.size);
 
   final Size size;
-  final StreamController<VideoEvent> _events =
-      StreamController<VideoEvent>.broadcast();
+
+  /// One stream per player: the comparison screen runs two at once, and a
+  /// shared broadcast stream would announce the video to whichever
+  /// controller subscribed first and leave the other waiting forever.
+  final Map<int, StreamController<VideoEvent>> _events = {};
+  int _nextPlayerId = 1;
 
   @override
   Future<void> init() async {}
 
   @override
-  Future<int?> create(DataSource dataSource) async => 1;
+  Future<int?> create(DataSource dataSource) async => _nextPlayerId++;
 
   @override
   Stream<VideoEvent> videoEventsFor(int playerId) {
     // Only announce the video once someone is listening, otherwise the
-    // broadcast stream drops the event before the controller subscribes.
-    _events.onListen = () => scheduleMicrotask(() => _events.add(VideoEvent(
+    // stream drops the event before the controller subscribes.
+    final events = _events.putIfAbsent(
+        playerId, () => StreamController<VideoEvent>.broadcast());
+    events.onListen = () => scheduleMicrotask(() => events.add(VideoEvent(
           eventType: VideoEventType.initialized,
           duration: const Duration(seconds: 5),
           size: size,
           rotationCorrection: 0,
         )));
-    return _events.stream;
+    return events.stream;
   }
 
   @override
@@ -68,14 +74,20 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
 
 /// A throw backed by a real (empty) file, since the screen checks that the
 /// clip still exists before opening it.
-ThrowVideo testVideo(Directory directory) {
-  final file = File('${directory.path}/clip.mp4')..writeAsBytesSync(<int>[0]);
+ThrowVideo testVideo(
+  Directory directory, {
+  String id = 'v1',
+  ThrowEvent event = ThrowEvent.javelin,
+  String athlete = '',
+}) {
+  final file = File('${directory.path}/$id.mp4')..writeAsBytesSync(<int>[0]);
   return ThrowVideo(
-    id: 'v1',
+    id: id,
     path: file.path,
-    event: ThrowEvent.javelin,
+    event: event,
     gender: Gender.men,
     importedAt: DateTime(2026, 1, 1),
+    athlete: athlete,
   );
 }
 
@@ -92,14 +104,15 @@ Future<void> mountAnalysisScreen(
   required ThrowVideo video,
   required Size screen,
   required Size videoSize,
+  VideoLibrary? library,
 }) async {
   tester.view.physicalSize = screen;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   VideoPlayerPlatform.instance = FakeVideoPlayerPlatform(videoSize);
   await tester.pumpWidget(
-    ChangeNotifierProvider<VideoLibrary>(
-      create: (_) => VideoLibrary(),
+    ChangeNotifierProvider<VideoLibrary>.value(
+      value: library ?? VideoLibrary(),
       child: MaterialApp(home: AnalysisScreen(video: video)),
     ),
   );
