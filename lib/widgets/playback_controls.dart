@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
 import '../utils/frame_seeker.dart';
+import '../utils/frame_timing.dart';
 import '../utils/scrub.dart';
 import '../utils/time_format.dart';
 
@@ -18,13 +19,19 @@ const kPlaybackSpeeds = [0.1, 0.25, 0.5, 0.75, 1.0];
 double scrubPixelsPerFrame(double captureFps) =>
     captureFps <= 0 ? 8.0 : (1000 / captureFps).clamp(4.0, 40.0);
 
-/// Rounds [position] to the nearest frame boundary so seeks land on exact
-/// frames instead of arbitrary milliseconds between them.
+/// Snaps [position] to the seek target for the nearest frame, so slider
+/// jumps land on exact frames instead of arbitrary milliseconds between
+/// them. The target sits a [kSeekLead] short of the frame's own boundary
+/// because the player renders the first frame at or after the position it is
+/// given — snapping to the boundary itself lands on the next frame whenever
+/// the clip's real timestamp is a rounding error above it.
 Duration snapToFrame(Duration position, double fps) {
   final frameUs = Duration.microsecondsPerSecond / fps;
+  final frame = (position.inMicroseconds / frameUs).round();
+  // In seconds: where that frame starts, and how far apart frames are.
+  final target = seekTargetSeconds(frame / fps, 1 / fps);
   return Duration(
-      microseconds: ((position.inMicroseconds / frameUs).round() * frameUs)
-          .round());
+      microseconds: (target * Duration.microsecondsPerSecond).round());
 }
 
 /// Transport controls for a single video: a thin slider for coarse jumps,

@@ -34,43 +34,58 @@ void main() {
           frames.indexForPosition(const Duration(seconds: -1)), 0);
     });
 
-    test('picks the frame whose window contains the position', () {
+    test('picks the still whose timestamp the position is nearest', () {
       final frames =
           ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
-      // At 60 fps frame 1 is on screen from 16.67 ms until 33.33 ms, so
-      // every position in between is frame 1 — including 25 ms, which a
-      // nearest-rounding would have called frame 2 and shown the wrong
-      // still over the video.
+      // Frame 1 is stamped 16.67 ms and frame 2 at 33.33 ms, so the still
+      // changes over halfway between them. Seeks aim a quarter frame
+      // *before* a stamp (see positionForIndex), so a floor of the display
+      // window would cover the video with the still before the one the
+      // player just landed on.
+      expect(frames.indexForPosition(const Duration(milliseconds: 13)), 1);
       expect(frames.indexForPosition(const Duration(milliseconds: 17)), 1);
       expect(frames.indexForPosition(const Duration(milliseconds: 24)), 1);
-      expect(frames.indexForPosition(const Duration(milliseconds: 25)), 1);
-      expect(frames.indexForPosition(const Duration(milliseconds: 33)), 1);
-      expect(frames.indexForPosition(const Duration(milliseconds: 34)), 2);
+      expect(frames.indexForPosition(const Duration(milliseconds: 26)), 2);
+      expect(frames.indexForPosition(const Duration(milliseconds: 33)), 2);
     });
 
-    test('a position exactly on a frame boundary is that frame', () {
+    test('an exact frame boundary is that frame', () {
       final frames =
           ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 50);
-      // Exact boundaries: 20 ms per frame, so 20 ms is frame 1, not 0.
+      // 20 ms per frame.
       expect(frames.indexForPosition(const Duration(milliseconds: 20)), 1);
       expect(frames.indexForPosition(const Duration(milliseconds: 40)), 2);
       expect(frames.indexForPosition(const Duration(milliseconds: 100)), 5);
     });
 
-    test('mid-frame seek targets map back to the frame they aimed at', () {
-      // Seeks aim half a frame in (see AnalysisScreen._positionForImage);
-      // those positions must resolve to the frame they were built from.
+    test('seek targets map back to the still they aimed at', () {
+      // The round trip that decides whether a scrub hands back the frame it
+      // ended on: the position built for a still must name that still again.
       for (final stride in [1, 2, 5]) {
         final frames = ScrubFrames(
             dir: '/none', count: 500, stride: stride, fps: 60);
         for (final index in [0, 1, 7, 42, 99]) {
-          final us =
-              ((index * stride + 0.5) * Duration.microsecondsPerSecond / 60)
-                  .round();
-          expect(frames.indexForPosition(Duration(microseconds: us)), index,
+          expect(
+              frames.indexForPosition(frames.positionForIndex(index)), index,
               reason: 'stride $stride, index $index');
         }
       }
+    });
+
+    test('a seek target sits just before the still it names', () {
+      // The player renders the first frame at or after the seek position, so
+      // a target inside the still's own display window lands on the *next*
+      // frame — the one-frame skip at the end of every scrub.
+      final frames =
+          ScrubFrames(dir: '/none', count: 100, stride: 1, fps: 30);
+      const frameUs = Duration.microsecondsPerSecond / 30;
+      for (final index in [1, 5, 60]) {
+        final us = frames.positionForIndex(index).inMicroseconds;
+        expect(us, lessThan(index * frameUs), reason: 'still $index');
+        expect(us, greaterThan((index - 1) * frameUs), reason: 'still $index');
+      }
+      // Frame 0 has nothing before it to lead from.
+      expect(frames.positionForIndex(0), Duration.zero);
     });
   });
 
@@ -100,55 +115,63 @@ void main() {
       final times = [for (var i = 0; i < 10; i++) step + i * step];
       final frames = await framesWithTimes(times);
       for (var i = 0; i < 10; i++) {
-        final mid = Duration(
-            microseconds: ((times[i] + step / 2) * 1e6).round());
-        expect(frames.indexForPosition(mid), i, reason: 'still $i');
+        final at = Duration(microseconds: (times[i] * 1e6).round());
+        expect(frames.indexForPosition(at), i, reason: 'still $i');
       }
     });
 
-    test('positionForIndex lands inside the frame it names', () async {
+    test('positionForIndex lands just short of the frame it names', () async {
       const step = 1 / 30;
       final times = [for (var i = 0; i < 10; i++) 0.5 + i * step];
       final frames = await framesWithTimes(times);
       for (var i = 0; i < 10; i++) {
-        final target = frames.positionForIndex(i);
-        final seconds = target.inMicroseconds / 1e6;
-        expect(seconds, greaterThan(times[i]));
-        if (i + 1 < times.length) {
-          expect(seconds, lessThan(times[i + 1]));
-        }
-        // And the round trip is stable.
-        expect(frames.indexForPosition(target), i);
+        final seconds = frames.positionForIndex(i).inMicroseconds / 1e6;
+        // Before its own frame, so the player renders that frame; after the
+        // one before it, so it doesn't render that one instead.
+        expect(seconds, lessThan(times[i]));
+        if (i > 0) expect(seconds, greaterThan(times[i - 1]));
+        expect(frames.indexForPosition(frames.positionForIndex(i)), i);
       }
     });
 
     test('uneven (variable rate) spacing still maps exactly', () async {
       final times = [0.0, 0.031, 0.070, 0.099, 0.140, 0.171];
       final frames = await framesWithTimes(times);
-      expect(frames.indexForPosition(const Duration(milliseconds: 0)), 0);
-      expect(frames.indexForPosition(const Duration(milliseconds: 30)), 0);
-      expect(frames.indexForPosition(const Duration(milliseconds: 31)), 1);
-      expect(frames.indexForPosition(const Duration(milliseconds: 69)), 1);
-      expect(frames.indexForPosition(const Duration(milliseconds: 70)), 2);
-      expect(frames.indexForPosition(const Duration(milliseconds: 200)), 5);
       for (var i = 0; i < times.length; i++) {
+        final at = Duration(microseconds: (times[i] * 1e6).round());
+        expect(frames.indexForPosition(at), i);
         expect(frames.indexForPosition(frames.positionForIndex(i)), i);
+        final seconds = frames.positionForIndex(i).inMicroseconds / 1e6;
+        expect(seconds, lessThanOrEqualTo(times[i]));
+        if (i > 0) expect(seconds, greaterThan(times[i - 1]));
       }
+      expect(frames.indexForPosition(const Duration(milliseconds: 200)), 5);
     });
 
-    test('a short or missing times file falls back to the arithmetic',
-        () async {
+    test(
+        'a short, out-of-order or missing times file falls back to the '
+        'arithmetic', () async {
       await File('${dir.path}/times.csv').writeAsString('0.0\n0.033');
-      final frames =
+      final short =
           ScrubFrames(dir: dir.path, count: 10, stride: 1, fps: 30);
-      await frames.loadTimes('times.csv');
-      // Fallback: 25 ms at 30 fps is inside frame 0 (0-33.3 ms).
-      expect(frames.indexForPosition(const Duration(milliseconds: 25)), 0);
-      expect(frames.indexForPosition(const Duration(milliseconds: 40)), 1);
+      await short.loadTimes('times.csv');
+      // Fallback: 25 ms at 30 fps is the seek target for frame 1.
+      expect(short.indexForPosition(const Duration(milliseconds: 25)), 1);
+      expect(short.indexForPosition(const Duration(milliseconds: 10)), 0);
+
+      // Times in decode rather than presentation order: the searches assume
+      // the list climbs, so one that doesn't is refused outright instead of
+      // misaligning the stills it covers.
+      await File('${dir.path}/times.csv')
+          .writeAsString('0.0\n0.066\n0.033\n0.099');
+      final jumbled =
+          ScrubFrames(dir: dir.path, count: 4, stride: 1, fps: 30);
+      await jumbled.loadTimes('times.csv');
+      expect(jumbled.indexForPosition(const Duration(milliseconds: 66)), 2);
 
       final none = ScrubFrames(dir: dir.path, count: 10, stride: 1, fps: 30);
       await none.loadTimes('absent.csv');
-      expect(none.indexForPosition(const Duration(milliseconds: 40)), 1);
+      expect(none.indexForPosition(const Duration(milliseconds: 33)), 1);
     });
 
     test('strided stills use their own recorded times', () async {
@@ -156,11 +179,22 @@ void main() {
       final times = [for (var i = 0; i < 8; i++) i * 3 / 30];
       final frames = await framesWithTimes(times, stride: 3);
       expect(frames.indexForPosition(const Duration(milliseconds: 100)), 1);
-      expect(frames.indexForPosition(const Duration(milliseconds: 199)), 1);
+      expect(frames.indexForPosition(const Duration(milliseconds: 149)), 1);
       expect(frames.indexForPosition(const Duration(milliseconds: 200)), 2);
       for (var i = 0; i < times.length; i++) {
         expect(frames.indexForPosition(frames.positionForIndex(i)), i);
       }
+    });
+
+    test('extra times beyond the stills that exist are dropped', () async {
+      const step = 1 / 30;
+      await File('${dir.path}/times.csv')
+          .writeAsString([for (var i = 0; i < 10; i++) i * step].join('\n'));
+      final frames =
+          ScrubFrames(dir: dir.path, count: 4, stride: 1, fps: 30);
+      await frames.loadTimes('times.csv');
+      // Only stills 0..3 exist; a position past them clamps to the last.
+      expect(frames.indexForPosition(const Duration(milliseconds: 300)), 3);
     });
   });
 }

@@ -382,9 +382,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Where to seek so the video shows the still at [imageIndex]. ScrubFrames
-  /// answers from the clip's own frame timestamps where it has them, so the
-  /// handoff lands on the frame the still was showing rather than a
-  /// neighbour.
+  /// answers from the clip's own frame timestamps where it has them, and aims
+  /// just short of the still's timestamp because the player renders the first
+  /// frame at or after a seek — so the handoff lands on the frame the still
+  /// was showing rather than the one after it.
   Duration _positionForImage(int imageIndex) =>
       _frames!.positionForIndex(imageIndex);
 
@@ -397,8 +398,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _seeker.seekTo(target);
     // Under one frame: at 1.5 the still was dropped while the player was
     // still a whole frame away, so the picture stepped as the video took
-    // over. Targets sit mid-frame, so the player reporting either the
-    // requested time or the frame's own start is within this.
+    // over. A target sits a quarter frame short of the frame it names, so
+    // the player reporting either the requested time or the frame's own
+    // timestamp is within this.
     final toleranceUs =
         0.6 * Duration.microsecondsPerSecond / widget.video.fps;
     void watch() {

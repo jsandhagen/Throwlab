@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 
+import 'frame_timing.dart';
+
 /// Serves pre-extracted still frames for smooth scrubbing: given a scrub
 /// position it decodes the matching JPEG to a [ui.Image] and publishes it on
 /// [current], keeping a small LRU of decoded frames and prefetching ahead in
@@ -78,59 +80,84 @@ class ScrubFrames {
         if (value != null) times.add(value);
       }
       // A short or corrupt list would silently misalign every still past the
-      // gap, which is worse than the arithmetic it replaces.
-      if (times.length >= count && !_disposed) {
-        _times = times;
+      // gap, which is worse than the arithmetic it replaces. Out-of-order
+      // times are the same kind of poison — the searches below assume the
+      // list climbs — so they disqualify the file rather than skew it.
+      if (times.length < count || _disposed) return;
+      for (var i = 1; i < count; i++) {
+        if (times[i] <= times[i - 1]) return;
       }
+      // Trailing entries beyond the stills that exist have nothing to name.
+      _times = times.take(count).toList(growable: false);
     } catch (_) {
       // Arithmetic fallback stands.
     }
   }
 
-  /// Maps a scrub [position] to the extracted frame the video is showing at
-  /// that instant — the one whose display window contains [position]. With
-  /// real timestamps that is a search; without them it is a floor of the fps
-  /// arithmetic (a round picked the *next* frame past the halfway point, so
-  /// covering the video with a still could swap in its neighbour).
+  /// Maps a scrub [position] to the extracted frame the video is showing
+  /// there: the still whose timestamp is nearest, ties going to the earlier
+  /// one. Seek targets sit a [kSeekLead] short of the still they name (see
+  /// [positionForIndex]), so this is the exact inverse of the position this
+  /// class hands out — and for a position the player arrived at some other
+  /// way it names the still closest to it.
   int indexForPosition(Duration position) {
     if (count <= 0) return 0;
     final seconds = position.inMicroseconds / Duration.microsecondsPerSecond;
     if (_times.isNotEmpty) {
-      // Last still whose time is at or before the position.
-      var lo = 0, hi = _times.length - 1, best = 0;
+      // First still at or after the position, then take whichever of it and
+      // its predecessor the position is nearer.
+      var lo = 0, hi = _times.length - 1, after = _times.length;
       while (lo <= hi) {
         final mid = (lo + hi) ~/ 2;
-        if (_times[mid] <= seconds + 1e-6) {
-          best = mid;
-          lo = mid + 1;
-        } else {
+        if (_times[mid] >= seconds - 1e-9) {
+          after = mid;
           hi = mid - 1;
+        } else {
+          lo = mid + 1;
         }
       }
-      return best.clamp(0, count - 1);
+      if (after <= 0) return 0;
+      if (after >= _times.length) return count - 1;
+      final before = after - 1;
+      final index = (seconds - _times[before] <= _times[after] - seconds)
+          ? before
+          : after;
+      return index.clamp(0, count - 1);
     }
-    final frame = seconds * fps;
-    final index = (frame / stride + 1e-6).floor();
+    final index = nearestFrame(seconds * fps / stride);
     return index.clamp(0, count - 1);
   }
 
-  /// Where to seek so the video lands on still [index]. Aims between this
-  /// still's timestamp and the next so neither rounding to whole
-  /// milliseconds nor an inexact rate can tip it into an adjacent frame.
+  /// Where to seek so the video lands on still [index] — a [kSeekLead] short
+  /// of the still's own timestamp, because the player renders the first frame
+  /// at or after the position it is given (see frame_timing.dart). Aiming
+  /// inside the still's display window, as landing "on" it suggests, is what
+  /// used to hand the scrub back one frame ahead of the still it ended on.
   Duration positionForIndex(int index) {
     final k = index.clamp(0, count - 1);
-    double seconds;
+    // Frame spacing to lead by: the real distance from the still before this
+    // one where the clip's own timestamps say, otherwise the fps arithmetic.
+    final nominalGap = stride / (fps > 0 ? fps : 30);
+    double time;
+    double gap;
     if (_times.isNotEmpty) {
-      final start = _times[k];
-      final next = k + 1 < _times.length
-          ? _times[k + 1]
-          : start + stride / (fps > 0 ? fps : 30);
-      seconds = start + (next - start) / 2;
+      time = _times[k];
+      if (k > 0) {
+        gap = _times[k] - _times[k - 1];
+      } else if (_times.length > 1) {
+        gap = _times[1] - _times[0];
+      } else {
+        gap = nominalGap;
+      }
+      if (gap <= 0) gap = nominalGap;
     } else {
-      seconds = (k * stride + 0.5) / (fps > 0 ? fps : 30);
+      time = k * nominalGap;
+      gap = nominalGap;
     }
     return Duration(
-        microseconds: (seconds * Duration.microsecondsPerSecond).round());
+        microseconds:
+            (seekTargetSeconds(time, gap) * Duration.microsecondsPerSecond)
+                .round());
   }
 
   String _pathFor(int index) =>
