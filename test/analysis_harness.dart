@@ -62,10 +62,19 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   Future<void> setVolume(int playerId, double volume) async {}
   @override
   Future<void> setPlaybackSpeed(int playerId, double speed) async {}
+  /// Every seek the app asked for, so a test can prove which players moved.
+  final List<({int playerId, Duration position})> seeks = [];
+
   @override
-  Future<void> seekTo(int playerId, Duration position) async {}
+  Future<void> seekTo(int playerId, Duration position) async {
+    seeks.add((playerId: playerId, position: position));
+    _positions[playerId] = position;
+  }
+
+  final Map<int, Duration> _positions = {};
   @override
-  Future<Duration> getPosition(int playerId) async => Duration.zero;
+  Future<Duration> getPosition(int playerId) async =>
+      _positions[playerId] ?? Duration.zero;
   @override
   Future<void> setMixWithOthers(bool mixWithOthers) async {}
   @override

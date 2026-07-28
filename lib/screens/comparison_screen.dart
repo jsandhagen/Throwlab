@@ -32,6 +32,11 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
   late final FrameSeeker _seekerB = FrameSeeker(_controllerB);
 
   ComparisonMode _mode = ComparisonMode.sideBySide;
+
+  /// Panes crop to fill by default: two half-screen boxes letterbox a clip
+  /// down to a stamp, and the throw is what matters, not the sky above it.
+  /// Each pane can be dragged to put the athlete where you want them.
+  bool _fill = true;
   double _overlayOpacity = 0.5;
   double _speed = 0.5;
   bool _linked = false;
@@ -122,15 +127,47 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
       );
     }
     return controller.value.isInitialized
-        ? AspectRatio(
-            aspectRatio: controller.value.aspectRatio,
-            child: VideoPlayer(controller))
+        ? _VideoPane(controller: controller, fill: _fill)
         : const Center(child: CircularProgressIndicator());
   }
 
-  Widget _syncRow(String label, FrameSeeker seeker, double fps,
+  /// Frame steps from the wheel while the clips are linked. Stepping off a
+  /// running target rather than the player's reported position keeps a fast
+  /// spin from stalling on a seek that hasn't landed yet.
+  Duration? _scrubTarget;
+
+  void _startLinkedScrub() {
+    _controllerA.pause();
+    _controllerB.pause();
+    _scrubTarget = _controllerA.value.position;
+  }
+
+  void _linkedScrubBy(int frames) {
+    final step = Duration(
+        microseconds: (Duration.microsecondsPerSecond / _fps).round());
+    final base = _scrubTarget ?? _controllerA.value.position;
+    final target = _clampToDuration(base + step * frames, _controllerA);
+    _scrubTarget = target;
+    _seekBoth(target);
+  }
+
+  Widget _wheel(VideoPlayerController controller, ThrowVideo video,
+      {bool linked = false, double height = 36}) {
+    return ScrubWheel(
+      controller: controller,
+      fps: video.fps,
+      captureFps: video.captureFps,
+      height: height,
+      onScrubStart: linked ? _startLinkedScrub : null,
+      onScrubBy: linked ? _linkedScrubBy : null,
+      onScrubEnd: linked ? () => _scrubTarget = null : null,
+    );
+  }
+
+  Widget _syncRow(String label, FrameSeeker seeker, ThrowVideo video,
       Duration sync, ValueChanged<Duration> onSet) {
     final controller = seeker.controller;
+    final fps = video.fps;
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: controller,
       builder: (context, value, _) => Row(
@@ -138,18 +175,29 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
           const SizedBox(width: 12),
           Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
           Expanded(
-            child: Slider(
-              value: value.position.inMilliseconds
-                  .clamp(0, value.duration.inMilliseconds)
-                  .toDouble(),
-              max: value.duration.inMilliseconds == 0
-                  ? 1
-                  : value.duration.inMilliseconds.toDouble(),
-              onChanged: (ms) {
-                controller.pause();
-                seeker.seekTo(
-                    snapToFrame(Duration(milliseconds: ms.round()), fps));
-              },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 24,
+                  child: Slider(
+                    value: value.position.inMilliseconds
+                        .clamp(0, value.duration.inMilliseconds)
+                        .toDouble(),
+                    max: value.duration.inMilliseconds == 0
+                        ? 1
+                        : value.duration.inMilliseconds.toDouble(),
+                    onChanged: (ms) {
+                      controller.pause();
+                      seeker.seekTo(
+                          snapToFrame(Duration(milliseconds: ms.round()), fps));
+                    },
+                  ),
+                ),
+                // Frame-precise scrubbing per clip while they're unlinked —
+                // the slider can't resolve single frames.
+                _wheel(controller, video, height: 30),
+              ],
             ),
           ),
           TextButton.icon(
@@ -183,13 +231,24 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
             const SizedBox(width: 6),
             const Text('A·B', style: TextStyle(fontWeight: FontWeight.bold)),
             Expanded(
-              child: Slider(
-                value: value.position.inMilliseconds
-                    .clamp(0, durationMs)
-                    .toDouble(),
-                max: durationMs == 0 ? 1 : durationMs.toDouble(),
-                onChanged: (ms) => _seekBoth(snapToFrame(
-                    Duration(milliseconds: ms.round()), widget.videoA.fps)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    height: 24,
+                    child: Slider(
+                      value: value.position.inMilliseconds
+                          .clamp(0, durationMs)
+                          .toDouble(),
+                      max: durationMs == 0 ? 1 : durationMs.toDouble(),
+                      onChanged: (ms) => _seekBoth(snapToFrame(
+                          Duration(milliseconds: ms.round()),
+                          widget.videoA.fps)),
+                    ),
+                  ),
+                  // One wheel through both clips, on A's timeline.
+                  _wheel(_controllerA, widget.videoA, linked: true),
+                ],
               ),
             ),
             const SizedBox(width: 12),
@@ -208,6 +267,13 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
         title: Text(
             '${widget.videoA.event.label}: compare throws'),
         actions: [
+          IconButton(
+            tooltip: _fill
+                ? 'Show each whole frame'
+                : 'Fill each pane (crop, drag to reframe)',
+            icon: Icon(_fill ? Icons.fit_screen : Icons.crop),
+            onPressed: () => setState(() => _fill = !_fill),
+          ),
           SegmentedButton<ComparisonMode>(
             showSelectedIcon: false,
             segments: const [
@@ -290,23 +356,27 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child: _syncRow('A', _seekerA, widget.videoA.fps,
+                          child: _syncRow('A', _seekerA, widget.videoA,
                               _syncA, (d) => _setSync(a: d)),
                         ),
                         Expanded(
-                          child: _syncRow('B', _seekerB, widget.videoB.fps,
+                          child: _syncRow('B', _seekerB, widget.videoB,
                               _syncB, (d) => _setSync(b: d)),
                         ),
                       ],
                     )
                   else ...[
-                    _syncRow('A', _seekerA, widget.videoA.fps, _syncA,
+                    _syncRow('A', _seekerA, widget.videoA, _syncA,
                         (d) => _setSync(a: d)),
-                    _syncRow('B', _seekerB, widget.videoB.fps, _syncB,
+                    _syncRow('B', _seekerB, widget.videoB, _syncB,
                         (d) => _setSync(b: d)),
                   ],
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  // Wrap, not Row: on a narrow phone the transport plus the
+                  // speed menu and "Go to release" runs past the screen, and
+                  // a clipped control is one you can't press.
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       IconButton(
                         tooltip: 'Both back one frame',
@@ -358,5 +428,104 @@ class _ComparisonScreenState extends State<ComparisonScreen> {
               ),
             ),
     );
+  }
+}
+
+/// One clip in the comparison, cropped to fill its pane and draggable
+/// inside it.
+///
+/// Fitting the whole frame into half a screen shrinks a throw to a stamp
+/// with the sky and the runway taking the space — so the pane fills instead
+/// and the surplus hangs outside the clip rect. Which part shows is the
+/// user's call: drag to reframe, pinch to zoom in further, double-tap to
+/// recentre. The clip's own aspect ratio is never touched, so nothing is
+/// ever stretched.
+class _VideoPane extends StatefulWidget {
+  const _VideoPane({required this.controller, required this.fill});
+
+  final VideoPlayerController controller;
+
+  /// Cover the pane (cropping the overflow) rather than fit inside it.
+  final bool fill;
+
+  @override
+  State<_VideoPane> createState() => _VideoPaneState();
+}
+
+class _VideoPaneState extends State<_VideoPane> {
+  /// Extra zoom on top of the base fit, and the drag away from centre.
+  double _zoom = 1;
+  Offset _pan = Offset.zero;
+  double _zoomAtGestureStart = 1;
+
+  /// The clip's size inside the pane at the current fit and zoom.
+  Size _contentSize(Size pane) {
+    final ratio = widget.controller.value.aspectRatio;
+    var width = pane.width;
+    var height = width / ratio;
+    final fitsInside = height <= pane.height;
+    // Cover takes whichever axis leaves no gap; contain takes the other.
+    if (widget.fill ? fitsInside : !fitsInside) {
+      height = pane.height;
+      width = height * ratio;
+    }
+    return Size(width * _zoom, height * _zoom);
+  }
+
+  /// Keeps the clip covering the pane on any axis where it is bigger, and
+  /// centred on any axis where it is not — so a drag can never open a gap.
+  Offset _clampPan(Offset pan, Size pane, Size content) {
+    double axis(double offset, double paneExtent, double contentExtent) {
+      final slack = (contentExtent - paneExtent) / 2;
+      return slack <= 0 ? 0 : offset.clamp(-slack, slack);
+    }
+
+    return Offset(axis(pan.dx, pane.width, content.width),
+        axis(pan.dy, pane.height, content.height));
+  }
+
+  @override
+  void didUpdateWidget(_VideoPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Switching between crop and whole-frame starts from a clean view.
+    if (oldWidget.fill != widget.fill) {
+      _zoom = 1;
+      _pan = Offset.zero;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final pane = constraints.biggest;
+      final content = _contentSize(pane);
+      final pan = _clampPan(_pan, pane, content);
+      return ClipRect(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onScaleStart: (_) => _zoomAtGestureStart = _zoom,
+          onScaleUpdate: (details) => setState(() {
+            _zoom = (_zoomAtGestureStart * details.scale).clamp(1.0, 4.0);
+            _pan = _clampPan(_pan + details.focalPointDelta, pane,
+                _contentSize(pane));
+          }),
+          onDoubleTap: () => setState(() {
+            _zoom = 1;
+            _pan = Offset.zero;
+          }),
+          child: Stack(
+            children: [
+              Positioned(
+                left: (pane.width - content.width) / 2 + pan.dx,
+                top: (pane.height - content.height) / 2 + pan.dy,
+                width: content.width,
+                height: content.height,
+                child: VideoPlayer(widget.controller),
+              ),
+            ],
+          ),
+        ),
+      );
+    });
   }
 }
