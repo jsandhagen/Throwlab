@@ -2,11 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-enum DrawTool { none, pen, line, angle }
+enum DrawTool { none, pen, line, arrow, angle }
 
 /// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
 /// middle one is the default.
 const kStrokeWidths = [1.5, 3.0, 6.0];
+
+/// How much of a zoom the ink takes on. Annotations are painted inside the
+/// zoom transform, so left alone a stroke thickens one-for-one — at 8x a
+/// hairline is a 24 px slab covering the very detail it was drawn to point
+/// at. The square root keeps ink growing with the picture, just slower: 4x
+/// zoom doubles a stroke instead of quadrupling it.
+double inkScaleFor(double zoomScale) =>
+    zoomScale <= 1 ? 1 : math.sqrt(zoomScale);
 
 /// All annotation points are stored normalized to the canvas (0..1 in both
 /// axes) so drawings stay anchored when the video is resized or rotated.
@@ -26,6 +34,13 @@ class PenStroke extends Annotation {
 
 class LineAnnotation extends Annotation {
   LineAnnotation(super.color, super.width, this.start, this.end);
+  Offset start;
+  Offset end;
+}
+
+/// Drawn tail → head, so the arrow points where the drag finished.
+class ArrowAnnotation extends Annotation {
+  ArrowAnnotation(super.color, super.width, this.start, this.end);
   Offset start;
   Offset end;
 }
@@ -105,9 +120,17 @@ class DrawingController extends ChangeNotifier {
 /// scrubbing, drawing, and node dragging — separate competing recognizers
 /// made pinch-zoom land unpredictably.
 class DrawingCanvas extends StatelessWidget {
-  const DrawingCanvas({super.key, required this.controller});
+  const DrawingCanvas({
+    super.key,
+    required this.controller,
+    this.zoomScale = 1,
+  });
 
   final DrawingController controller;
+
+  /// The stage's current zoom, so ink can be drawn at a damped weight
+  /// instead of blowing up with the picture (see [inkScaleFor]).
+  final double zoomScale;
 
   @override
   Widget build(BuildContext context) {
@@ -116,7 +139,7 @@ class DrawingCanvas extends StatelessWidget {
         animation: controller,
         builder: (context, _) => CustomPaint(
           size: Size.infinite,
-          painter: _AnnotationPainter(controller.annotations),
+          painter: _AnnotationPainter(controller.annotations, zoomScale),
         ),
       ),
     );
@@ -124,19 +147,27 @@ class DrawingCanvas extends StatelessWidget {
 }
 
 class _AnnotationPainter extends CustomPainter {
-  _AnnotationPainter(this.annotations);
+  _AnnotationPainter(this.annotations, this.zoomScale);
 
   final List<Annotation> annotations;
+  final double zoomScale;
 
   Offset _denormalize(Offset point, Size size) =>
       Offset(point.dx * size.width, point.dy * size.height);
+
+  /// Canvas-space length that lands as [width] × the damped zoom on screen.
+  double _ink(double width) => width * inkScaleFor(zoomScale) / zoomScale;
+
+  /// Canvas-space length that lands as a fixed [pixels] on screen, for
+  /// labels — chrome that reads the same at every zoom.
+  double _fixed(double pixels) => pixels / zoomScale;
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final annotation in annotations) {
       final paint = Paint()
         ..color = annotation.color
-        ..strokeWidth = annotation.width
+        ..strokeWidth = _ink(annotation.width)
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
@@ -154,10 +185,38 @@ class _AnnotationPainter extends CustomPainter {
         case LineAnnotation(:final start, :final end):
           canvas.drawLine(
               _denormalize(start, size), _denormalize(end, size), paint);
+        case ArrowAnnotation():
+          _paintArrow(canvas, size, annotation, paint);
         case AngleAnnotation():
           _paintAngle(canvas, size, annotation, paint);
       }
     }
+  }
+
+  void _paintArrow(
+      Canvas canvas, Size size, ArrowAnnotation arrow, Paint paint) {
+    final start = _denormalize(arrow.start, size);
+    final end = _denormalize(arrow.end, size);
+    final delta = end - start;
+    final length = delta.distance;
+    if (length == 0) return;
+    // The head scales with the pen, but never takes more than half a short
+    // arrow — a flick stays an arrow instead of becoming a triangle.
+    final head = math.min(_ink(arrow.width) * 5, length * 0.5);
+    final direction = delta / length;
+    final base = end - direction * head;
+    canvas.drawLine(start, base, paint);
+    final normal = Offset(-direction.dy, direction.dx) * (head * 0.45);
+    canvas.drawPath(
+      Path()
+        ..moveTo(end.dx, end.dy)
+        ..lineTo(base.dx + normal.dx, base.dy + normal.dy)
+        ..lineTo(base.dx - normal.dx, base.dy - normal.dy)
+        ..close(),
+      Paint()
+        ..color = arrow.color
+        ..style = PaintingStyle.fill,
+    );
   }
 
   void _paintAngle(
@@ -167,7 +226,7 @@ class _AnnotationPainter extends CustomPainter {
     final dotPaint = Paint()..color = angle.color;
     // Vertex dots grow with the pen so a thin angle stays precise and a
     // thick one stays visible.
-    final dotRadius = 2.5 + angle.width / 2;
+    final dotRadius = _ink(2.5 + angle.width / 2);
     for (final point in points) {
       canvas.drawCircle(point, dotRadius, dotPaint);
     }
@@ -183,14 +242,17 @@ class _AnnotationPainter extends CustomPainter {
           text: '${degrees.toStringAsFixed(1)}°',
           style: TextStyle(
             color: angle.color,
-            fontSize: 16,
+            fontSize: _fixed(16),
             fontWeight: FontWeight.bold,
-            shadows: const [Shadow(blurRadius: 4, color: Colors.black)],
+            shadows: [
+              Shadow(blurRadius: _fixed(4), color: Colors.black),
+            ],
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      textPainter.paint(canvas, points[1] + const Offset(10, 10));
+      textPainter.paint(
+          canvas, points[1] + Offset(_fixed(10), _fixed(10)));
     }
   }
 

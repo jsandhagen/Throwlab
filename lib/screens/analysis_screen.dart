@@ -471,6 +471,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   bool _activeStroke = false;
   void Function(Offset canvasPoint)? _nodeDrag;
 
+  /// Global position of the last touch-down on the video, captured before
+  /// the gesture arena resolves so a stroke can start where the finger
+  /// actually landed.
+  Offset? _pointerDown;
+
   /// The annotation layer itself — the aspect-fitted video box the strokes
   /// and markers are painted into.
   final GlobalKey _canvasKey = GlobalKey();
@@ -609,7 +614,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       return;
     }
     _activeStroke = false;
-    final canvasPoint = _toCanvas(details.focalPoint);
+    // Where the finger actually landed, not where the recognizer won the
+    // arena: a scale gesture is only granted once the touch has travelled,
+    // so details.focalPoint is already a slop's worth along the drag. That
+    // offset hides inside a pen scribble but plants an arrow's tail (and a
+    // line's start) somewhere the user didn't touch.
+    final canvasPoint = _toCanvas(_pointerDown ?? details.focalPoint);
     if (canvasPoint == null) return;
     _nodeDrag = _hitTestNode(canvasPoint);
     if (_nodeDrag != null) return;
@@ -629,6 +639,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       case DrawTool.line:
         final p = _normalizeCanvas(canvasPoint);
         _drawing.add(LineAnnotation(_drawing.color, _drawing.strokeWidth, p, p));
+        _activeStroke = true;
+      case DrawTool.arrow:
+        // Tail where the drag starts, head where it ends.
+        final p = _normalizeCanvas(canvasPoint);
+        _drawing
+            .add(ArrowAnnotation(_drawing.color, _drawing.strokeWidth, p, p));
         _activeStroke = true;
       case DrawTool.angle:
         break;
@@ -676,6 +692,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           last.end = _normalizeCanvas(canvasPoint);
           _drawing.notifyChanged();
         }
+      case DrawTool.arrow:
+        if (_activeStroke && last is ArrowAnnotation) {
+          last.end = _normalizeCanvas(canvasPoint);
+          _drawing.notifyChanged();
+        }
       case DrawTool.angle:
         break;
       case DrawTool.none:
@@ -708,6 +729,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   void _onScaleEnd(ScaleEndDetails details) {
     _endScrub();
     _nodeDrag = null;
+    // The stroke is finished. Leaving this set made the next pinch — which
+    // discards the stray stroke a one-finger drag may have started — delete
+    // the annotation just drawn, whenever both fingers landed together and
+    // no one-finger start ran in between.
+    _activeStroke = false;
   }
 
   /// Read/edit the throw's note without leaving the video.
@@ -1146,7 +1172,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                   // the pinch anchor reads it back on the next gesture.
                   _zoomOffset = _clampZoomOffset(_zoomOffset, _zoomScale);
                   final offset = _zoomOffset;
-                  return GestureDetector(
+                  return Listener(
+                    onPointerDown: (event) => _pointerDown = event.position,
+                    child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTapUp: (details) => _onVideoTap(details.globalPosition),
                     onScaleStart: _onScaleStart,
@@ -1193,7 +1221,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                                 fit: BoxFit.contain),
                                       ),
                                     ),
-                                  DrawingCanvas(controller: _drawing),
+                                  DrawingCanvas(
+                                    controller: _drawing,
+                                    zoomScale: _zoomScale,
+                                  ),
                                   IgnorePointer(
                                     child: CustomPaint(
                                       size: Size.infinite,
@@ -1202,6 +1233,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                         refB: _refB,
                                         pointA: _pointA,
                                         pointB: _pointB,
+                                        zoomScale: _zoomScale,
                                       ),
                                     ),
                                   ),
@@ -1211,6 +1243,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                           ),
                         ),
                       ),
+                    ),
                     ),
                   );
                 })
@@ -1483,31 +1516,43 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
 /// Crosshairs and guide lines for the four measurement taps.
 class _MeasurePainter extends CustomPainter {
-  _MeasurePainter({this.refA, this.refB, this.pointA, this.pointB});
+  _MeasurePainter({
+    this.refA,
+    this.refB,
+    this.pointA,
+    this.pointB,
+    this.zoomScale = 1,
+  });
 
   final Offset? refA, refB, pointA, pointB;
 
+  /// Markers keep a fixed size on screen: zooming in is how a marker gets
+  /// placed precisely, so one that grew with the picture would cover the
+  /// pixel it marks.
+  final double zoomScale;
+
   @override
   void paint(Canvas canvas, Size size) {
+    double px(double pixels) => pixels / zoomScale;
     final refPaint = Paint()
       ..color = Colors.lightBlueAccent
-      ..strokeWidth = 2
+      ..strokeWidth = px(2)
       ..style = PaintingStyle.stroke;
     final pointPaint = Paint()
       ..color = Colors.orangeAccent
-      ..strokeWidth = 2
+      ..strokeWidth = px(2)
       ..style = PaintingStyle.stroke;
 
     void crosshair(Offset p, Paint paint) {
-      canvas.drawCircle(p, 9, paint);
-      canvas.drawLine(p - const Offset(14, 0), p - const Offset(4, 0), paint);
-      canvas.drawLine(p + const Offset(4, 0), p + const Offset(14, 0), paint);
-      canvas.drawLine(p - const Offset(0, 14), p - const Offset(0, 4), paint);
-      canvas.drawLine(p + const Offset(0, 4), p + const Offset(0, 14), paint);
+      canvas.drawCircle(p, px(9), paint);
+      canvas.drawLine(p - Offset(px(14), 0), p - Offset(px(4), 0), paint);
+      canvas.drawLine(p + Offset(px(4), 0), p + Offset(px(14), 0), paint);
+      canvas.drawLine(p - Offset(0, px(14)), p - Offset(0, px(4)), paint);
+      canvas.drawLine(p + Offset(0, px(4)), p + Offset(0, px(14)), paint);
       // Filled center dot over a dark halo: the exact measured point,
       // readable against both bright sky and the implement itself.
-      canvas.drawCircle(p, 3, Paint()..color = Colors.black54);
-      canvas.drawCircle(p, 1.8, Paint()..color = paint.color);
+      canvas.drawCircle(p, px(3), Paint()..color = Colors.black54);
+      canvas.drawCircle(p, px(1.8), Paint()..color = paint.color);
     }
 
     // Lines first so the precise center dots stay visible on top.
@@ -1528,7 +1573,8 @@ class _MeasurePainter extends CustomPainter {
       refA != oldDelegate.refA ||
       refB != oldDelegate.refB ||
       pointA != oldDelegate.pointA ||
-      pointB != oldDelegate.pointB;
+      pointB != oldDelegate.pointB ||
+      zoomScale != oldDelegate.zoomScale;
 }
 
 /// Vertical, collapsible tool rail anchored to the bottom-right corner of
@@ -1553,6 +1599,7 @@ class _DrawingRailState extends State<_DrawingRail> {
     (DrawTool.none, Icons.pan_tool_alt, 'Scrub only'),
     (DrawTool.pen, Icons.draw, 'Freehand pen'),
     (DrawTool.line, Icons.timeline, 'Straight line'),
+    (DrawTool.arrow, Icons.arrow_right_alt, 'Arrow (drag tail to head)'),
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
   ];
 
