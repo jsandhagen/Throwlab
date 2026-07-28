@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-enum DrawTool { none, pen, line, arrow, angle }
+enum DrawTool { none, pen, line, arrow, curvedArrow, angle }
 
 /// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
 /// middle one is the default.
@@ -15,6 +15,28 @@ const kStrokeWidths = [1.5, 3.0, 6.0];
 /// zoom doubles a stroke instead of quadrupling it.
 double inkScaleFor(double zoomScale) =>
     zoomScale <= 1 ? 1 : math.sqrt(zoomScale);
+
+/// Rounds a sampled freehand path into a curve: each touch sample becomes
+/// the control point of a quadratic through its neighbours' midpoints. The
+/// stroke follows the same route, without the flat facets a raw polyline
+/// shows once the video is zoomed into.
+Path smoothPath(List<Offset> points) {
+  final path = Path();
+  if (points.isEmpty) return path;
+  path.moveTo(points.first.dx, points.first.dy);
+  if (points.length < 3) {
+    for (final point in points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    return path;
+  }
+  for (var i = 1; i < points.length - 1; i++) {
+    final midpoint = (points[i] + points[i + 1]) / 2;
+    path.quadraticBezierTo(
+        points[i].dx, points[i].dy, midpoint.dx, midpoint.dy);
+  }
+  return path..lineTo(points.last.dx, points.last.dy);
+}
 
 /// All annotation points are stored normalized to the canvas (0..1 in both
 /// axes) so drawings stay anchored when the video is resized or rotated.
@@ -43,6 +65,14 @@ class ArrowAnnotation extends Annotation {
   ArrowAnnotation(super.color, super.width, this.start, this.end);
   Offset start;
   Offset end;
+}
+
+/// A freehand path with a head on the end: the arc an implement or a joint
+/// travelled, pointing the way it went. Straight arrows can't trace a pull
+/// or a hip path, which curve by definition.
+class CurvedArrowAnnotation extends Annotation {
+  CurvedArrowAnnotation(super.color, super.width, this.points);
+  final List<Offset> points;
 }
 
 /// Three taps: first arm point, vertex, second arm point. The measured angle
@@ -174,19 +204,16 @@ class _AnnotationPainter extends CustomPainter {
       switch (annotation) {
         case PenStroke(:final points):
           if (points.length < 2) continue;
-          final path = Path()
-            ..moveTo(_denormalize(points.first, size).dx,
-                _denormalize(points.first, size).dy);
-          for (final point in points.skip(1)) {
-            final p = _denormalize(point, size);
-            path.lineTo(p.dx, p.dy);
-          }
-          canvas.drawPath(path, paint);
+          canvas.drawPath(
+              smoothPath(points.map((p) => _denormalize(p, size)).toList()),
+              paint);
         case LineAnnotation(:final start, :final end):
           canvas.drawLine(
               _denormalize(start, size), _denormalize(end, size), paint);
         case ArrowAnnotation():
           _paintArrow(canvas, size, annotation, paint);
+        case CurvedArrowAnnotation():
+          _paintCurvedArrow(canvas, size, annotation, paint);
         case AngleAnnotation():
           _paintAngle(canvas, size, annotation, paint);
       }
@@ -204,19 +231,62 @@ class _AnnotationPainter extends CustomPainter {
     // arrow — a flick stays an arrow instead of becoming a triangle.
     final head = math.min(_ink(arrow.width) * 5, length * 0.5);
     final direction = delta / length;
-    final base = end - direction * head;
-    canvas.drawLine(start, base, paint);
-    final normal = Offset(-direction.dy, direction.dx) * (head * 0.45);
+    canvas.drawLine(start, end - direction * head, paint);
+    _paintHead(canvas, end, direction, head, arrow.color);
+  }
+
+  void _paintCurvedArrow(
+      Canvas canvas, Size size, CurvedArrowAnnotation arrow, Paint paint) {
+    final points = arrow.points.map((p) => _denormalize(p, size)).toList();
+    if (points.length < 2) return;
+    final tip = points.last;
+    // Aim the head down the last stretch of the path rather than the final
+    // pair of samples, which are a pixel apart and jitter with the finger.
+    final head = math.min(_ink(arrow.width) * 5, _length(points) * 0.5);
+    final shaftEnd = _walkBack(points, head);
+    final delta = tip - shaftEnd;
+    if (delta.distance == 0) return;
+    canvas.drawPath(smoothPath(points), paint);
+    _paintHead(canvas, tip, delta / delta.distance, head, arrow.color);
+  }
+
+  /// Filled triangle pointing along [direction], its tip at [tip].
+  void _paintHead(Canvas canvas, Offset tip, Offset direction, double length,
+      Color color) {
+    final base = tip - direction * length;
+    final normal = Offset(-direction.dy, direction.dx) * (length * 0.45);
     canvas.drawPath(
       Path()
-        ..moveTo(end.dx, end.dy)
+        ..moveTo(tip.dx, tip.dy)
         ..lineTo(base.dx + normal.dx, base.dy + normal.dy)
         ..lineTo(base.dx - normal.dx, base.dy - normal.dy)
         ..close(),
       Paint()
-        ..color = arrow.color
+        ..color = color
         ..style = PaintingStyle.fill,
     );
+  }
+
+  double _length(List<Offset> points) {
+    var total = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      total += (points[i] - points[i - 1]).distance;
+    }
+    return total;
+  }
+
+  /// The point [distance] back along the path from its end.
+  Offset _walkBack(List<Offset> points, double distance) {
+    var remaining = distance;
+    for (var i = points.length - 1; i > 0; i--) {
+      final segment = points[i - 1] - points[i];
+      final step = segment.distance;
+      if (step >= remaining) {
+        return step == 0 ? points[i - 1] : points[i] + segment / step * remaining;
+      }
+      remaining -= step;
+    }
+    return points.first;
   }
 
   void _paintAngle(

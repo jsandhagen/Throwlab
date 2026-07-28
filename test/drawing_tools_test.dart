@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -138,6 +139,37 @@ void main() {
       expect(find.byType(DrawingCanvas), paints..line()..path());
     });
 
+    testWidgets('curved arrow traces the drag and heads where it lifts',
+        (tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await tapRail(tester, find.byIcon(Icons.turn_slight_right));
+
+      // An arc, like the path of a pull.
+      const path = [
+        Offset(300, 420),
+        Offset(320, 360),
+        Offset(360, 310),
+        Offset(410, 280),
+        Offset(470, 270),
+      ];
+      await drawAlong(tester, path);
+
+      final arrow = annotationsOf<CurvedArrowAnnotation>(tester).single;
+      // Every sample is kept, so the stroke follows the finger's route
+      // rather than the straight line between its ends.
+      expect(arrow.points.length, greaterThanOrEqualTo(path.length - 1));
+      expect(inkFor(tester, arrow.points.first),
+          within(distance: 1, from: path.first));
+      expect(inkFor(tester, arrow.points.last),
+          within(distance: 1, from: path.last));
+      expect(arrow.width, kStrokeWidths[1]);
+      // A curved shaft plus a filled head.
+      expect(find.byType(DrawingCanvas), paints..path()..path());
+    });
+
     testWidgets('undo removes the whole arrow', (tester) async {
       await mountWithArrow(tester);
       await drawAlong(
@@ -146,6 +178,46 @@ void main() {
 
       await tapRail(tester, find.byIcon(Icons.undo));
       expect(annotationsOf<ArrowAnnotation>(tester), isEmpty);
+    });
+  });
+
+  group('smoothPath', () {
+    List<Offset> pointsAlong(Path path, {int samples = 40}) {
+      final metric = path.computeMetrics().single;
+      return [
+        for (var i = 0; i <= samples; i++)
+          metric.getTangentForOffset(metric.length * i / samples)!.position,
+      ];
+    }
+
+    test('keeps the ends the stroke was drawn with', () {
+      const drawn = [Offset(10, 10), Offset(40, 60), Offset(90, 20)];
+      final sampled = pointsAlong(smoothPath(drawn));
+      expect(sampled.first, within(distance: 0.5, from: drawn.first));
+      expect(sampled.last, within(distance: 0.5, from: drawn.last));
+    });
+
+    test('rounds the corner off a polyline without leaving its neighbourhood',
+        () {
+      const corner = [Offset(0, 0), Offset(50, 0), Offset(50, 50)];
+      final sampled = pointsAlong(smoothPath(corner));
+      // The curve cuts inside the sharp corner...
+      final nearestToCorner = sampled
+          .map((p) => (p - const Offset(50, 0)).distance)
+          .reduce(math.min);
+      expect(nearestToCorner, greaterThan(1));
+      // ...but stays close to the route that was drawn.
+      expect(nearestToCorner, lessThan(20));
+    });
+
+    test('a two-point stroke is just the segment', () {
+      const line = [Offset(0, 0), Offset(30, 40)];
+      final metric = smoothPath(line).computeMetrics().single;
+      expect(metric.length, closeTo(50, 0.01));
+    });
+
+    test('an empty stroke paints nothing', () {
+      expect(smoothPath(const []).computeMetrics().isEmpty, isTrue);
     });
   });
 

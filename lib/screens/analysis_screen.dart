@@ -646,6 +646,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         _drawing
             .add(ArrowAnnotation(_drawing.color, _drawing.strokeWidth, p, p));
         _activeStroke = true;
+      case DrawTool.curvedArrow:
+        _drawing.add(CurvedArrowAnnotation(_drawing.color, _drawing.strokeWidth,
+            [_normalizeCanvas(canvasPoint)]));
+        _activeStroke = true;
       case DrawTool.angle:
         break;
       case DrawTool.none:
@@ -695,6 +699,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       case DrawTool.arrow:
         if (_activeStroke && last is ArrowAnnotation) {
           last.end = _normalizeCanvas(canvasPoint);
+          _drawing.notifyChanged();
+        }
+      case DrawTool.curvedArrow:
+        if (_activeStroke && last is CurvedArrowAnnotation) {
+          last.points.add(_normalizeCanvas(canvasPoint));
           _drawing.notifyChanged();
         }
       case DrawTool.angle:
@@ -1600,6 +1609,8 @@ class _DrawingRailState extends State<_DrawingRail> {
     (DrawTool.pen, Icons.draw, 'Freehand pen'),
     (DrawTool.line, Icons.timeline, 'Straight line'),
     (DrawTool.arrow, Icons.arrow_right_alt, 'Arrow (drag tail to head)'),
+    (DrawTool.curvedArrow, Icons.turn_slight_right,
+        'Curved arrow (trace a path, head where you lift)'),
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
   ];
 
