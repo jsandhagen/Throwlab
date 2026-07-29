@@ -134,17 +134,26 @@ class DrawingController extends ChangeNotifier {
   double get strokeWidth => _strokeWidth;
   List<Annotation> get annotations => List.unmodifiable(_annotations);
 
+  // The pen setters are no-ops when the value is already what was asked
+  // for. The comparison screen mirrors one pane's pen onto the other
+  // through a listener on each controller, and a notification for a
+  // setting that did not change is a change bouncing back — which is a
+  // loop with no end to it.
+
   set tool(DrawTool value) {
+    if (_tool == value) return;
     _tool = value;
     notifyListeners();
   }
 
   set color(Color value) {
+    if (_color == value) return;
     _color = value;
     notifyListeners();
   }
 
   set strokeWidth(double value) {
+    if (_strokeWidth == value) return;
     _strokeWidth = value;
     notifyListeners();
   }

@@ -135,17 +135,25 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   void _syncToolsFromA() => _copyTools(_drawA, _drawB);
   void _syncToolsFromB() => _copyTools(_drawB, _drawA);
 
-  /// Mirrors the pen settings onto the other pane. Guarded on equality so the
-  /// two controllers' listeners can't bounce a change back and forth.
+  /// Set while a mirror is in progress. Copying a setting notifies the pane
+  /// it was copied to, which runs that pane's listener while this one is
+  /// still mid-copy — and a mirror running back the other way from a
+  /// half-copied pane both fights the change and never settles.
+  bool _mirroringTools = false;
+
+  /// Mirrors the pen settings onto the other pane. One direction at a time:
+  /// the copy is what triggers the other pane's listener, so a mirror that
+  /// answered a mirror would bounce the change back and forth.
   void _copyTools(DrawingController from, DrawingController to) {
-    if (to.tool == from.tool &&
-        to.color == from.color &&
-        to.strokeWidth == from.strokeWidth) {
-      return;
+    if (_mirroringTools) return;
+    _mirroringTools = true;
+    try {
+      to.tool = from.tool;
+      to.color = from.color;
+      to.strokeWidth = from.strokeWidth;
+    } finally {
+      _mirroringTools = false;
     }
-    to.tool = from.tool;
-    to.color = from.color;
-    to.strokeWidth = from.strokeWidth;
   }
 
   /// The rail follows the finger: draw in a pane and undo/clear act on it.

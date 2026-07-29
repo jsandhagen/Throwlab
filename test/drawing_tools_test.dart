@@ -22,6 +22,16 @@ void main() {
       expect(controller.strokeWidth, kStrokeWidths.last);
       expect(notifications, 1);
     });
+
+    test('stays quiet when a setting is set to what it already is', () {
+      final controller = DrawingController();
+      var notifications = 0;
+      controller.addListener(() => notifications++);
+      controller.tool = DrawTool.none;
+      controller.color = kAnnotationColors.first;
+      controller.strokeWidth = kStrokeWidths[1];
+      expect(notifications, 0);
+    });
   });
 
   group('thickness picker', () {

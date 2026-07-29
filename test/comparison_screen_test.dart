@@ -286,6 +286,38 @@ void main() {
       expect(paneAnnotations<PenStroke>(tester, 0), hasLength(1));
     });
 
+    testWidgets('the colour picked once arms both panes', (tester) async {
+      // Mirroring the pen between the panes used to bounce the change back
+      // and forth until the stack ran out, taking the screen down with it.
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+      await selectColour(tester, 'Cyan');
+
+      await drawInPane(tester, 0);
+      await drawInPane(tester, 1);
+
+      expect(paneAnnotations<PenStroke>(tester, 0).single.color,
+          kAnnotationColors[2]);
+      expect(paneAnnotations<PenStroke>(tester, 1).single.color,
+          kAnnotationColors[2]);
+    });
+
+    testWidgets('the weight picked once arms both panes', (tester) async {
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+      await selectWidth(tester, 'Thick');
+
+      await drawInPane(tester, 0);
+      await drawInPane(tester, 1);
+
+      expect(paneAnnotations<PenStroke>(tester, 0).single.width,
+          kStrokeWidths.last);
+      expect(paneAnnotations<PenStroke>(tester, 1).single.width,
+          kStrokeWidths.last);
+    });
+
     testWidgets('with no tool selected a drag still reframes the crop',
         (tester) async {
       await mount(tester);
