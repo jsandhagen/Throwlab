@@ -12,11 +12,19 @@ import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/event_glyph.dart';
+import '../widgets/throw_actions.dart';
+import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
+import 'group_screen.dart';
 
 enum LibraryGrouping { athlete, event }
+
+/// Throws nobody is attached to yet. Kept as one heading so they are easy
+/// to find and tag, and pinned last so housekeeping never sits above the
+/// athletes actually being coached.
+const _unassigned = 'Unassigned';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -33,6 +41,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int? _dismissedBuild;
   LibraryGrouping _grouping = LibraryGrouping.athlete;
 
+  final TextEditingController _search = TextEditingController();
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +53,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _search.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -223,17 +235,71 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return [video];
   }
 
+  /// The library split into headings, each newest first, with the headings
+  /// themselves ordered by whoever threw most recently.
+  ///
+  /// Alphabetical order sounds tidier but buries the session you filmed an
+  /// hour ago under whichever athlete's name starts with an A, and drops
+  /// "Unassigned" into the middle of the names.
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
     for (final video in videos) {
       final key = _grouping == LibraryGrouping.athlete
-          ? (video.athlete.isEmpty ? 'Unassigned' : video.athlete)
+          ? (video.athlete.isEmpty ? _unassigned : video.athlete)
           : video.event.label;
       map.putIfAbsent(key, () => []).add(video);
     }
+    for (final group in map.values) {
+      group.sort((a, b) => b.displayDate.compareTo(a.displayDate));
+    }
     final keys = map.keys.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      ..sort((a, b) {
+        if (a == _unassigned) return 1;
+        if (b == _unassigned) return -1;
+        return map[b]!.first.displayDate.compareTo(map[a]!.first.displayDate);
+      });
     return {for (final k in keys) k: map[k]!};
+  }
+
+  /// Throws matching the search box: who threw it, what it is, or the note.
+  List<ThrowVideo> _matching(List<ThrowVideo> videos) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return videos;
+    return videos.where((video) {
+      final haystack = '${video.athlete} ${video.event.label} '
+          '${video.gender.label} ${video.note}';
+      return haystack.toLowerCase().contains(query);
+    }).toList()
+      ..sort((a, b) => b.displayDate.compareTo(a.displayDate));
+  }
+
+  /// What a card says about a throw, given what its heading already said.
+  String _cardTitle(ThrowVideo video) =>
+      _grouping == LibraryGrouping.athlete
+          ? '${video.event.label} · ${video.gender.label}'
+          : '${video.athlete.isEmpty ? _unassigned : video.athlete} '
+              '· ${video.gender.label}';
+
+  void _openThrow(ThrowVideo video, List<ThrowVideo> siblings) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AnalysisScreen(video: video, siblings: siblings),
+      ),
+    );
+  }
+
+  void _openGroup(String heading, List<ThrowVideo> videos) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GroupScreen(
+          title: heading,
+          videoIds: [for (final video in videos) video.id],
+          titleFor: _cardTitle,
+        ),
+      ),
+    );
   }
 
   @override
@@ -308,135 +374,222 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Search first, then the grouping switch, then the shelves. The two
+  /// controls stay put while the shelves scroll: a search box that scrolls
+  /// away is one you have to hunt for exactly when the library is long
+  /// enough to need it.
   Widget _libraryList(VideoLibrary library) {
-    final groups = _grouped(library.videos);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+    final searching = _query.trim().isNotEmpty;
+    final matches = _matching(library.videos);
+    return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: SegmentedButton<LibraryGrouping>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                  value: LibraryGrouping.athlete,
-                  icon: Icon(Icons.person),
-                  label: Text('By athlete')),
-              ButtonSegment(
-                  value: LibraryGrouping.event,
-                  icon: EventGlyph(ThrowEvent.javelin, size: 18),
-                  label: Text('By event')),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: SearchBar(
+            controller: _search,
+            hintText: 'Search athletes, events, notes',
+            leading: const Icon(Icons.search),
+            trailing: [
+              if (searching)
+                IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _search.clear();
+                    setState(() => _query = '');
+                  },
+                ),
             ],
-            selected: {_grouping},
-            onSelectionChanged: (selection) =>
-                setState(() => _grouping = selection.first),
+            onChanged: (value) => setState(() => _query = value),
           ),
         ),
-        for (final entry in groups.entries)
-          Card(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            clipBehavior: Clip.antiAlias,
-            child: ExpansionTile(
-              initiallyExpanded: true,
-              shape: const Border(),
-              leading: _grouping == LibraryGrouping.athlete
-                  ? const Icon(Icons.person)
-                  : EventGlyph(entry.value.first.event),
-              title: Text(entry.key,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text('${entry.value.length} '
-                  'throw${entry.value.length == 1 ? '' : 's'}'),
-              children: [
-                for (final video in entry.value)
-                  _videoTile(context, video, entry.value),
+        if (!searching)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: SegmentedButton<LibraryGrouping>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                    value: LibraryGrouping.athlete,
+                    icon: Icon(Icons.person),
+                    label: Text('By athlete')),
+                ButtonSegment(
+                    value: LibraryGrouping.event,
+                    icon: EventGlyph(ThrowEvent.javelin, size: 18),
+                    label: Text('By event')),
               ],
+              selected: {_grouping},
+              onSelectionChanged: (selection) =>
+                  setState(() => _grouping = selection.first),
             ),
           ),
+        Expanded(
+          child: searching ? _results(matches) : _shelves(matches),
+        ),
       ],
     );
   }
 
-  Widget _videoTile(
-      BuildContext context, ThrowVideo video, List<ThrowVideo> siblings) {
-    final library = context.read<VideoLibrary>();
-    final title = _grouping == LibraryGrouping.athlete
-        ? '${video.event.label} · ${video.gender.label}'
-        : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete} '
-            '· ${video.gender.label}';
-    return ListTile(
-      leading: ThrowThumbnail(video),
-      title: Text(title,
-          style: const TextStyle(fontWeight: FontWeight.w500)),
-      subtitle: Text(
-        '${video.displayDate.toLocal().toString().substring(0, 16)}'
-        '${video.note.isEmpty ? '' : ' — ${video.note}'}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (action) async {
-          if (action == 'note') {
-            final note = await _editText(
-                context, 'Note', video.note,
-                'e.g. "PB attempt, slight headwind"');
-            if (note != null) {
-              video.note = note;
-              await library.update(video);
-            }
-          } else if (action == 'athlete') {
-            final name = await _editText(
-                context, 'Athlete', video.athlete, 'e.g. "Sam"');
-            if (name != null) {
-              video.athlete = name.trim();
-              await library.update(video);
-            }
-          } else if (action == 'delete') {
-            await library.remove(video.id);
-            // Reclaim the (largest) artifact this import created.
-            final framesDir = video.scrubFramesDir;
-            if (framesDir != null) {
-              Directory(framesDir).delete(recursive: true).ignore();
-            }
-          }
-        },
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'athlete', child: Text('Set athlete')),
-          PopupMenuItem(value: 'note', child: Text('Edit note')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
-      ),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AnalysisScreen(video: video, siblings: siblings),
+  /// A flat grid of whatever matched, newest first — searching is looking
+  /// for one throw, so headings would only get in the way.
+  Widget _results(List<ThrowVideo> matches) {
+    if (matches.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text('Nothing matches "${_query.trim()}".',
+              textAlign: TextAlign.center),
         ),
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 16,
+        childAspectRatio: 1.05,
+      ),
+      itemCount: matches.length,
+      itemBuilder: (context, index) {
+        final video = matches[index];
+        return ThrowCard(
+          video: video,
+          // A search crosses headings, so the card has to say whose it is
+          // whichever grouping is selected.
+          title: '${video.athlete.isEmpty ? _unassigned : video.athlete} '
+              '· ${video.event.label}',
+          onTap: () => _openThrow(video, matches),
+          onLongPress: () => showThrowActions(context, video),
+        );
+      },
+    );
+  }
+
+  /// One horizontal shelf per heading, newest throw first.
+  ///
+  /// The library used to be a column of always-expanded groups, so five
+  /// athletes with fifteen throws each was a seventy-five row scroll and
+  /// no athlete could be seen without pushing the others off the screen.
+  /// A shelf costs one row whatever it holds, and the card cut off at the
+  /// right edge is what says there are more.
+  Widget _shelves(List<ThrowVideo> videos) {
+    final groups = _grouped(videos);
+    return ListView(
+      padding: const EdgeInsets.only(top: 8, bottom: 96),
+      children: [
+        for (final entry in groups.entries) _shelf(entry.key, entry.value),
+      ],
+    );
+  }
+
+  Widget _shelf(String heading, List<ThrowVideo> videos) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => _openGroup(heading, videos),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            child: Row(
+              children: [
+                _headingAvatar(heading, videos.first),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(heading,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text(
+                        '${videos.length} throw'
+                        '${videos.length == 1 ? '' : 's'} · '
+                        '${shortThrowDate(videos.first.displayDate)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right,
+                    color: theme.colorScheme.onSurfaceVariant),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(
+          // 132px card => an 82px still plus two lines; the rest is slack
+          // for a large text-scale setting.
+          height: 138,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: videos.length,
+            separatorBuilder: (context, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final video = videos[index];
+              return SizedBox(
+                width: 132,
+                child: ThrowCard(
+                  video: video,
+                  title: _cardTitle(video),
+                  onTap: () => _openThrow(video, videos),
+                  onLongPress: () => showThrowActions(context, video),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _headingAvatar(String heading, ThrowVideo first) {
+    if (_grouping == LibraryGrouping.event) {
+      return EventGlyph(first.event, color: eventColor(first.event));
+    }
+    final scheme = Theme.of(context).colorScheme;
+    if (heading == _unassigned) {
+      return CircleAvatar(
+        radius: 18,
+        backgroundColor: scheme.surfaceContainerHighest,
+        child: Icon(Icons.person_outline, color: scheme.onSurfaceVariant),
+      );
+    }
+    return CircleAvatar(
+      radius: 18,
+      backgroundColor: scheme.primaryContainer,
+      child: Text(
+        _initials(heading),
+        style: TextStyle(
+            color: scheme.onPrimaryContainer,
+            fontWeight: FontWeight.w700,
+            fontSize: 13),
       ),
     );
   }
 
-  Future<String?> _editText(BuildContext context, String title,
-      String current, String hint) {
-    final controller = TextEditingController(text: current);
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(hintText: hint),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: const Text('Save')),
-        ],
-      ),
-    );
+  /// "Sam Okoye" → "SO", "Sam" → "SA". Only ever two characters, so the
+  /// avatar stays a circle whatever the name.
+  String _initials(String name) {
+    final parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) {
+      final one = parts.first;
+      return (one.length >= 2 ? one.substring(0, 2) : one).toUpperCase();
+    }
+    return (parts.first[0] + parts.last[0]).toUpperCase();
   }
+
 }
 
 class _StorageErrorBanner extends StatelessWidget {
