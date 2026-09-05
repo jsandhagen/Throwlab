@@ -39,9 +39,21 @@ enum _MeasureStep { refA, refB, refConfirm, pointA, pointB, review }
 /// Single-throw breakdown: slow motion, frame stepping, drawing, and
 /// tap-to-measure release metrics.
 class AnalysisScreen extends StatefulWidget {
-  const AnalysisScreen({super.key, required this.video});
+  const AnalysisScreen({
+    super.key,
+    required this.video,
+    this.siblings = const [],
+  });
 
   final ThrowVideo video;
+
+  /// The throws [video] was opened alongside — one athlete's, or one
+  /// event's. Given them, the screen pages through the set instead of
+  /// making a coach walk back to the library between throws of the same
+  /// session. Empty means "on its own"; [video] is folded in either way,
+  /// so a caller can hand over a whole group without first checking that
+  /// it contains this throw.
+  final List<ThrowVideo> siblings;
 
   @override
   State<AnalysisScreen> createState() => _AnalysisScreenState();
@@ -70,6 +82,24 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   bool _openFailed = false;
 
+  /// Every throw in the set, oldest first, so the count a coach reads
+  /// ("3 of 8") follows the order the session was thrown rather than the
+  /// order the library happens to hold. Clips that share a timestamp — a
+  /// whole session imported at once, none of it carrying camera metadata —
+  /// fall back to id order, which at least keeps the numbering stable
+  /// between visits instead of shuffling on every sort.
+  late final List<ThrowVideo> _set = _orderedSet();
+
+  final ScrollController _strip = ScrollController();
+
+  /// A filmstrip cell plus its gap. The ListView's itemExtent and the
+  /// centring maths below have to agree, so they read it from here.
+  static const double _stripExtent = 72;
+
+  /// How much height the filmstrip costs the bottom overlay — the drawing
+  /// rail is inset by it too, so the tools stay clear of the stills.
+  static const double _stripHeight = 52;
+
   _MeasureStep? _measureStep;
   Offset? _refA, _refB, _pointA, _pointB;
   double _measureDt = 0;
@@ -81,6 +111,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   @override
   void initState() {
     super.initState();
+    // Without this, opening throw 7 of 8 leaves the strip scrolled to the
+    // start, showing everything except the throw actually on screen.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _centreStrip());
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
     final framesDir = widget.video.scrubFramesDir;
@@ -204,6 +237,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   void dispose() {
     _shuttle.dispose();
     _frames?.dispose();
+    _strip.dispose();
     _controller.dispose();
     _drawing.dispose();
     super.dispose();
@@ -980,8 +1014,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  String get _throwLabel =>
-      '${widget.video.event.label} · ${widget.video.gender.label}';
+  String get _throwLabel {
+    final throwName =
+        '${widget.video.event.label} · ${widget.video.gender.label}';
+    return _set.length > 1
+        ? '$throwName · ${_index + 1} of ${_set.length}'
+        : throwName;
+  }
 
   /// Back, then the per-throw actions. [vertical] lays them out for the
   /// left rail, where the title is carried by the implement glyph's tooltip
@@ -998,6 +1037,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         icon: const Icon(Icons.arrow_back),
         onPressed: () => Navigator.pop(context),
       ),
+      // Portrait pages from the filmstrip's own chevrons; adding them here
+      // too would push an already seven-wide header off a 390px screen.
+      if (vertical && _set.length > 1) ...[
+        _pagerButton(forward: false),
+        _pagerButton(forward: true),
+      ],
       if (vertical)
         Tooltip(
           message: _throwLabel,
@@ -1095,6 +1140,118 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               ),
             ),
           );
+  }
+
+  List<ThrowVideo> _orderedSet() {
+    final byId = {for (final video in widget.siblings) video.id: video};
+    byId[widget.video.id] = widget.video;
+    return byId.values.toList()
+      ..sort((a, b) {
+        final byDate = a.displayDate.compareTo(b.displayDate);
+        return byDate != 0 ? byDate : a.id.compareTo(b.id);
+      });
+  }
+
+  /// Where the open throw sits in [_set] — never -1, since [_orderedSet]
+  /// folds it in.
+  int get _index => _set.indexWhere((video) => video.id == widget.video.id);
+
+  ThrowVideo? get _earlierThrow => _index > 0 ? _set[_index - 1] : null;
+  ThrowVideo? get _laterThrow =>
+      _index < _set.length - 1 ? _set[_index + 1] : null;
+
+  /// Swaps this screen for another throw in the same set.
+  ///
+  /// pushReplacement, not push: paging through eight throws should leave
+  /// one screen on the stack, so Back still lands on the library instead of
+  /// retracing every throw looked at along the way. Each throw gets a fresh
+  /// state, which is what the player, the scrub frames and the drawing
+  /// layer all want anyway.
+  void _openThrow(ThrowVideo video) {
+    if (video.id == widget.video.id) return;
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder<void>(
+        pageBuilder: (_, __, ___) =>
+            AnalysisScreen(video: video, siblings: _set),
+        // The frame should change like a channel, not like a page arriving.
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+  }
+
+  /// Scrolls the strip so the open throw sits in the middle of it.
+  void _centreStrip() {
+    if (!mounted || !_strip.hasClients) return;
+    final target = _index * _stripExtent +
+        _stripExtent / 2 -
+        _strip.position.viewportDimension / 2;
+    _strip.jumpTo(target.clamp(0.0, _strip.position.maxScrollExtent));
+  }
+
+  /// One step through the set. The ends stop rather than wrap: "next"
+  /// quietly looping back to the first throw would read as a bug halfway
+  /// through a session.
+  Widget _pagerButton({required bool forward}) {
+    final target = forward ? _laterThrow : _earlierThrow;
+    return IconButton(
+      tooltip: forward ? 'Next throw' : 'Previous throw',
+      icon: Icon(forward ? Icons.chevron_right : Icons.chevron_left),
+      onPressed: target == null ? null : () => _openThrow(target),
+    );
+  }
+
+  /// The set as a row of stills beneath the video: where this throw sits in
+  /// the session, and a one-tap jump to any other. Coaches pick a throw out
+  /// by looking at it, which a list of "Shot Put · Men · 2026-09-02" rows
+  /// never allowed.
+  Widget _filmstrip() {
+    final scheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: _stripHeight,
+      child: Row(
+        children: [
+          _pagerButton(forward: false),
+          Expanded(
+            child: ListView.builder(
+              controller: _strip,
+              scrollDirection: Axis.horizontal,
+              itemExtent: _stripExtent,
+              itemCount: _set.length,
+              itemBuilder: (context, i) {
+                final video = _set[i];
+                final current = i == _index;
+                return Center(
+                  child: GestureDetector(
+                    onTap: () => _openThrow(video),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        // A transparent border on the others keeps every
+                        // cell the same size, so the strip doesn't shift
+                        // sideways as the selection moves.
+                        border: Border.all(
+                          color:
+                              current ? scheme.primary : Colors.transparent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Opacity(
+                        opacity: current ? 1 : 0.55,
+                        child: ThrowThumbnail(video, width: 56, height: 36),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          _pagerButton(forward: true),
+        ],
+      ),
+    );
   }
 
   /// Portrait header: back, title and the per-throw actions across the top,
@@ -1198,6 +1355,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     .bodySmall
                     ?.copyWith(color: Colors.white70),
               ),
+            if (!landscape && _set.length > 1) _filmstrip(),
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
@@ -1257,7 +1415,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 // the right-center and upper-right of the frame, and the
                 // inset keeps it clear of the scrubber/transport overlay
                 // (a single shorter row in landscape).
-                padding: EdgeInsets.only(bottom: landscape ? 60 : 150),
+                padding: EdgeInsets.only(
+                    bottom: landscape
+                        ? 60
+                        : (_set.length > 1 ? 150 + _stripHeight : 150)),
                 child: Align(
                   alignment: Alignment.bottomRight,
                   child: SingleChildScrollView(

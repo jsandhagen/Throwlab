@@ -182,7 +182,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (mounted) {
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
+        MaterialPageRoute(
+          builder: (_) => AnalysisScreen(
+              video: video, siblings: _siblingsOf(library, video)),
+        ),
       );
     }
   }
@@ -208,6 +211,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       );
     }
+  }
+
+  /// The throws shown alongside [video] in the library — its group under
+  /// the current grouping. Handed to the analysis screen so paging through
+  /// a session matches what the coach was just looking at.
+  List<ThrowVideo> _siblingsOf(VideoLibrary library, ThrowVideo video) {
+    for (final group in _grouped(library.videos).values) {
+      if (group.any((sibling) => sibling.id == video.id)) return group;
+    }
+    return [video];
   }
 
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
@@ -334,7 +347,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               subtitle: Text('${entry.value.length} '
                   'throw${entry.value.length == 1 ? '' : 's'}'),
               children: [
-                for (final video in entry.value) _videoTile(context, video),
+                for (final video in entry.value)
+                  _videoTile(context, video, entry.value),
               ],
             ),
           ),
@@ -342,7 +356,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _videoTile(BuildContext context, ThrowVideo video) {
+  Widget _videoTile(
+      BuildContext context, ThrowVideo video, List<ThrowVideo> siblings) {
     final library = context.read<VideoLibrary>();
     final title = _grouping == LibraryGrouping.athlete
         ? '${video.event.label} · ${video.gender.label}'
@@ -392,7 +407,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
       onTap: () => Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
+        MaterialPageRoute(
+          builder: (_) => AnalysisScreen(video: video, siblings: siblings),
+        ),
       ),
     );
   }

@@ -93,6 +93,7 @@ ThrowVideo testVideo(
   String id = 'v1',
   ThrowEvent event = ThrowEvent.javelin,
   String athlete = '',
+  DateTime? importedAt,
 }) {
   final file = File('${directory.path}/$id.mp4')..writeAsBytesSync(<int>[0]);
   return ThrowVideo(
@@ -100,7 +101,7 @@ ThrowVideo testVideo(
     path: file.path,
     event: event,
     gender: Gender.men,
-    importedAt: DateTime(2026, 1, 1),
+    importedAt: importedAt ?? DateTime(2026, 1, 1),
     athlete: athlete,
   );
 }
@@ -119,6 +120,7 @@ Future<void> mountAnalysisScreen(
   required Size screen,
   required Size videoSize,
   VideoLibrary? library,
+  List<ThrowVideo> siblings = const [],
 }) async {
   tester.view.physicalSize = screen;
   tester.view.devicePixelRatio = 1.0;
@@ -127,7 +129,8 @@ Future<void> mountAnalysisScreen(
   await tester.pumpWidget(
     ChangeNotifierProvider<VideoLibrary>.value(
       value: library ?? VideoLibrary(),
-      child: MaterialApp(home: AnalysisScreen(video: video)),
+      child: MaterialApp(
+          home: AnalysisScreen(video: video, siblings: siblings)),
     ),
   );
   await pumpFrames(tester);
