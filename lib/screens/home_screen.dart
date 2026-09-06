@@ -9,6 +9,7 @@ import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../utils/time_format.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
@@ -24,6 +25,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int? _availableBuild;
   LibraryGrouping _grouping = LibraryGrouping.athlete;
+  final TextEditingController _search = TextEditingController();
+  String _query = '';
+
+  /// Groups the user opened into the full-width list; the rest stay as
+  /// horizontal shelves.
+  final Set<String> _expanded = {};
 
   @override
   void initState() {
@@ -33,6 +40,12 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() => _availableBuild = build);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   Future<void> _installUpdate() async {
@@ -159,13 +172,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Color _eventColor(ThrowEvent event) => switch (event) {
-        ThrowEvent.shotPut => Colors.orangeAccent,
-        ThrowEvent.discus => Colors.greenAccent,
-        ThrowEvent.hammer => Colors.purpleAccent,
-        ThrowEvent.javelin => Colors.lightBlueAccent,
-      };
+  /// Throws matching the search box: athlete, event, gender, or note.
+  List<ThrowVideo> _filtered(List<ThrowVideo> videos) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return videos;
+    return [
+      for (final video in videos)
+        if ('${video.athlete} ${video.event.label} ${video.gender.label} '
+                '${video.note}'
+            .toLowerCase()
+            .contains(query))
+          video,
+    ];
+  }
 
+  /// Groups by the active dimension, newest group first, and sorts each
+  /// group's throws newest first.
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
     for (final video in videos) {
@@ -174,8 +196,12 @@ class _HomeScreenState extends State<HomeScreen> {
           : video.event.label;
       map.putIfAbsent(key, () => []).add(video);
     }
+    for (final group in map.values) {
+      group.sort((a, b) => b.displayDate.compareTo(a.displayDate));
+    }
     final keys = map.keys.toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      ..sort((a, b) => map[b]!.first.displayDate
+          .compareTo(map[a]!.first.displayDate));
     return {for (final k in keys) k: map[k]!};
   }
 
@@ -228,7 +254,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                   final content = library.videos.isEmpty
                       ? const _EmptyState()
-                      : _libraryList(library);
+                      : _library(library);
                   if (library.storageError == null) return content;
                   return Column(
                     children: [
@@ -250,117 +276,285 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _libraryList(VideoLibrary library) {
-    final groups = _grouped(library.videos);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+  Widget _library(VideoLibrary library) {
+    final groups = _grouped(_filtered(library.videos));
+    return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: SegmentedButton<LibraryGrouping>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
-                  value: LibraryGrouping.athlete,
-                  icon: Icon(Icons.person),
-                  label: Text('By athlete')),
-              ButtonSegment(
-                  value: LibraryGrouping.event,
-                  icon: Icon(Icons.category),
-                  label: Text('By event')),
-            ],
-            selected: {_grouping},
-            onSelectionChanged: (selection) =>
-                setState(() => _grouping = selection.first),
+        _searchField(),
+        _groupingToggle(),
+        Expanded(
+          child: groups.isEmpty
+              ? _NoMatches(query: _query.trim())
+              : ListView(
+                  padding: const EdgeInsets.only(top: 4, bottom: 120),
+                  children: [
+                    for (final entry in groups.entries)
+                      _section(entry.key, entry.value),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _searchField() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: TextField(
+        controller: _search,
+        textInputAction: TextInputAction.search,
+        onChanged: (value) => setState(() => _query = value),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: true,
+          fillColor: scheme.surfaceContainerHighest.withOpacity(0.5),
+          hintText: 'Search athletes, events, notes',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _search.clear();
+                    setState(() => _query = '');
+                  },
+                ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(28),
+            borderSide: BorderSide.none,
           ),
         ),
-        for (final entry in groups.entries)
-          Card(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            clipBehavior: Clip.antiAlias,
-            child: ExpansionTile(
-              initiallyExpanded: true,
-              shape: const Border(),
-              leading: Icon(_grouping == LibraryGrouping.athlete
-                  ? Icons.person
-                  : entry.value.first.event.icon),
-              title: Text(entry.key,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text('${entry.value.length} '
-                  'throw${entry.value.length == 1 ? '' : 's'}'),
+      ),
+    );
+  }
+
+  Widget _groupingToggle() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: SegmentedButton<LibraryGrouping>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          segments: const [
+            ButtonSegment(
+                value: LibraryGrouping.athlete,
+                icon: Icon(Icons.person_outline, size: 18),
+                label: Text('By athlete')),
+            ButtonSegment(
+                value: LibraryGrouping.event,
+                icon: Icon(Icons.sports_score, size: 18),
+                label: Text('By event')),
+          ],
+          selected: {_grouping},
+          onSelectionChanged: (selection) => setState(() {
+            _grouping = selection.first;
+            _expanded.clear();
+          }),
+        ),
+      ),
+    );
+  }
+
+  Widget _section(String key, List<ThrowVideo> videos) {
+    final theme = Theme.of(context);
+    final byAthlete = _grouping == LibraryGrouping.athlete;
+    final accent = byAthlete
+        ? _athleteColor(key)
+        : _eventColor(videos.first.event);
+    final expanded = _expanded.contains(key);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() {
+            if (!_expanded.remove(key)) _expanded.add(key);
+          }),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 8, 10),
+            child: Row(
               children: [
-                for (final video in entry.value) _videoTile(context, video),
+                _sectionAvatar(key, videos.first, accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        key,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700, letterSpacing: 0.2),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${videos.length} throw'
+                        '${videos.length == 1 ? '' : 's'} · '
+                        '${formatShortDate(videos.first.displayDate.toLocal())}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: expanded ? 0.25 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(Icons.chevron_right,
+                      color: theme.colorScheme.onSurfaceVariant),
+                ),
               ],
+            ),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                for (final video in videos)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: _card(video),
+                    ),
+                  ),
+              ],
+            ),
+          )
+        else
+          SizedBox(
+            // Roughly 16:9 so a frame keeps its shape, wide enough that the
+            // next card peeks in and the shelf reads as scrollable.
+            height: 172,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: videos.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) =>
+                  SizedBox(width: 288, child: _card(videos[index])),
             ),
           ),
       ],
     );
   }
 
-  Widget _videoTile(BuildContext context, ThrowVideo video) {
-    final library = context.read<VideoLibrary>();
-    final title = _grouping == LibraryGrouping.athlete
-        ? '${video.event.label} · ${video.gender.label}'
-        : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete} '
-            '· ${video.gender.label}';
-    return ListTile(
-      leading: _thumbnail(video),
-      title: Text(title,
-          style: const TextStyle(fontWeight: FontWeight.w500)),
-      subtitle: Text(
-        '${video.displayDate.toLocal().toString().substring(0, 16)}'
-        '${video.note.isEmpty ? '' : ' — ${video.note}'}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
+  Widget _sectionAvatar(String key, ThrowVideo first, Color accent) {
+    if (_grouping == LibraryGrouping.event) {
+      return Container(
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: accent.withOpacity(0.18),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(first.event.icon, color: accent, size: 22),
+      );
+    }
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accent.withOpacity(0.9), accent.withOpacity(0.55)],
+        ),
       ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (action) async {
-          if (action == 'note') {
-            final note = await _editText(
-                context, 'Note', video.note,
-                'e.g. "PB attempt, slight headwind"');
-            if (note != null) {
-              video.note = note;
-              await library.update(video);
-            }
-          } else if (action == 'athlete') {
-            final name = await _editText(
-                context, 'Athlete', video.athlete, 'e.g. "Sam"');
-            if (name != null) {
-              video.athlete = name.trim();
-              await library.update(video);
-            }
-          } else if (action == 'delete') {
-            await library.remove(video.id);
-          }
-        },
-        itemBuilder: (context) => const [
-          PopupMenuItem(value: 'athlete', child: Text('Set athlete')),
-          PopupMenuItem(value: 'note', child: Text('Edit note')),
-          PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
-      ),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
+      alignment: Alignment.center,
+      child: Text(
+        _initials(key),
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
 
-  Widget _thumbnail(ThrowVideo video) {
-    final color = _eventColor(video.event);
-    final path = video.thumbnailPath;
-    if (path != null && File(path).existsSync()) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.file(File(path),
-            width: 72, height: 48, fit: BoxFit.cover),
-      );
-    }
-    return CircleAvatar(
-      backgroundColor: color.withOpacity(0.18),
-      child: Icon(video.event.icon, color: color),
+  Widget _card(ThrowVideo video) {
+    final byAthlete = _grouping == LibraryGrouping.athlete;
+    final title = byAthlete
+        ? '${video.event.label} · ${video.gender.label}'
+        : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete}'
+            ' · ${video.gender.label}';
+    return _ThrowCard(
+      video: video,
+      title: title,
+      accent: _eventColor(video.event),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => AnalysisScreen(video: video)),
+      ),
+      onAction: (action) => _cardAction(action, video),
     );
+  }
+
+  Future<void> _cardAction(String action, ThrowVideo video) async {
+    final library = context.read<VideoLibrary>();
+    if (action == 'note') {
+      final note = await _editText(context, 'Note', video.note,
+          'e.g. "PB attempt, slight headwind"');
+      if (note != null) {
+        video.note = note;
+        await library.update(video);
+      }
+    } else if (action == 'athlete') {
+      final name =
+          await _editText(context, 'Athlete', video.athlete, 'e.g. "Sam"');
+      if (name != null) {
+        video.athlete = name.trim();
+        await library.update(video);
+      }
+    } else if (action == 'delete') {
+      await library.remove(video.id);
+    }
+  }
+
+  Color _eventColor(ThrowEvent event) => switch (event) {
+        ThrowEvent.shotPut => Colors.orangeAccent,
+        ThrowEvent.discus => Colors.greenAccent,
+        ThrowEvent.hammer => Colors.purpleAccent,
+        ThrowEvent.javelin => Colors.lightBlueAccent,
+      };
+
+  /// A stable per-athlete accent so the same name keeps the same color.
+  Color _athleteColor(String name) {
+    const palette = [
+      Color(0xFF4FC3F7),
+      Color(0xFF4DB6AC),
+      Color(0xFFFFB74D),
+      Color(0xFFBA68C8),
+      Color(0xFF81C784),
+      Color(0xFFF06292),
+    ];
+    var hash = 0;
+    for (final unit in name.codeUnits) {
+      hash = (hash * 31 + unit) & 0x7fffffff;
+    }
+    return palette[hash % palette.length];
+  }
+
+  String _initials(String name) {
+    final words = name.trim().split(RegExp(r'\s+'))
+      ..removeWhere((w) => w.isEmpty);
+    if (words.isEmpty) return '?';
+    if (words.length == 1) {
+      final word = words.first;
+      return (word.length == 1 ? word : word.substring(0, 2)).toUpperCase();
+    }
+    return '${words.first[0]}${words[1][0]}'.toUpperCase();
   }
 
   Future<String?> _editText(BuildContext context, String title,
@@ -383,6 +577,237 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(context, controller.text),
               child: const Text('Save')),
         ],
+      ),
+    );
+  }
+}
+
+/// A large thumbnail with the throw's details laid over the bottom of the
+/// frame, the way a video library reads best.
+class _ThrowCard extends StatelessWidget {
+  const _ThrowCard({
+    required this.video,
+    required this.title,
+    required this.accent,
+    required this.onTap,
+    required this.onAction,
+  });
+
+  final ThrowVideo video;
+  final String title;
+  final Color accent;
+  final VoidCallback onTap;
+  final ValueChanged<String> onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final subtitle = [
+      formatShortDate(video.displayDate.toLocal()),
+      if (video.note.isNotEmpty) video.note,
+    ].join(' · ');
+    final slowMo = video.captureFps > video.fps + 1;
+
+    return Material(
+      color: Colors.black,
+      clipBehavior: Clip.antiAlias,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: onTap,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _thumbnail(),
+            // Scrims: keep the overlaid text and controls readable whatever
+            // the frame is — bright sky at the top, grass or runway below.
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0, 0.3],
+                  colors: [Color(0x73000000), Colors.transparent],
+                ),
+              ),
+            ),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0.35, 1],
+                  colors: [Colors.transparent, Color(0xE6000000)],
+                ),
+              ),
+            ),
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                            color: accent, shape: BoxShape.circle),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (slowMo)
+              Positioned(
+                left: 12,
+                top: 12,
+                child: _Badge(
+                    label: '${video.captureFps.round()} fps',
+                    icon: Icons.slow_motion_video),
+              ),
+            Positioned(
+              right: 4,
+              top: 4,
+              child: PopupMenuButton<String>(
+                tooltip: 'Throw options',
+                icon: const Icon(Icons.more_vert,
+                    color: Colors.white, shadows: [
+                  Shadow(color: Colors.black54, blurRadius: 6),
+                ]),
+                onSelected: onAction,
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'athlete', child: Text('Set athlete')),
+                  PopupMenuItem(value: 'note', child: Text('Edit note')),
+                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
+            ),
+            const Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Color(0x59000000),
+                  shape: BoxShape.circle,
+                ),
+                child: Padding(
+                  padding: EdgeInsets.all(8),
+                  child: Icon(Icons.play_arrow_rounded,
+                      color: Colors.white, size: 26),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _thumbnail() {
+    final path = video.thumbnailPath;
+    if (path != null && File(path).existsSync()) {
+      return Image.file(File(path), fit: BoxFit.cover);
+    }
+    // No still frame (older imports, or extraction failed): fall back to an
+    // event-tinted panel so the shelf keeps its rhythm.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accent.withOpacity(0.35), accent.withOpacity(0.08)],
+        ),
+      ),
+      child: Center(
+        child: Icon(video.event.icon,
+            size: 44, color: Colors.white.withOpacity(0.7)),
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0x8A000000),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(label,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoMatches extends StatelessWidget {
+  const _NoMatches({required this.query});
+
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off, size: 44, color: scheme.onSurfaceVariant),
+            const SizedBox(height: 12),
+            Text('No throws match "$query"',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              'Search by athlete, event, gender, or note text.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }
