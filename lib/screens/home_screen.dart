@@ -10,6 +10,7 @@ import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../utils/time_format.dart';
+import '../widgets/throw_motifs.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
@@ -768,9 +769,11 @@ class _GroupingBarPainter extends CustomPainter {
   final Color accent;
   final Color outline;
 
-  /// How far the slanted edges lean, in logical pixels per half-height.
-  static const double _lean = 7;
   static const double _cut = 12;
+
+  /// The slanted edges lean at the sector's half-angle — the same 17.46°
+  /// the legal sector opens from the circle.
+  double _lean(Size size) => size.height / 2 * sectorLean;
 
   /// Same two-corner cut as [angularShape], drawn by hand so the fill,
   /// the block and the dividers can all be clipped to it.
@@ -800,14 +803,15 @@ class _GroupingBarPainter extends CustomPainter {
         ).createShader(rect),
     );
 
+    final lean = _lean(size);
     final segment = size.width / count;
     final left = position * segment;
     // A parallelogram, leaning right, one segment wide.
     final block = Path()
-      ..moveTo(left + _lean, 0)
-      ..lineTo(left + segment + _lean, 0)
-      ..lineTo(left + segment - _lean, size.height)
-      ..lineTo(left - _lean, size.height)
+      ..moveTo(left + lean, 0)
+      ..lineTo(left + segment + lean, 0)
+      ..lineTo(left + segment - lean, size.height)
+      ..lineTo(left - lean, size.height)
       ..close();
     canvas.drawPath(
       block,
@@ -827,8 +831,8 @@ class _GroupingBarPainter extends CustomPainter {
     );
     // Bright underline along the block's slanted foot.
     canvas.drawLine(
-      Offset(left - _lean, size.height - 1),
-      Offset(left + segment - _lean, size.height - 1),
+      Offset(left - lean, size.height - 1),
+      Offset(left + segment - lean, size.height - 1),
       Paint()
         ..strokeWidth = 2
         ..color = accent.withOpacity(0.85),
@@ -841,8 +845,8 @@ class _GroupingBarPainter extends CustomPainter {
               .reduce((a, b) => a < b ? a : b) /
           segment;
       final opacity = 0.16 + gap.clamp(0.0, 1.0) * 0.4;
-      final top = Offset(x + _lean, 8);
-      final bottom = Offset(x - _lean, size.height - 8);
+      final top = Offset(x + lean, 8);
+      final bottom = Offset(x - lean, size.height - 8);
       canvas.drawLine(
         top,
         bottom,
@@ -1157,26 +1161,37 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/icon/logo.png', width: 140),
-            const SizedBox(height: 16),
-            Text('No throws yet',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            const Text(
-              'Film side-on: tripod at 90° to the throwing direction, '
-              'perpendicular to the flight path. Then import the clip here '
-              'for slow-motion breakdown, drawing, and comparison.',
-              textAlign: TextAlign.center,
-            ),
-          ],
+    final scheme = Theme.of(context).colorScheme;
+    return Stack(
+      children: [
+        // The sector the throws will land in, opening down the screen.
+        Positioned.fill(
+          child: CustomPaint(
+            painter: SectorPainter(color: scheme.primary, opacity: 0.75),
+          ),
         ),
-      ),
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset('assets/icon/logo.png', width: 140),
+                const SizedBox(height: 16),
+                Text('No throws yet',
+                    style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                const Text(
+                  'Film side-on: tripod at 90° to the throwing direction, '
+                  'perpendicular to the flight path. Then import the clip '
+                  'here for slow-motion breakdown, drawing, and comparison.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
