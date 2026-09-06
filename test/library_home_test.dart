@@ -143,9 +143,15 @@ void main() {
     testWidgets('the heading opens that group on its own', (tester) async {
       await mountHome(tester);
       await tester.tap(find.text('Ana Diaz'));
-      await pumpFrames(tester, 12);
+      await pumpFrames(tester, 25);
       expect(find.byType(GroupScreen), findsOneWidget);
-      expect(find.byType(ThrowCard), findsNWidgets(2));
+      // Scoped to the new screen: the library underneath is still mounted
+      // while the push transition runs, and its cards would count too.
+      expect(
+        find.descendant(
+            of: find.byType(GroupScreen), matching: find.byType(ThrowCard)),
+        findsNWidgets(2),
+      );
     });
 
     testWidgets('a card opens the throw itself', (tester) async {
@@ -159,9 +165,21 @@ void main() {
       await mountHome(tester);
       await tester.longPress(find.byType(ThrowCard).first);
       await pumpFrames(tester, 30);
-      expect(find.text('Set athlete'), findsOneWidget);
+      // Bea is already tagged, so the sheet offers to change her, not to
+      // name someone.
+      expect(find.text('Change athlete'), findsOneWidget);
       expect(find.text('Add note'), findsOneWidget);
       expect(find.text('Delete throw'), findsOneWidget);
+    });
+
+    testWidgets('an untagged throw is offered a name, not a change',
+        (tester) async {
+      await mountHome(tester);
+      // Unassigned is pinned last, so its throw is the last card.
+      await tester.longPress(find.byType(ThrowCard).last);
+      await pumpFrames(tester, 30);
+      expect(find.text('Set athlete'), findsOneWidget);
+      expect(find.text('Change athlete'), findsNothing);
     });
 
     testWidgets('deleting from the sheet takes the throw out of the library',
