@@ -10,6 +10,7 @@ import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/throw_actions.dart';
@@ -381,7 +382,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _libraryList(VideoLibrary library) {
     final searching = _query.trim().isNotEmpty;
     final matches = _matching(library.videos);
-    return Column(
+    return Stack(
+      children: [
+        // The sector, sweeping across behind the whole library.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: SectorBackdropPainter(
+                  color: Theme.of(context).colorScheme.primary),
+            ),
+          ),
+        ),
+        Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -425,6 +437,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         Expanded(
           child: searching ? _results(matches) : _shelves(matches),
+        ),
+      ],
         ),
       ],
     );
@@ -627,7 +641,16 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    return Stack(
+      children: [
+        // The sector the throws will land in, opening down the screen.
+        Positioned.fill(
+          child: CustomPaint(
+            painter: SectorPainter(
+                color: Theme.of(context).colorScheme.primary, opacity: 0.75),
+          ),
+        ),
+        Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
@@ -647,6 +670,8 @@ class _EmptyState extends StatelessWidget {
           ],
         ),
       ),
+        ),
+      ],
     );
   }
 }
