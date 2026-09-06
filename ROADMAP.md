@@ -85,6 +85,7 @@ Checked items are implemented (at least in a first version). The phases are a su
 ## Phase 8 — Progress tracking
 
 - [x] Athlete profiles (name, events thrown, bests per implement; no age category yet)
+- [x] Results with no video — competition marks typed in, competing with the filmed throws for a best
 - [ ] Season progression charts (release speed, release angle, predicted distance over time)
 - [x] Personal bests with linked video
 - [ ] Correlate training metrics with competition results
@@ -92,6 +93,7 @@ Checked items are implemented (at least in a first version). The phases are a su
 
 ## Phase 9 — Coach tools
 
+- [x] Training notes per athlete — headings, lists, checklists, pictures with captions
 - [ ] Saved coaching cue library (reusable text annotations)
 - [ ] Session management (date, conditions, location)
 - [ ] Wind speed/direction logging

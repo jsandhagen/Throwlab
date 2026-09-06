@@ -16,6 +16,7 @@ import 'package:throwlab/main.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
+import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 
 import 'harness.dart';
@@ -32,6 +33,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'flutter.throwlab.videos': jsonEncode(sampleLibrary(thumbs)),
       'flutter.throwlab.marks': jsonEncode(sampleMarks()),
+      'flutter.throwlab.notes': jsonEncode(sampleNotes()),
     });
 
     tester.view.physicalSize = const Size(1080, 2280);
@@ -41,23 +43,29 @@ void main() {
 
     final library = VideoLibrary();
     await library.load();
+    final notes = NotesLibrary();
+    await notes.load();
 
-    // Three sessions on one implement: a mark with a field behind it.
-    await _shoot(tester, library, 'Anna Sofia', 'athlete_bests');
+    // Sessions on one implement, meet marks, and written-up notes.
+    await _shoot(tester, library, notes, 'Anna Sofia', 'athlete_bests');
     // Two weights at once — each keeps its own mark.
-    await _shoot(tester, library, 'Adam', 'athlete_two_implements');
+    await _shoot(tester, library, notes, 'Adam', 'athlete_two_implements');
     // A mark entered in feet, which is how it reads back.
-    await _shoot(tester, library, 'Jakob', 'athlete_feet');
+    await _shoot(tester, library, notes, 'Jakob', 'athlete_feet');
     // A whole season with nothing filmed.
-    await _shoot(tester, library, 'Priya Raman', 'athlete_marks_only');
+    await _shoot(tester, library, notes, 'Priya Raman',
+        'athlete_marks_only');
   });
 }
 
-Future<void> _shoot(WidgetTester tester, VideoLibrary library, String name,
-    String file) async {
+Future<void> _shoot(WidgetTester tester, VideoLibrary library,
+    NotesLibrary notes, String name, String file) async {
   await tester.pumpWidget(
-    ChangeNotifierProvider<VideoLibrary>.value(
-      value: library,
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider<VideoLibrary>.value(value: library),
+        ChangeNotifierProvider<NotesLibrary>.value(value: notes),
+      ],
       child: MaterialApp(
         theme: ThrowLabApp.theme,
         home: AthleteScreen(

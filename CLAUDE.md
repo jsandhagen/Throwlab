@@ -7,10 +7,10 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests |
-| `lib/services/` | `VideoLibrary` (persistence), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `group_screen`, `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `event_glyph`, `sector_art`, drawing canvas and rail, playback controls, pickers |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote` |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `analysis_screen`, `comparison_screen` |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `note_text`, drawing canvas and rail, playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -34,14 +34,16 @@ rendering it to PNGs:
 
 ```sh
 flutter test --update-goldens tool/preview/home_preview.dart \
-                              tool/preview/athlete_preview.dart
+                              tool/preview/athlete_preview.dart \
+                              tool/preview/note_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
-athlete and by event, a search in progress, the empty state, and three
-athlete profiles. Open the PNGs to see exactly what the screen paints.
-**Re-run it after touching a screen's layout and actually look at the
-output.**
+athlete and by event, a search in progress, the empty state, four athlete
+profiles, and a training note. Open the PNGs to see exactly what the screen
+paints. **Re-run it after touching a screen's layout and actually look at
+the output.** Run the previews one command at a time: two `flutter test`
+runs at once fight over the compiler and kill each other.
 
 The harness asserts nothing; `matchesGoldenFile` is used only as a way to
 write a PNG. It lives in `tool/` rather than `test/` so `flutter test` — and
@@ -95,7 +97,23 @@ like the app rather than a bare Material default.
   `VideoLibrary.isPersonalBest` caches it, and a card that gets
   `isPersonalBest: true` wears the gold frame and the medal. Untagged
   throws hold no marks: "Unassigned" is not a person. An athlete's heading
-  in the library opens `AthleteScreen` — their throws and their bests —
-  while an event or a date opens the plain `GroupScreen` grid.
+  in the library opens `AthleteScreen` — their bests, notes, marks and
+  throws — while an event or a date opens the plain `GroupScreen` grid.
+- Bests are scored over `ThrowResult`, which a clip (`ThrowVideo`) and a
+  typed-in mark (`ThrowMark`) both implement — most of what an athlete
+  throws is measured at a meet nobody filmed, and a record book that
+  ignored those would be wrong. Marks live under their own storage key, so
+  a corrupt mark list costs the marks and never the clips.
+- The gold is drawn, not tinted: `gold.dart` holds one narrow metal ramp
+  shared by `GoldEdgePainter` (the card's frame) and `FirstPlaceMedal` (the
+  star-cutout medal), so the two read as the same metal. Keep the ramp
+  narrow — a wide one makes a convincing coin and a blotchy frame.
+- A training note is a list of typed blocks (`NoteBlockKind`), not a
+  document: heading, paragraph, bullet, numbered, checklist, picture with a
+  caption. Emphasis is markers in the text (`**bold**`, `*italic*`,
+  `__underline__`) parsed by `inlineRuns`; `NoteTextController` styles them
+  live in the field so nobody has to think in markers. Pictures are copied
+  into the app's own storage on the way in — the picker's file will not
+  survive.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

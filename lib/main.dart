@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/home_screen.dart';
+import 'services/notes_library.dart';
 import 'services/video_library.dart';
 
 void main() {
@@ -41,8 +42,11 @@ class ThrowLabApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => VideoLibrary()..load(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => VideoLibrary()..load()),
+        ChangeNotifierProvider(create: (_) => NotesLibrary()..load()),
+      ],
       child: MaterialApp(
         title: 'ThrowLab',
         theme: theme,

@@ -11,6 +11,7 @@ import 'package:throwlab/screens/analysis_screen.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
 import 'package:throwlab/screens/group_screen.dart';
 import 'package:throwlab/screens/home_screen.dart';
+import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/widgets/gold.dart';
 import 'package:throwlab/widgets/throw_card.dart';
@@ -60,8 +61,12 @@ void main() {
     tester.view.physicalSize = Size(width, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(ChangeNotifierProvider<VideoLibrary>.value(
-      value: library,
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<VideoLibrary>.value(value: library),
+        ChangeNotifierProvider<NotesLibrary>(
+            create: (_) => NotesLibrary()..load()),
+      ],
       child: const MaterialApp(home: HomeScreen()),
     ));
     await pumpFrames(tester, 8);

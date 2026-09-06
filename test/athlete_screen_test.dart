@@ -9,6 +9,7 @@ import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/analysis_screen.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
+import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/widgets/gold.dart';
 import 'package:throwlab/widgets/throw_card.dart';
@@ -21,6 +22,7 @@ import 'analysis_harness.dart';
 void main() {
   late Directory temp;
   late VideoLibrary library;
+  late NotesLibrary notes;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -29,6 +31,8 @@ void main() {
     temp = await Directory.systemTemp.createTemp('throwlab_test');
     library = VideoLibrary();
     await library.load();
+    notes = NotesLibrary();
+    await notes.load();
   });
 
   tearDown(() => temp.deleteSync(recursive: true));
@@ -44,8 +48,11 @@ void main() {
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(ChangeNotifierProvider<VideoLibrary>.value(
-      value: library,
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<VideoLibrary>.value(value: library),
+        ChangeNotifierProvider<NotesLibrary>.value(value: notes),
+      ],
       child: MaterialApp(
         home: AthleteScreen(
             name: name, titleFor: (video) => video.event.label),

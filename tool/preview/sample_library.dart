@@ -9,6 +9,53 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+/// Training notes for one athlete: a session plan with a heading, a
+/// numbered list, a couple of cues with emphasis, and a checklist.
+List<Map<String, dynamic>> sampleNotes() {
+  final now = DateTime.now();
+  String daysAgo(int days) =>
+      DateTime(now.year, now.month, now.day - days, 18).toIso8601String();
+
+  Map<String, dynamic> block(String id, String kind, String text,
+          {bool checked = false}) =>
+      {'id': id, 'kind': kind, 'text': text, 'checked': checked};
+
+  return [
+    {
+      'id': 'note-1',
+      'athlete': 'Anna Sofia',
+      'createdAt': daysAgo(2),
+      'updatedAt': daysAgo(2),
+      'title': 'Throws day — 4 Sep',
+      'blocks': [
+        block('b1', 'paragraph',
+            'Best session since the break. **Left side stayed long** all '
+            'the way through the delivery.'),
+        block('b2', 'heading', 'What worked'),
+        block('b3', 'bullet', 'Slower first turn, then *let it run*'),
+        block('b4', 'bullet', 'Chin over the left knee at the block'),
+        block('b5', 'heading', 'Next session'),
+        block('b6', 'checklist', 'Six standing throws, 1.25 kg',
+            checked: true),
+        block('b7', 'checklist', 'Film from behind as well as side-on'),
+        block('b8', 'checklist', 'Ask about the __County entry deadline__'),
+      ],
+    },
+    {
+      'id': 'note-2',
+      'athlete': 'Anna Sofia',
+      'createdAt': daysAgo(23),
+      'updatedAt': daysAgo(21),
+      'title': '',
+      'blocks': [
+        block('b1', 'paragraph', 'Wind straight down the sector, no use.'),
+        block('b2', 'paragraph', 'Kept the reverse in — worth a look on '
+            'video before the next meet.'),
+      ],
+    },
+  ];
+}
+
 /// Marks with no clip behind them: one athlete's competition results, and
 /// a thrower who is only ever in a results sheet.
 List<Map<String, dynamic>> sampleMarks() {

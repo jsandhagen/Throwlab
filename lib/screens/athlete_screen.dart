@@ -5,16 +5,20 @@ import '../models/athlete_profile.dart';
 import '../models/throw_event.dart';
 import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
+import '../models/training_note.dart';
+import '../services/notes_library.dart';
 import '../services/video_library.dart';
 import '../widgets/angular.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/gold.dart';
 import '../widgets/mark_editor.dart';
+import '../widgets/note_text.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'note_editor_screen.dart';
 
 /// One athlete: what they have thrown, what their best mark is at each of
 /// it, and every clip of theirs.
@@ -138,6 +142,7 @@ class AthleteScreen extends StatelessWidget {
               );
             },
           ),
+        _notesSection(context, profile.name),
         if (profile.marks.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: _SectionHeading('Marks', '${profile.marks.length}'),
@@ -189,6 +194,72 @@ class AthleteScreen extends StatelessWidget {
           ),
         const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
+    );
+  }
+
+  /// The athlete's training notes, most recently edited first. Lives off
+  /// its own store, so a note keeps working whatever happens to the clips.
+  Widget _notesSection(BuildContext context, String athlete) {
+    return SliverToBoxAdapter(
+      child: Consumer<NotesLibrary>(
+        builder: (context, notes, _) {
+          final mine = notes.notesFor(athlete);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _SectionHeading(
+                  'Training notes', mine.isEmpty ? null : '${mine.length}'),
+              if (mine.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  child: Text(
+                    'Nothing written down yet. Notes are the place for '
+                    'session plans, cues that worked, and pictures of a '
+                    'position worth remembering.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                )
+              else
+                for (final note in mine)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: _NoteTile(
+                      note: note,
+                      onTap: () => _openNote(context, note),
+                    ),
+                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 16, 0),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => _openNote(
+                      context,
+                      TrainingNote(
+                        id: NotesLibrary.newNoteId(),
+                        athlete: athlete,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.note_add_outlined, size: 18),
+                    label: const Text('New note'),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _openNote(BuildContext context, TrainingNote note) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => NoteEditorScreen(note: note)),
     );
   }
 
@@ -434,6 +505,96 @@ class _MarkTile extends StatelessWidget {
                   color: isPersonalBest
                       ? personalBestGold
                       : theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One note in the list: what it is called, what it says next, and what is
+/// in it — a picture count and a checklist tally, which are the two things
+/// you want to know before opening it.
+class _NoteTile extends StatelessWidget {
+  const _NoteTile({required this.note, required this.onTap});
+
+  final TrainingNote note;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final checklist = note.checklist;
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+      clipBehavior: Clip.antiAlias,
+      shape: angularShape(10),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 2, right: 10),
+                child: Icon(Icons.sticky_note_2_outlined,
+                    size: 18, color: theme.colorScheme.primary),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      note.displayTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    if (note.preview.isNotEmpty)
+                      NoteRichText(
+                        note.preview,
+                        maxLines: 1,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        Text(
+                          shortThrowDate(note.updatedAt),
+                          style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                        if (note.pictureCount > 0) ...[
+                          const SizedBox(width: 10),
+                          Icon(Icons.image_outlined,
+                              size: 13,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 3),
+                          Text('${note.pictureCount}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                  color:
+                                      theme.colorScheme.onSurfaceVariant)),
+                        ],
+                        if (checklist.total > 0) ...[
+                          const SizedBox(width: 10),
+                          Icon(Icons.checklist,
+                              size: 13,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 3),
+                          Text('${checklist.done}/${checklist.total}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                  color:
+                                      theme.colorScheme.onSurfaceVariant)),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
