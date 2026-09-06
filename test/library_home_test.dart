@@ -49,8 +49,11 @@ void main() {
 
   tearDown(() => temp.deleteSync(recursive: true));
 
-  Future<void> mountHome(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(400, 1000);
+  /// [width] widens the phone-sized default for the tests that count every
+  /// card: a shelf only builds the cards it can show, and one card is now
+  /// 264 wide, so three of them don't exist at 400.
+  Future<void> mountHome(WidgetTester tester, {double width = 400}) async {
+    tester.view.physicalSize = Size(width, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(ChangeNotifierProvider<VideoLibrary>.value(
@@ -68,7 +71,7 @@ void main() {
   group('shelves', () {
     testWidgets('one heading per athlete, with a card per throw',
         (tester) async {
-      await mountHome(tester);
+      await mountHome(tester, width: 1000);
       expect(find.text('Ana Diaz'), findsOneWidget);
       expect(find.text('Bea Cole'), findsOneWidget);
       expect(find.text('Unassigned'), findsOneWidget);
@@ -96,7 +99,7 @@ void main() {
 
     testWidgets('grouping by event re-headings the same throws',
         (tester) async {
-      await mountHome(tester);
+      await mountHome(tester, width: 1000);
       await tester.tap(find.text('Event'));
       await pumpFrames(tester, 8);
       expect(find.text('Shot Put'), findsOneWidget);
@@ -106,7 +109,7 @@ void main() {
 
     testWidgets('grouping by date heads each day the library was filmed',
         (tester) async {
-      await mountHome(tester);
+      await mountHome(tester, width: 1000);
       await tester.tap(find.text('Date'));
       await pumpFrames(tester, 8);
       // Four throws on four days: 1, 4 and 5 January, and 1 February. Each

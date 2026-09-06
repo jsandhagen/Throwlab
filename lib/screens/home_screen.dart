@@ -464,8 +464,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         crossAxisSpacing: 12,
-        mainAxisSpacing: 16,
-        childAspectRatio: 1.05,
+        mainAxisSpacing: 12,
+        // Wider than tall like the frame itself, but with enough height
+        // left for the two lines that now sit on it.
+        childAspectRatio: 1.25,
       ),
       itemCount: matches.length,
       itemBuilder: (context, index) {
@@ -540,9 +542,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ),
         SizedBox(
-          // 132px card => an 82px still plus two lines; the rest is slack
-          // for a large text-scale setting.
-          height: 138,
+          // A 16:9 card at 264 wide: the still is the whole card now, so
+          // the height is the frame's rather than a still plus two lines.
+          height: 150,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -551,7 +553,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             itemBuilder: (context, index) {
               final video = videos[index];
               return SizedBox(
-                width: 132,
+                width: 264,
                 child: ThrowCard(
                   video: video,
                   title: _cardTitle(video),

@@ -72,10 +72,10 @@ class GroupScreen extends StatelessWidget {
                       const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
-                    mainAxisSpacing: 16,
-                    // Taller than the card needs: a cell shorter than its
-                    // contents overflows, one taller just leaves air.
-                    childAspectRatio: 1.05,
+                    mainAxisSpacing: 12,
+                    // Wider than tall like the frame itself, but with enough
+                    // height left for the two lines that now sit on it.
+                    childAspectRatio: 1.25,
                   ),
                   itemCount: videos.length,
                   itemBuilder: (context, index) {
