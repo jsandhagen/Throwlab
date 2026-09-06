@@ -277,11 +277,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _library(VideoLibrary library) {
-    final groups = _grouped(_filtered(library.videos));
+    final filtered = _filtered(library.videos);
+    final groups = _grouped(filtered);
     return Column(
       children: [
-        _searchField(),
-        _groupingToggle(),
+        // The count follows the search, so it always describes what's shown.
+        _header(filtered.length),
         Expanded(
           child: groups.isEmpty
               ? _NoMatches(query: _query.trim())
@@ -297,67 +298,95 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _searchField() {
-    final scheme = Theme.of(context).colorScheme;
+  /// Search field and grouping chips — one quiet block above the shelves.
+  Widget _header(int count) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-      child: TextField(
-        controller: _search,
-        textInputAction: TextInputAction.search,
-        onChanged: (value) => setState(() => _query = value),
-        decoration: InputDecoration(
-          isDense: true,
-          filled: true,
-          fillColor: scheme.surfaceContainerHighest.withOpacity(0.5),
-          hintText: 'Search athletes, events, notes',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _query.isEmpty
-              ? null
-              : IconButton(
-                  tooltip: 'Clear search',
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    _search.clear();
-                    setState(() => _query = '');
-                  },
-                ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 14),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(28),
-            borderSide: BorderSide.none,
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _searchField(),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _GroupChip(
+                icon: Icons.person_outline,
+                label: 'By athlete',
+                selected: _grouping == LibraryGrouping.athlete,
+                onTap: () => _setGrouping(LibraryGrouping.athlete),
+              ),
+              const SizedBox(width: 8),
+              _GroupChip(
+                icon: Icons.sports_score_outlined,
+                label: 'By event',
+                selected: _grouping == LibraryGrouping.event,
+                onTap: () => _setGrouping(LibraryGrouping.event),
+              ),
+              const Spacer(),
+              Text(
+                '$count throw${count == 1 ? '' : 's'}',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurfaceVariant
+                        .withOpacity(0.7)),
+              ),
+            ],
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _groupingToggle() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 2),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: SegmentedButton<LibraryGrouping>(
-          showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          segments: const [
-            ButtonSegment(
-                value: LibraryGrouping.athlete,
-                icon: Icon(Icons.person_outline, size: 18),
-                label: Text('By athlete')),
-            ButtonSegment(
-                value: LibraryGrouping.event,
-                icon: Icon(Icons.sports_score, size: 18),
-                label: Text('By event')),
-          ],
-          selected: {_grouping},
-          onSelectionChanged: (selection) => setState(() {
-            _grouping = selection.first;
-            _expanded.clear();
-          }),
-        ),
+  void _setGrouping(LibraryGrouping grouping) {
+    if (grouping == _grouping) return;
+    setState(() {
+      _grouping = grouping;
+      _expanded.clear();
+    });
+  }
+
+  Widget _searchField() {
+    final scheme = Theme.of(context).colorScheme;
+    OutlineInputBorder border(Color color, double width) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: color, width: width),
+        );
+    return TextField(
+      controller: _search,
+      textInputAction: TextInputAction.search,
+      onChanged: (value) => setState(() => _query = value),
+      style: const TextStyle(fontSize: 15),
+      cursorColor: scheme.primary,
+      cursorWidth: 1.5,
+      decoration: InputDecoration(
+        isDense: true,
+        filled: true,
+        fillColor: scheme.surfaceContainerHighest.withOpacity(0.35),
+        hintText: 'Search throws',
+        hintStyle: TextStyle(
+            fontSize: 15, color: scheme.onSurfaceVariant.withOpacity(0.7)),
+        prefixIcon: Icon(Icons.search_rounded,
+            size: 20, color: scheme.onSurfaceVariant.withOpacity(0.8)),
+        prefixIconConstraints:
+            const BoxConstraints(minWidth: 44, minHeight: 44),
+        suffixIcon: _query.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Clear search',
+                iconSize: 18,
+                splashRadius: 18,
+                icon: const Icon(Icons.close_rounded),
+                color: scheme.onSurfaceVariant,
+                onPressed: () {
+                  _search.clear();
+                  setState(() => _query = '');
+                },
+              ),
+        contentPadding: const EdgeInsets.fromLTRB(0, 13, 12, 13),
+        border: border(Colors.transparent, 0),
+        enabledBorder: border(scheme.outlineVariant.withOpacity(0.35), 1),
+        focusedBorder: border(scheme.primary.withOpacity(0.7), 1.4),
       ),
     );
   }
@@ -577,6 +606,69 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => Navigator.pop(context, controller.text),
               child: const Text('Save')),
         ],
+      ),
+    );
+  }
+}
+
+/// One of the two library grouping choices. A filled tint reads as the
+/// active one without the weight of a bordered segmented control.
+class _GroupChip extends StatelessWidget {
+  const _GroupChip({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground =
+        selected ? scheme.primary : scheme.onSurfaceVariant;
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.primary.withOpacity(0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: selected
+                  ? scheme.primary.withOpacity(0.45)
+                  : scheme.outlineVariant.withOpacity(0.35),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: foreground),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.1,
+                  color: foreground,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
