@@ -40,6 +40,7 @@ void main() {
         fps: 240,
         note: 'PB attempt',
         athlete: 'Sam',
+        distance: 58.42,
         thumbnailPath: '/thumbs/42.jpg',
       );
       final restored = ThrowVideo.fromJson(video.toJson());
@@ -51,7 +52,19 @@ void main() {
       expect(restored.fps, video.fps);
       expect(restored.note, video.note);
       expect(restored.athlete, video.athlete);
+      expect(restored.distance, video.distance);
       expect(restored.thumbnailPath, video.thumbnailPath);
+    });
+
+    test('has no distance until one is recorded', () {
+      final restored = ThrowVideo.fromJson({
+        'id': '1',
+        'path': '/v.mp4',
+        'event': 'javelin',
+        'gender': 'men',
+        'importedAt': '2026-06-11T10:30:00',
+      });
+      expect(restored.distance, isNull);
     });
 
     test('defaults fps to 30 when missing from stored JSON', () {

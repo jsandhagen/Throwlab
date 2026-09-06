@@ -107,7 +107,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (picked == null || !mounted) return;
 
     final details = await showDialog<
-        ({ThrowEvent event, Gender gender, String athlete})>(
+        ({
+      ThrowEvent event,
+      Gender gender,
+      String athlete,
+      double? distance
+    })>(
       context: context,
       builder: (context) => const _ImportDialog(),
     );
@@ -179,6 +184,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       fps: fps,
       captureFps: rates?.capture,
       athlete: details.athlete,
+      distance: details.distance,
       thumbnailPath: thumbnail,
       scrubFramesDir: frames?.dir,
       scrubFrameCount: frames?.count ?? 0,
@@ -733,6 +739,13 @@ class _ImportDialogState extends State<_ImportDialog> {
   ThrowEvent _event = ThrowEvent.shotPut;
   Gender _gender = Gender.men;
   String _athlete = '';
+  final TextEditingController _distance = TextEditingController();
+
+  @override
+  void dispose() {
+    _distance.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -759,6 +772,17 @@ class _ImportDialogState extends State<_ImportDialog> {
             ],
             onChanged: (event) =>
                 setState(() => _event = event ?? _event),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _distance,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Distance',
+              hintText: 'How far it went (optional)',
+              suffixText: 'm',
+            ),
           ),
           const SizedBox(height: 12),
           SegmentedButton<Gender>(
@@ -788,6 +812,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             event: _event,
             gender: _gender,
             athlete: _athlete.trim(),
+            distance: parseDistance(_distance.text),
           )),
           child: const Text('Import'),
         ),

@@ -4,12 +4,13 @@ import 'package:provider/provider.dart';
 import '../models/throw_video.dart';
 import '../services/video_library.dart';
 import 'athlete_picker.dart';
+import 'throw_card.dart';
 import 'throw_picker.dart';
 
-enum _ThrowAction { athlete, note, delete }
+enum _ThrowAction { athlete, distance, note, delete }
 
 /// The per-throw edits that used to hang off a row's overflow menu: who
-/// threw it, a note, and deleting it.
+/// threw it, how far it went, a note, and deleting it.
 ///
 /// A sheet rather than a popup menu, because the library is stills now and a
 /// long press in the middle of a grid has no corner to hang a menu off. It
@@ -40,6 +41,13 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
             onTap: () => Navigator.pop(context, _ThrowAction.athlete),
           ),
           ListTile(
+            leading: const Icon(Icons.straighten),
+            title: Text(video.distance == null
+                ? 'Add distance'
+                : 'Change distance'),
+            onTap: () => Navigator.pop(context, _ThrowAction.distance),
+          ),
+          ListTile(
             leading: const Icon(Icons.sticky_note_2),
             title: Text(video.note.isEmpty ? 'Add note' : 'Edit note'),
             onTap: () => Navigator.pop(context, _ThrowAction.note),
@@ -58,6 +66,8 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
   switch (action) {
     case _ThrowAction.athlete:
       await _editAthlete(context, library, video);
+    case _ThrowAction.distance:
+      await _editDistance(context, library, video);
     case _ThrowAction.note:
       await _editNote(context, library, video);
     case _ThrowAction.delete:
@@ -94,6 +104,56 @@ Future<void> _editAthlete(
   );
   if (saved == null) return;
   video.athlete = saved.trim();
+  await library.update(video);
+}
+
+/// How far it went. Empty clears it — a throw can be a foul, or measured
+/// later, and the card should then say nothing rather than "0.00 m".
+Future<void> _editDistance(
+    BuildContext context, VideoLibrary library, ThrowVideo video) async {
+  final controller = TextEditingController(
+      text: video.distance == null ? '' : video.distance!.toStringAsFixed(2));
+  final saved = await showDialog<String>(
+    context: context,
+    builder: (context) {
+      final error = ValueNotifier<String?>(null);
+      return AlertDialog(
+        title: const Text('Distance'),
+        content: ValueListenableBuilder<String?>(
+          valueListenable: error,
+          builder: (context, message, _) => TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              hintText: 'e.g. 58.42',
+              suffixText: 'm',
+              errorText: message,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final text = controller.text.trim();
+              if (text.isEmpty || parseDistance(text) != null) {
+                Navigator.pop(context, text);
+              } else {
+                error.value = 'Enter a distance in metres, e.g. 58.42';
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      );
+    },
+  );
+  if (saved == null) return;
+  video.distance = saved.trim().isEmpty ? null : parseDistance(saved);
   await library.update(video);
 }
 

@@ -74,6 +74,10 @@ set `tester.view.physicalSize`, pump, then `_shoot` each state worth seeing.
   must keep working (in memory, with a banner) when storage fails.
 - Event iconography comes from `EventGlyph`; the competition sector in
   `sector_art.dart` backs the library and the empty state. Both are drawn,
-  not icon-font glyphs.
+  not icon-font glyphs. The backdrop's arcs stay between the sector lines —
+  an arc outside them is a line no throwing field has.
+- A throw's distance (`ThrowVideo.distance`, metres, null until recorded)
+  is the badge on its card. Parse and print it with `parseDistance` /
+  `formatDistance` so a comma decimal mark and the centimetres both survive.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

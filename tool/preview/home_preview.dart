@@ -81,6 +81,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
     String recordedAt, {
     double captureFps = 30,
     String note = '',
+    double? distance,
     String? thumbnail,
   }) =>
       {
@@ -94,6 +95,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
         'captureFps': captureFps,
         'note': note,
         'athlete': athlete,
+        'distance': distance,
         'thumbnailPath': thumbnail,
       };
 
@@ -104,15 +106,16 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
   return [
     video('1', 'Anna Sofia', 'discus', 'women', daysAgo(2, 15),
         captureFps: 240, note: 'PB attempt, slight headwind',
-        thumbnail: thumbs[0]),
+        distance: 52.18, thumbnail: thumbs[0]),
     video('2', 'Anna Sofia', 'discus', 'women', daysAgo(2, 14),
         thumbnail: thumbs[2]),
     video('3', 'Anna Sofia', 'discus', 'women', daysAgo(9, 11),
         captureFps: 120, note: 'Standing throws', thumbnail: thumbs[0]),
     video('4', 'Jakob', 'javelin', 'men', daysAgo(21, 12),
-        captureFps: 240, note: 'Full approach', thumbnail: thumbs[1]),
+        captureFps: 240, note: 'Full approach', distance: 61.44,
+        thumbnail: thumbs[1]),
     video('5', 'Jakob', 'javelin', 'men', daysAgo(22, 12),
-        note: '~2.5 m/s tailwind', thumbnail: thumbs[1]),
+        note: '~2.5 m/s tailwind', distance: 58.9, thumbnail: thumbs[1]),
     video('6', 'Adam', 'shotPut', 'men', daysAgo(30, 9),
         thumbnail: thumbs[2]),
     video('7', '', 'hammer', 'women', daysAgo(120, 9),

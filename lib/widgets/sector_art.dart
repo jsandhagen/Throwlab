@@ -89,7 +89,7 @@ class SectorBackdropPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // Close enough to the corner that the arcs actually curve.
-    final apex = Offset(-size.width * 0.1, size.height * 1.08);
+    final apex = Offset(-size.width * 0.16, size.height * 1.12);
     final corner = Offset(size.width * 1.04, -size.height * 0.04);
     final bearing = math.atan2(corner.dy - apex.dy, corner.dx - apex.dx);
     const half = sectorHalfAngleDeg * math.pi / 180;
@@ -121,16 +121,15 @@ class SectorBackdropPainter extends CustomPainter {
         ],
       ).createShader(Offset.zero & size);
 
-    // Distance arcs, sweeping wider than the sector so they cross the whole
-    // screen; the sector is the part the lines pick out.
-    const sweep = 1.15; // radians, centered on the diagonal
+    // Distance arcs, drawn only between the sector lines: an arc outside
+    // them is a line that doesn't exist on a throwing field.
     for (var i = 1; i <= 7; i++) {
       canvas.drawArc(
-        Rect.fromCircle(center: apex, radius: reach * (0.16 + i * 0.135)),
-        bearing - sweep / 2,
-        sweep,
+        Rect.fromCircle(center: apex, radius: reach * (0.1 + i * 0.15)),
+        bearing - half,
+        2 * half,
         false,
-        stroke(1, 0.22),
+        stroke(1, 0.24),
       );
     }
     for (final sign in [-1, 1]) {

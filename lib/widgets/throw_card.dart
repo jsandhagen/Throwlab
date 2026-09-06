@@ -21,6 +21,19 @@ String shortThrowDate(DateTime when, {DateTime? now}) {
   return local.year == today.year ? date : '$date ${local.year}';
 }
 
+/// "58.42 m" — centimetres are how a throw is measured, and the trailing
+/// zeros of "58.40" carry meaning, so they stay.
+String formatDistance(double metres) => '${metres.toStringAsFixed(2)} m';
+
+/// A typed distance, or null when it isn't one. Accepts a comma decimal
+/// mark, since a phone keyboard hands over whatever the locale uses, and
+/// rejects negatives — a throw can be zero-length, never less.
+double? parseDistance(String text) {
+  final value = double.tryParse(text.trim().replaceAll(',', '.'));
+  if (value == null || value.isNaN || value < 0) return null;
+  return value;
+}
+
 /// A throw as a card: the still, with what it is written over it.
 ///
 /// The library used to be text rows with a 72×48 stamp on the left, which
@@ -53,9 +66,7 @@ class ThrowCard extends StatelessWidget {
     final subtitle = video.note.isEmpty
         ? shortThrowDate(video.displayDate)
         : '${shortThrowDate(video.displayDate)} · ${video.note}';
-    // Slow-mo clips store more frames per second than they play at; that
-    // ratio is what makes a throw readable, so it's worth saying up front.
-    final slowMo = video.captureFps > video.fps + 1;
+    final distance = video.distance;
 
     return Material(
       color: Colors.black,
@@ -122,11 +133,11 @@ class ThrowCard extends StatelessWidget {
                   ),
                 ),
               ),
-            if (slowMo && roomy)
+            if (distance != null && roomy)
               Positioned(
                 left: 8,
                 top: 8,
-                child: _Badge(label: '${video.captureFps.round()} fps'),
+                child: _Badge(label: formatDistance(distance)),
               ),
             Positioned(
               left: 10,
@@ -215,7 +226,7 @@ class _Badge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.slow_motion_video, size: 12, color: Colors.white),
+          const Icon(Icons.straighten, size: 12, color: Colors.white),
           const SizedBox(width: 4),
           Text(label,
               style: const TextStyle(

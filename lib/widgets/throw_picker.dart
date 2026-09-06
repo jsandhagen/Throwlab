@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import 'event_glyph.dart';
+import 'throw_card.dart';
 
 /// The colour each event is tagged with across the app.
 Color eventColor(ThrowEvent event) => switch (event) {
@@ -47,10 +48,15 @@ class ThrowThumbnail extends StatelessWidget {
   }
 }
 
-/// One line about a throw: when it was recorded, and the note if any.
+/// One line about a throw: when it was recorded, how far it went, and the
+/// note if any.
 String throwSubtitle(ThrowVideo video) {
-  final date = video.displayDate.toLocal().toString().substring(0, 16);
-  return video.note.isEmpty ? date : '$date · ${video.note}';
+  final distance = video.distance;
+  return [
+    video.displayDate.toLocal().toString().substring(0, 16),
+    if (distance != null) formatDistance(distance),
+    if (video.note.isNotEmpty) video.note,
+  ].join(' · ');
 }
 
 String throwTitle(ThrowVideo video) =>

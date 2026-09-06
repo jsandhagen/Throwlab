@@ -13,6 +13,7 @@ class ThrowVideo {
     double? captureFps,
     this.note = '',
     this.athlete = '',
+    this.distance,
     this.thumbnailPath,
     this.scrubFramesDir,
     this.scrubFrameCount = 0,
@@ -53,6 +54,10 @@ class ThrowVideo {
 
   /// Who threw it; empty when not assigned to anyone.
   String athlete;
+
+  /// How far it went, in metres; null until someone records it. The one
+  /// number a throw is actually judged by, so it leads on the card.
+  double? distance;
 
   /// Still frame extracted on import; null for videos imported before
   /// thumbnails existed or when extraction failed.
@@ -99,6 +104,7 @@ class ThrowVideo {
         'captureFps': captureFps,
         'note': note,
         'athlete': athlete,
+        'distance': distance,
         'thumbnailPath': thumbnailPath,
         'scrubFramesDir': scrubFramesDir,
         'scrubFrameCount': scrubFrameCount,
@@ -121,6 +127,7 @@ class ThrowVideo {
         captureFps: (json['captureFps'] as num?)?.toDouble(),
         note: json['note'] as String? ?? '',
         athlete: json['athlete'] as String? ?? '',
+        distance: (json['distance'] as num?)?.toDouble(),
         thumbnailPath: json['thumbnailPath'] as String?,
         scrubFramesDir: json['scrubFramesDir'] as String?,
         scrubFrameCount: (json['scrubFrameCount'] as num?)?.toInt() ?? 0,
