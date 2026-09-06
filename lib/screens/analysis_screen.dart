@@ -1016,7 +1016,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   String get _throwLabel {
     final throwName =
-        '${widget.video.event.label} · ${widget.video.gender.label}';
+        '${widget.video.event.label} · '
+        '${widget.video.implementSpec.weightLabel}';
     return _set.length > 1
         ? '$throwName · ${_index + 1} of ${_set.length}'
         : throwName;
@@ -1346,7 +1347,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               )
             else if (!landscape)
               Text(
-                'Ref: ${spec.referenceLabel.toLowerCase()} '
+                'Ref: ${spec.weightLabel} '
+                '${spec.referenceLabel.toLowerCase()} '
                 '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
                 '· drag video to scrub · pinch to zoom',
                 textAlign: TextAlign.center,

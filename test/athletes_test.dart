@@ -9,7 +9,7 @@ ThrowVideo _video(String id, String athlete) => ThrowVideo(
       id: id,
       path: '/v$id.mp4',
       event: ThrowEvent.discus,
-      gender: Gender.women,
+      implementKg: 1,
       importedAt: DateTime.parse('2026-06-11T10:30:00'),
       fps: 60,
       athlete: athlete,

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/video_library.dart';
 import 'athlete_picker.dart';
 import 'throw_card.dart';
 import 'throw_picker.dart';
 
-enum _ThrowAction { athlete, distance, note, delete }
+enum _ThrowAction { athlete, implement, distance, note, delete }
 
 /// The per-throw edits that used to hang off a row's overflow menu: who
-/// threw it, how far it went, a note, and deleting it.
+/// threw it, what they threw, how far it went, a note, and deleting it.
 ///
 /// A sheet rather than a popup menu, because the library is stills now and a
 /// long press in the middle of a grid has no corner to hang a menu off. It
@@ -41,6 +42,11 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
             onTap: () => Navigator.pop(context, _ThrowAction.athlete),
           ),
           ListTile(
+            leading: const Icon(Icons.fitness_center),
+            title: Text('Implement · ${video.implementSpec.weightLabel}'),
+            onTap: () => Navigator.pop(context, _ThrowAction.implement),
+          ),
+          ListTile(
             leading: const Icon(Icons.straighten),
             title: Text(video.distance == null
                 ? 'Add distance'
@@ -66,6 +72,8 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
   switch (action) {
     case _ThrowAction.athlete:
       await _editAthlete(context, library, video);
+    case _ThrowAction.implement:
+      await _editImplement(context, library, video);
     case _ThrowAction.distance:
       await _editDistance(context, library, video);
     case _ThrowAction.note:
@@ -104,6 +112,34 @@ Future<void> _editAthlete(
   );
   if (saved == null) return;
   video.athlete = saved.trim();
+  await library.update(video);
+}
+
+/// What was thrown. The weight is what fixes the dimension the analyzer
+/// calibrates against, so getting it wrong scales every measurement taken
+/// from the clip.
+Future<void> _editImplement(
+    BuildContext context, VideoLibrary library, ThrowVideo video) async {
+  final chosen = await showDialog<double>(
+    context: context,
+    builder: (context) => SimpleDialog(
+      title: Text('${video.event.label} implement'),
+      children: [
+        for (final spec in video.event.implements)
+          RadioListTile<double>(
+            value: spec.weightKg,
+            groupValue: video.implementKg,
+            title: Text(spec.weightLabel),
+            subtitle: Text('${spec.usedBy} · '
+                '${spec.referenceLabel.toLowerCase()} '
+                '${(spec.nominalSize * 100).toStringAsFixed(1)} cm'),
+            onChanged: (weight) => Navigator.pop(context, weight),
+          ),
+      ],
+    ),
+  );
+  if (chosen == null) return;
+  video.implementKg = chosen;
   await library.update(video);
 }
 

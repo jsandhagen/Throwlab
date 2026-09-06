@@ -65,7 +65,9 @@ void main() {
     await mount(tester, video: throwNumber(2), siblings: const []);
     expect(find.byIcon(Icons.chevron_left), findsNothing);
     expect(find.byIcon(Icons.chevron_right), findsNothing);
-    expect(find.text('Javelin · Men'), findsOneWidget);
+    // The header names the implement, which is what the analyzer measures
+    // against — the harness throws an 800 g javelin.
+    expect(find.text('Javelin · 800 g'), findsOneWidget);
   });
 
   testWidgets('the set includes the open throw even when it is not passed in',

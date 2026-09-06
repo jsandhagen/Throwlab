@@ -77,7 +77,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
     String id,
     String athlete,
     String event,
-    String gender,
+    double implementKg,
     String recordedAt, {
     double captureFps = 30,
     String note = '',
@@ -88,7 +88,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
         'id': id,
         'path': '/videos/$id.mp4',
         'event': event,
-        'gender': gender,
+        'implementKg': implementKg,
         'importedAt': recordedAt,
         'recordedAt': recordedAt,
         'fps': 30.0,
@@ -104,21 +104,21 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
       DateTime(now.year, now.month, now.day - days, hour).toIso8601String();
 
   return [
-    video('1', 'Anna Sofia', 'discus', 'women', daysAgo(2, 15),
+    video('1', 'Anna Sofia', 'discus', 1, daysAgo(2, 15),
         captureFps: 240, note: 'PB attempt, slight headwind',
         distance: 52.18, thumbnail: thumbs[0]),
-    video('2', 'Anna Sofia', 'discus', 'women', daysAgo(2, 14),
+    video('2', 'Anna Sofia', 'discus', 1, daysAgo(2, 14),
         thumbnail: thumbs[2]),
-    video('3', 'Anna Sofia', 'discus', 'women', daysAgo(9, 11),
+    video('3', 'Anna Sofia', 'discus', 1, daysAgo(9, 11),
         captureFps: 120, note: 'Standing throws', thumbnail: thumbs[0]),
-    video('4', 'Jakob', 'javelin', 'men', daysAgo(21, 12),
+    video('4', 'Jakob', 'javelin', 0.8, daysAgo(21, 12),
         captureFps: 240, note: 'Full approach', distance: 61.44,
         thumbnail: thumbs[1]),
-    video('5', 'Jakob', 'javelin', 'men', daysAgo(22, 12),
+    video('5', 'Jakob', 'javelin', 0.8, daysAgo(22, 12),
         note: '~2.5 m/s tailwind', distance: 58.9, thumbnail: thumbs[1]),
-    video('6', 'Adam', 'shotPut', 'men', daysAgo(30, 9),
+    video('6', 'Adam', 'shotPut', 7.26, daysAgo(30, 9),
         thumbnail: thumbs[2]),
-    video('7', '', 'hammer', 'women', daysAgo(120, 9),
+    video('7', '', 'hammer', 4, daysAgo(120, 9),
         note: 'Imported before thumbnails existed'),
   ];
 }

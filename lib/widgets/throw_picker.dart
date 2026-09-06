@@ -61,7 +61,7 @@ String throwSubtitle(ThrowVideo video) {
 
 String throwTitle(ThrowVideo video) =>
     '${video.athlete.isEmpty ? '' : '${video.athlete} · '}'
-    '${video.event.label} · ${video.gender.label}';
+    '${video.event.label} · ${video.implementSpec.weightLabel}';
 
 /// Picks a throw to compare [against] with. Opens on that throw's own event
 /// — comparing a javelin release with a shot put says nothing — and offers

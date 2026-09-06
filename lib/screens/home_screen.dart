@@ -109,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final details = await showDialog<
         ({
       ThrowEvent event,
-      Gender gender,
+      double implementKg,
       String athlete,
       double? distance
     })>(
@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       id: id,
       path: path,
       event: details.event,
-      gender: details.gender,
+      implementKg: details.implementKg,
       importedAt: DateTime.now(),
       recordedAt: rates?.recordedAt,
       fps: fps,
@@ -278,7 +278,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (query.isEmpty) return videos;
     return videos.where((video) {
       final haystack = '${video.athlete} ${video.event.label} '
-          '${video.gender.label} ${video.note}';
+          '${video.implementSpec.weightLabel} ${video.note}';
       return haystack.toLowerCase().contains(query);
     }).toList()
       ..sort((a, b) => b.displayDate.compareTo(a.displayDate));
@@ -287,10 +287,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// What a card says about a throw, given what its heading already said.
   String _cardTitle(ThrowVideo video) => switch (_grouping) {
         LibraryGrouping.athlete =>
-          '${video.event.label} · ${video.gender.label}',
+          '${video.event.label} · ${video.implementSpec.weightLabel}',
         LibraryGrouping.event =>
           '${video.athlete.isEmpty ? _unassigned : video.athlete} '
-              '· ${video.gender.label}',
+              '· ${video.implementSpec.weightLabel}',
         LibraryGrouping.date =>
           '${video.athlete.isEmpty ? _unassigned : video.athlete} '
               '· ${video.event.label}',
@@ -737,7 +737,7 @@ class _ImportDialog extends StatefulWidget {
 
 class _ImportDialogState extends State<_ImportDialog> {
   ThrowEvent _event = ThrowEvent.shotPut;
-  Gender _gender = Gender.men;
+  late ImplementSpec _implement = _event.defaultImplement;
   String _athlete = '';
   final TextEditingController _distance = TextEditingController();
 
@@ -749,7 +749,7 @@ class _ImportDialogState extends State<_ImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final spec = _event.specFor(_gender);
+    final spec = _implement;
     return AlertDialog(
       title: const Text('Throw details'),
       content: SingleChildScrollView(
@@ -770,8 +770,12 @@ class _ImportDialogState extends State<_ImportDialog> {
               for (final event in ThrowEvent.values)
                 DropdownMenuItem(value: event, child: Text(event.label)),
             ],
-            onChanged: (event) =>
-                setState(() => _event = event ?? _event),
+            onChanged: (event) => setState(() {
+              _event = event ?? _event;
+              // Weights don't carry across events: 4 kg is a shot or a
+              // hammer, never a discus.
+              _implement = _event.defaultImplement;
+            }),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -785,14 +789,19 @@ class _ImportDialogState extends State<_ImportDialog> {
             ),
           ),
           const SizedBox(height: 12),
-          SegmentedButton<Gender>(
-            segments: [
-              for (final gender in Gender.values)
-                ButtonSegment(value: gender, label: Text(gender.label)),
+          DropdownButtonFormField<double>(
+            value: _implement.weightKg,
+            decoration: const InputDecoration(labelText: 'Implement'),
+            items: [
+              for (final spec in _event.implements)
+                DropdownMenuItem(
+                  value: spec.weightKg,
+                  child: Text('${spec.weightLabel}  ·  ${spec.usedBy}',
+                      overflow: TextOverflow.ellipsis),
+                ),
             ],
-            selected: {_gender},
-            onSelectionChanged: (selection) =>
-                setState(() => _gender = selection.first),
+            onChanged: (weight) => setState(() =>
+                _implement = _event.specFor(weight ?? _implement.weightKg)),
           ),
           const SizedBox(height: 12),
           Text(
@@ -810,7 +819,7 @@ class _ImportDialogState extends State<_ImportDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context, (
             event: _event,
-            gender: _gender,
+            implementKg: _implement.weightKg,
             athlete: _athlete.trim(),
             distance: parseDistance(_distance.text),
           )),

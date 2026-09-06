@@ -7,7 +7,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowEvent`/`Gender` and implement specs |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowEvent` and the implement specs |
 | `lib/services/` | `VideoLibrary` (persistence), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `group_screen`, `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `event_glyph`, `sector_art`, drawing canvas and rail, playback controls, pickers |
@@ -76,6 +76,10 @@ set `tester.view.physicalSize`, pump, then `_shoot` each state worth seeing.
   `sector_art.dart` backs the library and the empty state. Both are drawn,
   not icon-font glyphs. The backdrop's arcs stay between the sector lines —
   an arc outside them is a line no throwing field has.
+- A throw is tagged with what was thrown, by weight: `ThrowVideo.implementKg`
+  picks an `ImplementSpec` whose regulated dimension is what the analyzer
+  calibrates against. Add a weight by adding a row to the table in
+  `throw_event.dart` — nothing else enumerates them.
 - A throw's distance (`ThrowVideo.distance`, metres, null until recorded)
   is the badge on its card. Parse and print it with `parseDistance` /
   `formatDistance` so a comma decimal mark and the centimetres both survive.

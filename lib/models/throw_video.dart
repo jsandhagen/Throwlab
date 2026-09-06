@@ -1,12 +1,25 @@
 import 'throw_event.dart';
 
+/// Throws imported before implements were picked by weight stored a gender
+/// instead. Those clips were thrown with the senior implement for it, which
+/// is what the old two-way choice meant.
+double _legacyWeight(ThrowEvent event, String? gender) {
+  final women = gender == 'women';
+  return switch (event) {
+    ThrowEvent.shotPut => women ? 4 : 7.26,
+    ThrowEvent.discus => women ? 1 : 2,
+    ThrowEvent.hammer => women ? 4 : 7.26,
+    ThrowEvent.javelin => women ? 0.6 : 0.8,
+  };
+}
+
 /// An imported throw recording plus the metadata needed to analyze it.
 class ThrowVideo {
   ThrowVideo({
     required this.id,
     required this.path,
     required this.event,
-    required this.gender,
+    required this.implementKg,
     required this.importedAt,
     this.recordedAt,
     this.fps = 30,
@@ -30,7 +43,9 @@ class ThrowVideo {
   /// recipe.
   String path;
   final ThrowEvent event;
-  final Gender gender;
+  /// What the implement weighs, in kilograms. Fixes the dimensions the
+  /// analyzer calibrates against — see [ImplementSpec].
+  double implementKg;
   final DateTime importedAt;
 
   /// When the camera recorded the clip (from the file's creation_time
@@ -91,13 +106,13 @@ class ThrowVideo {
   /// See VideoOptimizer.playbackVersion.
   int playbackVersion;
 
-  ImplementSpec get implementSpec => event.specFor(gender);
+  ImplementSpec get implementSpec => event.specFor(implementKg);
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'path': path,
         'event': event.name,
-        'gender': gender.name,
+        'implementKg': implementKg,
         'importedAt': importedAt.toIso8601String(),
         'recordedAt': recordedAt?.toIso8601String(),
         'fps': fps,
@@ -118,7 +133,11 @@ class ThrowVideo {
         id: json['id'] as String,
         path: json['path'] as String,
         event: ThrowEvent.values.byName(json['event'] as String),
-        gender: Gender.values.byName(json['gender'] as String),
+        implementKg: (json['implementKg'] as num?)?.toDouble() ??
+            _legacyWeight(
+              ThrowEvent.values.byName(json['event'] as String),
+              json['gender'] as String?,
+            ),
         importedAt: DateTime.parse(json['importedAt'] as String),
         recordedAt: json['recordedAt'] == null
             ? null

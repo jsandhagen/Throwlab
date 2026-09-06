@@ -100,7 +100,7 @@ ThrowVideo testVideo(
     id: id,
     path: file.path,
     event: event,
-    gender: Gender.men,
+    implementKg: 7.26,
     importedAt: importedAt ?? DateTime(2026, 1, 1),
     athlete: athlete,
   );
