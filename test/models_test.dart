@@ -83,6 +83,7 @@ void main() {
         note: 'PB attempt',
         athlete: 'Sam',
         distance: 58.42,
+        distanceUnit: DistanceUnit.feet,
         thumbnailPath: '/thumbs/42.jpg',
       );
       final restored = ThrowVideo.fromJson(video.toJson());
@@ -95,6 +96,7 @@ void main() {
       expect(restored.athlete, video.athlete);
       expect(restored.distance, video.distance);
       expect(restored.implementKg, video.implementKg);
+      expect(restored.distanceUnit, DistanceUnit.feet);
       expect(restored.thumbnailPath, video.thumbnailPath);
     });
 
@@ -116,6 +118,18 @@ void main() {
       // And the migrated weight is one the event is actually thrown at.
       expect(stored('discus', 'women').implementSpec.nominalSize,
           closeTo(0.181, 1e-9));
+    });
+
+    test('a distance with no stored unit is metres', () {
+      final restored = ThrowVideo.fromJson({
+        'id': '1',
+        'path': '/v.mp4',
+        'event': 'javelin',
+        'implementKg': 0.8,
+        'importedAt': '2026-06-11T10:30:00',
+        'distance': 58.42,
+      });
+      expect(restored.distanceUnit, DistanceUnit.metres);
     });
 
     test('has no distance until one is recorded', () {

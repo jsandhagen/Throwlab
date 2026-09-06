@@ -1,5 +1,13 @@
 import 'throw_event.dart';
 
+/// How a throw's distance was measured. The stored number is always metres;
+/// this is the unit it was entered in, and the one it reads back in — a
+/// coach who measured 134 feet should see 134 feet, not 40.84 m.
+enum DistanceUnit { metres, feet }
+
+/// Exactly, by definition.
+const double metresPerFoot = 0.3048;
+
 /// Throws imported before implements were picked by weight stored a gender
 /// instead. Those clips were thrown with the senior implement for it, which
 /// is what the old two-way choice meant.
@@ -27,6 +35,7 @@ class ThrowVideo {
     this.note = '',
     this.athlete = '',
     this.distance,
+    this.distanceUnit = DistanceUnit.metres,
     this.thumbnailPath,
     this.scrubFramesDir,
     this.scrubFrameCount = 0,
@@ -74,6 +83,9 @@ class ThrowVideo {
   /// number a throw is actually judged by, so it leads on the card.
   double? distance;
 
+  /// The unit [distance] was entered in, and the one it is shown in.
+  DistanceUnit distanceUnit;
+
   /// Still frame extracted on import; null for videos imported before
   /// thumbnails existed or when extraction failed.
   String? thumbnailPath;
@@ -120,6 +132,7 @@ class ThrowVideo {
         'note': note,
         'athlete': athlete,
         'distance': distance,
+        'distanceUnit': distanceUnit.name,
         'thumbnailPath': thumbnailPath,
         'scrubFramesDir': scrubFramesDir,
         'scrubFrameCount': scrubFrameCount,
@@ -147,6 +160,9 @@ class ThrowVideo {
         note: json['note'] as String? ?? '',
         athlete: json['athlete'] as String? ?? '',
         distance: (json['distance'] as num?)?.toDouble(),
+        distanceUnit: DistanceUnit.values.asNameMap()[
+                json['distanceUnit'] as String? ?? ''] ??
+            DistanceUnit.metres,
         thumbnailPath: json['thumbnailPath'] as String?,
         scrubFramesDir: json['scrubFramesDir'] as String?,
         scrubFrameCount: (json['scrubFrameCount'] as num?)?.toInt() ?? 0,

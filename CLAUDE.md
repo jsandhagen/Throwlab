@@ -80,8 +80,9 @@ set `tester.view.physicalSize`, pump, then `_shoot` each state worth seeing.
   picks an `ImplementSpec` whose regulated dimension is what the analyzer
   calibrates against. Add a weight by adding a row to the table in
   `throw_event.dart` — nothing else enumerates them.
-- A throw's distance (`ThrowVideo.distance`, metres, null until recorded)
-  is the badge on its card. Parse and print it with `parseDistance` /
-  `formatDistance` so a comma decimal mark and the centimetres both survive.
+- A throw's distance (`ThrowVideo.distance`, always metres, null until
+  recorded) is the badge on its card, shown in the unit it was entered in
+  (`distanceUnit`). `DistanceField` is the metres/feet pair that converts
+  as you type; `parseFeet` also takes "191-08" the way a meet writes it.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

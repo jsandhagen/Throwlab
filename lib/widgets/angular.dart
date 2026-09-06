@@ -270,11 +270,17 @@ class _SegmentedBarPainter extends CustomPainter {
 
     final segment = size.width / count;
     final left = position * segment;
-    // A parallelogram, leaning right, one segment wide.
+    // A parallelogram, leaning right, one segment wide — except at the
+    // ends, where the outer edge squares up so the block fills the bar's
+    // corner instead of leaving a wedge of background in it. Both blend
+    // over the last segment of travel, so the squaring off arrives with
+    // the block rather than snapping when it lands.
+    final atStart = (1 - position).clamp(0.0, 1.0);
+    final atEnd = (position - (count - 2)).clamp(0.0, 1.0);
     final block = Path()
-      ..moveTo(left + lean, 0)
+      ..moveTo(left + lean - 2 * lean * atStart, 0)
       ..lineTo(left + segment + lean, 0)
-      ..lineTo(left + segment - lean, size.height)
+      ..lineTo(left + segment - lean + 2 * lean * atEnd, size.height)
       ..lineTo(left - lean, size.height)
       ..close();
     canvas.drawPath(
@@ -296,7 +302,7 @@ class _SegmentedBarPainter extends CustomPainter {
     // Bright underline along the block's slanted foot.
     canvas.drawLine(
       Offset(left - lean, size.height - 1),
-      Offset(left + segment - lean, size.height - 1),
+      Offset(left + segment - lean + 2 * lean * atEnd, size.height - 1),
       Paint()
         ..strokeWidth = 2
         ..color = accent.withOpacity(0.85),

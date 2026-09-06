@@ -82,6 +82,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
     double captureFps = 30,
     String note = '',
     double? distance,
+    String distanceUnit = 'metres',
     String? thumbnail,
   }) =>
       {
@@ -96,6 +97,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
         'note': note,
         'athlete': athlete,
         'distance': distance,
+        'distanceUnit': distanceUnit,
         'thumbnailPath': thumbnail,
       };
 
@@ -113,7 +115,7 @@ List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
         captureFps: 120, note: 'Standing throws', thumbnail: thumbs[0]),
     video('4', 'Jakob', 'javelin', 0.8, daysAgo(21, 12),
         captureFps: 240, note: 'Full approach', distance: 61.44,
-        thumbnail: thumbs[1]),
+        distanceUnit: 'feet', thumbnail: thumbs[1]),
     video('5', 'Jakob', 'javelin', 0.8, daysAgo(22, 12),
         note: '~2.5 m/s tailwind', distance: 58.9, thumbnail: thumbs[1]),
     video('6', 'Adam', 'shotPut', 7.26, daysAgo(30, 9),

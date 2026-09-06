@@ -21,18 +21,43 @@ String shortThrowDate(DateTime when, {DateTime? now}) {
   return local.year == today.year ? date : '$date ${local.year}';
 }
 
-/// "58.42 m" — centimetres are how a throw is measured, and the trailing
-/// zeros of "58.40" carry meaning, so they stay.
-String formatDistance(double metres) => '${metres.toStringAsFixed(2)} m';
+/// "58.42 m", or "191.67 ft" for a throw measured in feet. Centimetres are
+/// how a throw is measured, and the trailing zeros of "58.40" carry
+/// meaning, so two decimals always.
+String formatDistance(double metres,
+    [DistanceUnit unit = DistanceUnit.metres]) {
+  final value =
+      unit == DistanceUnit.feet ? metres / metresPerFoot : metres;
+  return '${value.toStringAsFixed(2)} ${unit == DistanceUnit.feet ? 'ft' : 'm'}';
+}
 
-/// A typed distance, or null when it isn't one. Accepts a comma decimal
+/// A typed number, or null when it isn't one. Accepts a comma decimal
 /// mark, since a phone keyboard hands over whatever the locale uses, and
 /// rejects negatives — a throw can be zero-length, never less.
-double? parseDistance(String text) {
+double? parseDistanceValue(String text) {
   final value = double.tryParse(text.trim().replaceAll(',', '.'));
   if (value == null || value.isNaN || value < 0) return null;
   return value;
 }
+
+/// Feet, either as a decimal or the way a meet writes them: "191-08" and
+/// "191' 8" are both 191 feet 8 inches.
+double? parseFeet(String text) {
+  final cleaned = text.trim().replaceAll('"', '').replaceAll('\'', ' ');
+  final parts = cleaned.split(RegExp(r'[-\s]+'))
+    ..removeWhere((part) => part.isEmpty);
+  if (parts.length == 2) {
+    final feet = parseDistanceValue(parts[0]);
+    final inches = parseDistanceValue(parts[1]);
+    if (feet == null || inches == null || inches >= 12) return null;
+    return feet + inches / 12;
+  }
+  return parseDistanceValue(cleaned);
+}
+
+/// Metres, whatever a distance was typed in. Kept for the metres box and
+/// for anything that only deals in the stored unit.
+double? parseDistance(String text) => parseDistanceValue(text);
 
 /// A throw as a card: the still, with what it is written over it.
 ///
@@ -137,7 +162,8 @@ class ThrowCard extends StatelessWidget {
               Positioned(
                 left: 8,
                 top: 8,
-                child: _Badge(label: formatDistance(distance)),
+                child: _Badge(
+                    label: formatDistance(distance, video.distanceUnit)),
               ),
             Positioned(
               left: 10,

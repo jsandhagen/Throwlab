@@ -13,6 +13,7 @@ import '../services/video_optimizer.dart';
 import '../widgets/angular.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
+import '../widgets/distance_field.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
@@ -111,7 +112,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ThrowEvent event,
       double implementKg,
       String athlete,
-      double? distance
+      double? distance,
+      DistanceUnit distanceUnit
     })>(
       context: context,
       builder: (context) => const _ImportDialog(),
@@ -185,6 +187,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       captureFps: rates?.capture,
       athlete: details.athlete,
       distance: details.distance,
+      distanceUnit: details.distanceUnit,
       thumbnailPath: thumbnail,
       scrubFramesDir: frames?.dir,
       scrubFrameCount: frames?.count ?? 0,
@@ -397,18 +400,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _libraryList(VideoLibrary library) {
     final searching = _query.trim().isNotEmpty;
     final matches = _matching(library.videos);
-    return Stack(
-      children: [
-        // The sector, sweeping across behind the whole library.
-        Positioned.fill(
-          child: IgnorePointer(
-            child: CustomPaint(
-              painter: SectorBackdropPainter(
-                  color: Theme.of(context).colorScheme.primary),
-            ),
-          ),
-        ),
-        Column(
+    return Column(
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -445,9 +437,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
         Expanded(
-          child: searching ? _results(matches) : _shelves(matches),
-        ),
-      ],
+          child: Stack(
+            children: [
+              // The sector sweeps behind the throws, and stops at the
+              // header: a line crossing the search field or the grouping
+              // bar reads as a scratch on them, not as ground behind.
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: SectorBackdropPainter(
+                        color: Theme.of(context).colorScheme.primary),
+                  ),
+                ),
+              ),
+              searching ? _results(matches) : _shelves(matches),
+            ],
+          ),
         ),
       ],
     );
@@ -739,13 +744,8 @@ class _ImportDialogState extends State<_ImportDialog> {
   ThrowEvent _event = ThrowEvent.shotPut;
   late ImplementSpec _implement = _event.defaultImplement;
   String _athlete = '';
-  final TextEditingController _distance = TextEditingController();
-
-  @override
-  void dispose() {
-    _distance.dispose();
-    super.dispose();
-  }
+  double? _distance;
+  DistanceUnit _distanceUnit = DistanceUnit.metres;
 
   @override
   Widget build(BuildContext context) {
@@ -778,15 +778,13 @@ class _ImportDialogState extends State<_ImportDialog> {
             }),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _distance,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(
-              labelText: 'Distance',
-              hintText: 'How far it went (optional)',
-              suffixText: 'm',
-            ),
+          DistanceField(
+            metres: _distance,
+            unit: _distanceUnit,
+            onChanged: (metres, unit) {
+              _distance = metres;
+              _distanceUnit = unit;
+            },
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<double>(
@@ -821,7 +819,8 @@ class _ImportDialogState extends State<_ImportDialog> {
             event: _event,
             implementKg: _implement.weightKg,
             athlete: _athlete.trim(),
-            distance: parseDistance(_distance.text),
+            distance: _distance,
+            distanceUnit: _distanceUnit,
           )),
           child: const Text('Import'),
         ),

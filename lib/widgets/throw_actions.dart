@@ -5,7 +5,7 @@ import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/video_library.dart';
 import 'athlete_picker.dart';
-import 'throw_card.dart';
+import 'distance_field.dart';
 import 'throw_picker.dart';
 
 enum _ThrowAction { athlete, implement, distance, note, delete }
@@ -143,53 +143,39 @@ Future<void> _editImplement(
   await library.update(video);
 }
 
-/// How far it went. Empty clears it — a throw can be a foul, or measured
-/// later, and the card should then say nothing rather than "0.00 m".
+/// How far it went, in metres or feet. Empty clears it — a throw can be a
+/// foul, or measured later, and the card should then say nothing rather
+/// than "0.00 m".
 Future<void> _editDistance(
     BuildContext context, VideoLibrary library, ThrowVideo video) async {
-  final controller = TextEditingController(
-      text: video.distance == null ? '' : video.distance!.toStringAsFixed(2));
-  final saved = await showDialog<String>(
+  var metres = video.distance;
+  var unit = video.distanceUnit;
+  final saved = await showDialog<bool>(
     context: context,
-    builder: (context) {
-      final error = ValueNotifier<String?>(null);
-      return AlertDialog(
-        title: const Text('Distance'),
-        content: ValueListenableBuilder<String?>(
-          valueListenable: error,
-          builder: (context, message, _) => TextField(
-            controller: controller,
-            autofocus: true,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              hintText: 'e.g. 58.42',
-              suffixText: 'm',
-              errorText: message,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              final text = controller.text.trim();
-              if (text.isEmpty || parseDistance(text) != null) {
-                Navigator.pop(context, text);
-              } else {
-                error.value = 'Enter a distance in metres, e.g. 58.42';
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      );
-    },
+    builder: (context) => AlertDialog(
+      title: const Text('Distance'),
+      content: DistanceField(
+        metres: video.distance,
+        unit: video.distanceUnit,
+        autofocus: true,
+        onChanged: (value, entered) {
+          metres = value;
+          unit = entered;
+        },
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save')),
+      ],
+    ),
   );
-  if (saved == null) return;
-  video.distance = saved.trim().isEmpty ? null : parseDistance(saved);
+  if (saved != true) return;
+  video.distance = metres;
+  video.distanceUnit = unit;
   await library.update(video);
 }
 

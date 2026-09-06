@@ -54,7 +54,7 @@ String throwSubtitle(ThrowVideo video) {
   final distance = video.distance;
   return [
     video.displayDate.toLocal().toString().substring(0, 16),
-    if (distance != null) formatDistance(distance),
+    if (distance != null) formatDistance(distance, video.distanceUnit),
     if (video.note.isNotEmpty) video.note,
   ].join(' · ');
 }

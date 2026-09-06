@@ -26,6 +26,7 @@ class SectorPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    canvas.clipRect(Offset.zero & size);
     final apex = Offset(size.width / 2, size.height * 0.08);
     final reach = size.height - apex.dy;
     final spread = reach * sectorLean;
@@ -88,6 +89,11 @@ class SectorBackdropPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // CustomPaint doesn't clip, and both the lines and the wash run past
+    // the box on their way to the corner — without this they paint over
+    // whatever sits above the list.
+    canvas.clipRect(Offset.zero & size);
+
     // Close enough to the corner that the arcs actually curve.
     final apex = Offset(-size.width * 0.16, size.height * 1.12);
     final corner = Offset(size.width * 1.04, -size.height * 0.04);
