@@ -15,6 +15,8 @@ import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/distance_field.dart';
 import '../widgets/event_glyph.dart';
+import '../widgets/gold.dart';
+import '../widgets/mark_editor.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
@@ -214,6 +216,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Records a throw nobody filmed — which is most of them. Lives up here
+  /// rather than only inside a profile, because the athlete it belongs to
+  /// may have no clips at all yet and so no heading to open.
+  Future<void> _recordMark() async {
+    final library = context.read<VideoLibrary>();
+    final mark = await showMarkEditor(context);
+    if (mark != null) await library.addMark(mark);
+  }
+
   Future<void> _startComparison() async {
     final library = context.read<VideoLibrary>();
     final videos = library.videos;
@@ -241,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// the current grouping. Handed to the analysis screen so paging through
   /// a session matches what the coach was just looking at.
   List<ThrowVideo> _siblingsOf(VideoLibrary library, ThrowVideo video) {
-    for (final group in _grouped(library.videos).values) {
+    for (final group in _grouped(library, library.videos).values) {
       if (group.any((sibling) => sibling.id == video.id)) return group;
     }
     return [video];
@@ -253,7 +264,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Alphabetical order sounds tidier but buries the session you filmed an
   /// hour ago under whichever athlete's name starts with an A, and drops
   /// "Unassigned" into the middle of the names.
-  Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
+  Map<String, List<ThrowVideo>> _grouped(
+      VideoLibrary library, List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
     for (final video in videos) {
       final key = switch (_grouping) {
@@ -264,6 +276,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       };
       map.putIfAbsent(key, () => []).add(video);
     }
+    // An athlete whose season is on a results sheet rather than a phone
+    // still gets a heading. A library built out of stills would otherwise
+    // lose them entirely — and they are exactly who marks are for.
+    if (_grouping == LibraryGrouping.athlete) {
+      for (final name in library.athletesWithoutClips) {
+        map.putIfAbsent(name, () => []);
+      }
+    }
     for (final group in map.values) {
       group.sort((a, b) => b.displayDate.compareTo(a.displayDate));
     }
@@ -271,10 +291,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ..sort((a, b) {
         if (a == _unassigned) return 1;
         if (b == _unassigned) return -1;
-        return map[b]!.first.displayDate.compareTo(map[a]!.first.displayDate);
+        return _recencyOf(library, b, map[b]!)
+            .compareTo(_recencyOf(library, a, map[a]!));
       });
     return {for (final k in keys) k: map[k]!};
   }
+
+  /// When a heading last saw a throw. Falls back to the athlete's marks for
+  /// a heading with no clips under it, so they sort by when they last threw
+  /// rather than dropping to the bottom.
+  DateTime _recencyOf(
+          VideoLibrary library, String heading, List<ThrowVideo> videos) =>
+      videos.isNotEmpty
+          ? videos.first.displayDate
+          : library.lastThrewOn(heading) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
 
   /// Throws matching the search box: who threw it, what it is, or the note.
   List<ThrowVideo> _matching(List<ThrowVideo> videos) {
@@ -344,6 +375,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Record a mark',
+            icon: const Icon(Icons.emoji_events_outlined),
+            onPressed: _recordMark,
+          ),
           IconButton(
             tooltip: 'Compare two throws',
             icon: const Icon(Icons.compare),
@@ -460,7 +496,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
               searching
-                  ? _results(library, matches)
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_matchingAthletes(library).isNotEmpty &&
+                            matches.isNotEmpty)
+                          Padding(
+                            padding:
+                                const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child:
+                                _athleteChips(_matchingAthletes(library)),
+                          ),
+                        Expanded(child: _results(library, matches)),
+                      ],
+                    )
                   : _shelves(library, matches),
             ],
           ),
@@ -469,16 +518,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// Athletes whose name matches the search. Offered as a row of chips
+  /// above the throws, because a search for a name is usually a search for
+  /// the person — and for someone whose season is all marks, no clip can
+  /// match at all.
+  List<String> _matchingAthletes(VideoLibrary library) {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    return [
+      for (final name in library.knownAthletes)
+        if (name.toLowerCase().contains(query)) name,
+    ];
+  }
+
   /// A flat grid of whatever matched, newest first — searching is looking
   /// for one throw, so headings would only get in the way.
   Widget _results(VideoLibrary library, List<ThrowVideo> matches) {
-    if (matches.isEmpty) {
+    final athletes = _matchingAthletes(library);
+    if (matches.isEmpty && athletes.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Text('Nothing matches "${_query.trim()}".',
               textAlign: TextAlign.center),
         ),
+      );
+    }
+    if (matches.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+        children: [
+          _athleteChips(athletes),
+          const SizedBox(height: 12),
+          Text('No clips match "${_query.trim()}".',
+              style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ],
       );
     }
     return GridView.builder(
@@ -508,6 +583,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// The matching athletes, each a door into their profile.
+  Widget _athleteChips(List<String> names) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final name in names)
+          ActionChip(
+            avatar: const Icon(Icons.person_outline, size: 18),
+            label: Text(name),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    AthleteScreen(name: name, titleFor: _cardTitle),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   /// One horizontal shelf per heading, newest throw first.
   ///
   /// The library used to be a column of always-expanded groups, so five
@@ -516,7 +613,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// A shelf costs one row whatever it holds, and the card cut off at the
   /// right edge is what says there are more.
   Widget _shelves(VideoLibrary library, List<ThrowVideo> videos) {
-    final groups = _grouped(videos);
+    final groups = _grouped(library, videos);
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 96),
       children: [
@@ -538,7 +635,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
             child: Row(
               children: [
-                _headingAvatar(heading, videos.first),
+                _headingAvatar(heading, videos.isEmpty ? null : videos.first),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -551,7 +648,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           style: theme.textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600)),
                       Text(
-                        _shelfSubtitle(videos),
+                        _shelfSubtitle(library, heading, videos),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -570,7 +667,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // A 16:9 card at 264 wide: the still is the whole card now, so
           // the height is the frame's rather than a still plus two lines.
           height: 150,
-          child: ListView.separated(
+          child: videos.isEmpty
+              ? _unfilmedShelf(library, heading)
+              : ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: videos.length,
@@ -594,9 +693,69 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// What stands in for the row of stills when an athlete has marks but no
+  /// clips: their best, and the invitation to film one.
+  Widget _unfilmedShelf(VideoLibrary library, String heading) {
+    final theme = Theme.of(context);
+    final best = library.profileFor(heading).bests.firstOrNull;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+        clipBehavior: Clip.antiAlias,
+        shape: angularShape(14),
+        child: InkWell(
+          onTap: () => _openGroup(heading, const []),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const FirstPlaceMedal(size: 40),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (best != null)
+                        Text(
+                          '${formatDistance(best.distance, best.unit)}'
+                          '  ·  ${best.label}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: personalBestGold,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Marks only — nothing filmed yet.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   /// How recent the shelf is — except when the heading is already the
   /// date, where naming who threw says something new instead.
-  String _shelfSubtitle(List<ThrowVideo> videos) {
+  String _shelfSubtitle(
+      VideoLibrary library, String heading, List<ThrowVideo> videos) {
+    if (videos.isEmpty) {
+      final marks = library.profileFor(heading).marks.length;
+      final when = library.lastThrewOn(heading);
+      return '$marks mark${marks == 1 ? '' : 's'}'
+          '${when == null ? '' : ' · ${shortThrowDate(when)}'}';
+    }
     final count = '${videos.length} throw${videos.length == 1 ? '' : 's'}';
     if (_grouping != LibraryGrouping.date) {
       return '$count · ${shortThrowDate(videos.first.displayDate)}';
@@ -610,12 +769,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         : '$count · ${names.join(', ')}';
   }
 
-  Widget _headingAvatar(String heading, ThrowVideo first) {
-    if (_grouping == LibraryGrouping.event) {
+  /// [first] is null only for an athlete with no clips, which the event
+  /// and date groupings can't produce.
+  Widget _headingAvatar(String heading, ThrowVideo? first) {
+    if (_grouping == LibraryGrouping.event && first != null) {
       return EventGlyph(first.event, color: eventColor(first.event));
     }
     final scheme = Theme.of(context).colorScheme;
-    if (_grouping == LibraryGrouping.date) {
+    if (_grouping == LibraryGrouping.date && first != null) {
       final date = first.displayDate.toLocal();
       return Container(
         width: 36,
@@ -804,6 +965,9 @@ class _ImportDialogState extends State<_ImportDialog> {
           const SizedBox(height: 12),
           DropdownButtonFormField<double>(
             value: _implement.weightKg,
+            // Without this the '7.26 kg · Men, M35–M49' row is laid out at
+            // its natural width and runs off a narrow phone.
+            isExpanded: true,
             decoration: const InputDecoration(labelText: 'Implement'),
             items: [
               for (final spec in _event.implements)

@@ -29,6 +29,7 @@ void main() {
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({
       'flutter.throwlab.videos': jsonEncode(sampleLibrary(thumbs)),
+      'flutter.throwlab.marks': jsonEncode(sampleMarks()),
     });
 
     // A tall phone, the way the app is actually held.

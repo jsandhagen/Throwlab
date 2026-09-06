@@ -31,6 +31,7 @@ void main() {
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({
       'flutter.throwlab.videos': jsonEncode(sampleLibrary(thumbs)),
+      'flutter.throwlab.marks': jsonEncode(sampleMarks()),
     });
 
     tester.view.physicalSize = const Size(1080, 2280);
@@ -47,6 +48,8 @@ void main() {
     await _shoot(tester, library, 'Adam', 'athlete_two_implements');
     // A mark entered in feet, which is how it reads back.
     await _shoot(tester, library, 'Jakob', 'athlete_feet');
+    // A whole season with nothing filmed.
+    await _shoot(tester, library, 'Priya Raman', 'athlete_marks_only');
   });
 }
 

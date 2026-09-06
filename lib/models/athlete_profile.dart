@@ -1,4 +1,5 @@
 import 'throw_event.dart';
+import 'throw_mark.dart';
 import 'throw_video.dart';
 
 /// An athlete's furthest measured throw at one event and implement weight.
@@ -9,26 +10,33 @@ import 'throw_video.dart';
 /// the heavy one. It is the same reason a throw is tagged by weight rather
 /// than by gender — see [ImplementSpec].
 class PersonalBest {
-  const PersonalBest({required this.video, required this.attempts});
+  const PersonalBest({required this.result, required this.attempts});
 
-  /// The throw that holds the mark.
-  final ThrowVideo video;
+  /// The throw that holds the mark — filmed or merely written down.
+  final ThrowResult result;
+
+  /// The clip it came out of, or null when the throw was never filmed.
+  /// What decides whether the mark opens a video or only reads as a row.
+  ThrowVideo? get video => result is ThrowVideo ? result as ThrowVideo : null;
+
+  /// Whether there is a clip behind it.
+  bool get isFilmed => result is ThrowVideo;
 
   /// Measured throws the athlete has at this event and weight — the field
   /// the best was picked out of. One means the mark has nothing behind it
   /// yet, which is worth saying rather than hiding.
   final int attempts;
 
-  ThrowEvent get event => video.event;
-  double get implementKg => video.implementKg;
-  ImplementSpec get implementSpec => video.implementSpec;
+  ThrowEvent get event => result.event;
+  double get implementKg => result.implementKg;
+  ImplementSpec get implementSpec => event.specFor(implementKg);
 
   /// Metres. Non-null by construction: a best is only ever built from a
   /// throw that was measured.
-  double get distance => video.distance!;
+  double get distance => result.distance!;
 
-  DistanceUnit get unit => video.distanceUnit;
-  DateTime get setOn => video.displayDate;
+  DistanceUnit get unit => result.distanceUnit;
+  DateTime get setOn => result.displayDate;
 
   /// '7.26 kg Shot Put' — what the mark is at, the way a result list writes
   /// it.
@@ -45,6 +53,7 @@ class AthleteProfile {
   const AthleteProfile({
     required this.name,
     required this.throws,
+    required this.marks,
     required this.bests,
   });
 
@@ -53,8 +62,13 @@ class AthleteProfile {
   /// person here too.
   final String name;
 
-  /// Their throws, newest first.
+  /// Their filmed throws, newest first.
   final List<ThrowVideo> throws;
+
+  /// Their marks with no clip behind them, newest first. Usually the
+  /// competition results — the throws that mattered are rarely the ones
+  /// someone had a phone up for.
+  final List<ThrowMark> marks;
 
   /// One entry per event and weight they have a measured throw at, in event
   /// order and heaviest implement first — the order the implement tables
@@ -62,15 +76,23 @@ class AthleteProfile {
   /// rather than reshuffling as marks are added.
   final List<PersonalBest> bests;
 
-  bool get isEmpty => throws.isEmpty;
+  bool get isEmpty => throws.isEmpty && marks.isEmpty;
+
+  /// Everything of theirs a best could come out of, newest first.
+  List<ThrowResult> get results => [...throws, ...marks]
+    ..sort((a, b) => b.displayDate.compareTo(a.displayDate));
 
   /// How many of their throws carry a distance. The rest are still clips
   /// worth watching; they just can't be a best.
-  int get measured => throws.where((video) => video.distance != null).length;
+  int get measured =>
+      throws.where((video) => video.distance != null).length + marks.length;
 
   /// Everything they throw, in event order.
   List<ThrowEvent> get events {
-    final seen = {for (final video in throws) video.event};
+    final seen = {
+      for (final video in throws) video.event,
+      for (final mark in marks) mark.event,
+    };
     return [
       for (final event in ThrowEvent.values)
         if (seen.contains(event)) event,
@@ -79,10 +101,10 @@ class AthleteProfile {
 
   /// Their most recent throw's date, null when they have none.
   DateTime? get lastThrewOn =>
-      throws.isEmpty ? null : throws.first.displayDate;
+      isEmpty ? null : results.first.displayDate;
 
   /// Their oldest throw's date, null when they have none.
-  DateTime? get firstThrewOn => throws.isEmpty ? null : throws.last.displayDate;
+  DateTime? get firstThrewOn => isEmpty ? null : results.last.displayDate;
 
   /// Their best at [event] and [implementKg], or null when they have no
   /// measured throw with it.
@@ -93,18 +115,29 @@ class AthleteProfile {
     return null;
   }
 
-  /// The profile [name] has across [videos].
-  factory AthleteProfile.of(String name, List<ThrowVideo> videos) {
+  /// The profile [name] has across [videos] and [marks].
+  factory AthleteProfile.of(
+    String name,
+    List<ThrowVideo> videos, [
+    List<ThrowMark> marks = const [],
+  ]) {
     final wanted = name.trim().toLowerCase();
-    final mine = [
+    bool mine(ThrowResult result) =>
+        result.athlete.trim().toLowerCase() == wanted;
+    final clips = [
       for (final video in videos)
-        if (video.athlete.trim().toLowerCase() == wanted) video,
+        if (mine(video)) video,
+    ]..sort((a, b) => b.displayDate.compareTo(a.displayDate));
+    final typed = [
+      for (final mark in marks)
+        if (mine(mark)) mark,
     ]..sort((a, b) => b.displayDate.compareTo(a.displayDate));
 
     final bests = <PersonalBest>[];
-    for (final entry in _bestsByImplement(mine).entries) {
+    for (final entry
+        in _bestsByImplement([...clips, ...typed]).entries) {
       bests.add(PersonalBest(
-          video: entry.value.video, attempts: entry.value.attempts));
+          result: entry.value.result, attempts: entry.value.attempts));
     }
     bests.sort((a, b) {
       final byEvent = a.event.index.compareTo(b.event.index);
@@ -113,11 +146,14 @@ class AthleteProfile {
           : b.implementKg.compareTo(a.implementKg);
     });
 
+    // The most recent throw spells the name; fall back to what was asked
+    // for when they have nothing at all.
+    final newest = [...clips, ...typed]
+      ..sort((a, b) => b.displayDate.compareTo(a.displayDate));
     return AthleteProfile(
-      // The most recent throw spells the name; fall back to what was asked
-      // for when they have no throws at all.
-      name: mine.isEmpty ? name.trim() : mine.first.athlete.trim(),
-      throws: mine,
+      name: newest.isEmpty ? name.trim() : newest.first.athlete.trim(),
+      throws: clips,
+      marks: typed,
       bests: bests,
     );
   }
@@ -126,9 +162,9 @@ class AthleteProfile {
 /// A best under construction: the leader so far, and how many measured
 /// throws it has seen off.
 class _Standing {
-  _Standing(this.video) : attempts = 1;
+  _Standing(this.result) : attempts = 1;
 
-  ThrowVideo video;
+  ThrowResult result;
   int attempts;
 }
 
@@ -139,26 +175,26 @@ class _Standing {
 /// "Unassigned" hold records would turn a pile of unrelated clips into one
 /// fictional thrower — so those clips wear no medal until someone is put to
 /// them.
-Set<String> personalBestIds(List<ThrowVideo> videos) => {
-      for (final standing in _bestsByImplement(videos).values)
-        standing.video.id,
+Set<String> personalBestIds(List<ThrowResult> results) => {
+      for (final standing in _bestsByImplement(results).values)
+        standing.result.id,
     };
 
 /// The leading throw for each athlete, event and implement weight, keyed so
 /// that both the profile and the library's medals read the same rule.
-Map<String, _Standing> _bestsByImplement(List<ThrowVideo> videos) {
+Map<String, _Standing> _bestsByImplement(List<ThrowResult> results) {
   final standings = <String, _Standing>{};
-  for (final video in videos) {
-    final athlete = video.athlete.trim().toLowerCase();
-    if (athlete.isEmpty || video.distance == null) continue;
-    final key = '$athlete|${video.event.name}|${video.implementKg}';
+  for (final result in results) {
+    final athlete = result.athlete.trim().toLowerCase();
+    if (athlete.isEmpty || result.distance == null) continue;
+    final key = '$athlete|${result.event.name}|${result.implementKg}';
     final standing = standings[key];
     if (standing == null) {
-      standings[key] = _Standing(video);
+      standings[key] = _Standing(result);
       continue;
     }
     standing.attempts++;
-    if (_outranks(video, standing.video)) standing.video = video;
+    if (_outranks(result, standing.result)) standing.result = result;
   }
   return standings;
 }
@@ -168,7 +204,7 @@ Map<String, _Standing> _bestsByImplement(List<ThrowVideo> videos) {
 /// beaten rather than matched. The id settles the case where even the dates
 /// are equal, so the medal never moves between two identical throws
 /// depending on what order the library happens to be in.
-bool _outranks(ThrowVideo candidate, ThrowVideo holder) {
+bool _outranks(ThrowResult candidate, ThrowResult holder) {
   final difference = candidate.distance!.compareTo(holder.distance!);
   if (difference != 0) return difference > 0;
   final byDate = candidate.displayDate.compareTo(holder.displayDate);

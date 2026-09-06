@@ -5,12 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/models/throw_event.dart';
+import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/analysis_screen.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
 import 'package:throwlab/screens/group_screen.dart';
 import 'package:throwlab/screens/home_screen.dart';
 import 'package:throwlab/services/video_library.dart';
+import 'package:throwlab/widgets/gold.dart';
 import 'package:throwlab/widgets/throw_card.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
@@ -143,7 +145,7 @@ void main() {
       await library.update(ana[1]);
       await mountHome(tester, width: 1000);
 
-      expect(find.byIcon(Icons.military_tech), findsOneWidget);
+      expect(find.byType(FirstPlaceMedal), findsOneWidget);
       final gold = tester
           .widgetList<ThrowCard>(find.byType(ThrowCard))
           .where((card) => card.isPersonalBest);
@@ -157,8 +159,49 @@ void main() {
       await library.update(loose);
       await mountHome(tester, width: 1000);
 
-      expect(find.byIcon(Icons.military_tech), findsNothing);
+      expect(find.byType(FirstPlaceMedal), findsNothing);
       expect(find.text('99.99 m'), findsOneWidget);
+    });
+
+    testWidgets('an athlete with only marks still gets a heading',
+        (tester) async {
+      await library.addMark(ThrowMark(
+        id: 'm1',
+        athlete: 'Cy Novak',
+        event: ThrowEvent.hammer,
+        implementKg: 7.26,
+        distance: 61.20,
+        achievedOn: DateTime(2026, 3, 3),
+      ));
+      await mountHome(tester, width: 1000);
+
+      // Their season is on a results sheet, not a phone — so the shelf
+      // shows the mark instead of a row of stills nobody filmed.
+      expect(find.text('Cy Novak'), findsOneWidget);
+      expect(find.textContaining('1 mark'), findsOneWidget);
+      expect(find.textContaining('Marks only'), findsOneWidget);
+      expect(find.textContaining('61.20 m'), findsOneWidget);
+      // Sorted by when they last threw like everyone else: Cy's mark is
+      // from March, Bea's clip from February, Ana's from January.
+      final cy = tester.getRect(find.text('Cy Novak')).top;
+      expect(cy, lessThan(tester.getRect(find.text('Bea Cole')).top));
+      expect(cy, lessThan(tester.getRect(find.text('Ana Diaz')).top));
+    });
+
+    testWidgets('their heading opens the same profile as anyone else\'s',
+        (tester) async {
+      await library.addMark(ThrowMark(
+        id: 'm1',
+        athlete: 'Cy Novak',
+        event: ThrowEvent.hammer,
+        implementKg: 7.26,
+        distance: 61.20,
+        achievedOn: DateTime(2026, 3, 3),
+      ));
+      await mountHome(tester, width: 1000);
+      await tester.tap(find.text('Cy Novak'));
+      await pumpFrames(tester, 25);
+      expect(find.byType(AthleteScreen), findsOneWidget);
     });
 
     testWidgets('a search result carries the medal too', (tester) async {
@@ -168,7 +211,7 @@ void main() {
       await mountHome(tester);
       await search(tester, 'Ana');
 
-      expect(find.byIcon(Icons.military_tech), findsOneWidget);
+      expect(find.byType(FirstPlaceMedal), findsOneWidget);
     });
   });
 
@@ -194,6 +237,33 @@ void main() {
       await search(tester, 'nobody');
       expect(find.byType(ThrowCard), findsNothing);
       expect(find.textContaining('Nothing matches'), findsOneWidget);
+    });
+
+    testWidgets('finds an athlete whose season is all marks', (tester) async {
+      await library.addMark(ThrowMark(
+        id: 'm1',
+        athlete: 'Cy Novak',
+        event: ThrowEvent.hammer,
+        implementKg: 7.26,
+        distance: 61.20,
+        achievedOn: DateTime(2026, 3, 3),
+      ));
+      await mountHome(tester);
+      await search(tester, 'Cy');
+
+      // No clip can match, so the name itself is the result.
+      expect(find.byType(ThrowCard), findsNothing);
+      expect(find.widgetWithText(ActionChip, 'Cy Novak'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ActionChip, 'Cy Novak'));
+      await pumpFrames(tester, 25);
+      expect(find.byType(AthleteScreen), findsOneWidget);
+    });
+
+    testWidgets('offers the athlete alongside their throws', (tester) async {
+      await mountHome(tester);
+      await search(tester, 'Ana');
+      expect(find.widgetWithText(ActionChip, 'Ana Diaz'), findsOneWidget);
+      expect(find.byType(ThrowCard), findsNWidgets(2));
     });
 
     testWidgets('clearing brings the shelves back', (tester) async {

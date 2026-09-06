@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/athlete_profile.dart';
+import '../models/throw_event.dart';
+import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
 import '../services/video_library.dart';
 import '../widgets/angular.dart';
 import '../widgets/event_glyph.dart';
+import '../widgets/gold.dart';
+import '../widgets/mark_editor.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
@@ -55,6 +59,13 @@ class AthleteScreen extends StatelessWidget {
                 ),
               ],
             ),
+            actions: [
+              IconButton(
+                tooltip: 'Record a mark',
+                icon: const Icon(Icons.emoji_events_outlined),
+                onPressed: () => _addMark(context, library, profile.name),
+              ),
+            ],
           ),
           body: Stack(
             children: [
@@ -79,14 +90,22 @@ class AthleteScreen extends StatelessWidget {
   }
 
   /// "12 throws · 3 events · since 4 Aug" — enough of a profile to know
-  /// what you are looking at before scrolling.
+  /// what you are looking at before scrolling. Marks count as throws: from
+  /// out here there is no difference between one that was filmed and one
+  /// that wasn't.
   String _summary(AthleteProfile profile) {
-    final count =
-        '${profile.throws.length} throw${profile.throws.length == 1 ? '' : 's'}';
+    final total = profile.throws.length + profile.marks.length;
+    final count = '$total throw${total == 1 ? '' : 's'}';
     if (profile.isEmpty) return count;
     final events = profile.events.length;
     final since = shortThrowDate(profile.firstThrewOn!);
     return '$count · $events event${events == 1 ? '' : 's'} · since $since';
+  }
+
+  Future<void> _addMark(
+      BuildContext context, VideoLibrary library, String athlete) async {
+    final mark = await showMarkEditor(context, athlete: athlete);
+    if (mark != null) await library.addMark(mark);
   }
 
   Widget _body(
@@ -95,48 +114,109 @@ class AthleteScreen extends StatelessWidget {
       slivers: [
         const SliverToBoxAdapter(child: _SectionHeading('Personal bests')),
         if (profile.bests.isEmpty)
-          const SliverToBoxAdapter(child: _NoMarks())
+          SliverToBoxAdapter(
+            child: _NoMarks(
+                onRecord: () => _addMark(context, library, profile.name)),
+          )
         else
           SliverList.separated(
             itemCount: profile.bests.length,
             separatorBuilder: (context, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _BestTile(
-                best: profile.bests[index],
-                onTap: () => _openThrow(
-                    context, profile.bests[index].video, profile.throws),
-              ),
-            ),
-          ),
-        SliverToBoxAdapter(
-          child: _SectionHeading(
-              'Throws', '${profile.throws.length}'),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-          sliver: SliverGrid.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.25,
-            ),
-            itemCount: profile.throws.length,
             itemBuilder: (context, index) {
-              final video = profile.throws[index];
-              return ThrowCard(
-                video: video,
-                title: titleFor(video),
-                isPersonalBest: library.isPersonalBest(video),
-                onTap: () => _openThrow(context, video, profile.throws),
-                onLongPress: () => showThrowActions(context, video),
+              final best = profile.bests[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _BestTile(
+                  best: best,
+                  // A filmed best opens its clip; one that was only ever
+                  // written down opens the thing it actually is, the entry.
+                  onTap: () => best.isFilmed
+                      ? _openThrow(context, best.video!, profile.throws)
+                      : _editMark(
+                          context, library, best.result as ThrowMark),
+                ),
               );
             },
           ),
+        if (profile.marks.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: _SectionHeading('Marks', '${profile.marks.length}'),
+          ),
+          SliverList.separated(
+            itemCount: profile.marks.length,
+            separatorBuilder: (context, _) => const SizedBox(height: 6),
+            itemBuilder: (context, index) {
+              final mark = profile.marks[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _MarkTile(
+                  mark: mark,
+                  isPersonalBest: library.isPersonalBest(mark),
+                  onTap: () => _editMark(context, library, mark),
+                  onLongPress: () => _deleteMark(context, library, mark),
+                ),
+              );
+            },
+          ),
+        ],
+        SliverToBoxAdapter(
+          child: _SectionHeading('Throws', '${profile.throws.length}'),
         ),
+        if (profile.throws.isEmpty)
+          const SliverToBoxAdapter(child: _NoClips())
+        else
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            sliver: SliverGrid.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.25,
+              ),
+              itemCount: profile.throws.length,
+              itemBuilder: (context, index) {
+                final video = profile.throws[index];
+                return ThrowCard(
+                  video: video,
+                  title: titleFor(video),
+                  isPersonalBest: library.isPersonalBest(video),
+                  onTap: () => _openThrow(context, video, profile.throws),
+                  onLongPress: () => showThrowActions(context, video),
+                );
+              },
+            ),
+          ),
+        const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
     );
+  }
+
+  Future<void> _editMark(
+      BuildContext context, VideoLibrary library, ThrowMark mark) async {
+    final edited = await showMarkEditor(context, existing: mark);
+    if (edited != null) await library.updateMark(edited);
+  }
+
+  Future<void> _deleteMark(
+      BuildContext context, VideoLibrary library, ThrowMark mark) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this mark?'),
+        content: Text('${formatDistance(mark.distance, mark.distanceUnit)} '
+            '· ${shortThrowDate(mark.achievedOn)}'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) await library.removeMark(mark.id);
   }
 
   void _openThrow(
@@ -206,7 +286,16 @@ class _BestTile extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           child: Row(
             children: [
-              ThrowThumbnail(best.video, width: 76, height: 50),
+              // A filmed best leads with the frame it came out of; one that
+              // was only written down leads with the medal, so the row
+              // still reads as an achievement rather than a missing image.
+              SizedBox(
+                width: 76,
+                height: 50,
+                child: best.isFilmed
+                    ? ThrowThumbnail(best.video!, width: 76, height: 50)
+                    : const Center(child: FirstPlaceMedal(size: 34)),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -218,13 +307,24 @@ class _BestTile extends StatelessWidget {
                         EventGlyph(best.event,
                             size: 16, color: eventColor(best.event)),
                         const SizedBox(width: 6),
-                        Expanded(
+                        Flexible(
                           child: Text(best.label,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleSmall
                                   ?.copyWith(fontWeight: FontWeight.w600)),
                         ),
+                        // Said here rather than in the line below, which a
+                        // long meet name and a big number leave no room in.
+                        if (!best.isFilmed) ...[
+                          const SizedBox(width: 6),
+                          Tooltip(
+                            message: 'Not filmed',
+                            child: Icon(Icons.videocam_off_outlined,
+                                size: 14,
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -267,17 +367,126 @@ class _BestTile extends StatelessWidget {
   }
 }
 
+/// One mark, in the list of everything that was thrown but not filmed.
+class _MarkTile extends StatelessWidget {
+  const _MarkTile({
+    required this.mark,
+    required this.isPersonalBest,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final ThrowMark mark;
+  final bool isPersonalBest;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final subtitle = mark.note.isEmpty
+        ? shortThrowDate(mark.achievedOn)
+        : '${shortThrowDate(mark.achievedOn)} · ${mark.note}';
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.35),
+      clipBehavior: Clip.antiAlias,
+      shape: angularShape(10),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          child: Row(
+            children: [
+              EventGlyph(mark.event,
+                  size: 18, color: eventColor(mark.event)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${mark.implementSpec.weightLabel} '
+                      '${mark.event.label}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (isPersonalBest) const FirstPlaceMedal(size: 20),
+              const SizedBox(width: 6),
+              Text(
+                formatDistance(mark.distance, mark.distanceUnit),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: isPersonalBest
+                      ? personalBestGold
+                      : theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NoMarks extends StatelessWidget {
-  const _NoMarks();
+  const _NoMarks({required this.onRecord});
+
+  final VoidCallback onRecord;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'No distances yet. Add how far a throw went from its long-press '
+            'menu, or record a mark from a meet nobody filmed — the furthest '
+            'at each implement becomes a best either way.',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.tonalIcon(
+            onPressed: onRecord,
+            icon: const Icon(Icons.emoji_events_outlined, size: 18),
+            label: const Text('Record a mark'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An athlete whose season is on a results sheet rather than a phone.
+class _NoClips extends StatelessWidget {
+  const _NoClips();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
       child: Text(
-        'No distances recorded yet. Long-press a throw and add how far it '
-        'went — the furthest at each implement becomes a best, and its clip '
-        'wears the medal.',
+        'Nothing filmed yet. Import a clip from the library to break one '
+        'down frame by frame.',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),

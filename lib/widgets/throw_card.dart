@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/throw_video.dart';
 import 'event_glyph.dart';
+import 'gold.dart';
 import 'throw_picker.dart';
 
 const _months = [
@@ -59,11 +60,6 @@ double? parseFeet(String text) {
 /// for anything that only deals in the stored unit.
 double? parseDistance(String text) => parseDistanceValue(text);
 
-/// The colour a personal best is marked in. Warm enough to read as a medal
-/// against the dark theme without competing with the event accents, which
-/// are all cool.
-const personalBestGold = Color(0xFFFFC94D);
-
 /// A throw as a card: the still, with what it is written over it.
 ///
 /// The library used to be text rows with a 72×48 stamp on the left, which
@@ -107,14 +103,7 @@ class ThrowCard extends StatelessWidget {
     return Material(
       color: Colors.black,
       clipBehavior: Clip.antiAlias,
-      // The gold sits on the card's own edge rather than around it, so a
-      // best doesn't grow by two pixels and knock a shelf out of line.
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: isPersonalBest
-            ? const BorderSide(color: personalBestGold, width: 2)
-            : BorderSide.none,
-      ),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -198,7 +187,19 @@ class ThrowCard extends StatelessWidget {
                 ),
               ),
             if (isPersonalBest && roomy)
-              const Positioned(right: 8, top: 8, child: _Medal()),
+              const Positioned(
+                right: 7,
+                top: 6,
+                child: FirstPlaceMedal(),
+              ),
+            // Last, so the metal is stroked over the scrims and the wash
+            // rather than under them.
+            if (isPersonalBest)
+              const Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(painter: GoldEdgePainter()),
+                ),
+              ),
             Positioned(
               left: 10,
               right: 10,
@@ -265,34 +266,6 @@ class ThrowCard extends StatelessWidget {
       child: Center(
         child: EventGlyph(video.event,
             size: 34, color: Colors.white.withOpacity(0.75)),
-      ),
-    );
-  }
-}
-
-/// The medal a personal best wears: the distance badge's opposite number,
-/// pinned to the far corner so the two read as a pair rather than a stack.
-class _Medal extends StatelessWidget {
-  const _Medal();
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Personal best',
-      child: Container(
-        width: 26,
-        height: 26,
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFFFFE08A), personalBestGold],
-          ),
-        ),
-        child: const Icon(Icons.military_tech,
-            size: 17, color: Color(0xCC1A1200)),
       ),
     );
   }

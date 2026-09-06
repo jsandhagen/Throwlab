@@ -21,8 +21,28 @@ double _legacyWeight(ThrowEvent event, String? gender) {
   };
 }
 
+/// Something an athlete threw, as far as the record book is concerned.
+///
+/// A filmed throw is one; so is a mark typed in from a meet nobody pointed
+/// a phone at. Personal bests are worked out over both, because a best that
+/// ignores the competition it was actually set at is not a best — see
+/// [ThrowMark].
+abstract interface class ThrowResult {
+  String get id;
+  String get athlete;
+  ThrowEvent get event;
+  double get implementKg;
+
+  /// Metres, or null when nobody measured it.
+  double? get distance;
+  DistanceUnit get distanceUnit;
+
+  /// The day it counts as having happened.
+  DateTime get displayDate;
+}
+
 /// An imported throw recording plus the metadata needed to analyze it.
-class ThrowVideo {
+class ThrowVideo implements ThrowResult {
   ThrowVideo({
     required this.id,
     required this.path,
@@ -45,15 +65,18 @@ class ThrowVideo {
     this.playbackVersion = 0,
   }) : captureFps = captureFps ?? fps;
 
+  @override
   final String id;
 
   /// The file the app plays: the optimized copy when one was made, otherwise
   /// the imported original. Reassigned when the copy is re-made under a newer
   /// recipe.
   String path;
+  @override
   final ThrowEvent event;
   /// What the implement weighs, in kilograms. Fixes the dimensions the
   /// analyzer calibrates against — see [ImplementSpec].
+  @override
   double implementKg;
   final DateTime importedAt;
 
@@ -63,6 +86,7 @@ class ThrowVideo {
 
   /// The date shown for this throw: the recording time when known,
   /// otherwise the import time.
+  @override
   DateTime get displayDate => recordedAt ?? importedAt;
 
   /// Container/playback frame rate, probed from metadata on import.
@@ -77,13 +101,16 @@ class ThrowVideo {
   String note;
 
   /// Who threw it; empty when not assigned to anyone.
+  @override
   String athlete;
 
   /// How far it went, in metres; null until someone records it. The one
   /// number a throw is actually judged by, so it leads on the card.
+  @override
   double? distance;
 
   /// The unit [distance] was entered in, and the one it is shown in.
+  @override
   DistanceUnit distanceUnit;
 
   /// Still frame extracted on import; null for videos imported before

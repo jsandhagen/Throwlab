@@ -113,13 +113,13 @@ void main() {
         _throw('elsewhere', athlete: 'Bea Cole', distance: 99),
       ]);
 
-      expect([for (final best in profile.bests) best.video.id],
+      expect([for (final best in profile.bests) best.result.id],
           ['shot-4', 'shot-3', 'disc']);
       expect(profile.bests.first.distance, 14.10);
       // Two 4 kg throws behind the mark, one 3 kg throw behind that one.
       expect(profile.bests.first.attempts, 2);
       expect(profile.bests[1].attempts, 1);
-      expect(profile.bestAt(ThrowEvent.shotPut, 4)?.video.id, 'shot-4');
+      expect(profile.bestAt(ThrowEvent.shotPut, 4)?.result.id, 'shot-4');
       expect(profile.bestAt(ThrowEvent.hammer, 4), isNull);
     });
 

@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/models/throw_event.dart';
+import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/analysis_screen.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
 import 'package:throwlab/services/video_library.dart';
+import 'package:throwlab/widgets/gold.dart';
 import 'package:throwlab/widgets/throw_card.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
@@ -111,7 +113,7 @@ void main() {
     expect(cards.map((card) => card.isPersonalBest),
         [true, false, false]);
     // The medal is the card's; the bests section is all marks already.
-    expect(find.byIcon(Icons.military_tech), findsOneWidget);
+    expect(find.byType(FirstPlaceMedal), findsOneWidget);
   });
 
   testWidgets('says how to start tracking bests when nothing is measured',
@@ -119,8 +121,8 @@ void main() {
     await fill([testVideo(temp, id: 'v1', athlete: 'Ana Diaz')]);
     await mountProfile(tester);
 
-    expect(find.textContaining('No distances recorded yet'), findsOneWidget);
-    expect(find.byIcon(Icons.military_tech), findsNothing);
+    expect(find.textContaining('No distances yet'), findsOneWidget);
+    expect(find.byType(FirstPlaceMedal), findsNothing);
     expect(find.byType(ThrowCard), findsOneWidget);
   });
 
@@ -151,6 +153,94 @@ void main() {
     await tester.tap(find.text('800 g Javelin'));
     await pumpFrames(tester, 25);
     expect(find.byType(AnalysisScreen), findsOneWidget);
+  });
+
+  group('marks', () {
+    ThrowMark mark({
+      String id = 'm1',
+      String athlete = 'Ana Diaz',
+      double distance = 15.02,
+      DateTime? on,
+      String note = '',
+    }) =>
+        ThrowMark(
+          id: id,
+          athlete: athlete,
+          event: ThrowEvent.shotPut,
+          implementKg: 4,
+          distance: distance,
+          achievedOn: on ?? DateTime(2026, 5, 4),
+          note: note,
+        );
+
+    testWidgets('a throw nobody filmed can hold the best', (tester) async {
+      await fill([
+        testVideo(temp,
+            id: 'filmed',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.shotPut,
+            implementKg: 4,
+            distance: 14.10),
+      ]);
+      await library.addMark(mark(distance: 15.02, note: 'County Champs'));
+      await mountProfile(tester);
+
+      expect(find.text('15.02 m'), findsWidgets);
+      expect(find.byIcon(Icons.videocam_off_outlined), findsOneWidget);
+      // The clip lost the medal to a throw that actually went further.
+      final card = tester.widget<ThrowCard>(find.byType(ThrowCard));
+      expect(card.isPersonalBest, isFalse);
+      // Its own section lists it, meet and all.
+      expect(find.text('Marks'.toUpperCase()), findsOneWidget);
+      expect(find.textContaining('County Champs'), findsOneWidget);
+    });
+
+    testWidgets('an athlete with no clips still has a profile',
+        (tester) async {
+      await library.addMark(mark(distance: 15.02));
+      await library.addMark(mark(id: 'm2', distance: 14.10));
+      await mountProfile(tester);
+
+      expect(find.text('2 throws · 1 event · since 4 May'), findsOneWidget);
+      // Once as the best, once per mark in the list under it.
+      expect(find.text('4 kg Shot Put'), findsNWidgets(3));
+      expect(find.textContaining('Nothing filmed yet'), findsOneWidget);
+      expect(find.byType(ThrowCard), findsNothing);
+    });
+
+    testWidgets('records one from the profile', (tester) async {
+      await fill([testVideo(temp, id: 'v1', athlete: 'Ana Diaz')]);
+      await mountProfile(tester);
+
+      await tester.tap(find.byIcon(Icons.emoji_events_outlined).first);
+      await pumpFrames(tester, 20);
+      expect(find.widgetWithText(AlertDialog, 'Record a mark'),
+          findsOneWidget);
+      // The name is already known, so the sheet doesn't ask for it again.
+      expect(find.text('Athlete'), findsNothing);
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Metres'), '17.55');
+      await pumpFrames(tester, 4);
+      await tester.tap(find.text('Save'));
+      await pumpFrames(tester, 20);
+
+      expect(library.marks.single.distance, 17.55);
+      expect(library.marks.single.athlete, 'Ana Diaz');
+      expect(find.text('17.55 m'), findsWidgets);
+    });
+
+    testWidgets('deleting one asks first', (tester) async {
+      await library.addMark(mark(distance: 15.02));
+      await mountProfile(tester);
+
+      await tester.longPress(find.text('15.02 m').last);
+      await pumpFrames(tester, 20);
+      expect(find.text('Delete this mark?'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
+      await pumpFrames(tester, 20);
+      expect(library.marks, isEmpty);
+    });
   });
 
   testWidgets('an athlete with nothing left says so', (tester) async {

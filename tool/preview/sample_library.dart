@@ -9,6 +9,46 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+/// Marks with no clip behind them: one athlete's competition results, and
+/// a thrower who is only ever in a results sheet.
+List<Map<String, dynamic>> sampleMarks() {
+  final now = DateTime.now();
+  String daysAgo(int days) =>
+      DateTime(now.year, now.month, now.day - days, 14).toIso8601String();
+
+  Map<String, dynamic> mark(
+    String id,
+    String athlete,
+    String event,
+    double implementKg,
+    double distance,
+    String achievedOn, {
+    String note = '',
+    String distanceUnit = 'metres',
+  }) =>
+      {
+        'id': id,
+        'athlete': athlete,
+        'event': event,
+        'implementKg': implementKg,
+        'distance': distance,
+        'distanceUnit': distanceUnit,
+        'achievedOn': achievedOn,
+        'note': note,
+      };
+
+  return [
+    mark('m1', 'Anna Sofia', 'discus', 1, 54.02, daysAgo(16),
+        note: 'County Champs, final'),
+    mark('m2', 'Anna Sofia', 'discus', 1, 51.30, daysAgo(44),
+        note: 'League match'),
+    // Nothing of hers was ever filmed: the whole season is a results sheet.
+    mark('m3', 'Priya Raman', 'hammer', 4, 58.44, daysAgo(11),
+        note: 'Regional final'),
+    mark('m4', 'Priya Raman', 'hammer', 4, 56.10, daysAgo(39)),
+  ];
+}
+
 List<Map<String, dynamic>> sampleLibrary(List<String> thumbs) {
   Map<String, dynamic> video(
     String id,
