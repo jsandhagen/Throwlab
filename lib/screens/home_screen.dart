@@ -13,7 +13,19 @@ import '../utils/time_format.dart';
 import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 
-enum LibraryGrouping { athlete, event }
+enum LibraryGrouping { athlete, event, date }
+
+/// The app's angular silhouette: two opposite corners cut, the other two
+/// left square. Shared by the search field, the grouping bar, the cards and
+/// the section tiles so the screen reads as one shape language.
+ShapeBorder angularShape(double cut, {BorderSide side = BorderSide.none}) =>
+    BeveledRectangleBorder(
+      side: side,
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(cut),
+        bottomRight: Radius.circular(cut),
+      ),
+    );
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,6 +38,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _availableBuild;
   LibraryGrouping _grouping = LibraryGrouping.athlete;
   final TextEditingController _search = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   String _query = '';
 
   /// Groups the user opened into the full-width list; the rest stay as
@@ -35,6 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _searchFocus.addListener(() => setState(() {}));
     AppUpdater.checkForUpdate().then((build) {
       if (mounted && build != null) {
         setState(() => _availableBuild = build);
@@ -45,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -191,9 +206,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
     for (final video in videos) {
-      final key = _grouping == LibraryGrouping.athlete
-          ? (video.athlete.isEmpty ? 'Unassigned' : video.athlete)
-          : video.event.label;
+      final key = switch (_grouping) {
+        LibraryGrouping.athlete => _athleteName(video),
+        LibraryGrouping.event => video.event.label,
+        LibraryGrouping.date =>
+          formatShortDate(video.displayDate.toLocal()),
+      };
       map.putIfAbsent(key, () => []).add(video);
     }
     for (final group in map.values) {
@@ -269,6 +287,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        shape: angularShape(16),
         icon: const Icon(Icons.video_library),
         label: const Text('Import throw'),
         onPressed: _importVideo,
@@ -298,8 +317,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Search field and grouping chips — one quiet block above the shelves.
+  /// Search field over the grouping bar — one quiet block above the shelves.
   Widget _header(int count) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Column(
@@ -309,28 +329,21 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _GroupChip(
-                icon: Icons.person_outline,
-                label: 'By athlete',
-                selected: _grouping == LibraryGrouping.athlete,
-                onTap: () => _setGrouping(LibraryGrouping.athlete),
+              Expanded(
+                child: _GroupingBar(
+                  value: _grouping,
+                  onChanged: _setGrouping,
+                ),
               ),
-              const SizedBox(width: 8),
-              _GroupChip(
-                icon: Icons.sports_score_outlined,
-                label: 'By event',
-                selected: _grouping == LibraryGrouping.event,
-                onTap: () => _setGrouping(LibraryGrouping.event),
-              ),
-              const Spacer(),
-              Text(
-                '$count throw${count == 1 ? '' : 's'}',
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant
-                        .withOpacity(0.7)),
-              ),
+              // Only worth the width while a search is narrowing things down.
+              if (_query.trim().isNotEmpty) ...[
+                const SizedBox(width: 12),
+                Text(
+                  '$count throw${count == 1 ? '' : 's'}',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: scheme.onSurfaceVariant.withOpacity(0.7)),
+                ),
+              ],
             ],
           ),
         ],
@@ -348,55 +361,71 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _searchField() {
     final scheme = Theme.of(context).colorScheme;
-    OutlineInputBorder border(Color color, double width) => OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: color, width: width),
-        );
-    return TextField(
-      controller: _search,
-      textInputAction: TextInputAction.search,
-      onChanged: (value) => setState(() => _query = value),
-      style: const TextStyle(fontSize: 15),
-      cursorColor: scheme.primary,
-      cursorWidth: 1.5,
-      decoration: InputDecoration(
-        isDense: true,
-        filled: true,
-        fillColor: scheme.surfaceContainerHighest.withOpacity(0.35),
-        hintText: 'Search throws',
-        hintStyle: TextStyle(
-            fontSize: 15, color: scheme.onSurfaceVariant.withOpacity(0.7)),
-        prefixIcon: Icon(Icons.search_rounded,
-            size: 20, color: scheme.onSurfaceVariant.withOpacity(0.8)),
-        prefixIconConstraints:
-            const BoxConstraints(minWidth: 44, minHeight: 44),
-        suffixIcon: _query.isEmpty
-            ? null
-            : IconButton(
-                tooltip: 'Clear search',
-                iconSize: 18,
-                splashRadius: 18,
-                icon: const Icon(Icons.close_rounded),
-                color: scheme.onSurfaceVariant,
-                onPressed: () {
-                  _search.clear();
-                  setState(() => _query = '');
-                },
-              ),
-        contentPadding: const EdgeInsets.fromLTRB(0, 13, 12, 13),
-        border: border(Colors.transparent, 0),
-        enabledBorder: border(scheme.outlineVariant.withOpacity(0.35), 1),
-        focusedBorder: border(scheme.primary.withOpacity(0.7), 1.4),
+    final focused = _searchFocus.hasFocus;
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        shape: angularShape(
+          14,
+          side: BorderSide(
+            color: focused
+                ? scheme.primary.withOpacity(0.7)
+                : scheme.outlineVariant.withOpacity(0.35),
+            width: focused ? 1.4 : 1,
+          ),
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            scheme.surfaceContainerHighest.withOpacity(0.42),
+            scheme.surfaceContainerHighest.withOpacity(0.14),
+          ],
+        ),
+      ),
+      child: TextField(
+        controller: _search,
+        focusNode: _searchFocus,
+        textInputAction: TextInputAction.search,
+        onChanged: (value) => setState(() => _query = value),
+        style: const TextStyle(fontSize: 15),
+        cursorColor: scheme.primary,
+        cursorWidth: 1.5,
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Search throws',
+          hintStyle: TextStyle(
+              fontSize: 15, color: scheme.onSurfaceVariant.withOpacity(0.7)),
+          prefixIcon: Icon(Icons.search_rounded,
+              size: 20, color: scheme.onSurfaceVariant.withOpacity(0.8)),
+          prefixIconConstraints:
+              const BoxConstraints(minWidth: 44, minHeight: 44),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  iconSize: 18,
+                  splashRadius: 18,
+                  icon: const Icon(Icons.close_rounded),
+                  color: scheme.onSurfaceVariant,
+                  onPressed: () {
+                    _search.clear();
+                    setState(() => _query = '');
+                  },
+                ),
+          contentPadding: const EdgeInsets.fromLTRB(0, 13, 12, 13),
+          border: InputBorder.none,
+        ),
       ),
     );
   }
 
   Widget _section(String key, List<ThrowVideo> videos) {
     final theme = Theme.of(context);
-    final byAthlete = _grouping == LibraryGrouping.athlete;
-    final accent = byAthlete
-        ? _athleteColor(key)
-        : _eventColor(videos.first.event);
+    final accent = switch (_grouping) {
+      LibraryGrouping.athlete => _athleteColor(key),
+      LibraryGrouping.event => _eventColor(videos.first.event),
+      LibraryGrouping.date => theme.colorScheme.primary,
+    };
     final expanded = _expanded.contains(key);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,7 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.fromLTRB(16, 18, 8, 10),
             child: Row(
               children: [
-                _sectionAvatar(key, videos.first, accent),
+                _sectionTile(key, videos, accent),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -424,9 +453,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${videos.length} throw'
-                        '${videos.length == 1 ? '' : 's'} · '
-                        '${formatShortDate(videos.first.displayDate.toLocal())}',
+                        _sectionSubtitle(videos),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant),
                       ),
@@ -477,47 +506,79 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _sectionAvatar(String key, ThrowVideo first, Color accent) {
-    if (_grouping == LibraryGrouping.event) {
-      return Container(
-        width: 42,
-        height: 42,
-        decoration: BoxDecoration(
-          color: accent.withOpacity(0.18),
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: Icon(first.event.icon, color: accent, size: 22),
-      );
+  /// The date is already the title when grouping by date, so name the
+  /// athletes there instead of repeating it.
+  String _sectionSubtitle(List<ThrowVideo> videos) {
+    final count = '${videos.length} throw${videos.length == 1 ? '' : 's'}';
+    if (_grouping != LibraryGrouping.date) {
+      return '$count · ${formatShortDate(videos.first.displayDate.toLocal())}';
     }
+    final names = {for (final video in videos) _athleteName(video)}.toList();
+    final shown = names.length > 2
+        ? '${names.take(2).join(', ')} +${names.length - 2}'
+        : names.join(', ');
+    final weekday = weekdayName(videos.first.displayDate.toLocal());
+    return '$weekday · $count · $shown';
+  }
+
+  Widget _sectionTile(String key, List<ThrowVideo> videos, Color accent) {
+    final date = videos.first.displayDate.toLocal();
+    final content = switch (_grouping) {
+      LibraryGrouping.athlete => Text(
+          _initials(key),
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
+      LibraryGrouping.event =>
+        Icon(videos.first.event.icon, color: Colors.white, size: 22),
+      LibraryGrouping.date => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${date.day}',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    height: 1.05,
+                    fontWeight: FontWeight.w700)),
+            Text(monthAbbreviation(date).toUpperCase(),
+                style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 8.5,
+                    height: 1.2,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+    };
     return Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: ShapeDecoration(
+        shape: angularShape(13,
+            side: BorderSide(color: accent.withOpacity(0.55))),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [accent.withOpacity(0.9), accent.withOpacity(0.55)],
+          colors: [accent.withOpacity(0.85), accent.withOpacity(0.28)],
         ),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        _initials(key),
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.5,
-        ),
-      ),
+      child: content,
     );
   }
 
   Widget _card(ThrowVideo video) {
-    final byAthlete = _grouping == LibraryGrouping.athlete;
-    final title = byAthlete
-        ? '${video.event.label} · ${video.gender.label}'
-        : '${video.athlete.isEmpty ? 'Unassigned' : video.athlete}'
-            ' · ${video.gender.label}';
+    // Say what the shelf it sits in doesn't already say.
+    final title = switch (_grouping) {
+      LibraryGrouping.athlete =>
+        '${video.event.label} · ${video.gender.label}',
+      LibraryGrouping.event =>
+        '${_athleteName(video)} · ${video.gender.label}',
+      LibraryGrouping.date => '${_athleteName(video)} · ${video.event.label}',
+    };
     return _ThrowCard(
       video: video,
       title: title,
@@ -557,6 +618,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ThrowEvent.hammer => Colors.purpleAccent,
         ThrowEvent.javelin => Colors.lightBlueAccent,
       };
+
+  String _athleteName(ThrowVideo video) =>
+      video.athlete.isEmpty ? 'Unassigned' : video.athlete;
 
   /// A stable per-athlete accent so the same name keeps the same color.
   Color _athleteColor(String name) {
@@ -611,67 +675,208 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// One of the two library grouping choices. A filled tint reads as the
-/// active one without the weight of a bordered segmented control.
-class _GroupChip extends StatelessWidget {
-  const _GroupChip({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+/// The three ways to slice the library, as one connected bar: a slanted
+/// block slides under the active section and the dividers lean with it.
+class _GroupingBar extends StatelessWidget {
+  const _GroupingBar({required this.value, required this.onChanged});
 
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final LibraryGrouping value;
+  final ValueChanged<LibraryGrouping> onChanged;
+
+  static const _segments = [
+    (LibraryGrouping.athlete, Icons.person_outline, 'Athlete'),
+    (LibraryGrouping.event, Icons.sports_score_outlined, 'Event'),
+    (LibraryGrouping.date, Icons.event_outlined, 'Date'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final foreground =
-        selected ? scheme.primary : scheme.onSurfaceVariant;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-          decoration: BoxDecoration(
-            color: selected
-                ? scheme.primary.withOpacity(0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: selected
-                  ? scheme.primary.withOpacity(0.45)
-                  : scheme.outlineVariant.withOpacity(0.35),
-            ),
+    final index =
+        _segments.indexWhere((segment) => segment.$1 == value).toDouble();
+    return SizedBox(
+      height: 44,
+      child: TweenAnimationBuilder<double>(
+        // Only `end` matters after the first build: changing it slides the
+        // block from wherever it is to the segment just tapped.
+        tween: Tween<double>(begin: index, end: index),
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        builder: (context, position, child) => CustomPaint(
+          painter: _GroupingBarPainter(
+            position: position,
+            count: _segments.length,
+            surface: scheme.surfaceContainerHighest,
+            accent: scheme.primary,
+            outline: scheme.outlineVariant,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: foreground),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  height: 1.1,
-                  color: foreground,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          child: child,
+        ),
+        child: Row(
+          children: [
+            for (final (grouping, icon, label) in _segments)
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => onChanged(grouping),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon,
+                          size: 15,
+                          color: grouping == value
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant),
+                      const SizedBox(width: 6),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 13,
+                          letterSpacing: 0.2,
+                          color: grouping == value
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                          fontWeight: grouping == value
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
   }
+}
+
+class _GroupingBarPainter extends CustomPainter {
+  const _GroupingBarPainter({
+    required this.position,
+    required this.count,
+    required this.surface,
+    required this.accent,
+    required this.outline,
+  });
+
+  /// Which segment the block sits on; fractional while it slides.
+  final double position;
+  final int count;
+  final Color surface;
+  final Color accent;
+  final Color outline;
+
+  /// How far the slanted edges lean, in logical pixels per half-height.
+  static const double _lean = 7;
+  static const double _cut = 12;
+
+  /// Same two-corner cut as [angularShape], drawn by hand so the fill,
+  /// the block and the dividers can all be clipped to it.
+  Path _silhouette(Size size) => Path()
+    ..moveTo(_cut, 0)
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width, size.height - _cut)
+    ..lineTo(size.width - _cut, size.height)
+    ..lineTo(0, size.height)
+    ..lineTo(0, _cut)
+    ..close();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final bar = _silhouette(size);
+
+    canvas.save();
+    canvas.clipPath(bar);
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [surface.withOpacity(0.42), surface.withOpacity(0.14)],
+        ).createShader(rect),
+    );
+
+    final segment = size.width / count;
+    final left = position * segment;
+    // A parallelogram, leaning right, one segment wide.
+    final block = Path()
+      ..moveTo(left + _lean, 0)
+      ..lineTo(left + segment + _lean, 0)
+      ..lineTo(left + segment - _lean, size.height)
+      ..lineTo(left - _lean, size.height)
+      ..close();
+    canvas.drawPath(
+      block,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accent.withOpacity(0.34), accent.withOpacity(0.10)],
+        ).createShader(block.getBounds()),
+    );
+    canvas.drawPath(
+      block,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = accent.withOpacity(0.45),
+    );
+    // Bright underline along the block's slanted foot.
+    canvas.drawLine(
+      Offset(left - _lean, size.height - 1),
+      Offset(left + segment - _lean, size.height - 1),
+      Paint()
+        ..strokeWidth = 2
+        ..color = accent.withOpacity(0.85),
+    );
+
+    for (var i = 1; i < count; i++) {
+      final x = i * segment;
+      // Fade a divider out as the block slides up against it.
+      final gap = [(x - left).abs(), (x - left - segment).abs()]
+              .reduce((a, b) => a < b ? a : b) /
+          segment;
+      final opacity = 0.16 + gap.clamp(0.0, 1.0) * 0.4;
+      final top = Offset(x + _lean, 8);
+      final bottom = Offset(x - _lean, size.height - 8);
+      canvas.drawLine(
+        top,
+        bottom,
+        Paint()
+          ..strokeWidth = 1
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              outline.withOpacity(0),
+              outline.withOpacity(opacity),
+              outline.withOpacity(0),
+            ],
+          ).createShader(Rect.fromPoints(top, bottom)),
+      );
+    }
+    canvas.restore();
+
+    canvas.drawPath(
+      bar,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1
+        ..color = outline.withOpacity(0.35),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroupingBarPainter old) =>
+      old.position != position ||
+      old.count != count ||
+      old.surface != surface ||
+      old.accent != accent ||
+      old.outline != outline;
 }
 
 /// A large thumbnail with the throw's details laid over the bottom of the
@@ -702,7 +907,7 @@ class _ThrowCard extends StatelessWidget {
     return Material(
       color: Colors.black,
       clipBehavior: Clip.antiAlias,
-      borderRadius: BorderRadius.circular(20),
+      shape: angularShape(18),
       child: InkWell(
         onTap: onTap,
         child: Stack(
@@ -728,6 +933,18 @@ class _ThrowCard extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   stops: [0.35, 1],
                   colors: [Colors.transparent, Color(0xE6000000)],
+                ),
+              ),
+            ),
+            // A wash of the event's color across the cut corner — texture,
+            // and a second read on which event this is.
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomLeft,
+                  end: Alignment.topRight,
+                  stops: const [0, 0.55],
+                  colors: [accent.withOpacity(0.26), Colors.transparent],
                 ),
               ),
             ),

@@ -46,9 +46,13 @@ void main() {
     await _settle(tester);
     await _shoot(tester, 'home_expanded');
 
-    await tester.tap(find.text('By event'));
+    await tester.tap(find.text('Event'));
     await _settle(tester);
     await _shoot(tester, 'home_by_event');
+
+    await tester.tap(find.text('Date'));
+    await _settle(tester);
+    await _shoot(tester, 'home_by_date');
 
     await tester.enterText(find.byType(TextField).first, 'javelin');
     await _settle(tester);

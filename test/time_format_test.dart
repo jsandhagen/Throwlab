@@ -26,4 +26,20 @@ void main() {
       expect(formatShortDate(DateTime(2026, 9, 7), now: now), '7 Sep');
     });
   });
+
+  group('weekdayName', () {
+    test('names the day', () {
+      expect(weekdayName(DateTime(2026, 9, 6)), 'Sunday');
+      expect(weekdayName(DateTime(2026, 9, 7)), 'Monday');
+      expect(weekdayName(DateTime(2026, 9, 12)), 'Saturday');
+    });
+  });
+
+  group('monthAbbreviation', () {
+    test('names every month', () {
+      expect(monthAbbreviation(DateTime(2026, 1, 5)), 'Jan');
+      expect(monthAbbreviation(DateTime(2026, 7, 5)), 'Jul');
+      expect(monthAbbreviation(DateTime(2026, 12, 5)), 'Dec');
+    });
+  });
 }

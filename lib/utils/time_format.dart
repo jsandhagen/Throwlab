@@ -16,6 +16,17 @@ const _months = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ];
 
+const _weekdays = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+  'Saturday', 'Sunday',
+];
+
+/// Day of the week, e.g. `Friday`.
+String weekdayName(DateTime date) => _weekdays[date.weekday - 1];
+
+/// Three-letter month abbreviation, e.g. `Jul`.
+String monthAbbreviation(DateTime date) => _months[date.month - 1];
+
 /// Formats a library date the way the home screen shows it: `Today`,
 /// `Yesterday`, `10 Jul` within the current year, and `10 Jul 2024`
 /// otherwise. [date] and [now] are compared as local calendar days.

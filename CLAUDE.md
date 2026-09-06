@@ -36,8 +36,8 @@ flutter test --update-goldens tool/preview/home_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
-athlete and by event, a section expanded, a search in progress, and the empty
-state. Open the PNGs to see exactly what the screen paints. **Re-run it after
+athlete, by event and by date, a section expanded, a search in progress, and
+the empty state. Open the PNGs to see exactly what the screen paints. **Re-run it after
 touching a screen's layout and actually look at the output.**
 
 The harness asserts nothing; `matchesGoldenFile` is used only as a way to
@@ -63,6 +63,10 @@ same shape: load fonts, seed `SharedPreferences.setMockInitialValues`, set
 
 - Dark Material 3 theme seeded from the logo blue (`0xFF4FC3F7`); `main.dart`
   holds the theme, screens don't restyle it.
+- The home screen's look is angular: `angularShape()` (two opposite corners
+  cut) on the search field, grouping bar, cards, section tiles and the FAB,
+  with diagonal gradients for texture. Reuse it rather than inventing another
+  corner treatment.
 - `prefer_single_quotes` is on. Comments explain *why*, not what — match the
   density already in the file you're editing.
 - The library is stored as JSON in SharedPreferences by `VideoLibrary`; it
