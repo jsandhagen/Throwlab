@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/athlete_profile.dart';
 import '../models/throw_video.dart';
 
 /// Persists the list of imported throw videos.
@@ -17,6 +18,12 @@ class VideoLibrary extends ChangeNotifier {
   final List<ThrowVideo> _videos = [];
   bool _loaded = false;
   String? _storageError;
+
+  /// The throws standing as a personal best. Recomputed on every change
+  /// rather than asked for per card: the library paints a shelf of cards at
+  /// a time, and each one would otherwise re-scan the whole library to find
+  /// out whether it is wearing a medal.
+  Set<String> _bests = const {};
 
   List<ThrowVideo> get videos => List.unmodifiable(_videos);
   bool get isLoaded => _loaded;
@@ -47,6 +54,7 @@ class VideoLibrary extends ChangeNotifier {
       _videos.clear();
       _storageError = '$e';
     } finally {
+      _bests = personalBestIds(_videos);
       // Always leave the loading state, even when storage is broken, so the
       // app never wedges on the startup spinner.
       _loaded = true;
@@ -69,8 +77,18 @@ class VideoLibrary extends ChangeNotifier {
     return names;
   }
 
+  /// Whether this throw is the furthest its athlete has thrown that event
+  /// and weight — what puts the gold frame and the medal on its card.
+  bool isPersonalBest(ThrowVideo video) => _bests.contains(video.id);
+
+  /// What the library knows about one athlete: their throws, newest first,
+  /// and their best mark at each thing they throw.
+  AthleteProfile profileFor(String name) =>
+      AthleteProfile.of(name, _videos);
+
   Future<void> add(ThrowVideo video) async {
     _videos.insert(0, video);
+    _bests = personalBestIds(_videos);
     await _save();
     notifyListeners();
   }
@@ -79,6 +97,7 @@ class VideoLibrary extends ChangeNotifier {
     final index = _videos.indexWhere((v) => v.id == id);
     final removed = index == -1 ? null : _videos[index];
     _videos.removeWhere((v) => v.id == id);
+    _bests = personalBestIds(_videos);
     await _save();
     notifyListeners();
     if (removed != null) await _deleteFiles(removed);
@@ -113,6 +132,7 @@ class VideoLibrary extends ChangeNotifier {
     final index = _videos.indexWhere((v) => v.id == video.id);
     if (index == -1) return;
     _videos[index] = video;
+    _bests = personalBestIds(_videos);
     await _save();
     notifyListeners();
   }

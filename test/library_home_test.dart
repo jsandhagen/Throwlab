@@ -5,7 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/models/throw_event.dart';
+import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/analysis_screen.dart';
+import 'package:throwlab/screens/athlete_screen.dart';
 import 'package:throwlab/screens/group_screen.dart';
 import 'package:throwlab/screens/home_screen.dart';
 import 'package:throwlab/services/video_library.dart';
@@ -126,6 +128,50 @@ void main() {
     });
   });
 
+  group('personal bests', () {
+    /// Ana's two throws, oldest first.
+    List<ThrowVideo> anas() => library.videos.reversed
+        .where((video) => video.athlete == 'Ana Diaz')
+        .toList();
+
+    testWidgets('the furthest throw wears the medal on the shelf',
+        (tester) async {
+      final ana = anas();
+      ana[0].distance = 58.90;
+      await library.update(ana[0]);
+      ana[1].distance = 61.44;
+      await library.update(ana[1]);
+      await mountHome(tester, width: 1000);
+
+      expect(find.byIcon(Icons.military_tech), findsOneWidget);
+      final gold = tester
+          .widgetList<ThrowCard>(find.byType(ThrowCard))
+          .where((card) => card.isPersonalBest);
+      expect(gold.single.video.id, ana[1].id);
+    });
+
+    testWidgets('an untagged throw is never a best, however far it went',
+        (tester) async {
+      final loose = library.videos.firstWhere((video) => video.id == 'loose');
+      loose.distance = 99.99;
+      await library.update(loose);
+      await mountHome(tester, width: 1000);
+
+      expect(find.byIcon(Icons.military_tech), findsNothing);
+      expect(find.text('99.99 m'), findsOneWidget);
+    });
+
+    testWidgets('a search result carries the medal too', (tester) async {
+      final ana = anas();
+      ana[1].distance = 61.44;
+      await library.update(ana[1]);
+      await mountHome(tester);
+      await search(tester, 'Ana');
+
+      expect(find.byIcon(Icons.military_tech), findsOneWidget);
+    });
+  });
+
   group('search', () {
     testWidgets('narrows to matching throws and drops the headings',
         (tester) async {
@@ -161,18 +207,38 @@ void main() {
   });
 
   group('drilling in', () {
-    testWidgets('the heading opens that group on its own', (tester) async {
+    testWidgets('an athlete heading opens their profile', (tester) async {
       await mountHome(tester);
       await tester.tap(find.text('Ana Diaz'));
       await pumpFrames(tester, 25);
-      expect(find.byType(GroupScreen), findsOneWidget);
+      expect(find.byType(AthleteScreen), findsOneWidget);
       // Scoped to the new screen: the library underneath is still mounted
       // while the push transition runs, and its cards would count too.
       expect(
         find.descendant(
-            of: find.byType(GroupScreen), matching: find.byType(ThrowCard)),
+            of: find.byType(AthleteScreen), matching: find.byType(ThrowCard)),
         findsNWidgets(2),
       );
+    });
+
+    testWidgets('a heading nobody is behind opens the plain grid',
+        (tester) async {
+      await mountHome(tester);
+      // Unassigned is not a person, so there is no profile to open.
+      await tester.tap(find.text('Unassigned'));
+      await pumpFrames(tester, 25);
+      expect(find.byType(GroupScreen), findsOneWidget);
+      expect(find.byType(AthleteScreen), findsNothing);
+    });
+
+    testWidgets('an event heading opens the plain grid', (tester) async {
+      await mountHome(tester);
+      await tester.tap(find.text('Event'));
+      await pumpFrames(tester, 8);
+      await tester.tap(find.text('Shot Put'));
+      await pumpFrames(tester, 25);
+      expect(find.byType(GroupScreen), findsOneWidget);
+      expect(find.byType(AthleteScreen), findsNothing);
     });
 
     testWidgets('a card opens the throw itself', (tester) async {

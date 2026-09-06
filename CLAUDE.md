@@ -7,9 +7,9 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowEvent` and the implement specs |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests |
 | `lib/services/` | `VideoLibrary` (persistence), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
-| `lib/screens/` | `home_screen` (the library), `group_screen`, `analysis_screen`, `comparison_screen` |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `group_screen`, `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `event_glyph`, `sector_art`, drawing canvas and rail, playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting |
 | `test/` | Unit and widget tests — what CI runs |
@@ -33,13 +33,15 @@ There is no emulator in CI or in an agent session, so UI work is reviewed by
 rendering it to PNGs:
 
 ```sh
-flutter test --update-goldens tool/preview/home_preview.dart
+flutter test --update-goldens tool/preview/home_preview.dart \
+                              tool/preview/athlete_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
-athlete and by event, a search in progress, and the empty state. Open the
-PNGs to see exactly what the screen paints. **Re-run it after touching a
-screen's layout and actually look at the output.**
+athlete and by event, a search in progress, the empty state, and three
+athlete profiles. Open the PNGs to see exactly what the screen paints.
+**Re-run it after touching a screen's layout and actually look at the
+output.**
 
 The harness asserts nothing; `matchesGoldenFile` is used only as a way to
 write a PNG. It lives in `tool/` rather than `test/` so `flutter test` — and
@@ -55,11 +57,14 @@ it rather than rolling your own:
   Test bindings fake out async work, so an image first resolved inside a pump
   never finishes decoding and the thumbnail paints empty.
 
-Sample throws and their thumbnails are generated at run time (there is a tiny
-PNG encoder at the bottom of `home_preview.dart`), so no fixtures are
-committed. To preview another screen, add a file beside it following the same
-shape: `loadPreviewFonts()`, seed `SharedPreferences.setMockInitialValues`,
-set `tester.view.physicalSize`, pump, then `_shoot` each state worth seeing.
+Sample throws and their thumbnails come from `sample_library.dart`, generated
+at run time (there is a tiny PNG encoder at the bottom of it), so no fixtures
+are committed. To preview another screen, add a file beside it following the
+same shape: `loadPreviewFonts()`, seed
+`SharedPreferences.setMockInitialValues`, set `tester.view.physicalSize`,
+pump, then `_shoot` each state worth seeing. A preview that mounts one screen
+rather than the whole app paints it under `ThrowLabApp.theme`, so it looks
+like the app rather than a bare Material default.
 
 ## Conventions
 
@@ -84,5 +89,13 @@ set `tester.view.physicalSize`, pump, then `_shoot` each state worth seeing.
   recorded) is the badge on its card, shown in the unit it was entered in
   (`distanceUnit`). `DistanceField` is the metres/feet pair that converts
   as you type; `parseFeet` also takes "191-08" the way a meet writes it.
+- A personal best is per athlete, per event, *per implement weight* — a
+  lighter implement never erases the mark set with the heavy one. The rule
+  lives in `personalBestIds` (`athlete_profile.dart`) and nowhere else;
+  `VideoLibrary.isPersonalBest` caches it, and a card that gets
+  `isPersonalBest: true` wears the gold frame and the medal. Untagged
+  throws hold no marks: "Unassigned" is not a person. An athlete's heading
+  in the library opens `AthleteScreen` — their throws and their bests —
+  while an event or a date opens the plain `GroupScreen` grid.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

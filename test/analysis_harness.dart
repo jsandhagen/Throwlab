@@ -94,15 +94,18 @@ ThrowVideo testVideo(
   ThrowEvent event = ThrowEvent.javelin,
   String athlete = '',
   DateTime? importedAt,
+  double implementKg = 7.26,
+  double? distance,
 }) {
   final file = File('${directory.path}/$id.mp4')..writeAsBytesSync(<int>[0]);
   return ThrowVideo(
     id: id,
     path: file.path,
     event: event,
-    implementKg: 7.26,
+    implementKg: implementKg,
     importedAt: importedAt ?? DateTime(2026, 1, 1),
     athlete: athlete,
+    distance: distance,
   );
 }
 

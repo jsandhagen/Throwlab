@@ -19,6 +19,7 @@ import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'athlete_screen.dart';
 import 'comparison_screen.dart';
 import 'group_screen.dart';
 
@@ -309,14 +310,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _openGroup(String heading, List<ThrowVideo> videos) {
+    // An athlete is a person, not just a bucket of clips: their heading
+    // opens the profile — bests and all — while an event or a date, which
+    // nobody has a season with, opens the plain grid. Unassigned is not
+    // anybody, so it stays a grid too.
+    final isAthlete =
+        _grouping == LibraryGrouping.athlete && heading != _unassigned;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => GroupScreen(
-          title: heading,
-          videoIds: [for (final video in videos) video.id],
-          titleFor: _cardTitle,
-        ),
+        builder: (_) => isAthlete
+            ? AthleteScreen(name: heading, titleFor: _cardTitle)
+            : GroupScreen(
+                title: heading,
+                videoIds: [for (final video in videos) video.id],
+                titleFor: _cardTitle,
+              ),
       ),
     );
   }
@@ -450,7 +459,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
               ),
-              searching ? _results(matches) : _shelves(matches),
+              searching
+                  ? _results(library, matches)
+                  : _shelves(library, matches),
             ],
           ),
         ),
@@ -460,7 +471,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   /// A flat grid of whatever matched, newest first — searching is looking
   /// for one throw, so headings would only get in the way.
-  Widget _results(List<ThrowVideo> matches) {
+  Widget _results(VideoLibrary library, List<ThrowVideo> matches) {
     if (matches.isEmpty) {
       return Center(
         child: Padding(
@@ -489,6 +500,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // whichever grouping is selected.
           title: '${video.athlete.isEmpty ? _unassigned : video.athlete} '
               '· ${video.event.label}',
+          isPersonalBest: library.isPersonalBest(video),
           onTap: () => _openThrow(video, matches),
           onLongPress: () => showThrowActions(context, video),
         );
@@ -503,17 +515,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// no athlete could be seen without pushing the others off the screen.
   /// A shelf costs one row whatever it holds, and the card cut off at the
   /// right edge is what says there are more.
-  Widget _shelves(List<ThrowVideo> videos) {
+  Widget _shelves(VideoLibrary library, List<ThrowVideo> videos) {
     final groups = _grouped(videos);
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 96),
       children: [
-        for (final entry in groups.entries) _shelf(entry.key, entry.value),
+        for (final entry in groups.entries)
+          _shelf(library, entry.key, entry.value),
       ],
     );
   }
 
-  Widget _shelf(String heading, List<ThrowVideo> videos) {
+  Widget _shelf(
+      VideoLibrary library, String heading, List<ThrowVideo> videos) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -568,6 +582,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 child: ThrowCard(
                   video: video,
                   title: _cardTitle(video),
+                  isPersonalBest: library.isPersonalBest(video),
                   onTap: () => _openThrow(video, videos),
                   onLongPress: () => showThrowActions(context, video),
                 ),

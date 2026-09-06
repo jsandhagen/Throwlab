@@ -83,6 +83,7 @@ class GroupScreen extends StatelessWidget {
                     return ThrowCard(
                       video: video,
                       title: titleFor(video),
+                      isPersonalBest: library.isPersonalBest(video),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(

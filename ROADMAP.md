@@ -84,9 +84,9 @@ Checked items are implemented (at least in a first version). The phases are a su
 
 ## Phase 8 — Progress tracking
 
-- [ ] Athlete profiles (name, gender, age category, event)
+- [x] Athlete profiles (name, events thrown, bests per implement; no age category yet)
 - [ ] Season progression charts (release speed, release angle, predicted distance over time)
-- [ ] Personal bests with linked video
+- [x] Personal bests with linked video
 - [ ] Correlate training metrics with competition results
 - [ ] Migrate persistence to SQLite (sqflite)
 

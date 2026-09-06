@@ -59,6 +59,11 @@ double? parseFeet(String text) {
 /// for anything that only deals in the stored unit.
 double? parseDistance(String text) => parseDistanceValue(text);
 
+/// The colour a personal best is marked in. Warm enough to read as a medal
+/// against the dark theme without competing with the event accents, which
+/// are all cool.
+const personalBestGold = Color(0xFFFFC94D);
+
 /// A throw as a card: the still, with what it is written over it.
 ///
 /// The library used to be text rows with a 72×48 stamp on the left, which
@@ -72,6 +77,7 @@ class ThrowCard extends StatelessWidget {
     super.key,
     required this.video,
     required this.title,
+    this.isPersonalBest = false,
     this.onTap,
     this.onLongPress,
   });
@@ -81,6 +87,11 @@ class ThrowCard extends StatelessWidget {
   /// What this throw is, in the context it's shown in: under an athlete the
   /// name is redundant, in a search result it is the useful half.
   final String title;
+
+  /// Whether this throw is the furthest its athlete has thrown that event
+  /// and weight. Gold-frames the card and pins a medal to it, so the best
+  /// throw in a shelf is the one you spot without reading a single number.
+  final bool isPersonalBest;
 
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -96,7 +107,14 @@ class ThrowCard extends StatelessWidget {
     return Material(
       color: Colors.black,
       clipBehavior: Clip.antiAlias,
-      borderRadius: BorderRadius.circular(16),
+      // The gold sits on the card's own edge rather than around it, so a
+      // best doesn't grow by two pixels and knock a shelf out of line.
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: isPersonalBest
+            ? const BorderSide(color: personalBestGold, width: 2)
+            : BorderSide.none,
+      ),
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -144,6 +162,18 @@ class ThrowCard extends StatelessWidget {
                 ),
               ),
             ),
+            // A best glows from the corner its medal hangs in.
+            if (isPersonalBest)
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topRight,
+                    end: Alignment.bottomLeft,
+                    stops: [0, 0.6],
+                    colors: [Color(0x40FFC94D), Colors.transparent],
+                  ),
+                ),
+              ),
             if (roomy)
               Center(
                 child: DecoratedBox(
@@ -163,8 +193,12 @@ class ThrowCard extends StatelessWidget {
                 left: 8,
                 top: 8,
                 child: _Badge(
-                    label: formatDistance(distance, video.distanceUnit)),
+                  label: formatDistance(distance, video.distanceUnit),
+                  gold: isPersonalBest,
+                ),
               ),
+            if (isPersonalBest && roomy)
+              const Positioned(right: 8, top: 8, child: _Medal()),
             Positioned(
               left: 10,
               right: 10,
@@ -236,10 +270,42 @@ class ThrowCard extends StatelessWidget {
   }
 }
 
+/// The medal a personal best wears: the distance badge's opposite number,
+/// pinned to the far corner so the two read as a pair rather than a stack.
+class _Medal extends StatelessWidget {
+  const _Medal();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Personal best',
+      child: Container(
+        width: 26,
+        height: 26,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFFFFE08A), personalBestGold],
+          ),
+        ),
+        child: const Icon(Icons.military_tech,
+            size: 17, color: Color(0xCC1A1200)),
+      ),
+    );
+  }
+}
+
 class _Badge extends StatelessWidget {
-  const _Badge({required this.label});
+  const _Badge({required this.label, this.gold = false});
 
   final String label;
+
+  /// A best's distance is the thing the medal is about, so it is written in
+  /// the same gold rather than left as one more white number.
+  final bool gold;
 
   @override
   Widget build(BuildContext context) {
@@ -252,13 +318,14 @@ class _Badge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.straighten, size: 12, color: Colors.white),
+          Icon(Icons.straighten,
+              size: 12, color: gold ? personalBestGold : Colors.white),
           const SizedBox(width: 4),
           Text(label,
-              style: const TextStyle(
-                  color: Colors.white,
+              style: TextStyle(
+                  color: gold ? personalBestGold : Colors.white,
                   fontSize: 10.5,
-                  fontWeight: FontWeight.w600)),
+                  fontWeight: gold ? FontWeight.w700 : FontWeight.w600)),
         ],
       ),
     );
