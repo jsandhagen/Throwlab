@@ -44,25 +44,31 @@ The harness asserts nothing; `matchesGoldenFile` is used only as a way to
 write a PNG. It lives in `tool/` rather than `test/` so `flutter test` — and
 therefore CI — never runs it.
 
-Two things it has to do, and any new preview needs as well:
+`tool/preview/harness.dart` holds the two things every preview needs, so use
+it rather than rolling your own:
 
-- **Load fonts** from `$FLUTTER_ROOT/bin/cache/artifacts/material_fonts`. The
-  test engine ships no fonts, so without this every glyph and icon paints as a
-  filled box.
-- **Warm the image cache** (`_warmThumbnails`) before `pumpWidget`. Test
-  bindings fake out async work, so an image first resolved inside a pump never
-  finishes decoding and the thumbnail paints empty.
+- `loadPreviewFonts()` — registers the app's bundled Barlow plus the SDK's
+  Material icon font. The test engine ships no fonts, so without this every
+  glyph and icon paints as a filled box.
+- `warmImages()` — decodes files into the image cache *before* `pumpWidget`.
+  Test bindings fake out async work, so an image first resolved inside a pump
+  never finishes decoding and the thumbnail paints empty.
 
 Sample throws and their thumbnails are generated at run time (there is a tiny
 PNG encoder at the bottom of the file), so no fixtures are committed. To
 preview another screen, add a file next to `home_preview.dart` following the
-same shape: load fonts, seed `SharedPreferences.setMockInitialValues`, set
-`tester.view.physicalSize`, pump, then `_shoot` each state worth seeing.
+same shape: `loadPreviewFonts()`, seed
+`SharedPreferences.setMockInitialValues`, set `tester.view.physicalSize`,
+pump, then `_shoot` each state worth seeing. `motifs_preview.dart` renders
+the throwing motifs from `lib/widgets/throw_motifs.dart` the same way.
 
 ## Conventions
 
 - Dark Material 3 theme seeded from the logo blue (`0xFF4FC3F7`); `main.dart`
   holds the theme, screens don't restyle it.
+- Type is Barlow, bundled under `assets/fonts/` (OFL) rather than fetched at
+  runtime — the app is used at a track, often with no signal. It is set once
+  as `ThemeData.fontFamily`; don't name a family anywhere else.
 - The home screen's look is angular: `angularShape()` (two opposite corners
   cut) on the search field, grouping bar, cards, section tiles and the FAB,
   with diagonal gradients for texture. Reuse it rather than inventing another

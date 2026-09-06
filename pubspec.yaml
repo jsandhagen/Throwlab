@@ -36,3 +36,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/icon/logo.png
+  # Bundled rather than fetched at runtime: the app is used at a track,
+  # often with no signal. Barlow is OFL-licensed; see Barlow-OFL.txt.
+  fonts:
+    - family: Barlow
+      fonts:
+        - asset: assets/fonts/Barlow-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Barlow-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Barlow-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Barlow-Bold.ttf
+          weight: 700

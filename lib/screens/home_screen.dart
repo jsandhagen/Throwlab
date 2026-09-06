@@ -742,17 +742,26 @@ class _GroupingBar extends StatelessWidget {
                               ? scheme.primary
                               : scheme.onSurfaceVariant),
                       const SizedBox(width: 6),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 13,
-                          letterSpacing: 0.2,
-                          color: grouping == value
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                          fontWeight: grouping == value
-                              ? FontWeight.w600
-                              : FontWeight.w500,
+                      // Shrinks rather than overflowing when the segment is
+                      // squeezed — by the search count, or by a large
+                      // system text size.
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 13,
+                              letterSpacing: 0.2,
+                              color: grouping == value
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant,
+                              fontWeight: grouping == value
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ),
                     ],

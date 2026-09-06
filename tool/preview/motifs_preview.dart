@@ -5,15 +5,12 @@
 //
 // See CLAUDE.md for how this harness works.
 
-import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/widgets/throw_motifs.dart';
+
+import 'harness.dart';
 
 const _out = '../../build/preview';
 
@@ -26,7 +23,7 @@ const _eventColors = {
 
 void main() {
   testWidgets('motif sheet', (tester) async {
-    await _loadFonts();
+    await loadPreviewFonts();
     tester.view.physicalSize = const Size(1080, 2760);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -36,6 +33,7 @@ void main() {
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(
             seedColor: const Color(0xFF4FC3F7), brightness: Brightness.dark),
+        fontFamily: 'Barlow',
         useMaterial3: true,
       ),
       home: const _MotifSheet(),
@@ -253,29 +251,4 @@ class _MotifSheet extends StatelessWidget {
                 fontSize: 11,
                 color: Theme.of(context).colorScheme.onSurfaceVariant)),
       );
-}
-
-/// Loads Roboto and the Material icon font from the Flutter SDK; without
-/// them the test engine paints every glyph as a filled box.
-Future<void> _loadFonts() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) return;
-  final dir = Directory('$root/bin/cache/artifacts/material_fonts');
-  if (!dir.existsSync()) return;
-
-  Future<void> load(String family, List<String> files) async {
-    final loader = FontLoader(family);
-    for (final file in files) {
-      final bytes = File('${dir.path}/$file').readAsBytesSync();
-      loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-    }
-    await loader.load();
-  }
-
-  await load('Roboto', [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]);
-  await load('MaterialIcons', ['MaterialIcons-Regular.otf']);
 }

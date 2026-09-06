@@ -19,6 +19,7 @@ class ThrowLabApp extends StatelessWidget {
         title: 'ThrowLab',
         theme: ThemeData(
           brightness: Brightness.dark,
+          fontFamily: 'Barlow',
           colorScheme: ColorScheme.fromSeed(
             // Matches the light blue of the flask-and-javelin logo.
             seedColor: const Color(0xFF4FC3F7),

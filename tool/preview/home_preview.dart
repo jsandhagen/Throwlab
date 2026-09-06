@@ -9,23 +9,23 @@
 //
 // Living outside test/ keeps `flutter test` — and therefore CI — clear of it.
 
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/main.dart';
+
+import 'harness.dart';
 
 /// Where the generated PNGs go, relative to this file.
 const _out = '../../build/preview';
 
 void main() {
   testWidgets('home screen', (tester) async {
-    await _loadFonts();
+    await loadPreviewFonts();
     final thumbs = _sampleThumbnails();
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({
@@ -37,30 +37,30 @@ void main() {
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
-    await _warmThumbnails(tester, thumbs);
+    await warmImages(tester, thumbs);
     await tester.pumpWidget(const ThrowLabApp());
-    await _settle(tester);
+    await settle(tester);
     await _shoot(tester, 'home_by_athlete');
 
     await tester.tap(find.text('Anna Sofia'));
-    await _settle(tester);
+    await settle(tester);
     await _shoot(tester, 'home_expanded');
 
     await tester.tap(find.text('Event'));
-    await _settle(tester);
+    await settle(tester);
     await _shoot(tester, 'home_by_event');
 
     await tester.tap(find.text('Date'));
-    await _settle(tester);
+    await settle(tester);
     await _shoot(tester, 'home_by_date');
 
     await tester.enterText(find.byType(TextField).first, 'javelin');
-    await _settle(tester);
+    await settle(tester);
     await _shoot(tester, 'home_search');
   });
 
   testWidgets('empty library', (tester) async {
-    await _loadFonts();
+    await loadPreviewFonts();
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(1080, 2280);
@@ -68,73 +68,13 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(const ThrowLabApp());
-    await _settle(tester);
+    await settle(tester);
     await _shoot(tester, 'home_empty');
   });
 }
 
 Future<void> _shoot(WidgetTester tester, String name) =>
     expectLater(find.byType(MaterialApp), matchesGoldenFile('$_out/$name.png'));
-
-/// Pumps until the tree is idle. Thumbnails are already decoded by
-/// [_warmThumbnails], so a plain settle is enough here.
-Future<void> _settle(WidgetTester tester) async {
-  await tester.pumpAndSettle();
-  await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)));
-  await tester.pumpAndSettle();
-}
-
-/// Decodes the sample thumbnails into the image cache before the widget
-/// tree asks for them. Test bindings fake out async work, so an image first
-/// resolved from inside a pump never finishes decoding and paints as an
-/// empty box; warming the cache here — under [WidgetTester.runAsync], where
-/// async work is real — means the widgets get a finished image right away.
-Future<void> _warmThumbnails(WidgetTester tester, List<String> paths) async {
-  await tester.runAsync(() async {
-    for (final path in paths) {
-      final done = Completer<void>();
-      final stream =
-          FileImage(File(path)).resolve(ImageConfiguration.empty);
-      late final ImageStreamListener listener;
-      listener = ImageStreamListener((_, __) {
-        stream.removeListener(listener);
-        if (!done.isCompleted) done.complete();
-      }, onError: (error, _) {
-        stream.removeListener(listener);
-        if (!done.isCompleted) done.complete();
-      });
-      stream.addListener(listener);
-      await done.future.timeout(const Duration(seconds: 5),
-          onTimeout: () => stderr.writeln('preview: $path failed to decode'));
-    }
-  });
-}
-
-/// Loads Roboto and the Material icon font from the Flutter SDK; without
-/// them the test engine paints every glyph as a filled box.
-Future<void> _loadFonts() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) return;
-  final dir = Directory('$root/bin/cache/artifacts/material_fonts');
-  if (!dir.existsSync()) return;
-
-  Future<void> load(String family, List<String> files) async {
-    final loader = FontLoader(family);
-    for (final file in files) {
-      final bytes = File('${dir.path}/$file').readAsBytesSync();
-      loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-    }
-    await loader.load();
-  }
-
-  await load('Roboto', [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]);
-  await load('MaterialIcons', ['MaterialIcons-Regular.otf']);
-}
 
 List<Map<String, dynamic>> _sampleLibrary(List<String> thumbs) {
   Map<String, dynamic> video(
