@@ -299,7 +299,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _library(VideoLibrary library) {
     final filtered = _filtered(library.videos);
     final groups = _grouped(filtered);
-    return Column(
+    return Stack(
+      children: [
+        // The sector, sweeping across behind the whole library.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: SectorBackdropPainter(
+                  color: Theme.of(context).colorScheme.primary),
+            ),
+          ),
+        ),
+        Column(
       children: [
         // The count follows the search, so it always describes what's shown.
         _header(filtered.length),
@@ -313,6 +324,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       _section(entry.key, entry.value),
                   ],
                 ),
+        ),
+      ],
         ),
       ],
     );
