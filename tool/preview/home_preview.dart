@@ -42,11 +42,15 @@ void main() {
     await settle(tester);
     await _shoot(tester, 'home_by_athlete');
 
-    await tester.tap(find.text('By event'));
+    await tester.tap(find.text('Event'));
     await settle(tester);
     await _shoot(tester, 'home_by_event');
 
-    await tester.enterText(find.byType(SearchBar).first, 'javelin');
+    await tester.tap(find.text('Date'));
+    await settle(tester);
+    await _shoot(tester, 'home_by_date');
+
+    await tester.enterText(find.byType(TextField).first, 'javelin');
     await settle(tester);
     await _shoot(tester, 'home_search');
   });

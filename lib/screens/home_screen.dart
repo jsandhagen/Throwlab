@@ -10,6 +10,7 @@ import '../models/throw_video.dart';
 import '../services/app_updater.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../widgets/angular.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/event_glyph.dart';
@@ -20,7 +21,7 @@ import 'analysis_screen.dart';
 import 'comparison_screen.dart';
 import 'group_screen.dart';
 
-enum LibraryGrouping { athlete, event }
+enum LibraryGrouping { athlete, event, date }
 
 /// Throws nobody is attached to yet. Kept as one heading so they are easy
 /// to find and tag, and pinned last so housekeeping never sits above the
@@ -245,9 +246,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Map<String, List<ThrowVideo>> _grouped(List<ThrowVideo> videos) {
     final map = <String, List<ThrowVideo>>{};
     for (final video in videos) {
-      final key = _grouping == LibraryGrouping.athlete
-          ? (video.athlete.isEmpty ? _unassigned : video.athlete)
-          : video.event.label;
+      final key = switch (_grouping) {
+        LibraryGrouping.athlete =>
+          video.athlete.isEmpty ? _unassigned : video.athlete,
+        LibraryGrouping.event => video.event.label,
+        LibraryGrouping.date => shortThrowDate(video.displayDate),
+      };
       map.putIfAbsent(key, () => []).add(video);
     }
     for (final group in map.values) {
@@ -275,11 +279,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   /// What a card says about a throw, given what its heading already said.
-  String _cardTitle(ThrowVideo video) =>
-      _grouping == LibraryGrouping.athlete
-          ? '${video.event.label} · ${video.gender.label}'
-          : '${video.athlete.isEmpty ? _unassigned : video.athlete} '
-              '· ${video.gender.label}';
+  String _cardTitle(ThrowVideo video) => switch (_grouping) {
+        LibraryGrouping.athlete =>
+          '${video.event.label} · ${video.gender.label}',
+        LibraryGrouping.event =>
+          '${video.athlete.isEmpty ? _unassigned : video.athlete} '
+              '· ${video.gender.label}',
+        LibraryGrouping.date =>
+          '${video.athlete.isEmpty ? _unassigned : video.athlete} '
+              '· ${video.event.label}',
+      };
 
   void _openThrow(ThrowVideo video, List<ThrowVideo> siblings) {
     Navigator.push(
@@ -397,42 +406,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: SearchBar(
+          child: AngularSearchField(
             controller: _search,
-            hintText: 'Search athletes, events, notes',
-            leading: const Icon(Icons.search),
-            trailing: [
-              if (searching)
-                IconButton(
-                  tooltip: 'Clear search',
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    _search.clear();
-                    setState(() => _query = '');
-                  },
-                ),
-            ],
             onChanged: (value) => setState(() => _query = value),
+            onClear: () {
+              _search.clear();
+              setState(() => _query = '');
+            },
           ),
         ),
         if (!searching)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: SegmentedButton<LibraryGrouping>(
-              showSelectedIcon: false,
+            child: AngularSegmentedBar<LibraryGrouping>(
+              value: _grouping,
+              onChanged: (grouping) =>
+                  setState(() => _grouping = grouping),
               segments: const [
-                ButtonSegment(
+                AngularSegment(
                     value: LibraryGrouping.athlete,
-                    icon: Icon(Icons.person),
-                    label: Text('By athlete')),
-                ButtonSegment(
+                    icon: Icons.person_outline,
+                    label: 'Athlete'),
+                AngularSegment(
                     value: LibraryGrouping.event,
-                    icon: EventGlyph(ThrowEvent.javelin, size: 18),
-                    label: Text('By event')),
+                    icon: Icons.sports_score_outlined,
+                    label: 'Event'),
+                AngularSegment(
+                    value: LibraryGrouping.date,
+                    icon: Icons.event_outlined,
+                    label: 'Date'),
               ],
-              selected: {_grouping},
-              onSelectionChanged: (selection) =>
-                  setState(() => _grouping = selection.first),
             ),
           ),
         Expanded(
@@ -521,9 +524,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           style: theme.textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w600)),
                       Text(
-                        '${videos.length} throw'
-                        '${videos.length == 1 ? '' : 's'} · '
-                        '${shortThrowDate(videos.first.displayDate)}',
+                        _shelfSubtitle(videos),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant),
                       ),
@@ -563,11 +566,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  /// How recent the shelf is — except when the heading is already the
+  /// date, where naming who threw says something new instead.
+  String _shelfSubtitle(List<ThrowVideo> videos) {
+    final count = '${videos.length} throw${videos.length == 1 ? '' : 's'}';
+    if (_grouping != LibraryGrouping.date) {
+      return '$count · ${shortThrowDate(videos.first.displayDate)}';
+    }
+    final names = {
+      for (final video in videos)
+        video.athlete.isEmpty ? _unassigned : video.athlete
+    }.toList();
+    return names.length > 2
+        ? '$count · ${names.take(2).join(', ')} +${names.length - 2}'
+        : '$count · ${names.join(', ')}';
+  }
+
   Widget _headingAvatar(String heading, ThrowVideo first) {
     if (_grouping == LibraryGrouping.event) {
       return EventGlyph(first.event, color: eventColor(first.event));
     }
     final scheme = Theme.of(context).colorScheme;
+    if (_grouping == LibraryGrouping.date) {
+      final date = first.displayDate.toLocal();
+      return Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: ShapeDecoration(
+          shape: angularShape(11,
+              side: BorderSide(color: scheme.primary.withOpacity(0.45))),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              scheme.primary.withOpacity(0.55),
+              scheme.primary.withOpacity(0.16),
+            ],
+          ),
+        ),
+        child: Text('${date.day}',
+            style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 15,
+                fontWeight: FontWeight.w700)),
+      );
+    }
     if (heading == _unassigned) {
       return CircleAvatar(
         radius: 18,

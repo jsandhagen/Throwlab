@@ -97,11 +97,29 @@ void main() {
     testWidgets('grouping by event re-headings the same throws',
         (tester) async {
       await mountHome(tester);
-      await tester.tap(find.text('By event'));
+      await tester.tap(find.text('Event'));
       await pumpFrames(tester, 8);
       expect(find.text('Shot Put'), findsOneWidget);
       expect(find.text('Javelin'), findsOneWidget);
       expect(find.byType(ThrowCard), findsNWidgets(4));
+    });
+
+    testWidgets('grouping by date heads each day the library was filmed',
+        (tester) async {
+      await mountHome(tester);
+      await tester.tap(find.text('Date'));
+      await pumpFrames(tester, 8);
+      // Four throws on four days: 1, 4 and 5 January, and 1 February. Each
+      // date reads twice — once as the heading, once on the card under it.
+      for (final day in ['1 Feb', '5 Jan', '4 Jan', '1 Jan']) {
+        expect(find.text(day), findsNWidgets(2));
+      }
+      expect(find.byType(ThrowCard), findsNWidgets(4));
+      // Newest day leads, and a card names who threw rather than repeating
+      // the event grouping's wording.
+      expect(tester.getRect(find.text('1 Feb').first).top,
+          lessThan(tester.getRect(find.text('1 Jan').first).top));
+      expect(find.textContaining('Bea Cole ·'), findsOneWidget);
     });
   });
 
@@ -113,7 +131,7 @@ void main() {
       expect(find.byType(ThrowCard), findsOneWidget);
       // Headings and the grouping switch are gone: a search crosses them.
       expect(find.text('Ana Diaz'), findsNothing);
-      expect(find.text('By athlete'), findsNothing);
+      expect(find.text('Athlete'), findsNothing);
     });
 
     testWidgets('matches on the event as well as the name', (tester) async {
@@ -132,7 +150,7 @@ void main() {
     testWidgets('clearing brings the shelves back', (tester) async {
       await mountHome(tester);
       await search(tester, 'Bea');
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(find.byIcon(Icons.close_rounded));
       await pumpFrames(tester, 8);
       expect(find.text('Ana Diaz'), findsOneWidget);
       expect(find.byType(ThrowCard), findsNWidgets(4));
