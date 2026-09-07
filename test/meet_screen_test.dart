@@ -510,4 +510,69 @@ void main() {
       expect(find.textContaining('needs'), findsNothing);
     });
   });
+
+  group('the meet format', () {
+    /// Opens the meet's own settings, off the app bar.
+    Future<void> openSettings(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Meet settings'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('offers both a 3 + 3 and a straight six', (tester) async {
+      await mountMeet(tester);
+      await openSettings(tester);
+      await tester.tap(find.byType(DropdownButtonFormField<(int, int)>));
+      await tester.pumpAndSettle();
+
+      // Two formats a coach reads off a programme, each named in full.
+      expect(find.text('3 + 3 · cut after 3'), findsWidgets);
+      expect(find.text('6 throws · everyone'), findsWidgets);
+      expect(find.text('4 throws · everyone'), findsWidgets);
+    });
+
+    testWidgets('a straight six has no cut and no final to ask about',
+        (tester) async {
+      await mountMeet(tester);
+      await openSettings(tester);
+      await tester.tap(find.byType(DropdownButtonFormField<(int, int)>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('6 throws · everyone').last);
+      await tester.pumpAndSettle();
+
+      // Nobody is cut, so there is nothing to advance to.
+      expect(find.text('Final'), findsNothing);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final meet = meets.byId('k1')!;
+      expect(meet.rounds, 6);
+      expect(meet.prelimRounds, 6);
+      expect(meet.hasFinal, isFalse);
+    });
+
+    testWidgets('a 3 + 3 keeps the cut it was given', (tester) async {
+      // Start from a meet with no cut, the way the straight six saves it.
+      final meet = meets.byId('k1')!
+        ..prelimRounds = 6
+        ..advancing = 99;
+      await meets.save(meet);
+      await mountMeet(tester);
+      await openSettings(tester);
+      await tester.tap(find.byType(DropdownButtonFormField<(int, int)>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('3 + 3 · cut after 3').last);
+      await tester.pumpAndSettle();
+
+      // The final's own dropdown appears, defaulted rather than left on the
+      // no-cut count it was stored with.
+      expect(find.text('Top 8 advance'), findsOneWidget);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      final saved = meets.byId('k1')!;
+      expect(saved.prelimRounds, 3);
+      expect(saved.rounds, 6);
+      expect(saved.advancing, 8);
+    });
+  });
 }

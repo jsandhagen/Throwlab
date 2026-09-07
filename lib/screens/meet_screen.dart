@@ -1174,15 +1174,50 @@ class _MeetDialogState extends State<_MeetDialog> {
   late final TextEditingController _name =
       TextEditingController(text: widget.existing?.name ?? '');
   late DateTime _date = widget.existing?.date ?? DateTime.now();
-  late int _rounds = widget.existing?.rounds ?? 6;
-  late int _advancing = widget.existing?.advancing ?? 8;
-  late bool _cut = widget.existing?.hasFinal ?? true;
+  /// A meet with no cut stores an advancing count past any real field, so
+  /// it is not one of the choices below — fall back to the usual eight
+  /// rather than handing the dropdown a value it has no item for.
+  late int _advancing = _finals.contains(widget.existing?.advancing)
+      ? widget.existing!.advancing
+      : 8;
 
-  /// Three, then the final — the only cut a throws competition makes.
-  static const _prelimRounds = 3;
+  /// The format, as (attempts, rounds before the cut). Equal parts mean
+  /// the whole field throws the lot.
+  late (int, int) _format = (
+    widget.existing?.rounds ?? 6,
+    widget.existing?.prelimRounds ?? 3,
+  );
 
-  /// A cut needs rounds on both sides of it.
-  bool get _canCut => _rounds > _prelimRounds;
+  bool get _hasFinal => _format.$2 < _format.$1;
+
+  /// The formats a throws competition is actually run in. Both of the
+  /// common ones are here in their own right — six throws for everybody,
+  /// and three then a final — rather than one being an option hung off the
+  /// other, because a coach reads them off a programme as two formats.
+  /// The cuts a final is drawn at.
+  static const _finals = [6, 8, 9, 12];
+
+  static const _known = [
+    (6, 3),
+    (5, 3),
+    (6, 6),
+    (5, 5),
+    (4, 4),
+    (3, 3),
+  ];
+
+  /// The choices, plus whatever this meet already is when that is
+  /// something else — a stored format has to stay selectable.
+  List<(int, int)> get _options =>
+      _known.contains(_format) ? _known : [_format, ..._known];
+
+  /// Derived rather than written down, so a label can't end up describing
+  /// a format the meet isn't in: '3 + 3', '3 + 1', '4 throws'.
+  static String _labelFor((int, int) format) {
+    final (rounds, prelim) = format;
+    if (prelim >= rounds) return '$rounds throws · everyone';
+    return '$prelim + ${rounds - prelim} · cut after $prelim';
+  }
 
   @override
   void dispose() {
@@ -1228,41 +1263,25 @@ class _MeetDialogState extends State<_MeetDialog> {
               trailing: const Icon(Icons.edit_calendar_outlined),
               onTap: _pickDate,
             ),
-            DropdownButtonFormField<int>(
-              value: _rounds,
-              decoration: const InputDecoration(labelText: 'Attempts'),
+            DropdownButtonFormField<(int, int)>(
+              value: _format,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Format'),
               items: [
-                for (final rounds in const [3, 4, 5, 6])
+                for (final format in _options)
                   DropdownMenuItem(
-                      value: rounds, child: Text('$rounds per athlete')),
+                      value: format, child: Text(_labelFor(format))),
               ],
-              onChanged: (rounds) => setState(() {
-                _rounds = rounds ?? 6;
-                // Three attempts can't be split into three and a final.
-                if (!_canCut) _cut = false;
-              }),
+              onChanged: (format) =>
+                  setState(() => _format = format ?? _format),
             ),
-            const SizedBox(height: 4),
-            SwitchListTile(
-              value: _cut && _canCut,
-              contentPadding: EdgeInsets.zero,
-              title: const Text('3 + 3'),
-              subtitle: Text(
-                _canCut
-                    ? 'Everyone throws three, then the leaders throw the '
-                        'rest.'
-                    : 'Needs more than three attempts.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              onChanged:
-                  _canCut ? (value) => setState(() => _cut = value) : null,
-            ),
-            if (_cut && _canCut)
+            if (_hasFinal) ...[
+              const SizedBox(height: 12),
               DropdownButtonFormField<int>(
                 value: _advancing,
                 decoration: const InputDecoration(labelText: 'Final'),
                 items: [
-                  for (final advancing in const [6, 8, 9, 12])
+                  for (final advancing in _finals)
                     DropdownMenuItem(
                         value: advancing,
                         child: Text('Top $advancing advance')),
@@ -1270,6 +1289,7 @@ class _MeetDialogState extends State<_MeetDialog> {
                 onChanged: (advancing) =>
                     setState(() => _advancing = advancing ?? 8),
               ),
+            ],
           ],
         ),
       ),
@@ -1283,10 +1303,10 @@ class _MeetDialogState extends State<_MeetDialog> {
             if (existing != null) {
               existing.name = _name.text.trim();
               existing.date = _date;
-              existing.rounds = _rounds;
-              existing.prelimRounds = _cut && _canCut ? _prelimRounds : _rounds;
+              existing.rounds = _format.$1;
+              existing.prelimRounds = _format.$2;
               // No cut means nobody is ever out of it.
-              existing.advancing = _cut && _canCut ? _advancing : 99;
+              existing.advancing = _hasFinal ? _advancing : 99;
               Navigator.pop(context, existing);
               return;
             }
@@ -1296,9 +1316,9 @@ class _MeetDialogState extends State<_MeetDialog> {
                 id: MeetLibrary.newMeetId(),
                 name: _name.text.trim(),
                 date: _date,
-                rounds: _rounds,
-                prelimRounds: _cut && _canCut ? _prelimRounds : _rounds,
-                advancing: _cut && _canCut ? _advancing : 99,
+                rounds: _format.$1,
+                prelimRounds: _format.$2,
+                advancing: _hasFinal ? _advancing : 99,
               ),
             );
           },
