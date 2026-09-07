@@ -185,25 +185,37 @@ class _ThrowsGlyphPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
+    final implement = Offset(s * 0.73, s * 0.26);
+    final radius = s * 0.21;
+    final trail = s * 0.105;
 
-    // The flight, leaving low on the left and still rising: enough of the
-    // curve to read as a throw, cut off before the implement so the two
-    // don't merge into a comma at icon sizes.
+    // The line the implement is travelling along as it leaves the trail,
+    // 30° above horizontal. Both the end of the curve and its control point
+    // sit on this line through the centre of the ball, so the curve's last
+    // tangent aims at that centre instead of passing under it — eyeballed
+    // endpoints read as a flight the implement isn't on.
+    const approach = Offset(0.866, -0.5);
+
+    // Clear of the ball by the trail's own rounded cap plus a hairline, so
+    // the two read as one flight rather than merging at icon sizes.
+    final end = implement - approach * (radius + trail / 2 + s * 0.05);
+    final control = end - approach * (s * 0.30);
+
     canvas.drawPath(
       Path()
         ..moveTo(s * 0.08, s * 0.90)
-        ..quadraticBezierTo(s * 0.18, s * 0.55, s * 0.48, s * 0.44),
+        ..quadraticBezierTo(control.dx, control.dy, end.dx, end.dy),
       Paint()
         ..color = color
         ..isAntiAlias = true
         ..style = PaintingStyle.stroke
-        ..strokeWidth = s * 0.105
+        ..strokeWidth = trail
         ..strokeCap = StrokeCap.round,
     );
 
     canvas.drawCircle(
-      Offset(s * 0.73, s * 0.26),
-      s * 0.21,
+      implement,
+      radius,
       Paint()
         ..color = color
         ..isAntiAlias = true
