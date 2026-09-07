@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/app_updater.dart';
+import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../widgets/angular.dart';
@@ -16,7 +17,6 @@ import '../widgets/athlete_picker.dart';
 import '../widgets/distance_field.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/gold.dart';
-import '../widgets/mark_editor.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
@@ -24,6 +24,8 @@ import 'analysis_screen.dart';
 import 'athlete_screen.dart';
 import 'comparison_screen.dart';
 import 'group_screen.dart';
+import 'meet_screen.dart';
+import 'meets_screen.dart';
 
 enum LibraryGrouping { athlete, event, date }
 
@@ -216,13 +218,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Records a throw nobody filmed — which is most of them. Lives up here
-  /// rather than only inside a profile, because the athlete it belongs to
-  /// may have no clips at all yet and so no heading to open.
-  Future<void> _recordMark() async {
-    final library = context.read<VideoLibrary>();
-    final mark = await showMarkEditor(context);
-    if (mark != null) await library.addMark(mark);
+  /// Opens the meets — and, when there is one on today, the competition
+  /// itself. A coach reaching for this between attempts is at a meet, not
+  /// browsing the ones they have been to, and the round they are entering
+  /// is one tap away rather than two.
+  ///
+  /// This is also where a single mark is recorded from: the throw nobody
+  /// filmed is nearly always one from a meet, and the two belong together.
+  void _openMeets() {
+    final meets = context.read<MeetLibrary>();
+    final live = meets.live;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => live == null
+            ? const MeetsScreen()
+            : MeetScreen(meetId: live.id),
+      ),
+    );
   }
 
   Future<void> _startComparison() async {
@@ -376,9 +389,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         actions: [
           IconButton(
-            tooltip: 'Record a mark',
+            tooltip: 'Meets',
             icon: const Icon(Icons.emoji_events_outlined),
-            onPressed: _recordMark,
+            onPressed: _openMeets,
           ),
           IconButton(
             tooltip: 'Compare two throws',

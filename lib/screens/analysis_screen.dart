@@ -139,6 +139,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         if (mounted) setState(() => _openFailed = true);
       });
       if (_frames == null ||
+          widget.video.optimizePending ||
           widget.video.scrubFramesVersion <
               VideoOptimizer.scrubFramesVersion ||
           widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
@@ -185,12 +186,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     // re-encoded — the rest cost one probe — and the current player keeps
     // showing the old file until the screen is reopened, so a scrub in flight
     // is never pulled out from under the finger.
-    if (widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
+    if (widget.video.optimizePending ||
+        widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
+      // A clip filmed at a meet was saved as the camera shot it, so it is
+      // owed the encode an import does up front — its pixels may be the
+      // right shape while its keyframes are seconds apart, which is what
+      // makes an exact seek slow.
       final remade = await VideoOptimizer.remakePlaybackCopy(
-          widget.video.path, widget.video.id);
+          widget.video.path, widget.video.id,
+          force: widget.video.optimizePending);
       if (!mounted) return;
       if (remade != null) widget.video.path = remade;
       widget.video.playbackVersion = VideoOptimizer.playbackVersion;
+      widget.video.optimizePending = false;
       await library.update(widget.video);
     }
     final result = await VideoOptimizer.extractScrubFrames(

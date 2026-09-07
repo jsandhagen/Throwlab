@@ -7,10 +7,10 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote` |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `note_text`, drawing canvas and rail, playback controls, pickers |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote`, `Meet` (a competition and its series) |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` and `meet_screen` (the meet tracker), `analysis_screen`, `comparison_screen` |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `note_text`, drawing canvas and rail, playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -42,14 +42,16 @@ rendering it to PNGs:
 ```sh
 flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/athlete_preview.dart \
-                              tool/preview/note_preview.dart
+                              tool/preview/note_preview.dart \
+                              tool/preview/meet_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
-profiles, and a training note: as it opens, and with the keyboard up (which
-the note preview fakes, insets and all) — toolbar above it, and pinned to
-the top. Open the PNGs to see exactly what the screen paints. **Re-run it
+profiles, a training note (as it opens, and with the keyboard up — which
+the note preview fakes, insets and all — toolbar above it, and pinned to
+the top), and the meet tracker: the meets, a competition part-way through,
+and the sheet a round is entered in. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -128,5 +130,18 @@ like the app rather than a bare Material default.
   under the keyboard, which is exactly when the tools are wanted. It can be
   pinned under the app bar instead (remembered in `throwlab.noteToolbarTop`),
   and the delete tools stay put at its end rather than scrolling off it.
+- A meet is tracked from the trophy in the library's app bar, and holds no
+  results of its own: every measured attempt is a `ThrowMark` or a
+  `ThrowVideo` in `VideoLibrary` the moment it is entered, which the
+  `MeetAttempt` points at by id. That is what keeps a series from
+  disagreeing with the record book, and puts a Saturday's competition in
+  the athlete's personal bests without a second step. A foul or a pass
+  holds no distance — a filmed foul keeps its clip and loses the number,
+  or a throw that didn't count would stand as a best.
+- Filming at a meet skips the import's re-encode, which runs for minutes:
+  `VideoOptimizer.stashCapture` copies the camera's file into app storage
+  as it was shot and the clip is stamped `optimizePending`, which
+  `AnalysisScreen` settles the first time the throw is opened. Nothing
+  else should film without that flag.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

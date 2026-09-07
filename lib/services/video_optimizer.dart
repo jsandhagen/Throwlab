@@ -48,6 +48,28 @@ class VideoOptimizer {
     return outPath;
   }
 
+  /// Takes a just-filmed clip into the app's own storage as it was shot, and
+  /// returns its path — no re-encode, so it costs a file copy rather than
+  /// the minutes [optimizeForScrubbing] takes.
+  ///
+  /// This is what filming at a meet needs: the camera hands back a file in a
+  /// cache the OS will clear, and the next athlete is up. The clip lands
+  /// where a re-encoded one would, so the encode can be done later in place
+  /// (see ThrowVideo.optimizePending). Returns null if the copy fails, which
+  /// leaves the caller with nothing worth storing.
+  static Future<String?> stashCapture(String srcPath, String id) async {
+    try {
+      final docs = await getApplicationDocumentsDirectory();
+      final dir = Directory('${docs.path}/throws');
+      await dir.create(recursive: true);
+      final outPath = '${dir.path}/$id.mp4';
+      await File(srcPath).copy(outPath);
+      return outPath;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// The playback-copy recipe, shared by the import and by a later remake so
   /// the two can't drift apart. Returns whether the encode succeeded.
   static Future<bool> _encodePlaybackCopy(
@@ -163,12 +185,17 @@ class VideoOptimizer {
   /// working file in place — and renaming under an open player is safe, since
   /// the already-open handle keeps serving the old content until the screen
   /// is reopened.
+  ///
+  /// [force] encodes whatever the geometry says, for a clip that was never
+  /// encoded at all: a meet capture is the camera's own file, and its fault
+  /// is the seconds between keyframes rather than the shape of its pixels.
   static Future<String?> remakePlaybackCopy(
     String srcPath,
     String id, {
     ValueChanged<double?>? onProgress,
+    bool force = false,
   }) async {
-    if (await _playbackGeometryCurrent(srcPath)) return null;
+    if (!force && await _playbackGeometryCurrent(srcPath)) return null;
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/throws');
     await dir.create(recursive: true);

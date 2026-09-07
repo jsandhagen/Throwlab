@@ -63,6 +63,7 @@ class ThrowVideo implements ThrowResult {
     this.scrubFrameLongSide = 0,
     this.scrubFramesVersion = 0,
     this.playbackVersion = 0,
+    this.optimizePending = false,
   }) : captureFps = captureFps ?? fps;
 
   @override
@@ -145,6 +146,16 @@ class ThrowVideo implements ThrowResult {
   /// See VideoOptimizer.playbackVersion.
   int playbackVersion;
 
+  /// Whether this clip is still the camera's own file, waiting for the
+  /// re-encode an import does up front.
+  ///
+  /// Set for a throw filmed at a meet, where the coach has the next athlete
+  /// up in ninety seconds and cannot spend them watching a progress bar.
+  /// The clip is saved as it was shot and plays straight away; the analyzer
+  /// does the encode the first time the throw is opened, which is normally
+  /// at home that evening. Cleared once that has happened.
+  bool optimizePending;
+
   ImplementSpec get implementSpec => event.specFor(implementKg);
 
   Map<String, dynamic> toJson() => {
@@ -167,6 +178,7 @@ class ThrowVideo implements ThrowResult {
         'scrubFrameLongSide': scrubFrameLongSide,
         'scrubFramesVersion': scrubFramesVersion,
         'playbackVersion': playbackVersion,
+        'optimizePending': optimizePending,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -199,5 +211,6 @@ class ThrowVideo implements ThrowResult {
         scrubFramesVersion:
             (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
         playbackVersion: (json['playbackVersion'] as num?)?.toInt() ?? 0,
+        optimizePending: json['optimizePending'] as bool? ?? false,
       );
 }
