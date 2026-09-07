@@ -7,6 +7,7 @@ import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/screens/meet_event_screen.dart';
 import 'package:throwlab/screens/meet_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/video_library.dart';
@@ -57,7 +58,7 @@ void main() {
     return video;
   }
 
-  Future<void> mountMeet(WidgetTester tester) async {
+  Future<void> mount(WidgetTester tester, Widget screen) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -66,12 +67,26 @@ void main() {
         ChangeNotifierProvider<VideoLibrary>.value(value: library),
         ChangeNotifierProvider<MeetLibrary>.value(value: meets),
       ],
-      child: MaterialApp(
-        home: MeetScreen(meetId: 'k1', filmAttempt: fakeFilm),
-      ),
+      child: MaterialApp(home: screen),
     ));
     await tester.pumpAndSettle();
   }
+
+  /// The discus, which is where the throwing happens: a meet is a day, and
+  /// its events are what a coach actually stands at.
+  Future<void> mountEvent(WidgetTester tester) => mount(
+        tester,
+        MeetEventScreen(
+          meetId: 'k1',
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          filmAttempt: fakeFilm,
+        ),
+      );
+
+  /// The meet itself: the events in it, and the settings.
+  Future<void> mountMeet(WidgetTester tester) =>
+      mount(tester, const MeetScreen(meetId: 'k1'));
 
   /// Opens the sheet on the round the athlete is about to throw. Ana leads
   /// the flight in these tests, so hers is the first card.
@@ -92,7 +107,7 @@ void main() {
   group('the card', () {
     testWidgets('shows who is entered, in what, with an empty series',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       expect(find.text('Ana Diaz'), findsOneWidget);
       expect(find.text('Discus · 1 kg'), findsOneWidget);
       expect(find.text('County Champs'), findsOneWidget);
@@ -102,7 +117,57 @@ void main() {
       expect(find.textContaining('Best'), findsNothing);
     });
 
-    testWidgets('an empty meet asks for the throwers first', (tester) async {
+    testWidgets('an event nobody is in asks for the throwers first',
+        (tester) async {
+      await meets.removeEntry('k1', 'e1');
+      await mountEvent(tester);
+      expect(find.textContaining('Nobody in this event'), findsOneWidget);
+    });
+  });
+
+  group('the meet', () {
+    testWidgets('lists the events being contested at it', (tester) async {
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'e2',
+            athlete: 'Bea Cole',
+            event: ThrowEvent.javelin,
+            implementKg: 0.6,
+            order: 1,
+          ));
+      await mountMeet(tester);
+
+      expect(find.text('Discus · 1 kg'), findsOneWidget);
+      expect(find.text('Javelin · 600 g'), findsOneWidget);
+      expect(find.textContaining('2 events'), findsOneWidget);
+      // The throwing is a screen down, not on the meet itself.
+      expect(find.text('Mark'), findsNothing);
+    });
+
+    testWidgets('an event opens the competition it stands for',
+        (tester) async {
+      await mountMeet(tester);
+      await tester.tap(find.text('Discus · 1 kg'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MeetEventScreen), findsOneWidget);
+      expect(find.text('Ana Diaz'), findsOneWidget);
+      expect(find.text('Mark'), findsOneWidget);
+    });
+
+    testWidgets('says how far through each event is', (tester) async {
+      final meet = meets.byId('k1')!;
+      meet.entries.single
+        ..setAttempt(0, MeetAttempt.untracked(30))
+        ..setAttempt(1, MeetAttempt.foul());
+      await meets.save(meet);
+      await mountMeet(tester);
+
+      expect(find.textContaining('round 3 of 6'), findsOneWidget);
+    });
+
+    testWidgets('a meet nobody is entered in asks for the throwers first',
+        (tester) async {
       await meets.removeEntry('k1', 'e1');
       await mountMeet(tester);
       expect(find.textContaining('Add the throwers'), findsOneWidget);
@@ -112,7 +177,7 @@ void main() {
   group('writing a mark down', () {
     testWidgets('puts it in the series and in the record book',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
 
@@ -131,7 +196,7 @@ void main() {
     });
 
     testWidgets('the next mark goes in the next round', (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       await tapMark(tester);
@@ -145,7 +210,7 @@ void main() {
     });
 
     testWidgets('a personal best is called one on the spot', (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       expect(find.byType(FirstPlaceMedal), findsOneWidget);
@@ -161,7 +226,7 @@ void main() {
         distance: 45,
         achievedOn: DateTime(2026, 5, 1),
       ));
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       expect(find.byType(FirstPlaceMedal), findsNothing);
@@ -172,7 +237,7 @@ void main() {
   group('the throws that do not count', () {
     testWidgets('a foul is an X and leaves nothing in the record book',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await tester.tap(find.text('Foul'));
       await tester.pumpAndSettle();
@@ -184,7 +249,7 @@ void main() {
 
     testWidgets('a mark called back as a foul leaves the record book too',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       expect(library.marks, hasLength(1));
@@ -200,7 +265,7 @@ void main() {
     });
 
     testWidgets('clearing a round takes the mark with it', (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
 
@@ -217,7 +282,7 @@ void main() {
   group('filming', () {
     testWidgets('hangs the clip on the round and asks for the distance',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tester.tap(find.text('Film'));
       await tester.pumpAndSettle();
 
@@ -238,7 +303,7 @@ void main() {
 
     testWidgets('a clip stays in the library when the round is cleared',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tester.tap(find.text('Film'));
       await tester.pumpAndSettle();
       await enterDistance(tester, '44.11');
@@ -256,7 +321,7 @@ void main() {
 
     testWidgets('a filmed throw called a foul keeps the clip, loses the mark',
         (tester) async {
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tester.tap(find.text('Film'));
       await tester.pumpAndSettle();
       await enterDistance(tester, '44.11');
@@ -291,7 +356,7 @@ void main() {
     testWidgets('their mark is recorded without touching the library',
         (tester) async {
       await addRival('M. Okoye');
-      await mountMeet(tester);
+      await mountEvent(tester);
 
       // Their card is the second one; the Mark button next to their name.
       await tester.tap(find.text('Mark').last);
@@ -309,7 +374,7 @@ void main() {
 
     testWidgets('there is no camera pointed at them', (tester) async {
       await addRival('M. Okoye');
-      await mountMeet(tester);
+      await mountEvent(tester);
       // One Film button, on the coach's own athlete.
       expect(find.text('Film'), findsOneWidget);
       expect(find.text('Mark'), findsNWidgets(2));
@@ -338,7 +403,7 @@ void main() {
     testWidgets('rank the field, mine among them', (tester) async {
       await addRival('r1', 'M. Okoye', 44.90);
       await addRival('r2', 'J. Smith', 38.44, order: 6);
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       await openStandings(tester);
@@ -358,7 +423,7 @@ void main() {
       await meets.save(meet);
       await addRival('r1', 'M. Okoye', 44.90);
       await addRival('r2', 'J. Smith', 43.00, order: 6);
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       await openStandings(tester);
@@ -373,7 +438,7 @@ void main() {
       await meets.save(meet);
       await addRival('r1', 'M. Okoye', 44.90);
       await addRival('r2', 'J. Smith', 20.00, order: 6);
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       await openStandings(tester);
@@ -387,7 +452,7 @@ void main() {
       await meets.save(meet);
       await addRival('r1', 'M. Okoye', 44.90);
       await addRival('r2', 'J. Smith', 20.00, order: 6);
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       await openStandings(tester);
@@ -411,7 +476,7 @@ void main() {
             implementKg: 1,
             order: 1,
           ));
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tester.tap(find.byIcon(Icons.more_horiz).first);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Throw later'));
@@ -460,7 +525,7 @@ void main() {
     testWidgets('closes the last rounds for an athlete who missed the cut',
         (tester) async {
       await setUpThreeAndThree(ana: const [30.0, 31.0, 32.0]);
-      await mountMeet(tester);
+      await mountEvent(tester);
 
       // Ana is third of three with everyone's prelims thrown: rounds 4-6
       // are not hers to enter, and are greyed out to say so.
@@ -488,7 +553,7 @@ void main() {
         (tester) async {
       await setUpThreeAndThree(
           ana: const [30.0, 31.0, 32.0], complete: false);
-      await mountMeet(tester);
+      await mountEvent(tester);
 
       // Fischer has thrown once. Nobody is out yet, so Ana can still be
       // entered for round 4.
@@ -500,7 +565,7 @@ void main() {
     testWidgets('says the standings are the final once the cut is made',
         (tester) async {
       await setUpThreeAndThree(ana: const [30.0, 31.0, 32.0]);
-      await mountMeet(tester);
+      await mountEvent(tester);
       await tester.tap(find.text('Standings'));
       await tester.pumpAndSettle();
 

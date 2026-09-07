@@ -1,6 +1,7 @@
-// Renders the meet tracker to PNGs — the competitions, one in progress, and
-// the sheet a round is entered in — so the screens can be reviewed without
-// an emulator or a track.
+// Renders the meet tracker to PNGs — the season as a list and as a
+// calendar, a meet's events, one of them in progress, and the sheet a round
+// is entered in — so the screens can be reviewed without an emulator or a
+// track.
 //
 //   flutter test --update-goldens tool/preview/meet_preview.dart
 //
@@ -17,6 +18,7 @@ import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/screens/meet_event_screen.dart';
 import 'package:throwlab/screens/meet_screen.dart';
 import 'package:throwlab/screens/meets_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
@@ -168,9 +170,24 @@ void main() {
     // The meets, as the trophy opens them on a day with nothing on.
     await _shoot(tester, library, meets, const MeetsScreen(), 'meets_list');
 
-    // The competition itself, part-way through.
+    // The same season as a month, which is how the next one is planned.
+    await tester.tap(find.text('Calendar'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meets_calendar.png'));
+
+    // One meet: the events being contested at it, and where each stands.
     await _shoot(tester, library, meets,
-        const MeetScreen(meetId: 'k1'), 'meet_tracker');
+        const MeetScreen(meetId: 'k1'), 'meet_events');
+
+    // The discus itself, part-way through.
+    await _shoot(
+        tester,
+        library,
+        meets,
+        const MeetEventScreen(
+            meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
+        'meet_tracker');
 
     // Where the competition stands, with the cut and what it takes to
     // get past it.
@@ -181,8 +198,10 @@ void main() {
     await tester.tap(find.text('Series'));
     await settle(tester);
 
-    // The sheet a round is entered in, as it opens on a filmed attempt.
-    await tester.tap(find.byKey(const ValueKey('round-4')).first);
+    // The sheet a round is entered in, opened on a mark already recorded —
+    // Anna's third throw. Her last three are closed (she missed the cut),
+    // and a closed round has no sheet to open.
+    await tester.tap(find.byKey(const ValueKey('round-2')).first);
     await settle(tester);
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('$_out/meet_attempt.png'));

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../models/meet.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/app_updater.dart';
@@ -24,6 +25,7 @@ import 'analysis_screen.dart';
 import 'athlete_screen.dart';
 import 'comparison_screen.dart';
 import 'group_screen.dart';
+import 'meet_event_screen.dart';
 import 'meet_screen.dart';
 import 'meets_screen.dart';
 
@@ -228,14 +230,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _openMeets() {
     final meets = context.read<MeetLibrary>();
     final live = meets.live;
+    if (live == null) {
+      Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const MeetsScreen()));
+      return;
+    }
     Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => live == null
-            ? const MeetsScreen()
-            : MeetScreen(meetId: live.id),
-      ),
-    );
+        context, MaterialPageRoute(builder: (_) => MeetScreen(meetId: live.id)));
+    // One event on today's card is the one the coach is standing at: go
+    // there, and leave the meet behind it for the back button. Two, and
+    // they pick — nobody else can tell which ring they are at.
+    final competitions = MeetCompetition.of(live);
+    if (competitions.length == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MeetEventScreen(
+            meetId: live.id,
+            event: competitions.single.event,
+            implementKg: competitions.single.implementKg,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _startComparison() async {
