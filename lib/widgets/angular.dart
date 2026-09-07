@@ -122,12 +122,18 @@ class _AngularSearchFieldState extends State<AngularSearchField> {
 class AngularSegment<T> {
   const AngularSegment({
     required this.value,
-    required this.icon,
+    this.icon,
+    this.glyph,
     required this.label,
-  });
+  }) : assert(icon != null || glyph != null, 'A segment needs a mark');
 
   final T value;
-  final IconData icon;
+  final IconData? icon;
+
+  /// A drawn mark, for a segment the Material set has no honest icon for.
+  /// It is handed the colour the segment is currently painted in.
+  final Widget Function(Color color)? glyph;
+
   final String label;
 }
 
@@ -180,11 +186,13 @@ class AngularSegmentedBar<T> extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(segment.icon,
-                          size: 15,
-                          color: segment.value == value
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant),
+                      Builder(builder: (context) {
+                        final tint = segment.value == value
+                            ? scheme.primary
+                            : scheme.onSurfaceVariant;
+                        return segment.glyph?.call(tint) ??
+                            Icon(segment.icon, size: 15, color: tint);
+                      }),
                       const SizedBox(width: 6),
                       // Shrinks rather than overflowing when the segment is
                       // squeezed by a large system text size.

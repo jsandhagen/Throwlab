@@ -465,16 +465,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               value: _grouping,
               onChanged: (grouping) =>
                   setState(() => _grouping = grouping),
-              segments: const [
-                AngularSegment(
+              segments: [
+                const AngularSegment(
                     value: LibraryGrouping.athlete,
                     icon: Icons.person_outline,
                     label: 'Athlete'),
                 AngularSegment(
                     value: LibraryGrouping.event,
-                    icon: Icons.sports_score_outlined,
+                    glyph: (color) => ThrowsGlyph(size: 18, color: color),
                     label: 'Event'),
-                AngularSegment(
+                const AngularSegment(
                     value: LibraryGrouping.date,
                     icon: Icons.event_outlined,
                     label: 'Date'),

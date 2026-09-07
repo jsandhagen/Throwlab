@@ -153,3 +153,64 @@ class _EventGlyphPainter extends CustomPainter {
   bool shouldRepaint(_EventGlyphPainter old) =>
       old.event != event || old.color != color;
 }
+
+/// The mark for the events as a set: an implement climbing away from the
+/// circle. No single implement can stand for all four, and the nearest
+/// Material icon is a chequered flag — a finish line, which belongs to a
+/// race and not to a throw.
+class ThrowsGlyph extends StatelessWidget {
+  const ThrowsGlyph({super.key, this.size = 24, this.color});
+
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = color ??
+        IconTheme.of(context).color ??
+        Theme.of(context).colorScheme.onSurface;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _ThrowsGlyphPainter(resolved)),
+    );
+  }
+}
+
+class _ThrowsGlyphPainter extends CustomPainter {
+  _ThrowsGlyphPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+
+    // The flight, leaving low on the left and still rising: enough of the
+    // curve to read as a throw, cut off before the implement so the two
+    // don't merge into a comma at icon sizes.
+    canvas.drawPath(
+      Path()
+        ..moveTo(s * 0.08, s * 0.90)
+        ..quadraticBezierTo(s * 0.18, s * 0.55, s * 0.48, s * 0.44),
+      Paint()
+        ..color = color
+        ..isAntiAlias = true
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = s * 0.105
+        ..strokeCap = StrokeCap.round,
+    );
+
+    canvas.drawCircle(
+      Offset(s * 0.73, s * 0.26),
+      s * 0.21,
+      Paint()
+        ..color = color
+        ..isAntiAlias = true
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_ThrowsGlyphPainter old) => old.color != color;
+}
