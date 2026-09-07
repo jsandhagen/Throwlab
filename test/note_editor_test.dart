@@ -51,6 +51,32 @@ void main() {
     await pumpFrames(tester, 6);
   }
 
+  /// Mounts the editor the way the app opens it — pushed over the screen
+  /// that opened it, so leaving it really pops a route.
+  Future<void> pushEditor(WidgetTester tester, TrainingNote which) async {
+    tester.view.physicalSize = const Size(500, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ChangeNotifierProvider<NotesLibrary>.value(
+      value: notes,
+      child: MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => NoteEditorScreen(note: which)),
+              ),
+              child: const Text('Open the note'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open the note'));
+    await pumpFrames(tester, 20);
+  }
+
   /// The block fields, in order. The title is a field too, and leads.
   Finder blockField(int index) => find.byType(TextField).at(index + 1);
 
@@ -299,6 +325,22 @@ void main() {
     expect(tester.getTopLeft(bar).dy, lessThan(200));
     expect(find.byTooltip('Put the controls above the keyboard'),
         findsOneWidget);
+  });
+
+  testWidgets('a deleted note stays deleted once the screen closes',
+      (tester) async {
+    await notes.save(note(title: 'Throws day'));
+    await pushEditor(tester, notes.byId('n1')!);
+
+    await tester.tap(find.byTooltip('Delete note'));
+    await pumpFrames(tester, 20);
+    await tester.tap(find.text('Delete'));
+    await pumpFrames(tester, 30);
+
+    // Backing out of a note saves it. Backing out of a deleted one must
+    // not, or the note is written straight back into the library.
+    expect(find.text('Open the note'), findsOneWidget);
+    expect(notes.notes, isEmpty);
   });
 
   testWidgets('deleting the note asks, then takes it away', (tester) async {

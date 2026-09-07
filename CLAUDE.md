@@ -27,6 +27,13 @@ flutter test        # unit + widget tests; CI gate
 flutter analyze     # expect infos, plus one pre-existing unused-import warning
 ```
 
+A Claude Code on the web session has no Flutter to run those with, so
+`.claude/hooks/session-start.sh` installs one (pinned; CI tracks stable) and
+runs `pub get` before the session starts. It is a no-op on a real machine.
+Bump the version in it rather than installing an SDK by hand — a container
+that has already run it keeps the SDK, and a session that installs its own
+pays for the download again.
+
 ## Previewing UI changes without a device
 
 There is no emulator in CI or in an agent session, so UI work is reviewed by

@@ -59,6 +59,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   /// throw. A half-typed line is exactly what must not be lost.
   NotesLibrary? _store;
 
+  /// Set once the note has been deleted. Everything else on this screen
+  /// saves — on a debounce, on leaving, on the way down in dispose() — and
+  /// a save of a note that is no longer in the store puts it back, so the
+  /// deleted note has to switch all of that off on its way out.
+  bool _deleted = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -102,7 +108,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   void dispose() {
     // Anything typed inside the debounce window would otherwise go down
     // with the screen.
-    if (_saveTimer?.isActive ?? false) {
+    if ((_saveTimer?.isActive ?? false) && !_deleted) {
       _saveTimer!.cancel();
       _store?.save(_note);
     }
@@ -157,6 +163,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   void _save() {
     _saveTimer?.cancel();
+    if (_deleted) return;
     _store?.save(_note);
   }
 
@@ -391,9 +398,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Future<void> _deleteNote() async {
     if (!await _confirm('Delete this note?', _note.displayTitle)) return;
     _saveTimer?.cancel();
+    _deleted = true;
     // The held store rather than a fresh lookup: _confirm has already been
-    // away and back, and the tree may not be here any more.
-    await _store?.remove(_note.id);
+    // away and back, and the tree may not be here any more. Not awaited
+    // either — the store's own tidying up (the write, the note's pictures)
+    // has no bearing on leaving, and waiting on it leaves the coach looking
+    // at a note they have just deleted.
+    unawaited(_store?.remove(_note.id) ?? Future.value());
     if (mounted) Navigator.pop(context);
   }
 
