@@ -5,9 +5,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/throw_event.dart';
+import 'package:throwlab/screens/home_screen.dart';
+import 'package:throwlab/screens/meet_event_screen.dart';
 import 'package:throwlab/screens/meet_screen.dart';
 import 'package:throwlab/screens/meets_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
+import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/widgets/throw_card.dart';
 
@@ -131,8 +134,73 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('No meets yet'), findsOneWidget);
-      // Nothing left to read either way, so the bar goes with the meets.
-      expect(find.text('Calendar'), findsNothing);
+      // The bar stays: an empty season is still one to plan.
+      expect(find.text('Calendar'), findsOneWidget);
+    });
+  });
+
+  group('the trophy', () {
+    Future<void> mountHome(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(420, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider<VideoLibrary>.value(value: library),
+          ChangeNotifierProvider<MeetLibrary>.value(value: meets),
+          ChangeNotifierProvider<NotesLibrary>(
+              create: (_) => NotesLibrary()..load()),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Meets'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('opens the season when nothing is on today', (tester) async {
+      await mountHome(tester);
+      expect(find.byType(MeetsScreen), findsOneWidget);
+      expect(find.text('Calendar'), findsOneWidget);
+    });
+
+    testWidgets('goes straight to the event when a meet is on today',
+        (tester) async {
+      // Today's meet, with one event in it.
+      await meets.save(Meet(id: 'live', name: 'Open Meet', date: DateTime.now()));
+      await meets.addEntry('live',
+          entry: MeetEntry(
+            id: 'e9',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+          ));
+      await mountHome(tester);
+
+      expect(find.byType(MeetEventScreen), findsOneWidget);
+    });
+
+    testWidgets("the season is still behind today's meet, to walk back to",
+        (tester) async {
+      await meets.save(Meet(id: 'live', name: 'Open Meet', date: DateTime.now()));
+      await meets.addEntry('live',
+          entry: MeetEntry(
+            id: 'e9',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+          ));
+      await mountHome(tester);
+
+      // Back out of the event, then out of the meet: the calendar is there
+      // rather than the library, which is what a coach came looking for.
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(MeetScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(MeetsScreen), findsOneWidget);
+      expect(find.text('Calendar'), findsOneWidget);
     });
   });
 

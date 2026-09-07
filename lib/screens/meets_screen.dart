@@ -95,41 +95,43 @@ class _MeetsScreenState extends State<MeetsScreen> {
                   ),
                 ),
               ),
-              if (meets.meets.isEmpty)
-                _empty(context)
-              else
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                      child: AngularSegmentedBar<_MeetsView>(
-                        value: _view,
-                        onChanged: _setView,
-                        segments: const [
-                          AngularSegment(
-                              value: _MeetsView.list,
-                              icon: Icons.view_agenda_outlined,
-                              label: 'List'),
-                          AngularSegment(
-                              value: _MeetsView.calendar,
-                              icon: Icons.calendar_month_outlined,
-                              label: 'Calendar'),
-                        ],
-                      ),
+              // The bar stays up with nothing on the books: a season is
+              // planned forwards, and an empty calendar is where the first
+              // meet of it gets a date.
+              Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: AngularSegmentedBar<_MeetsView>(
+                      value: _view,
+                      onChanged: _setView,
+                      segments: const [
+                        AngularSegment(
+                            value: _MeetsView.list,
+                            icon: Icons.view_agenda_outlined,
+                            label: 'List'),
+                        AngularSegment(
+                            value: _MeetsView.calendar,
+                            icon: Icons.calendar_month_outlined,
+                            label: 'Calendar'),
+                      ],
                     ),
-                    Expanded(
-                      child: _view == _MeetsView.list
-                          ? _list(context, meets)
-                          : _MeetCalendar(
-                              meets: meets.meets,
-                              onOpen: (meet) => _open(context, meet),
-                              onDelete: (meet) =>
-                                  _confirmDelete(context, meets, meet),
-                              onAdd: (day) => _start(context, meets, date: day),
-                            ),
-                    ),
-                  ],
-                ),
+                  ),
+                  Expanded(
+                    child: _view == _MeetsView.list
+                        ? (meets.meets.isEmpty
+                            ? _empty(context)
+                            : _list(context, meets))
+                        : _MeetCalendar(
+                            meets: meets.meets,
+                            onOpen: (meet) => _open(context, meet),
+                            onDelete: (meet) =>
+                                _confirmDelete(context, meets, meet),
+                            onAdd: (day) => _start(context, meets, date: day),
+                          ),
+                  ),
+                ],
+              ),
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(

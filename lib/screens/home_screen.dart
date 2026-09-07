@@ -227,16 +227,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   ///
   /// This is also where a single mark is recorded from: the throw nobody
   /// filmed is nearly always one from a meet, and the two belong together.
+  /// The trophy: the season, and then as far into today's competition as
+  /// can be worked out without asking.
+  ///
+  /// The season goes on the stack whatever happens, even when the coach is
+  /// taken straight past it — it is the way to every other meet and to the
+  /// calendar, and skipping it left both unreachable on a day with a meet
+  /// on. Back walks out the way they came in.
   void _openMeets() {
     final meets = context.read<MeetLibrary>();
     final live = meets.live;
-    if (live == null) {
-      Navigator.push(context,
-          MaterialPageRoute(builder: (_) => const MeetsScreen()));
-      return;
-    }
     Navigator.push(
-        context, MaterialPageRoute(builder: (_) => MeetScreen(meetId: live.id)));
+        context, MaterialPageRoute(builder: (_) => const MeetsScreen()));
+    if (live == null) return;
+    Navigator.push(context,
+        MaterialPageRoute(builder: (_) => MeetScreen(meetId: live.id)));
     // One event on today's card is the one the coach is standing at: go
     // there, and leave the meet behind it for the back button. Two, and
     // they pick — nobody else can tell which ring they are at.
