@@ -50,8 +50,8 @@ That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
 profiles, a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
-the top), and the meet tracker: the meets, a competition part-way through,
-and the sheet a round is entered in. Open the PNGs to see exactly what the screen paints. **Re-run it
+the top), and the meet tracker: the meets, a competition part-way through, the
+standings with the cut, and the sheet a round is entered in. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -138,6 +138,19 @@ like the app rather than a bare Material default.
   the athlete's personal bests without a second step. A foul or a pass
   holds no distance — a filmed foul keeps its clip and loses the number,
   or a throw that didn't count would stand as a best.
+- A meet holds the whole field, not just the coach's athletes.
+  `MeetEntry.tracked` is what separates them: an untracked entry writes
+  nothing to `VideoLibrary` — its distances live on its `MeetAttempt`s — so
+  a rival's throw can never surface as somebody's personal best or as a
+  name in the athlete list. It is also why an attempt can carry either a
+  `resultId` or a `distance`.
+- Standings are worked out per `MeetCompetition` — everyone on the same
+  event *and* implement, since that is the contest an athlete is placed in
+  — and ties are broken by countback down the series, the way a
+  competition breaks them. `Meet.advancing` draws the cut, which is what
+  `neededToQualify` measures against: a centimetre past whoever holds the
+  last qualifying place, because equalling a mark loses the countback.
+  `MeetStandings.finalOrder` is the redraw for the final, leader last.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

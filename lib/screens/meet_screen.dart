@@ -9,6 +9,7 @@ import '../models/throw_video.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../widgets/angular.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/attempt_entry.dart';
 import '../widgets/event_glyph.dart';
@@ -43,7 +44,13 @@ class MeetScreen extends StatefulWidget {
   State<MeetScreen> createState() => _MeetScreenState();
 }
 
+/// Which way the meet is being read: the order it is thrown in, or where
+/// everyone stands in it.
+enum _MeetView { series, standings }
+
 class _MeetScreenState extends State<MeetScreen> {
+  _MeetView _view = _MeetView.series;
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<MeetLibrary, VideoLibrary>(
@@ -91,23 +98,30 @@ class _MeetScreenState extends State<MeetScreen> {
               if (meet.entries.isEmpty)
                 _empty(context)
               else
-                ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+                Column(
                   children: [
-                    for (final entry in meet.entries)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _EntryCard(
-                          meet: meet,
-                          entry: entry,
-                          series: MeetSeries(entry, library.results),
-                          library: library,
-                          onEnter: (round) => _enter(meet, entry, round),
-                          onFilm: (round) => _film(meet, entry, round),
-                          onOpen: _openThrow,
-                          onRemove: () => _removeEntry(meets, meet, entry),
-                        ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                      child: AngularSegmentedBar<_MeetView>(
+                        value: _view,
+                        onChanged: (view) => setState(() => _view = view),
+                        segments: const [
+                          AngularSegment(
+                              value: _MeetView.series,
+                              icon: Icons.format_list_numbered,
+                              label: 'Series'),
+                          AngularSegment(
+                              value: _MeetView.standings,
+                              icon: Icons.emoji_events_outlined,
+                              label: 'Standings'),
+                        ],
                       ),
+                    ),
+                    Expanded(
+                      child: _view == _MeetView.series
+                          ? _seriesList(meet, meets, library)
+                          : _standingsList(meet, library),
+                    ),
                   ],
                 ),
             ],
@@ -120,6 +134,80 @@ class _MeetScreenState extends State<MeetScreen> {
         );
       },
     );
+  }
+
+  /// The field in the order it throws, which is the order a coach's eye
+  /// goes down the list in as the round works through.
+  Widget _seriesList(Meet meet, MeetLibrary meets, VideoLibrary library) {
+    final order = meet.inOrder;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+      children: [
+        for (var i = 0; i < order.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _EntryCard(
+              meet: meet,
+              entry: order[i],
+              position: i + 1,
+              series: MeetSeries(order[i], library.results),
+              library: library,
+              onEnter: (round) => _enter(meet, order[i], round),
+              onFilm: (round) => _film(meet, order[i], round),
+              onOpen: _openThrow,
+              onRemove: () => _removeEntry(meets, meet, order[i]),
+              onMove: (by) => _move(meet, order, i, by),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Where the competition stands — one table per implement, because that
+  /// is what an athlete is actually placed in.
+  Widget _standingsList(Meet meet, VideoLibrary library) {
+    final competitions = MeetCompetition.of(meet);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+      children: [
+        for (final competition in competitions)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: _StandingsCard(
+              standings: MeetStandings(competition, library.results,
+                  advancing: meet.advancing),
+              onSetFinalOrder: (standings) =>
+                  _setFinalOrder(meet, standings),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Moves one athlete up or down the flight.
+  Future<void> _move(
+      Meet meet, List<MeetEntry> order, int index, int by) async {
+    final target = index + by;
+    if (target < 0 || target >= order.length) return;
+    final moved = [...order];
+    moved.insert(target, moved.removeAt(index));
+    await _reorder(meet, moved);
+  }
+
+  /// Redraws the order for the final: the qualifiers, worst-placed first,
+  /// with everyone who missed the cut left where they are behind them.
+  Future<void> _setFinalOrder(Meet meet, MeetStandings standings) async {
+    final qualifiers = standings.finalOrder;
+    final rest = [
+      for (final entry in meet.inOrder)
+        if (!qualifiers.contains(entry)) entry,
+    ];
+    await _reorder(meet, [...qualifiers, ...rest]);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${standings.competition.label}: the final throws '
+              'in reverse order, leader last.')));
+    }
   }
 
   String _summary(Meet meet) {
@@ -196,6 +284,14 @@ class _MeetScreenState extends State<MeetScreen> {
     }
   }
 
+  /// Reorders the field, and saves it.
+  Future<void> _reorder(Meet meet, List<MeetEntry> order) async {
+    for (var i = 0; i < order.length; i++) {
+      order[i].order = i;
+    }
+    await context.read<MeetLibrary>().save(meet);
+  }
+
   /// Strips the distance from a round being taken back: a typed mark is
   /// deleted outright, while a filmed one keeps its clip and loses only the
   /// number. Returns the clip, when there was one.
@@ -225,6 +321,16 @@ class _MeetScreenState extends State<MeetScreen> {
   }) async {
     final meets = context.read<MeetLibrary>();
     final library = context.read<VideoLibrary>();
+
+    // The rest of the field is recorded, not collected: their throw is a
+    // number on the attempt and nothing else. It has to be, or a rival's
+    // 60 m would turn up in the library as somebody's personal best.
+    if (!entry.tracked) {
+      await meets.setAttempt(meet.id, entry.id, round,
+          MeetAttempt.untracked(metres, distanceUnit: unit));
+      return;
+    }
+
     final existing = MeetSeries(entry, library.results).resultAt(round);
 
     // Filmed: the clip is the throw, so the mark belongs on it rather than
@@ -331,7 +437,12 @@ class _MeetScreenState extends State<MeetScreen> {
       context: context,
       builder: (context) => _EntryDialog(known: library.knownAthletes),
     );
-    if (entry != null) await meets.addEntry(meet.id, entry: entry);
+    if (entry != null) {
+      // Onto the end of the flight: an athlete added mid-competition is
+      // one the coach has just noticed, not one who throws first.
+      entry.order = meet.entries.length;
+      await meets.addEntry(meet.id, entry: entry);
+    }
   }
 
   Future<void> _removeEntry(
@@ -371,22 +482,31 @@ class _EntryCard extends StatelessWidget {
   const _EntryCard({
     required this.meet,
     required this.entry,
+    required this.position,
     required this.series,
     required this.library,
     required this.onEnter,
     required this.onFilm,
     required this.onOpen,
     required this.onRemove,
+    required this.onMove,
   });
 
   final Meet meet;
   final MeetEntry entry;
+
+  /// Where they throw in the flight, from 1.
+  final int position;
+
   final MeetSeries series;
   final VideoLibrary library;
   final ValueChanged<int> onEnter;
   final ValueChanged<int> onFilm;
   final ValueChanged<ThrowVideo> onOpen;
   final VoidCallback onRemove;
+
+  /// Moves them one place up (-1) or down (1) the order.
+  final ValueChanged<int> onMove;
 
   @override
   Widget build(BuildContext context) {
@@ -407,17 +527,47 @@ class _EntryCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                // Where they are in the flight: the number a coach counts
+                // down to work out how long they have before their athlete
+                // is in the circle.
+                SizedBox(
+                  width: 22,
+                  child: Text(
+                    '$position',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
                 EventGlyph(entry.event, size: 18, color: accent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        entry.athlete.isEmpty ? 'Unassigned' : entry.athlete,
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              entry.athlete.isEmpty
+                                  ? 'Unassigned'
+                                  : entry.athlete,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  // The rest of the field sits back a shade
+                                  // from the athletes the coach is here for.
+                                  color: entry.tracked
+                                      ? null
+                                      : theme.colorScheme.onSurfaceVariant),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (!entry.tracked) ...[
+                            const SizedBox(width: 6),
+                            Icon(Icons.groups_outlined,
+                                size: 15,
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ],
+                        ],
                       ),
                       Text(
                         '${entry.event.label} · '
@@ -428,10 +578,37 @@ class _EntryCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Remove from meet',
+                PopupMenuButton<String>(
+                  tooltip: 'Order and entry',
                   icon: const Icon(Icons.more_horiz, size: 20),
-                  onPressed: onRemove,
+                  onSelected: (choice) => switch (choice) {
+                    'up' => onMove(-1),
+                    'down' => onMove(1),
+                    _ => onRemove(),
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                        value: 'up',
+                        child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.arrow_upward, size: 18),
+                            title: Text('Throw earlier'))),
+                    PopupMenuItem(
+                        value: 'down',
+                        child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.arrow_downward, size: 18),
+                            title: Text('Throw later'))),
+                    PopupMenuItem(
+                        value: 'remove',
+                        child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline, size: 18),
+                            title: Text('Remove'))),
+                  ],
                 ),
               ],
             ),
@@ -499,12 +676,17 @@ class _EntryCard extends StatelessWidget {
                           ),
                         ),
                 ),
-                TextButton.icon(
-                  icon: const Icon(Icons.videocam_outlined, size: 20),
-                  label: const Text('Film'),
-                  onPressed: () => onFilm(entry.nextRound),
-                ),
-                const SizedBox(width: 4),
+                // Nothing is filmed for the rest of the field: a clip has
+                // to land in the library under somebody's name, and these
+                // are not the coach's athletes to keep.
+                if (entry.tracked) ...[
+                  TextButton.icon(
+                    icon: const Icon(Icons.videocam_outlined, size: 20),
+                    label: const Text('Film'),
+                    onPressed: () => onFilm(entry.nextRound),
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 FilledButton.tonalIcon(
                   icon: const Icon(Icons.straighten, size: 20),
                   label: const Text('Mark'),
@@ -631,6 +813,184 @@ class _AttemptBox extends StatelessWidget {
   }
 }
 
+/// One competition's table: who is where, where the cut falls, and what a
+/// coach's own athlete has to throw to get past it.
+class _StandingsCard extends StatelessWidget {
+  const _StandingsCard({required this.standings, required this.onSetFinalOrder});
+
+  final MeetStandings standings;
+  final ValueChanged<MeetStandings> onSetFinalOrder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = eventColor(standings.competition.event);
+    final places = standings.places;
+    return Card(
+      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                EventGlyph(standings.competition.event, size: 18,
+                    color: accent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    standings.competition.label,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (standings.hasCut)
+                  Text(
+                    'top ${standings.advancing} advance',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (var i = 0; i < places.length; i++) ...[
+              // The cut, drawn where it falls: everything under this line
+              // is out of the final as things stand.
+              if (standings.hasCut &&
+                  i > 0 &&
+                  places[i - 1].advancing &&
+                  !places[i].advancing)
+                _CutLine(advancing: standings.advancing),
+              _PlaceRow(
+                place: places[i],
+                accent: accent,
+                needed: standings.neededToQualify(places[i].entry.id),
+              ),
+            ],
+            if (standings.hasCut) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.swap_vert, size: 18),
+                  label: const Text('Order the final'),
+                  onPressed: () => onSetFinalOrder(standings),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CutLine extends StatelessWidget {
+  const _CutLine({required this.advancing});
+
+  final int advancing;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: scheme.primary.withOpacity(0.5))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Text(
+              'the cut',
+              style: TextStyle(fontSize: 10, color: scheme.primary),
+            ),
+          ),
+          Expanded(child: Divider(color: scheme.primary.withOpacity(0.5))),
+        ],
+      ),
+    );
+  }
+}
+
+/// One line of the table. A coach's own athlete is the one the eye should
+/// find first, so the rest of the field is set back rather than dressed up.
+class _PlaceRow extends StatelessWidget {
+  const _PlaceRow({
+    required this.place,
+    required this.accent,
+    required this.needed,
+  });
+
+  final MeetPlace place;
+  final Color accent;
+
+  /// What it would take to make the final, for an athlete who is out of it.
+  final double? needed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final mine = place.entry.tracked;
+    final best = place.best;
+    final unit = place.series.bestRound == null
+        ? DistanceUnit.metres
+        : place.series.unitAt(place.series.bestRound!);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 24,
+                child: Text(
+                  best == null ? '–' : '${place.place}',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                      color: mine ? accent : scheme.onSurfaceVariant,
+                      fontWeight: mine ? FontWeight.w700 : FontWeight.w500),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  place.entry.athlete.isEmpty
+                      ? 'Unassigned'
+                      : place.entry.athlete,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      color: mine ? scheme.onSurface : scheme.onSurfaceVariant,
+                      fontWeight: mine ? FontWeight.w600 : FontWeight.w400),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                best == null ? '—' : formatDistance(best, unit),
+                style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: mine ? accent : scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          // Only for the coach's own: what the rest of the field needs is
+          // not their problem.
+          if (mine && needed != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 2),
+              child: Text(
+                'needs ${formatDistance(needed!, unit)} to make the final',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: scheme.primary),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Enters an athlete in an event. The weight is asked for here rather than
 /// per attempt because it does not change through a competition — and a
 /// best is per weight, so guessing it would put the mark in the wrong book.
@@ -647,6 +1007,7 @@ class _EntryDialogState extends State<_EntryDialog> {
   String _athlete = '';
   ThrowEvent _event = ThrowEvent.shotPut;
   late ImplementSpec _implement = _event.defaultImplement;
+  bool _tracked = true;
 
   @override
   Widget build(BuildContext context) {
@@ -657,11 +1018,22 @@ class _EntryDialogState extends State<_EntryDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AthletePicker(
-              known: widget.known,
-              value: _athlete,
-              onChanged: (name) => setState(() => _athlete = name),
-            ),
+            // A rival is a name off a start list, not somebody the library
+            // has met, so typing is the only sensible way in.
+            if (_tracked)
+              AthletePicker(
+                known: widget.known,
+                value: _athlete,
+                onChanged: (name) => setState(() => _athlete = name),
+              )
+            else
+              TextField(
+                autofocus: true,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(
+                    labelText: 'Athlete', hintText: 'Name or club'),
+                onChanged: (name) => setState(() => _athlete = name),
+              ),
             const SizedBox(height: 12),
             DropdownButtonFormField<ThrowEvent>(
               value: _event,
@@ -691,6 +1063,21 @@ class _EntryDialogState extends State<_EntryDialog> {
               onChanged: (weight) => setState(() =>
                   _implement = _event.specFor(weight ?? _implement.weightKg)),
             ),
+            const SizedBox(height: 4),
+            SwitchListTile(
+              value: _tracked,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('One of mine'),
+              subtitle: Text(
+                _tracked
+                    ? 'Marks and clips go into the library, and count '
+                        'towards their bests.'
+                    : 'Tracked for the standings only — nothing is written '
+                        'to your library.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              onChanged: (value) => setState(() => _tracked = value),
+            ),
           ],
         ),
       ),
@@ -708,6 +1095,7 @@ class _EntryDialogState extends State<_EntryDialog> {
                       athlete: _athlete.trim(),
                       event: _event,
                       implementKg: _implement.weightKg,
+                      tracked: _tracked,
                     ),
                   ),
           child: const Text('Add'),
@@ -733,6 +1121,7 @@ class _MeetDialogState extends State<_MeetDialog> {
       TextEditingController(text: widget.existing?.name ?? '');
   late DateTime _date = widget.existing?.date ?? DateTime.now();
   late int _rounds = widget.existing?.rounds ?? 6;
+  late int _advancing = widget.existing?.advancing ?? 8;
 
   @override
   void dispose() {
@@ -788,6 +1177,22 @@ class _MeetDialogState extends State<_MeetDialog> {
               ],
               onChanged: (rounds) => setState(() => _rounds = rounds ?? 6),
             ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              value: _advancing,
+              decoration: const InputDecoration(labelText: 'Final'),
+              items: [
+                for (final advancing in const [6, 8, 9, 12, 99])
+                  DropdownMenuItem(
+                    value: advancing,
+                    child: Text(advancing >= 99
+                        ? 'Everyone throws the lot'
+                        : 'Top $advancing advance'),
+                  ),
+              ],
+              onChanged: (advancing) =>
+                  setState(() => _advancing = advancing ?? 8),
+            ),
           ],
         ),
       ),
@@ -802,6 +1207,7 @@ class _MeetDialogState extends State<_MeetDialog> {
               existing.name = _name.text.trim();
               existing.date = _date;
               existing.rounds = _rounds;
+              existing.advancing = _advancing;
               Navigator.pop(context, existing);
               return;
             }
@@ -812,6 +1218,7 @@ class _MeetDialogState extends State<_MeetDialog> {
                 name: _name.text.trim(),
                 date: _date,
                 rounds: _rounds,
+                advancing: _advancing,
               ),
             );
           },

@@ -70,10 +70,15 @@ List<Map<String, dynamic>> _meets() {
     name: 'County Champs',
     date: _date,
     rounds: 6,
+    advancing: 2,
   );
 
   final anna = MeetEntry(
-      id: 'e1', athlete: 'Anna Sofia', event: ThrowEvent.discus, implementKg: 1)
+      id: 'e1',
+      athlete: 'Anna Sofia',
+      event: ThrowEvent.discus,
+      implementKg: 1,
+      order: 0)
     ..setAttempt(0, MeetAttempt.mark('mk1'))
     ..setAttempt(1, MeetAttempt.foul())
     ..setAttempt(2, MeetAttempt.mark('mk2'))
@@ -83,7 +88,8 @@ List<Map<String, dynamic>> _meets() {
       id: 'e2',
       athlete: 'Jakob',
       event: ThrowEvent.javelin,
-      implementKg: 0.8)
+      implementKg: 0.8,
+      order: 2)
     ..setAttempt(0, MeetAttempt.mark('mk3'))
     ..setAttempt(1, MeetAttempt.mark('mk4'))
     ..setAttempt(2, MeetAttempt.pass());
@@ -92,10 +98,39 @@ List<Map<String, dynamic>> _meets() {
       id: 'e3',
       athlete: 'Priya Raman',
       event: ThrowEvent.shotPut,
-      implementKg: 4)
+      implementKg: 4,
+      order: 4)
     ..setAttempt(0, MeetAttempt.mark('mk5'));
 
-  champs.entries.addAll([anna, jakob, priya]);
+  // The rest of the discus field: not the coach's athletes, so their marks
+  // live on the attempts and never reach the library.
+  MeetEntry rival(String id, String name, int order, List<double?> marks) {
+    final entry = MeetEntry(
+      id: id,
+      athlete: name,
+      event: ThrowEvent.discus,
+      implementKg: 1,
+      tracked: false,
+      order: order,
+    );
+    for (var round = 0; round < marks.length; round++) {
+      entry.setAttempt(
+          round,
+          marks[round] == null
+              ? MeetAttempt.foul()
+              : MeetAttempt.untracked(marks[round]!));
+    }
+    return entry;
+  }
+
+  champs.entries.addAll([
+    anna,
+    rival('r1', 'M. Okoye (Barnet)', 1, [44.12, null, 44.90]),
+    jakob,
+    rival('r2', 'L. Fischer (Brighton)', 3, [43.20, 42.06]),
+    priya,
+    rival('r3', 'S. Patel (Ealing)', 5, [39.80, null]),
+  ]);
 
   final spring = Meet(
     id: 'k0',
@@ -136,6 +171,15 @@ void main() {
     // The competition itself, part-way through.
     await _shoot(tester, library, meets,
         const MeetScreen(meetId: 'k1'), 'meet_tracker');
+
+    // Where the competition stands, with the cut and what it takes to
+    // get past it.
+    await tester.tap(find.text('Standings'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_standings.png'));
+    await tester.tap(find.text('Series'));
+    await settle(tester);
 
     // The sheet a round is entered in, as it opens on a filmed attempt.
     await tester.tap(find.byKey(const ValueKey('round-4')).first);

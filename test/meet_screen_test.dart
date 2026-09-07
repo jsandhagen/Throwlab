@@ -73,9 +73,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Opens the sheet on the round the athlete is about to throw.
+  /// Opens the sheet on the round the athlete is about to throw. Ana leads
+  /// the flight in these tests, so hers is the first card.
   Future<void> tapMark(WidgetTester tester) async {
-    await tester.tap(find.text('Mark'));
+    await tester.tap(find.text('Mark').first);
     await tester.pumpAndSettle();
   }
 
@@ -269,6 +270,155 @@ void main() {
       expect(entry().attemptAt(0)?.kind, AttemptKind.foul);
       expect(entry().attemptAt(0)?.resultId, 'v1');
       expect(find.text('X'), findsOneWidget);
+    });
+  });
+
+  group('the rest of the field', () {
+    /// Adds a rival to the meet: someone the library must never hear about.
+    Future<void> addRival(String name, {double? best}) async {
+      final entry = MeetEntry(
+        id: 'r-$name',
+        athlete: name,
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: false,
+        order: 5,
+      );
+      if (best != null) entry.setAttempt(0, MeetAttempt.untracked(best));
+      await meets.addEntry('k1', entry: entry);
+    }
+
+    testWidgets('their mark is recorded without touching the library',
+        (tester) async {
+      await addRival('M. Okoye');
+      await mountMeet(tester);
+
+      // Their card is the second one; the Mark button next to their name.
+      await tester.tap(find.text('Mark').last);
+      await tester.pumpAndSettle();
+      await enterDistance(tester, '44.90');
+
+      final rival = meets.byId('k1')!.entries.last;
+      expect(rival.attemptAt(0)?.distance, 44.90);
+      expect(rival.attemptAt(0)?.resultId, isNull);
+      // The record book never hears about it.
+      expect(library.marks, isEmpty);
+      expect(library.videos, isEmpty);
+      expect(library.knownAthletes, isNot(contains('M. Okoye')));
+    });
+
+    testWidgets('there is no camera pointed at them', (tester) async {
+      await addRival('M. Okoye');
+      await mountMeet(tester);
+      // One Film button, on the coach's own athlete.
+      expect(find.text('Film'), findsOneWidget);
+      expect(find.text('Mark'), findsNWidgets(2));
+    });
+  });
+
+  group('standings', () {
+    Future<void> openStandings(WidgetTester tester) async {
+      await tester.tap(find.text('Standings'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> addRival(String id, String name, double best,
+        {int order = 5}) async {
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: id,
+            athlete: name,
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            tracked: false,
+            order: order,
+          )..setAttempt(0, MeetAttempt.untracked(best)));
+    }
+
+    testWidgets('rank the field, mine among them', (tester) async {
+      await addRival('r1', 'M. Okoye', 44.90);
+      await addRival('r2', 'J. Smith', 38.44, order: 6);
+      await mountMeet(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openStandings(tester);
+
+      final okoye = tester.getRect(find.text('M. Okoye')).top;
+      final ana = tester.getRect(find.text('Ana Diaz')).top;
+      final smith = tester.getRect(find.text('J. Smith')).top;
+      expect(okoye, lessThan(ana));
+      expect(ana, lessThan(smith));
+      expect(find.text('44.90 m'), findsOneWidget);
+    });
+
+    testWidgets('say what my athlete needs to make the final',
+        (tester) async {
+      // A final of two, and Ana is third.
+      final meet = meets.byId('k1')!..advancing = 2;
+      await meets.save(meet);
+      await addRival('r1', 'M. Okoye', 44.90);
+      await addRival('r2', 'J. Smith', 43.00, order: 6);
+      await mountMeet(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openStandings(tester);
+
+      expect(find.text('the cut'), findsOneWidget);
+      expect(find.textContaining('needs 43.01 m'), findsOneWidget);
+    });
+
+    testWidgets('say nothing about what the rest of the field needs',
+        (tester) async {
+      final meet = meets.byId('k1')!..advancing = 1;
+      await meets.save(meet);
+      await addRival('r1', 'M. Okoye', 44.90);
+      await addRival('r2', 'J. Smith', 20.00, order: 6);
+      await mountMeet(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openStandings(tester);
+
+      // Ana is out of the final and told so; Smith is out of it and not.
+      expect(find.textContaining('needs'), findsOneWidget);
+    });
+
+    testWidgets('order the final worst-placed first', (tester) async {
+      final meet = meets.byId('k1')!..advancing = 2;
+      await meets.save(meet);
+      await addRival('r1', 'M. Okoye', 44.90);
+      await addRival('r2', 'J. Smith', 20.00, order: 6);
+      await mountMeet(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openStandings(tester);
+      await tester.tap(find.text('Order the final'));
+      await tester.pumpAndSettle();
+
+      // Ana (41.20) throws before Okoye (44.90); Smith missed the cut and
+      // is left behind them.
+      expect(meets.byId('k1')!.inOrder.map((e) => e.athlete),
+          ['Ana Diaz', 'M. Okoye', 'J. Smith']);
+    });
+  });
+
+  group('the throwing order', () {
+    testWidgets('an athlete can be moved down the flight', (tester) async {
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'e2',
+            athlete: 'Bea Cole',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            order: 1,
+          ));
+      await mountMeet(tester);
+      await tester.tap(find.byIcon(Icons.more_horiz).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Throw later'));
+      await tester.pumpAndSettle();
+
+      expect(meets.byId('k1')!.inOrder.map((e) => e.athlete),
+          ['Bea Cole', 'Ana Diaz']);
     });
   });
 }
