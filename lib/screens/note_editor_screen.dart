@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/training_note.dart';
 import '../services/notes_library.dart';
@@ -31,6 +32,10 @@ class NoteEditorScreen extends StatefulWidget {
 }
 
 class _NoteEditorScreenState extends State<NoteEditorScreen> {
+  /// Where the coach last left the formatting bar. Remembered, because it
+  /// is a preference about their hands rather than about this note.
+  static const _dockKey = 'throwlab.noteToolbarTop';
+
   late final TrainingNote _note = widget.note.copy();
   late final TextEditingController _title =
       TextEditingController(text: _note.title);
@@ -41,6 +46,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   /// The block the toolbar acts on. Kept after focus is lost to the
   /// toolbar's own buttons, which is where the cursor goes when you tap one.
   String? _active;
+
+  /// Toolbar under the app bar rather than above the keyboard. Either place
+  /// stays on screen while typing; which one reads better depends on the
+  /// phone, so it is a choice rather than a decision.
+  bool _dockTop = false;
 
   Timer? _saveTimer;
 
@@ -63,6 +73,29 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     if (_note.blocks.isEmpty) {
       _note.blocks.add(NoteBlock(id: NotesLibrary.newBlockId()));
     }
+    unawaited(_loadDock());
+  }
+
+  Future<void> _loadDock() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() => _dockTop = prefs.getBool(_dockKey) ?? false);
+    } catch (_) {
+      // Storage that will not answer just means the bar stays where it is.
+    }
+  }
+
+  void _toggleDock() {
+    setState(() => _dockTop = !_dockTop);
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_dockKey, _dockTop);
+      } catch (_) {
+        // The bar has already moved; it just won't be there next time.
+      }
+    }());
   }
 
   @override
@@ -200,16 +233,117 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _save();
   }
 
+  /// The list kinds. A run of them, all the same kind, is what reads as one
+  /// list on the screen — and so is what "delete the list" has to mean.
+  static const _listKinds = {
+    NoteBlockKind.bullet,
+    NoteBlockKind.numbered,
+    NoteBlockKind.checklist,
+  };
+
+  /// The whole list [block] belongs to: the lines either side of it that are
+  /// the same kind, unbroken. Empty when [block] is not a list line.
+  List<NoteBlock> _listRun(NoteBlock block) {
+    if (!_listKinds.contains(block.kind)) return const [];
+    final index = _note.blocks.indexOf(block);
+    if (index == -1) return const [];
+    var first = index;
+    while (first > 0 && _note.blocks[first - 1].kind == block.kind) {
+      first--;
+    }
+    var last = index;
+    while (last < _note.blocks.length - 1 &&
+        _note.blocks[last + 1].kind == block.kind) {
+      last++;
+    }
+    return _note.blocks.sublist(first, last + 1);
+  }
+
+  /// Takes [doomed] out of the note, tidies up after them, and leaves the
+  /// cursor somewhere sensible.
+  ///
+  /// A note is never left with nothing in it: emptying it out gives back one
+  /// blank line, so the screen still has somewhere to type. That is also
+  /// what deleting the only line means — the line clears rather than the
+  /// editor going blank.
+  void _removeBlocks(List<NoteBlock> doomed) {
+    if (doomed.isEmpty) return;
+    final typing = _focusNodes.values.any((node) => node.hasFocus);
+    final at = _note.blocks.indexOf(doomed.first);
+    setState(() {
+      for (final block in doomed) {
+        _note.blocks.remove(block);
+      }
+      if (_note.blocks.isEmpty) {
+        _note.blocks.add(NoteBlock(id: NotesLibrary.newBlockId()));
+      }
+      // The line that slid up into the gap, or the last one if the gap was
+      // at the end — the same place a cursor lands in any editor.
+      final landing = _note.blocks[at.clamp(0, _note.blocks.length - 1)];
+      _active = landing.id;
+      if (typing && !landing.isImage) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _focusFor(landing).requestFocus();
+        });
+      }
+    });
+    for (final block in doomed) {
+      _controllers.remove(block.id)?.dispose();
+      _focusNodes.remove(block.id)?.dispose();
+      final path = block.imagePath;
+      // The picture is a file of ours, not the gallery's copy — nothing else
+      // will ever come back for it.
+      if (path != null) {
+        unawaited(_store?.deletePicture(path) ?? Future.value());
+      }
+    }
+    _save();
+  }
+
   void _deleteBlock() {
     final block = _activeBlock;
-    if (block == null || _note.blocks.length == 1) return;
-    setState(() {
-      _note.blocks.remove(block);
-      _active = null;
-    });
-    _controllers.remove(block.id)?.dispose();
-    _focusNodes.remove(block.id)?.dispose();
-    _save();
+    if (block == null) return;
+    _removeBlocks([block]);
+  }
+
+  Future<void> _deleteList() async {
+    final block = _activeBlock;
+    if (block == null) return;
+    final run = _listRun(block);
+    if (run.isEmpty) return;
+    final lines = run.length == 1 ? '1 line' : '${run.length} lines';
+    if (!await _confirm('Delete this list?', '$lines will go.')) return;
+    _removeBlocks(run);
+  }
+
+  Future<void> _deletePicture(NoteBlock block) async {
+    if (!await _confirm('Delete this picture?',
+        'It goes from the note and from the phone. The rest of the note '
+        'stays.')) {
+      return;
+    }
+    _removeBlocks([block]);
+  }
+
+  /// The one confirmation shape this screen uses. Typing is undoable by
+  /// retyping; deleting a picture or a whole list is not, so those ask.
+  Future<bool> _confirm(String title, String detail) async {
+    final answer = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(detail),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    return answer == true && mounted;
   }
 
   /// Wraps the selection in [marker], or opens an empty pair to type into.
@@ -255,24 +389,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   Future<void> _deleteNote() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete this note?'),
-        content: Text(_note.displayTitle),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Delete')),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
+    if (!await _confirm('Delete this note?', _note.displayTitle)) return;
     _saveTimer?.cancel();
-    await context.read<NotesLibrary>().remove(_note.id);
+    // The held store rather than a fresh lookup: _confirm has already been
+    // away and back, and the tree may not be here any more.
+    await _store?.remove(_note.id);
     if (mounted) Navigator.pop(context);
   }
 
@@ -299,44 +420,71 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           ),
           actions: [
             IconButton(
+              tooltip: _dockTop
+                  ? 'Put the controls above the keyboard'
+                  : 'Pin the controls to the top',
+              icon: Icon(_dockTop
+                  ? Icons.vertical_align_bottom
+                  : Icons.vertical_align_top),
+              onPressed: _toggleDock,
+            ),
+            IconButton(
               tooltip: 'Delete note',
               icon: const Icon(Icons.delete_outline),
               onPressed: _deleteNote,
             ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        // The toolbar rides in the body rather than in bottomNavigationBar:
+        // the Scaffold shrinks its body to clear the keyboard but leaves a
+        // bottom bar underneath it, which is how the tools used to disappear
+        // exactly when there was text to format.
+        body: Column(
           children: [
-            TextField(
-              controller: _title,
-              textCapitalization: TextCapitalization.sentences,
-              style: theme.textTheme.headlineSmall,
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                hintText: 'Note title',
-                isDense: true,
-              ),
-              onChanged: (value) {
-                _note.title = value;
-                _scheduleSave();
-              },
+            if (_dockTop) _toolbar(),
+            // With the bar at the top it is the text, not the bar, that
+            // runs down to the system navigation — so the inset moves too.
+            Expanded(
+              child: SafeArea(top: false, bottom: _dockTop, child: _blocks()),
             ),
-            const SizedBox(height: 4),
-            for (final block in _note.blocks) _blockRow(block),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => _addBlock(NoteBlockKind.paragraph),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add a line'),
-              ),
-            ),
+            if (!_dockTop) _toolbar(),
           ],
         ),
-        bottomNavigationBar: _toolbar(),
       ),
+    );
+  }
+
+  Widget _blocks() {
+    final theme = Theme.of(context);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        TextField(
+          controller: _title,
+          textCapitalization: TextCapitalization.sentences,
+          style: theme.textTheme.headlineSmall,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            hintText: 'Note title',
+            isDense: true,
+          ),
+          onChanged: (value) {
+            _note.title = value;
+            _scheduleSave();
+          },
+        ),
+        const SizedBox(height: 4),
+        for (final block in _note.blocks) _blockRow(block),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _addBlock(NoteBlockKind.paragraph),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Add a line'),
+          ),
+        ),
+      ],
     );
   }
 
@@ -462,16 +610,54 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: path != null && File(path).existsSync()
-                ? Image.file(File(path), fit: BoxFit.cover)
-                : Container(
-                    height: 120,
-                    alignment: Alignment.center,
-                    color: theme.colorScheme.surfaceContainerHighest,
-                    child: const Text('Picture missing'),
+          Stack(
+            children: [
+              // Tapping the picture makes it the line the toolbar acts on.
+              // Without this the only way to select one was its caption,
+              // which nobody has to have written.
+              GestureDetector(
+                onTap: () => setState(() => _active = block.id),
+                child: ConstrainedBox(
+                  // A picture is drawn at its own size, so a small one would
+                  // otherwise be smaller than the button sitting on it —
+                  // which puts the button outside the picture, where taps
+                  // never land.
+                  constraints:
+                      const BoxConstraints(minWidth: 48, minHeight: 48),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: path != null && File(path).existsSync()
+                        ? Image.file(File(path), fit: BoxFit.cover)
+                        : Container(
+                            height: 120,
+                            alignment: Alignment.center,
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            child: const Text('Picture missing'),
+                          ),
                   ),
+                ),
+              ),
+              // On the picture itself, not in the toolbar: a picture has no
+              // cursor in it, so a tool that acts on "the line you are in"
+              // is no way to get rid of one.
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Material(
+                  color: theme.colorScheme.surface.withOpacity(0.72),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    tooltip: 'Delete this picture',
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 34, height: 34),
+                    padding: EdgeInsets.zero,
+                    onPressed: () => _deletePicture(block),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           TextField(
@@ -493,55 +679,85 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
   }
 
-  /// The formatting bar. Sits above the keyboard, and acts on whichever
-  /// line the cursor is in.
+  /// The formatting bar. Acts on whichever line the cursor is in, and stays
+  /// put while the keyboard is up — pinned just above it, or under the app
+  /// bar if that is where the coach put it.
   Widget _toolbar() {
     final block = _activeBlock;
     final theme = Theme.of(context);
+    final divider = Divider(
+        height: 1, thickness: 1, color: theme.colorScheme.outlineVariant);
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
       child: SafeArea(
         top: false,
-        child: SizedBox(
-          height: 52,
-          // Scrolls: eleven tools don't fit across a phone, and the ones
-          // that fall off the end are the rarer ones.
-          child: ListView(
-            key: const Key('note-toolbar'),
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            children: [
-              _tool(Icons.format_bold, 'Bold',
-                  onTap: () => _emphasise('**')),
-              _tool(Icons.format_italic, 'Italic',
-                  onTap: () => _emphasise('*')),
-              _tool(Icons.format_underlined, 'Underline',
-                  onTap: () => _emphasise('__')),
-              const _ToolDivider(),
-              _tool(Icons.title, 'Heading',
-                  on: block?.kind == NoteBlockKind.heading,
-                  onTap: () => _setKind(NoteBlockKind.heading)),
-              _tool(Icons.format_list_bulleted, 'Bulleted list',
-                  on: block?.kind == NoteBlockKind.bullet,
-                  onTap: () => _setKind(NoteBlockKind.bullet)),
-              _tool(Icons.format_list_numbered, 'Numbered list',
-                  on: block?.kind == NoteBlockKind.numbered,
-                  onTap: () => _setKind(NoteBlockKind.numbered)),
-              _tool(Icons.checklist, 'Checklist',
-                  on: block?.kind == NoteBlockKind.checklist,
-                  onTap: () => _setKind(NoteBlockKind.checklist)),
-              const _ToolDivider(),
-              _tool(Icons.image_outlined, 'Add a picture',
-                  onTap: _addPicture),
-              const _ToolDivider(),
-              _tool(Icons.arrow_upward, 'Move up',
-                  onTap: () => _move(-1)),
-              _tool(Icons.arrow_downward, 'Move down',
-                  onTap: () => _move(1)),
-              _tool(Icons.backspace_outlined, 'Delete this line',
-                  onTap: _deleteBlock),
-            ],
-          ),
+        // Docked at the top there is no system inset beneath the bar to
+        // clear — the body below it goes on for the rest of the screen.
+        bottom: !_dockTop,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!_dockTop) divider,
+            SizedBox(
+              height: 52,
+              child: Row(
+                children: [
+                  // The formatting tools scroll: a dozen of them don't fit
+                  // across a phone, and the ones that fall off the end are
+                  // the rarer ones.
+                  Expanded(
+                    child: ListView(
+                      key: const Key('note-toolbar'),
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      children: [
+                        _tool(Icons.format_bold, 'Bold',
+                            onTap: () => _emphasise('**')),
+                        _tool(Icons.format_italic, 'Italic',
+                            onTap: () => _emphasise('*')),
+                        _tool(Icons.format_underlined, 'Underline',
+                            onTap: () => _emphasise('__')),
+                        const _ToolDivider(),
+                        _tool(Icons.title, 'Heading',
+                            on: block?.kind == NoteBlockKind.heading,
+                            onTap: () => _setKind(NoteBlockKind.heading)),
+                        _tool(Icons.format_list_bulleted, 'Bulleted list',
+                            on: block?.kind == NoteBlockKind.bullet,
+                            onTap: () => _setKind(NoteBlockKind.bullet)),
+                        _tool(Icons.format_list_numbered, 'Numbered list',
+                            on: block?.kind == NoteBlockKind.numbered,
+                            onTap: () => _setKind(NoteBlockKind.numbered)),
+                        _tool(Icons.checklist, 'Checklist',
+                            on: block?.kind == NoteBlockKind.checklist,
+                            onTap: () => _setKind(NoteBlockKind.checklist)),
+                        const _ToolDivider(),
+                        _tool(Icons.image_outlined, 'Add a picture',
+                            onTap: _addPicture),
+                        const _ToolDivider(),
+                        _tool(Icons.arrow_upward, 'Move up',
+                            onTap: () => _move(-1)),
+                        _tool(Icons.arrow_downward, 'Move down',
+                            onTap: () => _move(1)),
+                      ],
+                    ),
+                  ),
+                  // Deleting stays put at the end of the bar rather than
+                  // scrolling away with the rest: a tool you cannot find is
+                  // a tool you do not have.
+                  const _ToolDivider(),
+                  // Only where there is a list to delete — a run of one
+                  // kind of list line goes in one tap rather than in nine.
+                  if (block != null && _listRun(block).length > 1)
+                    _tool(Icons.playlist_remove, 'Delete this list',
+                        onTap: _deleteList),
+                  _tool(Icons.backspace_outlined, 'Delete this line',
+                      onTap: _deleteBlock),
+                  const SizedBox(width: 4),
+                ],
+              ),
+            ),
+            if (_dockTop) divider,
+          ],
         ),
       ),
     );

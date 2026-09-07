@@ -40,10 +40,12 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
-profiles, and a training note. Open the PNGs to see exactly what the screen
-paints. **Re-run it after touching a screen's layout and actually look at
-the output.** Run the previews one command at a time: two `flutter test`
-runs at once fight over the compiler and kill each other.
+profiles, and a training note: as it opens, and with the keyboard up (which
+the note preview fakes, insets and all) — toolbar above it, and pinned to
+the top. Open the PNGs to see exactly what the screen paints. **Re-run it
+after touching a screen's layout and actually look at the output.** Run the
+previews one command at a time: two `flutter test` runs at once fight over
+the compiler and kill each other.
 
 The harness asserts nothing; `matchesGoldenFile` is used only as a way to
 write a PNG. It lives in `tool/` rather than `test/` so `flutter test` — and
@@ -114,6 +116,10 @@ like the app rather than a bare Material default.
   `__underline__`) parsed by `inlineRuns`; `NoteTextController` styles them
   live in the field so nobody has to think in markers. Pictures are copied
   into the app's own storage on the way in — the picker's file will not
-  survive.
+  survive, and deleting the block deletes the file. The formatting bar sits
+  in the editor's body, never in `bottomNavigationBar`: a bottom bar stays
+  under the keyboard, which is exactly when the tools are wanted. It can be
+  pinned under the app bar instead (remembered in `throwlab.noteToolbarTop`),
+  and the delete tools stay put at its end rather than scrolling off it.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

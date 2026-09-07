@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -191,6 +193,18 @@ void main() {
       await broken.load();
       expect(broken.isLoaded, isTrue);
       expect(broken.notes, isEmpty);
+    });
+
+    test('deleting one picture leaves the file gone and the note alone',
+        () async {
+      final temp = await Directory.systemTemp.createTemp('throwlab_pic');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      final file = File('${temp.path}/p.png')..writeAsStringSync('x');
+
+      await notes.deletePicture(file.path);
+      expect(file.existsSync(), isFalse);
+      // A picture that has already gone is not an error worth having.
+      await notes.deletePicture(file.path);
     });
 
     test('deleting one leaves the rest', () async {

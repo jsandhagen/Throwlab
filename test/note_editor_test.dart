@@ -191,7 +191,7 @@ void main() {
         ['First']);
   });
 
-  testWidgets('the last line is never deleted out from under you',
+  testWidgets('deleting the only line clears it rather than the editor',
       (tester) async {
     await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Only')]));
     await tester.tap(blockField(0));
@@ -200,7 +200,33 @@ void main() {
     await tester.tap(find.byTooltip('Delete this line'));
     await pumpFrames(tester, 6);
 
+    // There is always somewhere to type — but the line itself does go.
     expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.text('Only'), findsNothing);
+    expect(notes.notesFor('Ana Diaz').single.blocks.single.text, '');
+  });
+
+  testWidgets('a whole list goes in one tap', (tester) async {
+    await mountEditor(tester, note(blocks: [
+      NoteBlock(id: 'b1', kind: NoteBlockKind.heading, text: 'Session 3'),
+      NoteBlock(id: 'b2', kind: NoteBlockKind.bullet, text: 'Stay tall'),
+      NoteBlock(id: 'b3', kind: NoteBlockKind.bullet, text: 'Block the left'),
+      NoteBlock(id: 'b4', kind: NoteBlockKind.bullet, text: 'Finish through'),
+    ]));
+    // Nothing to delete until the cursor is in a list.
+    expect(find.byTooltip('Delete this list'), findsNothing);
+    await tester.tap(blockField(1));
+    await pumpFrames(tester, 4);
+
+    await scrollToolbar(tester);
+    await tester.tap(find.byTooltip('Delete this list'));
+    await pumpFrames(tester, 20);
+    await tester.tap(find.text('Delete'));
+    await pumpFrames(tester, 20);
+
+    // The heading above it is not part of the list, and stays.
+    expect(notes.notesFor('Ana Diaz').single.blocks.map((b) => b.text),
+        ['Session 3']);
   });
 
   testWidgets('a picture carries a caption', (tester) async {
@@ -224,6 +250,55 @@ void main() {
           id: 'b1', kind: NoteBlockKind.image, imagePath: '/gone.png'),
     ]));
     expect(find.text('Picture missing'), findsOneWidget);
+  });
+
+  testWidgets('a picture can be deleted from the picture itself',
+      (tester) async {
+    await mountEditor(tester, note(blocks: [
+      NoteBlock(
+          id: 'b1', kind: NoteBlockKind.image, imagePath: picture.path),
+      NoteBlock(id: 'b2', text: 'What it should look like'),
+    ]));
+
+    await tester.tap(find.byTooltip('Delete this picture'));
+    await pumpFrames(tester, 20);
+    await tester.tap(find.text('Delete'));
+    await pumpFrames(tester, 20);
+
+    expect(find.byType(Image), findsNothing);
+    expect(notes.notesFor('Ana Diaz').single.blocks.map((b) => b.text),
+        ['What it should look like']);
+  });
+
+  testWidgets('the toolbar stays above the keyboard', (tester) async {
+    await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Cue')]));
+    final bar = find.byKey(const Key('note-toolbar'));
+
+    // Up comes the keyboard, over the bottom third of the screen.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 400);
+    await pumpFrames(tester, 6);
+
+    // Above the keyboard, and against it — not under it, which is where a
+    // bottomNavigationBar would have gone.
+    expect(tester.getBottomLeft(bar).dy, lessThanOrEqualTo(800));
+    expect(tester.getBottomLeft(bar).dy, greaterThan(700));
+  });
+
+  testWidgets('the controls can be pinned to the top, and stay pinned',
+      (tester) async {
+    await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Cue')]));
+    final bar = find.byKey(const Key('note-toolbar'));
+    expect(tester.getTopLeft(bar).dy, greaterThan(600));
+
+    await tester.tap(find.byTooltip('Pin the controls to the top'));
+    await pumpFrames(tester, 6);
+    expect(tester.getTopLeft(bar).dy, lessThan(200));
+
+    // The next note opens with the bar where it was left.
+    await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Cue')]));
+    expect(tester.getTopLeft(bar).dy, lessThan(200));
+    expect(find.byTooltip('Put the controls above the keyboard'),
+        findsOneWidget);
   });
 
   testWidgets('deleting the note asks, then takes it away', (tester) async {

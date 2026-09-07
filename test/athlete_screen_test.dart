@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/models/training_note.dart';
 import 'package:throwlab/screens/analysis_screen.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
 import 'package:throwlab/services/notes_library.dart';
@@ -248,6 +249,33 @@ void main() {
       await pumpFrames(tester, 20);
       expect(library.marks, isEmpty);
     });
+  });
+
+  testWidgets('a note can be deleted from the profile, after asking',
+      (tester) async {
+    await fill([
+      testVideo(temp,
+          id: 'a', athlete: 'Ana Diaz', importedAt: DateTime(2026, 5, 3)),
+    ]);
+    await notes.save(TrainingNote(
+      id: 'n1',
+      athlete: 'Ana Diaz',
+      title: 'Throws day',
+      createdAt: DateTime(2026, 5, 1),
+      updatedAt: DateTime(2026, 5, 1),
+    ));
+    await mountProfile(tester);
+
+    await tester.scrollUntilVisible(find.text('Throws day'), 200,
+        scrollable: find.byType(Scrollable).first);
+    await pumpFrames(tester, 4);
+    await tester.longPress(find.text('Throws day'));
+    await pumpFrames(tester, 20);
+    expect(find.text('Delete this note?'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await pumpFrames(tester, 20);
+
+    expect(notes.notes, isEmpty);
   });
 
   testWidgets('an athlete with nothing left says so', (tester) async {

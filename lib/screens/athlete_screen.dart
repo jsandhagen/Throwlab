@@ -228,6 +228,7 @@ class AthleteScreen extends StatelessWidget {
                     child: _NoteTile(
                       note: note,
                       onTap: () => _openNote(context, note),
+                      onLongPress: () => _deleteNote(context, notes, note),
                     ),
                   ),
               Padding(
@@ -254,6 +255,29 @@ class AthleteScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Long-pressing a note deletes it, the way long-pressing a mark does —
+  /// so a note written on the wrong athlete doesn't have to be opened to be
+  /// got rid of.
+  Future<void> _deleteNote(
+      BuildContext context, NotesLibrary notes, TrainingNote note) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this note?'),
+        content: Text(note.displayTitle),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed == true) await notes.remove(note.id);
   }
 
   void _openNote(BuildContext context, TrainingNote note) {
@@ -519,10 +543,12 @@ class _MarkTile extends StatelessWidget {
 /// in it — a picture count and a checklist tally, which are the two things
 /// you want to know before opening it.
 class _NoteTile extends StatelessWidget {
-  const _NoteTile({required this.note, required this.onTap});
+  const _NoteTile(
+      {required this.note, required this.onTap, required this.onLongPress});
 
   final TrainingNote note;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -534,6 +560,7 @@ class _NoteTile extends StatelessWidget {
       shape: angularShape(10),
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(

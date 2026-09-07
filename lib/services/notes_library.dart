@@ -123,6 +123,17 @@ class NotesLibrary extends ChangeNotifier {
     }
   }
 
+  /// Reclaims one deleted block's picture. Best-effort, like the note-wide
+  /// sweep below: a picture that will not delete costs space, never data.
+  Future<void> deletePicture(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // The block that pointed at it is already gone.
+    }
+  }
+
   /// Reclaims a deleted note's pictures. Best-effort: a failed delete costs
   /// space, never data.
   Future<void> _deletePictures(TrainingNote note) async {
