@@ -81,6 +81,61 @@ void main() {
     });
   });
 
+  group('deleting a meet', () {
+    testWidgets('a long press asks first, and a cancel keeps it',
+        (tester) async {
+      await mountMeets(tester);
+      await tester.longPress(find.text('County Champs'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete County Champs?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(meets.byId('k1'), isNotNull);
+      expect(find.text('County Champs'), findsOneWidget);
+    });
+
+    testWidgets('confirming takes it off the list and out of storage',
+        (tester) async {
+      await mountMeets(tester);
+      await tester.longPress(find.text('County Champs'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(meets.byId('k1'), isNull);
+      expect(find.text('County Champs'), findsNothing);
+      // The other meet is untouched.
+      expect(find.text('Spring Open'), findsOneWidget);
+    });
+
+    testWidgets('the calendar deletes the same way', (tester) async {
+      await mountMeets(tester);
+      await openCalendar(tester);
+      await tester.longPress(find.text('County Champs'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(meets.byId('k1'), isNull);
+      expect(find.text('County Champs'), findsNothing);
+    });
+
+    testWidgets('the last meet leaves the empty state behind', (tester) async {
+      await meets.remove('k0');
+      await mountMeets(tester);
+      await tester.longPress(find.text('County Champs'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No meets yet'), findsOneWidget);
+      // Nothing left to read either way, so the bar goes with the meets.
+      expect(find.text('Calendar'), findsNothing);
+    });
+  });
+
   group('the calendar', () {
     testWidgets('opens on the month the meets are in', (tester) async {
       await mountMeets(tester);

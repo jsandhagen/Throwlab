@@ -164,6 +164,32 @@ void main() {
       expect(reopened.meets.map((m) => m.id), ['new', 'old']);
     });
 
+    test('a deleted meet stays deleted', () async {
+      final library = MeetLibrary();
+      await library.load();
+      await library.save(_meet(id: 'k0', on: DateTime(2026, 4, 1)));
+      await library.save(_meet(id: 'k1', on: DateTime(2026, 6, 1))
+        ..entries.add(_entry()));
+
+      await library.remove('k1');
+      expect(library.meets.map((m) => m.id), ['k0']);
+
+      // Gone from storage too, not just from the list in memory.
+      final reopened = MeetLibrary();
+      await reopened.load();
+      expect(reopened.meets.map((m) => m.id), ['k0']);
+      expect(reopened.byId('k1'), isNull);
+    });
+
+    test('deleting a meet nobody has is not an error', () async {
+      final library = MeetLibrary();
+      await library.load();
+      await library.save(_meet(id: 'k0'));
+
+      await library.remove('nothing');
+      expect(library.meets, hasLength(1));
+    });
+
     test('a corrupt store costs the meets, not the app', () async {
       SharedPreferences.setMockInitialValues(
           {'throwlab.meets': 'not json at all'});
