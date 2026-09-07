@@ -399,6 +399,109 @@ void main() {
     });
   });
 
+  group('three and three', () {
+    /// A 3 + 3 with [advancing] going through, and a field whose series
+    /// are given round by round.
+    Meet threeAndThree(Map<String, List<double>> field, {int advancing = 2}) {
+      final meet = Meet(
+        id: 'k1',
+        name: 'County Champs',
+        date: DateTime(2026, 6, 13),
+        rounds: 6,
+        prelimRounds: 3,
+        advancing: advancing,
+      );
+      var order = 0;
+      field.forEach((name, marks) {
+        final entry = MeetEntry(
+          id: name,
+          athlete: name,
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          tracked: name == 'mine',
+          order: order++,
+        );
+        for (var round = 0; round < marks.length; round++) {
+          entry.setAttempt(round, MeetAttempt.untracked(marks[round]));
+        }
+        meet.entries.add(entry);
+      });
+      return meet;
+    }
+
+    MeetStandings standingsOf(Meet meet) => MeetStandings(
+          MeetCompetition.of(meet).single,
+          const [],
+          advancing: meet.advancing,
+          prelimRounds: meet.prelimRounds,
+        );
+
+    test('is six rounds with the cut after three', () {
+      final meet = threeAndThree(const {});
+      expect(meet.hasFinal, isTrue);
+      expect(meet.rounds, 6);
+      expect(meet.prelimRounds, 3);
+    });
+
+    test('a meet where everyone throws the lot has no final', () {
+      expect(Meet(id: 'k', name: 'Open', date: DateTime(2026, 5, 2)).hasFinal,
+          isFalse);
+    });
+
+    test('the cut is not made until the whole field has had its three', () {
+      final standings = standingsOf(threeAndThree(const {
+        'mine': [41.20, 41.50, 42.00],
+        'okoye': [44.90, 44.00, 45.10],
+        // Still one to throw: nobody is out yet.
+        'smith': [38.44, 39.00],
+      }));
+      expect(standings.cutMade, isFalse);
+      // So everyone still has rounds coming, last place included.
+      expect(standings.throwsInFinal('smith'), isTrue);
+    });
+
+    test('once it is made, only the qualifiers throw on', () {
+      final standings = standingsOf(threeAndThree(const {
+        'mine': [41.20, 41.50, 42.00],
+        'okoye': [44.90, 44.00, 45.10],
+        'smith': [38.44, 39.00, 38.10],
+      }));
+      expect(standings.cutMade, isTrue);
+      expect(standings.throwsInFinal('okoye'), isTrue);
+      expect(standings.throwsInFinal('mine'), isTrue);
+      expect(standings.throwsInFinal('smith'), isFalse);
+    });
+
+    test('a competition with no cut never closes a round', () {
+      final meet = threeAndThree(const {
+        'mine': [41.20, 41.50, 42.00],
+        'okoye': [44.90, 44.00, 45.10],
+      }, advancing: 8);
+      final standings = standingsOf(meet);
+      expect(standings.cutMade, isFalse);
+      expect(standings.throwsInFinal('mine'), isTrue);
+    });
+
+    test('the format survives a round trip through JSON', () {
+      final read = Meet.fromJson(threeAndThree(const {}).toJson());
+      expect(read.rounds, 6);
+      expect(read.prelimRounds, 3);
+      expect(read.hasFinal, isTrue);
+    });
+
+    test('a meet stored before the final existed keeps all its rounds', () {
+      final read = Meet.fromJson({
+        'id': 'k1',
+        'name': 'Spring Open',
+        'date': '2026-05-02T00:00:00.000',
+        'rounds': 6,
+        'entries': <dynamic>[],
+      });
+      expect(read.prelimRounds, 6);
+      expect(read.hasFinal, isFalse);
+    });
+  });
+
   group('the meet in progress', () {
     test("is today's", () async {
       final library = MeetLibrary();

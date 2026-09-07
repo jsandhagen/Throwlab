@@ -205,9 +205,11 @@ class Meet {
     required this.name,
     required this.date,
     this.rounds = 6,
+    int? prelimRounds,
     this.advancing = 8,
     List<MeetEntry>? entries,
-  }) : entries = entries ?? [];
+  })  : prelimRounds = prelimRounds ?? rounds,
+        entries = entries ?? [];
 
   final String id;
 
@@ -222,6 +224,16 @@ class Meet {
   /// early-season open is often three or four, and a series of six boxes
   /// where only three were ever thrown reads as three fouls.
   int rounds;
+
+  /// How many rounds everyone throws before the cut.
+  ///
+  /// A championship throws three and then gives the leaders three more —
+  /// "3 + 3", which is [rounds] 6 and this 3. Equal to [rounds] when the
+  /// whole field throws the lot, which is what a meet with no cut is.
+  int prelimRounds;
+
+  /// Whether the field is cut part-way: three rounds, then the final.
+  bool get hasFinal => prelimRounds < rounds;
 
   /// How many of a competition go through to the final rounds. Eight is
   /// the usual cut; a small section takes everyone, which is what a number
@@ -255,6 +267,7 @@ class Meet {
         'name': name,
         'date': date.toIso8601String(),
         'rounds': rounds,
+        'prelimRounds': prelimRounds,
         'advancing': advancing,
         'entries': [for (final entry in entries) entry.toJson()],
       };
@@ -264,6 +277,9 @@ class Meet {
         name: json['name'] as String? ?? '',
         date: DateTime.parse(json['date'] as String),
         rounds: (json['rounds'] as num?)?.toInt() ?? 6,
+        // A meet stored before the final existed had no cut: everyone
+        // entered threw every round of it.
+        prelimRounds: (json['prelimRounds'] as num?)?.toInt(),
         advancing: (json['advancing'] as num?)?.toInt() ?? 8,
         entries: [
           for (final raw in (json['entries'] as List<dynamic>? ?? []))
@@ -424,6 +440,7 @@ class MeetStandings {
     this.competition,
     Iterable<ThrowResult> results, {
     this.advancing = 8,
+    this.prelimRounds = 0,
   }) {
     final ranked = [
       for (final entry in competition.entries)
@@ -454,10 +471,30 @@ class MeetStandings {
   /// entered.
   final int advancing;
 
+  /// How many rounds are thrown before the cut; 0 in a competition that
+  /// doesn't have one.
+  final int prelimRounds;
+
   final List<MeetPlace> places = [];
 
   /// Whether anybody is going to be left out.
   bool get hasCut => places.length > advancing;
+
+  /// Whether the cut has actually happened, rather than being where the
+  /// field would be cut if it stopped now.
+  ///
+  /// It takes everyone having had their three: an athlete sitting ninth
+  /// with a round in hand is not out, and closing their last rounds while
+  /// they still have one to throw would be wrong.
+  bool get cutMade =>
+      hasCut &&
+      prelimRounds > 0 &&
+      competition.entries.every((entry) => entry.taken >= prelimRounds);
+
+  /// Whether this athlete still has throws coming. Everyone does until the
+  /// cut is made; after it, only the athletes who went through.
+  bool throwsInFinal(String entryId) =>
+      !cutMade || (placeOf(entryId)?.advancing ?? false);
 
   MeetPlace? placeOf(String entryId) {
     for (final place in places) {

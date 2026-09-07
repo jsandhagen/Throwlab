@@ -144,6 +144,13 @@ like the app rather than a bare Material default.
   a rival's throw can never surface as somebody's personal best or as a
   name in the athlete list. It is also why an attempt can carry either a
   `resultId` or a `distance`.
+- A meet's format is `Meet.rounds` with `prelimRounds`: a 3 + 3 is six
+  rounds cut after three, and a competition where the whole field throws
+  the lot has the two equal (`hasFinal` is the difference). The cut only
+  bites once every entry has had its prelims — `MeetStandings.cutMade` —
+  because an athlete sitting ninth with a throw in hand is not out, and
+  closing their rounds while they still have one would be wrong. After
+  that, `throwsInFinal` is what greys the last three boxes on a card.
 - Standings are worked out per `MeetCompetition` — everyone on the same
   event *and* implement, since that is the contest an athlete is placed in
   — and ties are broken by countback down the series, the way a

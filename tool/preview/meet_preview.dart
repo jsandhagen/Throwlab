@@ -70,6 +70,7 @@ List<Map<String, dynamic>> _meets() {
     name: 'County Champs',
     date: _date,
     rounds: 6,
+    prelimRounds: 3,
     advancing: 2,
   );
 
@@ -81,8 +82,7 @@ List<Map<String, dynamic>> _meets() {
       order: 0)
     ..setAttempt(0, MeetAttempt.mark('mk1'))
     ..setAttempt(1, MeetAttempt.foul())
-    ..setAttempt(2, MeetAttempt.mark('mk2'))
-    ..setAttempt(3, MeetAttempt.foul());
+    ..setAttempt(2, MeetAttempt.mark('mk2'));
 
   final jakob = MeetEntry(
       id: 'e2',
@@ -127,9 +127,9 @@ List<Map<String, dynamic>> _meets() {
     anna,
     rival('r1', 'M. Okoye (Barnet)', 1, [44.12, null, 44.90]),
     jakob,
-    rival('r2', 'L. Fischer (Brighton)', 3, [43.20, 42.06]),
+    rival('r2', 'L. Fischer (Brighton)', 3, [43.20, 42.06, 41.90]),
     priya,
-    rival('r3', 'S. Patel (Ealing)', 5, [39.80, null]),
+    rival('r3', 'S. Patel (Ealing)', 5, [39.80, null, 40.12]),
   ]);
 
   final spring = Meet(

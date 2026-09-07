@@ -421,4 +421,93 @@ void main() {
           ['Bea Cole', 'Ana Diaz']);
     });
   });
+
+  group('a 3 + 3', () {
+    /// Ana plus two rivals in a 3 + 3 where only two go through.
+    Future<void> setUpThreeAndThree(
+        {List<double> ana = const [], bool complete = true}) async {
+      final meet = meets.byId('k1')!
+        ..rounds = 6
+        ..prelimRounds = 3
+        ..advancing = 2;
+      final entry = meet.entries.single;
+      for (var round = 0; round < ana.length; round++) {
+        entry.setAttempt(round, MeetAttempt.untracked(ana[round]));
+      }
+      // Ana is the coach's, but her marks are stubbed straight onto the
+      // series here so the test is about the cut, not about entering them.
+      entry.tracked = false;
+      for (final rival in [
+        ('r1', 'M. Okoye', [44.90, 44.10, 45.00]),
+        ('r2', 'L. Fischer', complete ? [43.20, 42.00, 43.50] : [43.20]),
+      ]) {
+        final other = MeetEntry(
+          id: rival.$1,
+          athlete: rival.$2,
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          tracked: false,
+          order: 5,
+        );
+        for (var round = 0; round < rival.$3.length; round++) {
+          other.setAttempt(round, MeetAttempt.untracked(rival.$3[round]));
+        }
+        meet.entries.add(other);
+      }
+      await meets.save(meet);
+    }
+
+    testWidgets('closes the last rounds for an athlete who missed the cut',
+        (tester) async {
+      await setUpThreeAndThree(ana: const [30.0, 31.0, 32.0]);
+      await mountMeet(tester);
+
+      // Ana is third of three with everyone's prelims thrown: rounds 4-6
+      // are not hers to enter, and are greyed out to say so.
+      final closed = tester.widget<Opacity>(find.descendant(
+          of: find.byKey(const ValueKey('round-3')).first,
+          matching: find.byType(Opacity)));
+      expect(closed.opacity, lessThan(1));
+      // Round 3 was hers, and still reads at full strength.
+      final open = tester.widget<Opacity>(find.descendant(
+          of: find.byKey(const ValueKey('round-2')).first,
+          matching: find.byType(Opacity)));
+      expect(open.opacity, 1);
+
+      // Tapping a closed round does nothing — no sheet opens.
+      await tester.tap(find.byKey(const ValueKey('round-3')).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Save mark'), findsNothing);
+
+      // And the card says so where its buttons were: there is no round
+      // left for them to open.
+      expect(find.text('out of the final'), findsOneWidget);
+    });
+
+    testWidgets('leaves them open while anyone still has a prelim to throw',
+        (tester) async {
+      await setUpThreeAndThree(
+          ana: const [30.0, 31.0, 32.0], complete: false);
+      await mountMeet(tester);
+
+      // Fischer has thrown once. Nobody is out yet, so Ana can still be
+      // entered for round 4.
+      await tester.tap(find.byKey(const ValueKey('round-3')).first);
+      await tester.pumpAndSettle();
+      expect(find.text('Save mark'), findsOneWidget);
+    });
+
+    testWidgets('says the standings are the final once the cut is made',
+        (tester) async {
+      await setUpThreeAndThree(ana: const [30.0, 31.0, 32.0]);
+      await mountMeet(tester);
+      await tester.tap(find.text('Standings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('the final'), findsOneWidget);
+      expect(find.text('the cut'), findsOneWidget);
+      // Nothing left to need: the closed rounds say it.
+      expect(find.textContaining('needs'), findsNothing);
+    });
+  });
 }

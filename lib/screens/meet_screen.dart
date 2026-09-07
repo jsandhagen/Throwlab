@@ -140,6 +140,19 @@ class _MeetScreenState extends State<MeetScreen> {
   /// goes down the list in as the round works through.
   Widget _seriesList(Meet meet, MeetLibrary meets, VideoLibrary library) {
     final order = meet.inOrder;
+    // Who is through, per competition — a 3 + 3 closes the last rounds for
+    // everyone who missed the cut, and that is only known once the whole
+    // field has had its three.
+    final inFinal = <String, bool>{};
+    if (meet.hasFinal) {
+      for (final competition in MeetCompetition.of(meet)) {
+        final standings = MeetStandings(competition, library.results,
+            advancing: meet.advancing, prelimRounds: meet.prelimRounds);
+        for (final entry in competition.entries) {
+          inFinal[entry.id] = standings.throwsInFinal(entry.id);
+        }
+      }
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
       children: [
@@ -150,6 +163,9 @@ class _MeetScreenState extends State<MeetScreen> {
               meet: meet,
               entry: order[i],
               position: i + 1,
+              // Null when nothing is closed: no final, or they made it.
+              closedFrom:
+                  (inFinal[order[i].id] ?? true) ? null : meet.prelimRounds,
               series: MeetSeries(order[i], library.results),
               library: library,
               onEnter: (round) => _enter(meet, order[i], round),
@@ -175,7 +191,8 @@ class _MeetScreenState extends State<MeetScreen> {
             padding: const EdgeInsets.only(bottom: 12),
             child: _StandingsCard(
               standings: MeetStandings(competition, library.results,
-                  advancing: meet.advancing),
+                  advancing: meet.advancing,
+                  prelimRounds: meet.prelimRounds),
               onSetFinalOrder: (standings) =>
                   _setFinalOrder(meet, standings),
             ),
@@ -483,6 +500,7 @@ class _EntryCard extends StatelessWidget {
     required this.meet,
     required this.entry,
     required this.position,
+    required this.closedFrom,
     required this.series,
     required this.library,
     required this.onEnter,
@@ -497,6 +515,10 @@ class _EntryCard extends StatelessWidget {
 
   /// Where they throw in the flight, from 1.
   final int position;
+
+  /// The first round they no longer have — the cut, for an athlete who
+  /// missed it. Null while everyone still has throws coming.
+  final int? closedFrom;
 
   final MeetSeries series;
   final VideoLibrary library;
@@ -622,6 +644,8 @@ class _EntryCard extends StatelessWidget {
                       key: ValueKey('round-$round'),
                       round: round,
                       accent: accent,
+                      closed:
+                          closedFrom != null && round >= closedFrom!,
                       attempt: entry.attemptAt(round),
                       distance: series.distanceAt(round),
                       unit: series.resultAt(round)?.distanceUnit ??
@@ -676,6 +700,15 @@ class _EntryCard extends StatelessWidget {
                           ),
                         ),
                 ),
+                // Cut, with nothing left to fill in behind them: there is
+                // no round for these buttons to open.
+                if (closedFrom != null && entry.nextRound >= closedFrom!)
+                  Text(
+                    'out of the final',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant),
+                  )
+                else ...[
                 // Nothing is filmed for the rest of the field: a clip has
                 // to land in the library under somebody's name, and these
                 // are not the coach's athletes to keep.
@@ -692,6 +725,7 @@ class _EntryCard extends StatelessWidget {
                   label: const Text('Mark'),
                   onPressed: () => onEnter(entry.nextRound),
                 ),
+                ],
               ],
             ),
           ],
@@ -709,6 +743,7 @@ class _AttemptBox extends StatelessWidget {
     super.key,
     required this.round,
     required this.accent,
+    required this.closed,
     required this.attempt,
     required this.distance,
     required this.unit,
@@ -723,6 +758,10 @@ class _AttemptBox extends StatelessWidget {
   /// The event's colour, so the leading attempt reads as part of the card
   /// rather than as the app's own accent landing on it.
   final Color accent;
+
+  /// A round this athlete doesn't get: they were cut before it. Shown, not
+  /// hidden — a series is six boxes, and the empty ones say why.
+  final bool closed;
 
   final MeetAttempt? attempt;
   final double? distance;
@@ -748,64 +787,71 @@ class _AttemptBox extends StatelessWidget {
             ),
     };
     return Semantics(
-      label: 'Round ${round + 1}',
-      button: true,
+      label: closed && attempt == null
+          ? 'Round ${round + 1}, out of the final'
+          : 'Round ${round + 1}',
+      button: !closed,
       child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
+        // A round they were cut before is not theirs to enter.
+        onTap: closed ? null : onTap,
+        onLongPress: closed ? null : onLongPress,
         borderRadius: BorderRadius.circular(8),
-        child: Container(
-          height: 46,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            color: attempt == null
-                ? null
-                : scheme.surfaceContainerHighest.withOpacity(0.6),
-            border: Border.all(
-              color: isBest ? accent : scheme.outlineVariant,
-              width: isBest ? 1.5 : 1,
-            ),
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                top: 2,
-                left: 4,
-                child: Text(
-                  '${round + 1}',
-                  style: TextStyle(
-                      fontSize: 9,
-                      height: 1,
-                      color: scheme.onSurfaceVariant),
-                ),
+        child: Opacity(
+          // Greyed rather than gone, so the series still reads as six.
+          opacity: closed && attempt == null ? 0.35 : 1,
+          child: Container(
+            height: 46,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: attempt == null
+                  ? null
+                  : scheme.surfaceContainerHighest.withOpacity(0.6),
+              border: Border.all(
+                color: isBest ? accent : scheme.outlineVariant,
+                width: isBest ? 1.5 : 1,
               ),
-              if (filmed)
+            ),
+            child: Stack(
+              children: [
                 Positioned(
                   top: 2,
-                  right: 3,
-                  child: Icon(Icons.videocam,
-                      size: 10, color: scheme.primary),
+                  left: 4,
+                  child: Text(
+                    '${round + 1}',
+                    style: TextStyle(
+                        fontSize: 9,
+                        height: 1,
+                        color: scheme.onSurfaceVariant),
+                  ),
                 ),
-              Positioned.fill(
-                top: 8,
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        text,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: color,
+                if (filmed)
+                  Positioned(
+                    top: 2,
+                    right: 3,
+                    child: Icon(Icons.videocam,
+                        size: 10, color: scheme.primary),
+                  ),
+                Positioned.fill(
+                  top: 8,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          text,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -848,9 +894,13 @@ class _StandingsCard extends StatelessWidget {
                 ),
                 if (standings.hasCut)
                   Text(
-                    'top ${standings.advancing} advance',
+                    standings.cutMade
+                        ? 'the final'
+                        : 'top ${standings.advancing} advance',
                     style: theme.textTheme.labelSmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant),
+                        color: standings.cutMade
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant),
                   ),
               ],
             ),
@@ -866,7 +916,11 @@ class _StandingsCard extends StatelessWidget {
               _PlaceRow(
                 place: places[i],
                 accent: accent,
-                needed: standings.neededToQualify(places[i].entry.id),
+                // Once the cut is made there is nothing left to need: the
+                // closed rounds on their card say it better than a number.
+                needed: standings.cutMade
+                    ? null
+                    : standings.neededToQualify(places[i].entry.id),
               ),
             ],
             if (standings.hasCut) ...[
@@ -1122,6 +1176,13 @@ class _MeetDialogState extends State<_MeetDialog> {
   late DateTime _date = widget.existing?.date ?? DateTime.now();
   late int _rounds = widget.existing?.rounds ?? 6;
   late int _advancing = widget.existing?.advancing ?? 8;
+  late bool _cut = widget.existing?.hasFinal ?? true;
+
+  /// Three, then the final — the only cut a throws competition makes.
+  static const _prelimRounds = 3;
+
+  /// A cut needs rounds on both sides of it.
+  bool get _canCut => _rounds > _prelimRounds;
 
   @override
   void dispose() {
@@ -1175,24 +1236,40 @@ class _MeetDialogState extends State<_MeetDialog> {
                   DropdownMenuItem(
                       value: rounds, child: Text('$rounds per athlete')),
               ],
-              onChanged: (rounds) => setState(() => _rounds = rounds ?? 6),
+              onChanged: (rounds) => setState(() {
+                _rounds = rounds ?? 6;
+                // Three attempts can't be split into three and a final.
+                if (!_canCut) _cut = false;
+              }),
             ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<int>(
-              value: _advancing,
-              decoration: const InputDecoration(labelText: 'Final'),
-              items: [
-                for (final advancing in const [6, 8, 9, 12, 99])
-                  DropdownMenuItem(
-                    value: advancing,
-                    child: Text(advancing >= 99
-                        ? 'Everyone throws the lot'
-                        : 'Top $advancing advance'),
-                  ),
-              ],
-              onChanged: (advancing) =>
-                  setState(() => _advancing = advancing ?? 8),
+            const SizedBox(height: 4),
+            SwitchListTile(
+              value: _cut && _canCut,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('3 + 3'),
+              subtitle: Text(
+                _canCut
+                    ? 'Everyone throws three, then the leaders throw the '
+                        'rest.'
+                    : 'Needs more than three attempts.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              onChanged:
+                  _canCut ? (value) => setState(() => _cut = value) : null,
             ),
+            if (_cut && _canCut)
+              DropdownButtonFormField<int>(
+                value: _advancing,
+                decoration: const InputDecoration(labelText: 'Final'),
+                items: [
+                  for (final advancing in const [6, 8, 9, 12])
+                    DropdownMenuItem(
+                        value: advancing,
+                        child: Text('Top $advancing advance')),
+                ],
+                onChanged: (advancing) =>
+                    setState(() => _advancing = advancing ?? 8),
+              ),
           ],
         ),
       ),
@@ -1207,7 +1284,9 @@ class _MeetDialogState extends State<_MeetDialog> {
               existing.name = _name.text.trim();
               existing.date = _date;
               existing.rounds = _rounds;
-              existing.advancing = _advancing;
+              existing.prelimRounds = _cut && _canCut ? _prelimRounds : _rounds;
+              // No cut means nobody is ever out of it.
+              existing.advancing = _cut && _canCut ? _advancing : 99;
               Navigator.pop(context, existing);
               return;
             }
@@ -1218,7 +1297,8 @@ class _MeetDialogState extends State<_MeetDialog> {
                 name: _name.text.trim(),
                 date: _date,
                 rounds: _rounds,
-                advancing: _advancing,
+                prelimRounds: _cut && _canCut ? _prelimRounds : _rounds,
+                advancing: _cut && _canCut ? _advancing : 99,
               ),
             );
           },
