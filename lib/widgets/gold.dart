@@ -72,12 +72,14 @@ class GoldEdgePainter extends CustomPainter {
 /// Drawn like the event glyphs and the sector are, so it scales to whatever
 /// corner it is pinned in, needs no icon font, and takes the same gold as
 /// the frame around the card it sits on. The star is a real hole rather
-/// than a lighter shape, which is what keeps it reading as a medal at 30
+/// than a lighter shape, which is what keeps it reading as a medal at 20
 /// pixels instead of as a yellow blob with a smudge in it.
 class FirstPlaceMedal extends StatelessWidget {
-  const FirstPlaceMedal({super.key, this.size = 30});
+  const FirstPlaceMedal({super.key, this.size = 20});
 
-  /// Width. The ribbon makes the medal taller than it is wide.
+  /// Width — which is the disc's diameter. The ribbon makes the medal a
+  /// good deal taller than it is wide, so a badge is sized by how big its
+  /// disc should be and the straps follow.
   final double size;
 
   @override
@@ -96,9 +98,10 @@ class FirstPlaceMedal extends StatelessWidget {
 class _MedalPainter extends CustomPainter {
   const _MedalPainter();
 
-  /// Height as a multiple of width: the disc is the full width, and the
-  /// ribbon stands about a third of that again above it.
-  static const aspect = 1.34;
+  /// Height as a multiple of width. The disc is the full width and the
+  /// ribbon stands about two thirds of that again above it — long straps
+  /// and a big disc, the proportions a medal hanging on a wall has.
+  static const aspect = 1.62;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -114,31 +117,33 @@ class _MedalPainter extends CustomPainter {
     // the ribbon and the disc alike rather than out of one of them.
     canvas.saveLayer(bounds, Paint());
 
-    // The straps cross on their way down to the disc, which is what makes
-    // the gap between them read as a folded ribbon and not as a V.
-    final ribbonBottom = centre.dy - radius * 0.55;
+    // Two broad straps, each running from its own top corner down across
+    // the middle, ending under the disc. Wide, long, and crossing is what
+    // makes them read as ribbon; the narrowing gap between them is the
+    // fold. Drawn first so the disc covers where they cross.
+    final ribbonBottom = centre.dy;
     canvas
       ..drawPath(
         Path()
           ..moveTo(0, 0)
-          ..lineTo(w * 0.30, 0)
-          ..lineTo(w * 0.60, ribbonBottom)
-          ..lineTo(w * 0.30, ribbonBottom)
+          ..lineTo(w * 0.38, 0)
+          ..lineTo(w * 0.66, ribbonBottom)
+          ..lineTo(w * 0.28, ribbonBottom)
           ..close(),
         metal,
       )
       ..drawPath(
         Path()
-          ..moveTo(w * 0.70, 0)
+          ..moveTo(w * 0.62, 0)
           ..lineTo(w, 0)
-          ..lineTo(w * 0.70, ribbonBottom)
-          ..lineTo(w * 0.40, ribbonBottom)
+          ..lineTo(w * 0.72, ribbonBottom)
+          ..lineTo(w * 0.34, ribbonBottom)
           ..close(),
         metal,
       )
       ..drawCircle(centre, radius, metal)
       ..drawPath(
-        _star(centre, radius * 0.66),
+        _star(centre, radius * 0.62),
         Paint()..blendMode = BlendMode.clear,
       )
       ..restore();

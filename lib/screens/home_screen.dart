@@ -710,7 +710,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                const FirstPlaceMedal(size: 40),
+                const FirstPlaceMedal(size: 34),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
