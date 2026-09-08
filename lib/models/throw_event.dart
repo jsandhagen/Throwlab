@@ -116,6 +116,16 @@ const _discus = [
       minSize: 0.210,
       maxSize: 0.212,
       usedBy: 'U20 men, M50–M59'),
+  // The U.S. high school boys' discus, which has no World Athletics entry
+  // of its own and is thrown as the 1.5 kg shell — see the note above.
+  // Called a 1.6 rather than a 3.5 lb wherever it is thrown, so unlike the
+  // 12 lb shot it wears its metric weight.
+  ImplementSpec(
+      weightKg: 1.6,
+      referenceLabel: 'Disc diameter',
+      minSize: 0.200,
+      maxSize: 0.202,
+      usedBy: 'U.S. high school boys'),
   ImplementSpec(
       weightKg: 1.5,
       referenceLabel: 'Disc diameter',

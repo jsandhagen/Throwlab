@@ -19,6 +19,20 @@ void main() {
       expect(ThrowEvent.shotPut.specFor(12 * 0.45359237).weightKg, 5.44);
     });
 
+    test('is not how the high school discus is named', () {
+      // A 1.6 kg discus is called a 1.6 everywhere it is thrown, never a
+      // 3.5 lb, so it keeps its metric weight where the shot does not.
+      final sixteen = ThrowEvent.discus.implements
+          .firstWhere((spec) => spec.weightKg == 1.6);
+      expect(sixteen.weightLabel, '1.6 kg');
+      // Its own weight, distinct from the 1.5 kg it is shelled from.
+      expect(ThrowEvent.discus.implements.map((s) => s.weightKg),
+          containsAll([1.75, 1.6, 1.5]));
+      expect(ThrowEvent.discus.specFor(1.6).weightKg, 1.6);
+      // And what a sheet naming it in pounds resolves to.
+      expect(ThrowEvent.discus.specFor(3.5 * 0.45359237).weightKg, 1.6);
+    });
+
     test('leaves the metric implements naming themselves in kilos', () {
       expect(ThrowEvent.shotPut.specFor(7.26).weightLabel, '7.26 kg');
       expect(ThrowEvent.javelin.specFor(0.6).weightLabel, '600 g');

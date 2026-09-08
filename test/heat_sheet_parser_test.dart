@@ -79,6 +79,8 @@ void main() {
 
     test('comes off the heading in kilos, however it is written', () {
       expect(one("Event 3 Men's Hammer 6K").implementKg, 6);
+      // The U.S. high school discus, which sheets write as a 1.6K.
+      expect(one('Event 12 Boys Discus 1.6K').implementKg, 1.6);
       expect(one('Event 4 Senior Discus (1.75kg)').implementKg, 1.75);
       expect(one("Event 9 Women's Javelin 600g").implementKg, 0.6);
     });
