@@ -9,9 +9,9 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote`, `Meet` (a competition and its series) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `analysis_screen`, `comparison_screen` |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, drawing canvas and rail, playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`, and `pdf_text` to get the words out of a PDF) |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -43,7 +43,8 @@ rendering it to PNGs:
 flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/athlete_preview.dart \
                               tool/preview/note_preview.dart \
-                              tool/preview/meet_preview.dart
+                              tool/preview/meet_preview.dart \
+                              tool/preview/schedule_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
@@ -52,7 +53,9 @@ profiles, a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
-and the sheet a round is entered in. Open the PNGs to see exactly what the screen paints. **Re-run it
+and the sheet a round is entered in — and the schedule import: the page a
+fixture list is pasted into, what the parser made of one, and the season it
+leaves behind. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -166,6 +169,18 @@ like the app rather than a bare Material default.
   `neededToQualify` measures against: a centimetre past whoever holds the
   last qualifying place, because equalling a mark loses the countback.
   `MeetStandings.finalOrder` is the redraw for the final, leader last.
+- A season can be read off a schedule rather than typed in a meet at a
+  time. `schedule_parser` turns pasted text — or the text `pdf_text` pulls
+  out of a PDF — into candidate meets, and `ScheduleImportScreen` puts them
+  up for approval: nothing reaches `MeetLibrary` until a coach has ticked
+  it. A fixture list is written for a person to read, so the parser is
+  allowed to be unsure and says where it was: a row with no year on it is
+  read as the season that hasn't happened yet, `4/12` is read month first,
+  and both say so on the row. `pdf_text` is deliberately small — text
+  operators, Flate, and the ToUnicode table a subset font needs — and
+  returns null rather than mojibake, so a scanned schedule is turned away
+  instead of guessed at. A meet carries a `venue` because that is most of
+  what a fixture list has to say beyond the name and the date.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

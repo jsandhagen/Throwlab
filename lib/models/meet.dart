@@ -204,6 +204,7 @@ class Meet {
     required this.id,
     required this.name,
     required this.date,
+    this.venue = '',
     this.rounds = 6,
     int? prelimRounds,
     this.advancing = 8,
@@ -219,6 +220,12 @@ class Meet {
   /// The day it was thrown. A meet is entered on the day, but a coach
   /// typing up a results sheet afterwards needs to be able to say when.
   DateTime date;
+
+  /// Where it is — 'Sportcity' or 'Hayward Field'. Empty for a meet nobody
+  /// bothered to say, which is most of them when the coach is standing at
+  /// it. A fixture list is the one place it matters: a season read off a
+  /// schedule in September is a list of names, dates and car parks.
+  String venue;
 
   /// Attempts per athlete. Six is a championship; a school meet or an
   /// early-season open is often three or four, and a series of six boxes
@@ -266,6 +273,7 @@ class Meet {
         'id': id,
         'name': name,
         'date': date.toIso8601String(),
+        if (venue.isNotEmpty) 'venue': venue,
         'rounds': rounds,
         'prelimRounds': prelimRounds,
         'advancing': advancing,
@@ -276,6 +284,7 @@ class Meet {
         id: json['id'] as String,
         name: json['name'] as String? ?? '',
         date: DateTime.parse(json['date'] as String),
+        venue: json['venue'] as String? ?? '',
         rounds: (json['rounds'] as num?)?.toInt() ?? 6,
         // A meet stored before the final existed had no cut: everyone
         // entered threw every round of it.

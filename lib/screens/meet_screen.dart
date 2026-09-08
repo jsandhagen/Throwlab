@@ -43,9 +43,11 @@ class MeetScreen extends StatelessWidget {
               children: [
                 Text(meet.name.isEmpty ? 'Meet' : meet.name),
                 Text(
-                  '${shortThrowDate(meet.date)} · ${_summary(meet)}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant),
+                  '${shortThrowDate(meet.date)}'
+                  '${meet.venue.isEmpty ? '' : ' · ${meet.venue}'}'
+                  ' · ${_summary(meet)}',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -238,8 +240,8 @@ class _EventCard extends StatelessWidget {
                       '$field in the field'
                       '${mine == field ? '' : ' · $mine of mine'} · '
                       '$_progress',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                     if (leader != null && leader.best != null) ...[
                       const SizedBox(height: 6),
@@ -300,7 +302,10 @@ class _MeetDialog extends StatefulWidget {
 class _MeetDialogState extends State<_MeetDialog> {
   late final TextEditingController _name =
       TextEditingController(text: widget.existing?.name ?? '');
+  late final TextEditingController _venue =
+      TextEditingController(text: widget.existing?.venue ?? '');
   late DateTime _date = widget.existing?.date ?? widget.date ?? DateTime.now();
+
   /// A meet with no cut stores an advancing count past any real field, so
   /// it is not one of the choices below — fall back to the usual eight
   /// rather than handing the dropdown a value it has no item for.
@@ -349,6 +354,7 @@ class _MeetDialogState extends State<_MeetDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _venue.dispose();
     super.dispose();
   }
 
@@ -379,6 +385,14 @@ class _MeetDialogState extends State<_MeetDialog> {
               decoration: const InputDecoration(
                 labelText: 'Meet',
                 hintText: 'e.g. "County Champs"',
+              ),
+            ),
+            TextField(
+              controller: _venue,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Where',
+                hintText: 'e.g. "Sportcity"',
               ),
             ),
             const SizedBox(height: 4),
@@ -429,6 +443,7 @@ class _MeetDialogState extends State<_MeetDialog> {
             final existing = widget.existing;
             if (existing != null) {
               existing.name = _name.text.trim();
+              existing.venue = _venue.text.trim();
               existing.date = _date;
               existing.rounds = _format.$1;
               existing.prelimRounds = _format.$2;
@@ -443,6 +458,7 @@ class _MeetDialogState extends State<_MeetDialog> {
                 id: MeetLibrary.newMeetId(),
                 name: _name.text.trim(),
                 date: _date,
+                venue: _venue.text.trim(),
                 rounds: _format.$1,
                 prelimRounds: _format.$2,
                 advancing: _hasFinal ? _advancing : 99,

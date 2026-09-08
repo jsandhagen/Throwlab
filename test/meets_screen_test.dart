@@ -23,9 +23,11 @@ void main() {
   final now = DateTime.now();
   // Two days this month that no neighbouring month's days can be confused
   // with in the grid: it never runs further than the 14th of the month
-  // after, or earlier than the 23rd of the month before.
-  final champs = DateTime(now.year, now.month, 20);
-  final open = DateTime(now.year, now.month, 8);
+  // after, or earlier than the 23rd of the month before. Never today,
+  // either — a meet on today's date is the live one, and the trophy walks
+  // straight past the season to it, which is a different test below.
+  final champs = DateTime(now.year, now.month, now.day == 20 ? 21 : 20);
+  final open = DateTime(now.year, now.month, now.day == 8 ? 9 : 8);
 
   Future<void> seed({bool calendar = false}) async {
     SharedPreferences.setMockInitialValues(

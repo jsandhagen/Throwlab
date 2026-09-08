@@ -13,6 +13,7 @@ import '../widgets/sector_art.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'meet_screen.dart';
+import 'schedule_import_screen.dart';
 
 /// Which way the season is being read: the meets one after another, or the
 /// months they fall in.
@@ -76,6 +77,11 @@ class _MeetsScreenState extends State<MeetsScreen> {
             title: const Text('Meets'),
             actions: [
               IconButton(
+                tooltip: 'Import a schedule',
+                icon: const Icon(Icons.upload_file_outlined),
+                onPressed: () => _import(context),
+              ),
+              IconButton(
                 tooltip: 'Record a mark',
                 icon: const Icon(Icons.straighten),
                 onPressed: () async {
@@ -90,8 +96,8 @@ class _MeetsScreenState extends State<MeetsScreen> {
               Positioned.fill(
                 child: IgnorePointer(
                   child: CustomPaint(
-                    painter: SectorBackdropPainter(
-                        color: theme.colorScheme.primary),
+                    painter:
+                        SectorBackdropPainter(color: theme.colorScheme.primary),
                   ),
                 ),
               ),
@@ -179,6 +185,12 @@ class _MeetsScreenState extends State<MeetsScreen> {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () => _import(context),
+              icon: const Icon(Icons.upload_file_outlined),
+              label: const Text('Import a schedule'),
+            ),
           ],
         ),
       ),
@@ -192,6 +204,11 @@ class _MeetsScreenState extends State<MeetsScreen> {
     await meets.save(meet);
     if (context.mounted) _open(context, meet);
   }
+
+  void _import(BuildContext context) => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ScheduleImportScreen()),
+      );
 
   void _open(BuildContext context, Meet meet) => Navigator.push(
         context,
@@ -271,8 +288,10 @@ class _MeetCalendarState extends State<_MeetCalendar> {
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  List<Meet> _on(DateTime day) =>
-      [for (final meet in widget.meets) if (_sameDay(meet.date, day)) meet];
+  List<Meet> _on(DateTime day) => [
+        for (final meet in widget.meets)
+          if (_sameDay(meet.date, day)) meet
+      ];
 
   void _step(int months) => setState(() {
         _month = DateTime(_month.year, _month.month + months);
@@ -403,8 +422,8 @@ class _MeetCalendarState extends State<_MeetCalendar> {
                     context,
                     // Days, not hours: adding 24 h across a daylight-saving
                     // change would land on the same date twice.
-                    DateTime(start.year, start.month,
-                        start.day + week * 7 + day),
+                    DateTime(
+                        start.year, start.month, start.day + week * 7 + day),
                     today,
                   ),
                 ),
@@ -549,9 +568,17 @@ class MeetCard extends StatelessWidget {
               ?.copyWith(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
-          '${shortThrowDate(meet.date)} · '
-          '${meet.entries.length} athlete${meet.entries.length == 1 ? '' : 's'}'
-          ' · $attempts attempt${attempts == 1 ? '' : 's'}',
+          [
+            shortThrowDate(meet.date),
+            if (meet.venue.isNotEmpty) meet.venue,
+            // A meet with nobody in it yet is one on the calendar, not one
+            // that went badly: counting its nothing reads as the latter.
+            if (meet.entries.isNotEmpty) ...[
+              '${meet.entries.length} '
+                  'athlete${meet.entries.length == 1 ? '' : 's'}',
+              '$attempts attempt${attempts == 1 ? '' : 's'}',
+            ],
+          ].join(' · '),
           style: theme.textTheme.bodySmall
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
