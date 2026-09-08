@@ -91,8 +91,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         title: const Text('Downloading update'),
         content: ValueListenableBuilder<double?>(
           valueListenable: progress,
-          builder: (context, value, _) =>
-              LinearProgressIndicator(value: value),
+          builder: (context, value, _) => LinearProgressIndicator(value: value),
         ),
       ),
     );
@@ -110,18 +109,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _importVideo() async {
     final library = context.read<VideoLibrary>();
-    final picked =
-        await ImagePicker().pickVideo(source: ImageSource.gallery);
+    final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (picked == null || !mounted) return;
 
     final details = await showDialog<
         ({
-      ThrowEvent event,
-      double implementKg,
-      String athlete,
-      double? distance,
-      DistanceUnit distanceUnit
-    })>(
+          ThrowEvent event,
+          double implementKg,
+          String athlete,
+          double? distance,
+          DistanceUnit distanceUnit
+        })>(
       context: context,
       builder: (context) => const _ImportDialog(),
     );
@@ -199,14 +197,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       scrubFramesDir: frames?.dir,
       scrubFrameCount: frames?.count ?? 0,
       scrubFrameStride: frames?.stride ?? 1,
-      scrubFrameLongSide:
-          frames != null ? VideoOptimizer.scrubFrameMax : 0,
+      scrubFrameLongSide: frames != null ? VideoOptimizer.scrubFrameMax : 0,
       scrubFramesVersion:
           frames != null ? VideoOptimizer.scrubFramesVersion : 0,
       // Only a copy we made carries the current geometry; when the encode
       // failed the original file stands in and still needs remaking.
-      playbackVersion:
-          path == picked.path ? 0 : VideoOptimizer.playbackVersion,
+      playbackVersion: path == picked.path ? 0 : VideoOptimizer.playbackVersion,
     );
     await library.add(video);
     if (mounted) {
@@ -276,8 +272,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ComparisonScreen(
-              videoA: selection[0], videoB: selection[1]),
+          builder: (_) =>
+              ComparisonScreen(videoA: selection[0], videoB: selection[1]),
         ),
       );
     }
@@ -405,8 +401,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             Image.asset('assets/icon/logo.png', height: 32),
             const SizedBox(width: 10),
             const Text('ThrowLab',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+                style:
+                    TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.5)),
           ],
         ),
         actions: [
@@ -426,8 +422,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         top: false,
         child: Column(
           children: [
-            if (_availableBuild != null &&
-                _availableBuild != _dismissedBuild)
+            if (_availableBuild != null && _availableBuild != _dismissedBuild)
               MaterialBanner(
                 leading: const Icon(Icons.system_update),
                 content: const Text('A new version of ThrowLab is ready.'),
@@ -498,8 +493,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: AngularSegmentedBar<LibraryGrouping>(
               value: _grouping,
-              onChanged: (grouping) =>
-                  setState(() => _grouping = grouping),
+              onChanged: (grouping) => setState(() => _grouping = grouping),
               segments: [
                 const AngularSegment(
                     value: LibraryGrouping.athlete,
@@ -537,10 +531,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         if (_matchingAthletes(library).isNotEmpty &&
                             matches.isNotEmpty)
                           Padding(
-                            padding:
-                                const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                            child:
-                                _athleteChips(_matchingAthletes(library)),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                            child: _athleteChips(_matchingAthletes(library)),
                           ),
                         Expanded(child: _results(library, matches)),
                       ],
@@ -631,8 +623,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    AthleteScreen(name: name, titleFor: _cardTitle),
+                builder: (_) => AthleteScreen(name: name, titleFor: _cardTitle),
               ),
             ),
           ),
@@ -658,8 +649,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _shelf(
-      VideoLibrary library, String heading, List<ThrowVideo> videos) {
+  Widget _shelf(VideoLibrary library, String heading, List<ThrowVideo> videos) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,24 +695,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: videos.isEmpty
               ? _unfilmedShelf(library, heading)
               : ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: videos.length,
-            separatorBuilder: (context, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final video = videos[index];
-              return SizedBox(
-                width: 264,
-                child: ThrowCard(
-                  video: video,
-                  title: _cardTitle(video),
-                  isPersonalBest: library.isPersonalBest(video),
-                  onTap: () => _openThrow(video, videos),
-                  onLongPress: () => showThrowActions(context, video),
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: videos.length,
+                  separatorBuilder: (context, _) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final video = videos[index];
+                    return SizedBox(
+                      width: 264,
+                      child: ThrowCard(
+                        video: video,
+                        title: _cardTitle(video),
+                        isPersonalBest: library.isPersonalBest(video),
+                        onTap: () => _openThrow(video, videos),
+                        onLongPress: () => showThrowActions(context, video),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ],
     );
@@ -871,7 +861,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
-
 }
 
 class _StorageErrorBanner extends StatelessWidget {
@@ -919,25 +908,25 @@ class _EmptyState extends StatelessWidget {
           ),
         ),
         Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/icon/logo.png', width: 140),
-            const SizedBox(height: 16),
-            Text('No throws yet',
-                style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            const Text(
-              'Film side-on: tripod at 90° to the throwing direction, '
-              'perpendicular to the flight path. Then import the clip here '
-              'for slow-motion breakdown, drawing, and comparison.',
-              textAlign: TextAlign.center,
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Image.asset('assets/icon/logo.png', width: 140),
+                const SizedBox(height: 16),
+                Text('No throws yet',
+                    style: Theme.of(context).textTheme.headlineSmall),
+                const SizedBox(height: 8),
+                const Text(
+                  'Film side-on: tripod at 90° to the throwing direction, '
+                  'perpendicular to the flight path. Then import the clip here '
+                  'for slow-motion breakdown, drawing, and comparison.',
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
         ),
       ],
     );
@@ -956,7 +945,7 @@ class _ImportDialogState extends State<_ImportDialog> {
   late ImplementSpec _implement = _event.defaultImplement;
   String _athlete = '';
   double? _distance;
-  DistanceUnit _distanceUnit = DistanceUnit.metres;
+  DistanceUnit _distanceUnit = DistanceUnit.meters;
 
   @override
   Widget build(BuildContext context) {
@@ -965,63 +954,63 @@ class _ImportDialogState extends State<_ImportDialog> {
       title: const Text('Throw details'),
       content: SingleChildScrollView(
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AthletePicker(
-            known: context.read<VideoLibrary>().knownAthletes,
-            value: _athlete,
-            onChanged: (name) => setState(() => _athlete = name),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<ThrowEvent>(
-            value: _event,
-            decoration: const InputDecoration(labelText: 'Event'),
-            items: [
-              for (final event in ThrowEvent.values)
-                DropdownMenuItem(value: event, child: Text(event.label)),
-            ],
-            onChanged: (event) => setState(() {
-              _event = event ?? _event;
-              // Weights don't carry across events: 4 kg is a shot or a
-              // hammer, never a discus.
-              _implement = _event.defaultImplement;
-            }),
-          ),
-          const SizedBox(height: 12),
-          DistanceField(
-            metres: _distance,
-            unit: _distanceUnit,
-            onChanged: (metres, unit) {
-              _distance = metres;
-              _distanceUnit = unit;
-            },
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<double>(
-            value: _implement.weightKg,
-            // Without this the '7.26 kg · Men, M35–M49' row is laid out at
-            // its natural width and runs off a narrow phone.
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Implement'),
-            items: [
-              for (final spec in _event.implements)
-                DropdownMenuItem(
-                  value: spec.weightKg,
-                  child: Text('${spec.weightLabel}  ·  ${spec.usedBy}',
-                      overflow: TextOverflow.ellipsis),
-                ),
-            ],
-            onChanged: (weight) => setState(() =>
-                _implement = _event.specFor(weight ?? _implement.weightKg)),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Calibration: ${spec.referenceLabel.toLowerCase()} '
-            '${spec.minSize >= 1 ? '${spec.minSize}–${spec.maxSize} m' : '${(spec.minSize * 1000).round()}–${(spec.maxSize * 1000).round()} mm'}',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AthletePicker(
+              known: context.read<VideoLibrary>().knownAthletes,
+              value: _athlete,
+              onChanged: (name) => setState(() => _athlete = name),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<ThrowEvent>(
+              value: _event,
+              decoration: const InputDecoration(labelText: 'Event'),
+              items: [
+                for (final event in ThrowEvent.values)
+                  DropdownMenuItem(value: event, child: Text(event.label)),
+              ],
+              onChanged: (event) => setState(() {
+                _event = event ?? _event;
+                // Weights don't carry across events: 4 kg is a shot or a
+                // hammer, never a discus.
+                _implement = _event.defaultImplement;
+              }),
+            ),
+            const SizedBox(height: 12),
+            DistanceField(
+              meters: _distance,
+              unit: _distanceUnit,
+              onChanged: (meters, unit) {
+                _distance = meters;
+                _distanceUnit = unit;
+              },
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<double>(
+              value: _implement.weightKg,
+              // Without this the '7.26 kg · Men, M35–M49' row is laid out at
+              // its natural width and runs off a narrow phone.
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Implement'),
+              items: [
+                for (final spec in _event.implements)
+                  DropdownMenuItem(
+                    value: spec.weightKg,
+                    child: Text('${spec.weightLabel}  ·  ${spec.usedBy}',
+                        overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (weight) => setState(() =>
+                  _implement = _event.specFor(weight ?? _implement.weightKg)),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Calibration: ${spec.referenceLabel.toLowerCase()} '
+              '${spec.minSize >= 1 ? '${spec.minSize}–${spec.maxSize} m' : '${(spec.minSize * 1000).round()}–${(spec.maxSize * 1000).round()} mm'}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ),
       ),
       actions: [

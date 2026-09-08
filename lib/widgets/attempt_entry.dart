@@ -19,12 +19,12 @@ enum AttemptAction {
 }
 
 class AttemptOutcome {
-  const AttemptOutcome(this.action, {this.metres, this.unit});
+  const AttemptOutcome(this.action, {this.meters, this.unit});
 
   final AttemptAction action;
 
-  /// Metres, for [AttemptAction.save].
-  final double? metres;
+  /// Meters, for [AttemptAction.save].
+  final double? meters;
   final DistanceUnit? unit;
 }
 
@@ -42,8 +42,8 @@ Future<AttemptOutcome?> showAttemptSheet(
   required int round,
   required bool filmed,
   AttemptKind? existing,
-  double? metres,
-  DistanceUnit unit = DistanceUnit.metres,
+  double? meters,
+  DistanceUnit unit = DistanceUnit.meters,
   bool canFilm = true,
 }) =>
     showModalBottomSheet<AttemptOutcome>(
@@ -55,7 +55,7 @@ Future<AttemptOutcome?> showAttemptSheet(
         round: round,
         filmed: filmed,
         existing: existing,
-        metres: metres,
+        meters: meters,
         unit: unit,
         canFilm: canFilm,
       ),
@@ -67,7 +67,7 @@ class _AttemptSheet extends StatefulWidget {
     required this.round,
     required this.filmed,
     required this.existing,
-    required this.metres,
+    required this.meters,
     required this.unit,
     required this.canFilm,
   });
@@ -76,7 +76,7 @@ class _AttemptSheet extends StatefulWidget {
   final int round;
   final bool filmed;
   final AttemptKind? existing;
-  final double? metres;
+  final double? meters;
   final DistanceUnit unit;
   final bool canFilm;
 
@@ -85,7 +85,7 @@ class _AttemptSheet extends StatefulWidget {
 }
 
 class _AttemptSheetState extends State<_AttemptSheet> {
-  late double? _metres = widget.metres;
+  late double? _meters = widget.meters;
   late DistanceUnit _unit = widget.unit;
 
   void _close(AttemptOutcome outcome) => Navigator.pop(context, outcome);
@@ -130,11 +130,11 @@ class _AttemptSheetState extends State<_AttemptSheet> {
           ),
           const SizedBox(height: 16),
           DistanceField(
-            metres: _metres,
+            meters: _meters,
             unit: _unit,
             autofocus: true,
-            onChanged: (metres, entered) => setState(() {
-              _metres = metres;
+            onChanged: (meters, entered) => setState(() {
+              _meters = meters;
               _unit = entered;
             }),
           ),
@@ -168,9 +168,9 @@ class _AttemptSheetState extends State<_AttemptSheet> {
           FilledButton(
             style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16)),
-            onPressed: (_metres ?? 0) > 0
+            onPressed: (_meters ?? 0) > 0
                 ? () => _close(AttemptOutcome(AttemptAction.save,
-                    metres: _metres, unit: _unit))
+                    meters: _meters, unit: _unit))
                 : null,
             child: const Text('Save mark'),
           ),

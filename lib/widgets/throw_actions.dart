@@ -36,9 +36,8 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
           const Divider(height: 1),
           ListTile(
             leading: const Icon(Icons.person),
-            title: Text(video.athlete.isEmpty
-                ? 'Set athlete'
-                : 'Change athlete'),
+            title:
+                Text(video.athlete.isEmpty ? 'Set athlete' : 'Change athlete'),
             onTap: () => Navigator.pop(context, _ThrowAction.athlete),
           ),
           ListTile(
@@ -48,9 +47,8 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
           ),
           ListTile(
             leading: const Icon(Icons.straighten),
-            title: Text(video.distance == null
-                ? 'Add distance'
-                : 'Change distance'),
+            title: Text(
+                video.distance == null ? 'Add distance' : 'Change distance'),
             onTap: () => Navigator.pop(context, _ThrowAction.distance),
           ),
           ListTile(
@@ -60,8 +58,7 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
           ),
           ListTile(
             leading: Icon(Icons.delete_outline, color: scheme.error),
-            title: Text('Delete throw',
-                style: TextStyle(color: scheme.error)),
+            title: Text('Delete throw', style: TextStyle(color: scheme.error)),
             onTap: () => Navigator.pop(context, _ThrowAction.delete),
           ),
         ],
@@ -143,23 +140,23 @@ Future<void> _editImplement(
   await library.update(video);
 }
 
-/// How far it went, in metres or feet. Empty clears it — a throw can be a
+/// How far it went, in meters or feet. Empty clears it — a throw can be a
 /// foul, or measured later, and the card should then say nothing rather
 /// than "0.00 m".
 Future<void> _editDistance(
     BuildContext context, VideoLibrary library, ThrowVideo video) async {
-  var metres = video.distance;
+  var meters = video.distance;
   var unit = video.distanceUnit;
   final saved = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
       title: const Text('Distance'),
       content: DistanceField(
-        metres: video.distance,
+        meters: video.distance,
         unit: video.distanceUnit,
         autofocus: true,
         onChanged: (value, entered) {
-          metres = value;
+          meters = value;
           unit = entered;
         },
       ),
@@ -174,7 +171,7 @@ Future<void> _editDistance(
     ),
   );
   if (saved != true) return;
-  video.distance = metres;
+  video.distance = meters;
   video.distanceUnit = unit;
   await library.update(video);
 }

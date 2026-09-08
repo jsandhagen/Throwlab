@@ -38,8 +38,8 @@ Date      Meet                       Site
     });
 
     test('throws the header row away', () {
-      expect(parse(schedule).any((c) => c.name.toLowerCase() == 'meet'),
-          isFalse);
+      expect(
+          parse(schedule).any((c) => c.name.toLowerCase() == 'meet'), isFalse);
     });
   });
 
@@ -87,8 +87,8 @@ Date      Meet                       Site
 
   group('the rest of the row', () {
     test('splits a venue off an @', () {
-      final found = parse('Sat 12 April 2027  Spring Open @ Hayward Field')
-          .single;
+      final found =
+          parse('Sat 12 April 2027  Spring Open @ Hayward Field').single;
       expect(found.name, 'Spring Open');
       expect(found.venue, 'Hayward Field');
     });
@@ -106,8 +106,7 @@ Date      Meet                       Site
     });
 
     test('drops a start time rather than storing it as the day', () {
-      final found =
-          parse('Sat 12 April 2027, 10:30 am  Spring Open').single;
+      final found = parse('Sat 12 April 2027, 10:30 am  Spring Open').single;
       expect(found.name, 'Spring Open');
       expect(found.date, DateTime(2027, 4, 12));
     });
@@ -117,8 +116,7 @@ Date      Meet                       Site
           'Sun Devil Classic');
     });
 
-    test('takes the meet off the next line when the date is alone on one',
-        () {
+    test('takes the meet off the next line when the date is alone on one', () {
       final found = parse('''
 Friday 12 April 2027
     Loughborough Open — Loughborough
@@ -149,7 +147,7 @@ Friday 12 April 2027
 
     test('warns when a day is crowded enough to be one meet timetable', () {
       // A timetable pasted with the date repeated down it: four meets on
-      // one day is a Saturday, four rows on one day is a programme.
+      // one day is a Saturday, four rows on one day is a program.
       final found = parse('''
 6/12/2027  10:00  Hammer, Men
 6/12/2027  11:30  Shot Put, Women

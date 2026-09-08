@@ -303,7 +303,8 @@ void main() {
     testWidgets('goes straight to the event when a meet is on today',
         (tester) async {
       // Today's meet, with one event in it.
-      await meets.save(Meet(id: 'live', name: 'Open Meet', date: DateTime.now()));
+      await meets
+          .save(Meet(id: 'live', name: 'Open Meet', date: DateTime.now()));
       await meets.addEntry('live',
           entry: MeetEntry(
             id: 'e9',
@@ -318,7 +319,8 @@ void main() {
 
     testWidgets("the season is still behind today's meet, to walk back to",
         (tester) async {
-      await meets.save(Meet(id: 'live', name: 'Open Meet', date: DateTime.now()));
+      await meets
+          .save(Meet(id: 'live', name: 'Open Meet', date: DateTime.now()));
       await meets.addEntry('live',
           entry: MeetEntry(
             id: 'e9',

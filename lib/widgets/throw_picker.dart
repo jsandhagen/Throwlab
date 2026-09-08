@@ -7,7 +7,7 @@ import '../models/throw_video.dart';
 import 'event_glyph.dart';
 import 'throw_card.dart';
 
-/// The colour each event is tagged with across the app.
+/// The color each event is tagged with across the app.
 Color eventColor(ThrowEvent event) => switch (event) {
       ThrowEvent.shotPut => Colors.orangeAccent,
       ThrowEvent.discus => Colors.greenAccent,
@@ -18,7 +18,8 @@ Color eventColor(ThrowEvent event) => switch (event) {
 /// A throw's still frame, falling back to the implement glyph for clips
 /// imported before thumbnails existed (or whose still went missing).
 class ThrowThumbnail extends StatelessWidget {
-  const ThrowThumbnail(this.video, {super.key, this.width = 72, this.height = 48});
+  const ThrowThumbnail(this.video,
+      {super.key, this.width = 72, this.height = 48});
 
   final ThrowVideo video;
   final double width;
@@ -71,8 +72,7 @@ Future<ThrowVideo?> pickThrowToCompare(
   required List<ThrowVideo> videos,
   required ThrowVideo against,
 }) {
-  final candidates =
-      videos.where((video) => video.id != against.id).toList();
+  final candidates = videos.where((video) => video.id != against.id).toList();
   return showModalBottomSheet<ThrowVideo>(
     context: context,
     showDragHandle: true,

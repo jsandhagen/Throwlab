@@ -18,7 +18,7 @@ import '../widgets/throw_picker.dart';
 /// Reading a heat sheet into a meet: which events to keep, and who in them
 /// is one of yours.
 ///
-/// A programme lists the whole afternoon and the whole field, and typing
+/// A program lists the whole afternoon and the whole field, and typing
 /// that in a name at a time is the reason a coach ends up tracking three
 /// athletes instead of the section they are placed against. So the sheet is
 /// read whole and the choosing happens here.
@@ -222,7 +222,7 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
         problem: _problem,
         onRead: _read,
         onOpenPdf: _openPdf,
-        blurb: 'Paste the programme, or open the PDF the meet sent. The '
+        blurb: 'Paste the program, or open the PDF the meet sent. The '
             'throwing events are picked out of it — everything else on the '
             'afternoon is left alone.',
         hint: 'Event 15  Boys Shot Put 12lb\n'
@@ -321,9 +321,10 @@ class _EventCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '${event.event.label} · ${event.implementKg.toStringAsFixed(
-                  event.implementKg % 1 == 0 ? 0 : 2,
-                )} kg',
+                // The implement's own name for itself, so a 12 lb shot
+                // reads as one rather than as 5.44 kg.
+                '${event.event.label} · '
+                '${event.event.specFor(event.implementKg).weightLabel}',
                 style: theme.textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),

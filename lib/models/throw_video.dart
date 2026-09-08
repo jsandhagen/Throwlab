@@ -1,12 +1,16 @@
 import 'throw_event.dart';
 
-/// How a throw's distance was measured. The stored number is always metres;
+/// How a throw's distance was measured. The stored number is always meters;
 /// this is the unit it was entered in, and the one it reads back in — a
 /// coach who measured 134 feet should see 134 feet, not 40.84 m.
-enum DistanceUnit { metres, feet }
+/// A throw stored before this was spelled the American way holds 'metres',
+/// which no longer names a value — and reads back as [DistanceUnit.meters]
+/// through the fallback every `fromJson` already had, which is the same
+/// unit it was written as. So there is nothing to migrate.
+enum DistanceUnit { meters, feet }
 
 /// Exactly, by definition.
-const double metresPerFoot = 0.3048;
+const double metersPerFoot = 0.3048;
 
 /// Throws imported before implements were picked by weight stored a gender
 /// instead. Those clips were thrown with the senior implement for it, which
@@ -33,7 +37,7 @@ abstract interface class ThrowResult {
   ThrowEvent get event;
   double get implementKg;
 
-  /// Metres, or null when nobody measured it.
+  /// Meters, or null when nobody measured it.
   double? get distance;
   DistanceUnit get distanceUnit;
 
@@ -55,7 +59,7 @@ class ThrowVideo implements ThrowResult {
     this.note = '',
     this.athlete = '',
     this.distance,
-    this.distanceUnit = DistanceUnit.metres,
+    this.distanceUnit = DistanceUnit.meters,
     this.thumbnailPath,
     this.scrubFramesDir,
     this.scrubFrameCount = 0,
@@ -75,6 +79,7 @@ class ThrowVideo implements ThrowResult {
   String path;
   @override
   final ThrowEvent event;
+
   /// What the implement weighs, in kilograms. Fixes the dimensions the
   /// analyzer calibrates against — see [ImplementSpec].
   @override
@@ -105,7 +110,7 @@ class ThrowVideo implements ThrowResult {
   @override
   String athlete;
 
-  /// How far it went, in metres; null until someone records it. The one
+  /// How far it went, in meters; null until someone records it. The one
   /// number a throw is actually judged by, so it leads on the card.
   @override
   double? distance;
@@ -199,17 +204,15 @@ class ThrowVideo implements ThrowResult {
         note: json['note'] as String? ?? '',
         athlete: json['athlete'] as String? ?? '',
         distance: (json['distance'] as num?)?.toDouble(),
-        distanceUnit: DistanceUnit.values.asNameMap()[
-                json['distanceUnit'] as String? ?? ''] ??
-            DistanceUnit.metres,
+        distanceUnit: DistanceUnit.values
+                .asNameMap()[json['distanceUnit'] as String? ?? ''] ??
+            DistanceUnit.meters,
         thumbnailPath: json['thumbnailPath'] as String?,
         scrubFramesDir: json['scrubFramesDir'] as String?,
         scrubFrameCount: (json['scrubFrameCount'] as num?)?.toInt() ?? 0,
         scrubFrameStride: (json['scrubFrameStride'] as num?)?.toInt() ?? 1,
-        scrubFrameLongSide:
-            (json['scrubFrameLongSide'] as num?)?.toInt() ?? 0,
-        scrubFramesVersion:
-            (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
+        scrubFrameLongSide: (json['scrubFrameLongSide'] as num?)?.toInt() ?? 0,
+        scrubFramesVersion: (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
         playbackVersion: (json['playbackVersion'] as num?)?.toInt() ?? 0,
         optimizePending: json['optimizePending'] as bool? ?? false,
       );

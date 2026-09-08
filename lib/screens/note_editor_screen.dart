@@ -18,7 +18,7 @@ import '../widgets/note_text.dart';
 ///
 /// Emphasis is written with markers in the text and drawn as you type: the
 /// bold word is bold in the field, and its `**` sit either side of it in a
-/// faint grey. That is what buys real formatting without a document model,
+/// faint gray. That is what buys real formatting without a document model,
 /// and it means a note is still readable text wherever it ends up.
 class NoteEditorScreen extends StatefulWidget {
   const NoteEditorScreen({super.key, required this.note});
@@ -181,11 +181,13 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       final kind = block.kind == NoteBlockKind.heading
           ? NoteBlockKind.paragraph
           : block.kind;
-      _insertAfter(block, NoteBlock(
-        id: NotesLibrary.newBlockId(),
-        kind: kind,
-        text: tail,
-      ));
+      _insertAfter(
+          block,
+          NoteBlock(
+            id: NotesLibrary.newBlockId(),
+            kind: kind,
+            text: tail,
+          ));
       _save();
       return;
     }
@@ -324,9 +326,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   Future<void> _deletePicture(NoteBlock block) async {
-    if (!await _confirm('Delete this picture?',
+    if (!await _confirm(
+        'Delete this picture?',
         'It goes from the note and from the phone. The rest of the note '
-        'stays.')) {
+            'stays.')) {
       return;
     }
     _removeBlocks([block]);
@@ -376,16 +379,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   Future<void> _addPicture() async {
-    final picked =
-        await ImagePicker().pickImage(source: ImageSource.gallery);
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null || !mounted) return;
     final id = NotesLibrary.newBlockId();
     final stored = await context
         .read<NotesLibrary>()
         .adoptPicture(_note.id, id, picked.path);
     if (stored == null || !mounted) return;
-    final fresh = NoteBlock(
-        id: id, kind: NoteBlockKind.image, imagePath: stored);
+    final fresh =
+        NoteBlock(id: id, kind: NoteBlockKind.image, imagePath: stored);
     final active = _activeBlock;
     if (active == null) {
       setState(() => _note.blocks.add(fresh));
@@ -519,10 +521,10 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               controller: _controllerFor(block),
               focusNode: _focusFor(block),
               style: style?.copyWith(
-                decoration: block.kind == NoteBlockKind.checklist &&
-                        block.checked
-                    ? TextDecoration.lineThrough
-                    : null,
+                decoration:
+                    block.kind == NoteBlockKind.checklist && block.checked
+                        ? TextDecoration.lineThrough
+                        : null,
                 color: block.kind == NoteBlockKind.checklist && block.checked
                     ? theme.colorScheme.onSurfaceVariant
                     : null,
@@ -799,7 +801,6 @@ class _ToolDivider extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
         child: VerticalDivider(
-            width: 1,
-            color: Theme.of(context).colorScheme.outlineVariant),
+            width: 1, color: Theme.of(context).colorScheme.outlineVariant),
       );
 }

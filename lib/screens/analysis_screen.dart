@@ -113,7 +113,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     super.initState();
     // Without this, opening throw 7 of 8 leaves the strip scrolled to the
     // start, showing everything except the throw actually on screen.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _centreStrip());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
     final framesDir = widget.video.scrubFramesDir;
@@ -140,8 +140,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       });
       if (_frames == null ||
           widget.video.optimizePending ||
-          widget.video.scrubFramesVersion <
-              VideoOptimizer.scrubFramesVersion ||
+          widget.video.scrubFramesVersion < VideoOptimizer.scrubFramesVersion ||
           widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
         _prepareScrubFrames();
       }
@@ -264,8 +263,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   void _jogFrames(int frames) {
     _controller.pause();
     final step = Duration(
-        microseconds: (Duration.microsecondsPerSecond / widget.video.fps)
-            .round());
+        microseconds:
+            (Duration.microsecondsPerSecond / widget.video.fps).round());
     _seeker.seekBy(step * frames);
   }
 
@@ -278,8 +277,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   /// Drag distance that advances the video by one frame in scrub mode,
   /// scaled to the clip's real frame duration like the wheel.
-  double get _pixelsPerFrame =>
-      scrubPixelsPerFrame(widget.video.captureFps);
+  double get _pixelsPerFrame => scrubPixelsPerFrame(widget.video.captureFps);
 
   Size _viewport = Size.zero;
   double _zoomScale = 1;
@@ -335,8 +333,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   Offset _clampToVideo(Offset p) {
     final size = _canvasSize;
-    return Offset(
-        p.dx.clamp(0.0, size.width), p.dy.clamp(0.0, size.height));
+    return Offset(p.dx.clamp(0.0, size.width), p.dy.clamp(0.0, size.height));
   }
 
   /// Keeps the zoomed content covering the viewport (no gaps at edges).
@@ -453,15 +450,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
     if (details.pointerCount > 1) {
-      final scale =
-          (_gestureStartScale * details.scale).clamp(1.0, 8.0);
+      final scale = (_gestureStartScale * details.scale).clamp(1.0, 8.0);
       // Keep the content point that started under the fingers under them.
       final anchor =
           (_gestureStartFocal - _gestureStartOffset) / _gestureStartScale;
       setState(() {
         _zoomScale = scale;
-        _zoomOffset = _clampZoomOffset(
-            details.localFocalPoint - anchor * scale, scale);
+        _zoomOffset =
+            _clampZoomOffset(details.localFocalPoint - anchor * scale, scale);
       });
       return;
     }
@@ -595,8 +591,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   Future<void> _editFps() async {
-    final fieldController = TextEditingController(
-        text: widget.video.captureFps.toStringAsFixed(0));
+    final fieldController =
+        TextEditingController(text: widget.video.captureFps.toStringAsFixed(0));
     final fps = await showDialog<double>(
       context: context,
       builder: (context) => AlertDialog(
@@ -616,8 +612,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(
-                context, double.tryParse(fieldController.text)),
+            onPressed: () =>
+                Navigator.pop(context, double.tryParse(fieldController.text)),
             child: const Text('Save'),
           ),
         ],
@@ -689,8 +685,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   /// Frames spanning ~100 ms of real time. File frames each represent
   /// 1/captureFps s.
-  int get _jumpFrames =>
-      math.max(2, (widget.video.captureFps * 0.1).round());
+  int get _jumpFrames => math.max(2, (widget.video.captureFps * 0.1).round());
 
   /// Jumps forward ~100 ms of REAL time so the speed math uses the same dt
   /// regardless of frame rate. The longer baseline (vs 50 ms) halves
@@ -836,16 +831,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       javelin: _isJavelin,
     );
     final event = widget.video.event;
-    final ballistic =
-        event == ThrowEvent.shotPut || event == ThrowEvent.hammer;
+    final ballistic = event == ThrowEvent.shotPut || event == ThrowEvent.hammer;
     final height = _releaseHeights[event]!;
-    final optimal =
-        optimalAngleDeg(metrics.speed, releaseHeight: height);
-    final lost = distanceLostToAngle(
-        metrics.speed, metrics.releaseAngleDeg,
+    final optimal = optimalAngleDeg(metrics.speed, releaseHeight: height);
+    final lost = distanceLostToAngle(metrics.speed, metrics.releaseAngleDeg,
         releaseHeight: height);
-    final predicted = predictedDistance(
-        metrics.speed, metrics.releaseAngleDeg,
+    final predicted = predictedDistance(metrics.speed, metrics.releaseAngleDeg,
         releaseHeight: height);
     final attack = metrics.attackAngleDeg;
 
@@ -861,8 +852,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               Text('Release metrics',
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
-              _metricRow('Release speed',
-                  '~${metrics.speed.toStringAsFixed(1)} m/s'),
+              _metricRow(
+                  'Release speed', '~${metrics.speed.toStringAsFixed(1)} m/s'),
               _metricRow('Release angle',
                   '${metrics.releaseAngleDeg.toStringAsFixed(1)}°'),
               if (attack != null)
@@ -871,12 +862,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     '${attack >= 0 ? '+' : ''}${attack.toStringAsFixed(1)}° '
                         '(nose ${attack >= 0 ? 'up' : 'down'})'),
               if (ballistic) ...[
-                _metricRow('Predicted distance',
-                    '~${predicted.toStringAsFixed(2)} m'),
-                _metricRow('Optimal angle',
-                    '${optimal.toStringAsFixed(1)}°'),
-                _metricRow('Lost to angle',
-                    '${lost.toStringAsFixed(2)} m'),
+                _metricRow(
+                    'Predicted distance', '~${predicted.toStringAsFixed(2)} m'),
+                _metricRow('Optimal angle', '${optimal.toStringAsFixed(1)}°'),
+                _metricRow('Lost to angle', '${lost.toStringAsFixed(2)} m'),
               ],
               const SizedBox(height: 8),
               Text(
@@ -916,8 +905,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         child: Row(
           children: [
             Expanded(child: Text(label)),
-            Text(value,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
           ],
         ),
       );
@@ -927,15 +915,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final summary = '~${metrics.speed.toStringAsFixed(1)} m/s @ '
         '${metrics.releaseAngleDeg.toStringAsFixed(1)}°'
         '${attack == null ? '' : ', AoA ${attack >= 0 ? '+' : ''}${attack.toStringAsFixed(1)}°'}';
-    widget.video.note = widget.video.note.isEmpty
-        ? summary
-        : '${widget.video.note} · $summary';
+    widget.video.note =
+        widget.video.note.isEmpty ? summary : '${widget.video.note} · $summary';
     await context.read<VideoLibrary>().update(widget.video);
     if (mounted) {
       setState(() {}); // note icon switches to "has a note"
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved to note: $summary')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Saved to note: $summary')));
     }
   }
 
@@ -964,57 +951,57 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                   return Listener(
                     onPointerDown: (event) => _pointerDown = event.position,
                     child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTapUp: (details) => _onVideoTap(details.globalPosition),
-                    onScaleStart: _onScaleStart,
-                    onScaleUpdate: _onScaleUpdate,
-                    onScaleEnd: _onScaleEnd,
-                    child: ClipRect(
-                      child: Transform(
-                        transform: Matrix4.identity()
-                          ..translate(offset.dx, offset.dy)
-                          ..scale(_zoomScale),
-                        child: SizedBox(
-                          width: _viewport.width,
-                          height: _viewport.height,
-                          child: Center(
-                            child: AspectRatio(
-                              aspectRatio: _controller.value.aspectRatio,
-                              child: Stack(
-                                key: _canvasKey,
-                                fit: StackFit.expand,
-                                children: [
-                                  VideoPlayer(_controller),
-                                  // Smooth-scrub overlay: cached stills
-                                  // that track the finger, covering the video
-                                  // only once a drag actually moves (and
-                                  // across the brief handoff back). A touch
-                                  // that never travels leaves the video alone.
-                                  Positioned.fill(
-                                      child: ScrubStill(shuttle: _shuttle)),
-                                  DrawingCanvas(
-                                    controller: _drawing,
-                                    zoomScale: _zoomScale,
-                                  ),
-                                  IgnorePointer(
-                                    child: CustomPaint(
-                                      size: Size.infinite,
-                                      painter: _MeasurePainter(
-                                        refA: _refA,
-                                        refB: _refB,
-                                        pointA: _pointA,
-                                        pointB: _pointB,
-                                        zoomScale: _zoomScale,
+                      behavior: HitTestBehavior.opaque,
+                      onTapUp: (details) => _onVideoTap(details.globalPosition),
+                      onScaleStart: _onScaleStart,
+                      onScaleUpdate: _onScaleUpdate,
+                      onScaleEnd: _onScaleEnd,
+                      child: ClipRect(
+                        child: Transform(
+                          transform: Matrix4.identity()
+                            ..translate(offset.dx, offset.dy)
+                            ..scale(_zoomScale),
+                          child: SizedBox(
+                            width: _viewport.width,
+                            height: _viewport.height,
+                            child: Center(
+                              child: AspectRatio(
+                                aspectRatio: _controller.value.aspectRatio,
+                                child: Stack(
+                                  key: _canvasKey,
+                                  fit: StackFit.expand,
+                                  children: [
+                                    VideoPlayer(_controller),
+                                    // Smooth-scrub overlay: cached stills
+                                    // that track the finger, covering the video
+                                    // only once a drag actually moves (and
+                                    // across the brief handoff back). A touch
+                                    // that never travels leaves the video alone.
+                                    Positioned.fill(
+                                        child: ScrubStill(shuttle: _shuttle)),
+                                    DrawingCanvas(
+                                      controller: _drawing,
+                                      zoomScale: _zoomScale,
+                                    ),
+                                    IgnorePointer(
+                                      child: CustomPaint(
+                                        size: Size.infinite,
+                                        painter: _MeasurePainter(
+                                          refA: _refA,
+                                          refB: _refB,
+                                          pointA: _pointA,
+                                          pointB: _pointB,
+                                          zoomScale: _zoomScale,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                     ),
                   );
                 })
@@ -1023,8 +1010,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   String get _throwLabel {
-    final throwName =
-        '${widget.video.event.label} · '
+    final throwName = '${widget.video.event.label} · '
         '${widget.video.implementSpec.weightLabel}';
     return _set.length > 1
         ? '$throwName · ${_index + 1} of ${_set.length}'
@@ -1067,9 +1053,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         tooltip: widget.video.athlete.isEmpty
             ? 'Tag athlete'
             : 'Athlete: ${widget.video.athlete}',
-        icon: Icon(widget.video.athlete.isEmpty
-            ? Icons.person_add_alt
-            : Icons.person),
+        icon: Icon(
+            widget.video.athlete.isEmpty ? Icons.person_add_alt : Icons.person),
         onPressed: _editAthlete,
       ),
       IconButton(
@@ -1103,52 +1088,49 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   Widget? _measureBanner({required bool pill}) {
     if (_measureStep == null) return null;
     return Material(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            // Landscape shows the instructions as a pill beside the left
-            // rail instead of a full-width band over the video.
-            borderRadius: pill ? BorderRadius.circular(24) : null,
-            clipBehavior: pill ? Clip.antiAlias : Clip.none,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                mainAxisSize:
-                    pill ? MainAxisSize.min : MainAxisSize.max,
-                children: [
-                  if (_detecting)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else
-                    const Icon(Icons.straighten, size: 20),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    fit: pill ? FlexFit.loose : FlexFit.tight,
-                    child: Text(
-                        _detecting
-                            ? 'Finding the javelin…'
-                            : _measureInstruction,
-                        style: Theme.of(context).textTheme.bodyMedium),
-                  ),
-                  TextButton(
-                    onPressed: _cancelMeasure,
-                    child: const Text('Cancel'),
-                  ),
-                  if (_measureStep == _MeasureStep.refConfirm)
-                    FilledButton(
-                      onPressed: _detecting ? null : _confirmRefAndJump,
-                      child: const Text('Next'),
-                    ),
-                  if (_measureStep == _MeasureStep.review)
-                    FilledButton(
-                      onPressed: _showResults,
-                      child: const Text('Calculate'),
-                    ),
-                ],
-              ),
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      // Landscape shows the instructions as a pill beside the left
+      // rail instead of a full-width band over the video.
+      borderRadius: pill ? BorderRadius.circular(24) : null,
+      clipBehavior: pill ? Clip.antiAlias : Clip.none,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          mainAxisSize: pill ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            if (_detecting)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              const Icon(Icons.straighten, size: 20),
+            const SizedBox(width: 8),
+            Flexible(
+              fit: pill ? FlexFit.loose : FlexFit.tight,
+              child: Text(
+                  _detecting ? 'Finding the javelin…' : _measureInstruction,
+                  style: Theme.of(context).textTheme.bodyMedium),
             ),
-          );
+            TextButton(
+              onPressed: _cancelMeasure,
+              child: const Text('Cancel'),
+            ),
+            if (_measureStep == _MeasureStep.refConfirm)
+              FilledButton(
+                onPressed: _detecting ? null : _confirmRefAndJump,
+                child: const Text('Next'),
+              ),
+            if (_measureStep == _MeasureStep.review)
+              FilledButton(
+                onPressed: _showResults,
+                child: const Text('Calculate'),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   List<ThrowVideo> _orderedSet() {
@@ -1191,7 +1173,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Scrolls the strip so the open throw sits in the middle of it.
-  void _centreStrip() {
+  void _centerStrip() {
     if (!mounted || !_strip.hasClients) return;
     final target = _index * _stripExtent +
         _stripExtent / 2 -
@@ -1242,8 +1224,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                         // cell the same size, so the strip doesn't shift
                         // sideways as the selection moves.
                         border: Border.all(
-                          color:
-                              current ? scheme.primary : Colors.transparent,
+                          color: current ? scheme.primary : Colors.transparent,
                           width: 2,
                         ),
                       ),
@@ -1409,8 +1390,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 right: 8,
                 child: SafeArea(
                   bottom: false,
-                  child: Align(
-                      alignment: Alignment.topLeft, child: banner),
+                  child: Align(alignment: Alignment.topLeft, child: banner),
                 ),
               ),
           ] else

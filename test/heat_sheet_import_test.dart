@@ -13,7 +13,7 @@ import 'package:throwlab/screens/heat_sheet_import_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/video_library.dart';
 
-/// Reading a meet's programme into the meet: which events are kept, and
+/// Reading a meet's program into the meet: which events are kept, and
 /// which of the names belong to the coach.
 void main() {
   late MeetLibrary meets;
@@ -25,8 +25,8 @@ void main() {
     await meets.load();
     library = VideoLibrary();
     await library.load();
-    await meets.save(Meet(
-        id: 'k1', name: 'County Champs', date: DateTime(2026, 6, 13)));
+    await meets.save(
+        Meet(id: 'k1', name: 'County Champs', date: DateTime(2026, 6, 13)));
     // One of the coach's own, known to the library from a mark.
     await library.addMark(ThrowMark(
       id: 'm1',
@@ -64,8 +64,7 @@ Event 16  Girls Discus
     Navigator.push(
       tester.element(find.byType(Scaffold)),
       MaterialPageRoute(
-        builder: (_) =>
-            HeatSheetImportScreen(meetId: 'k1', readPdf: readPdf),
+        builder: (_) => HeatSheetImportScreen(meetId: 'k1', readPdf: readPdf),
       ),
     );
     await tester.pumpAndSettle();
@@ -105,16 +104,15 @@ Event 16  Girls Discus
 
     final entries = meets.byId('k1')!.entries;
     expect(entries.length, 2);
-    final jakob =
-        entries.firstWhere((e) => e.athlete == 'Jakob Sandhagen');
+    final jakob = entries.firstWhere((e) => e.athlete == 'Jakob Sandhagen');
     // The library's spelling wins over the sheet's 'SANDHAGEN, J', or the
     // season splits between two spellings of one person.
     expect(jakob.tracked, isTrue);
     expect(jakob.event, ThrowEvent.shotPut);
-    // A 12 lb shot is thrown as the 5 kg shell.
-    expect(jakob.implementKg, 5);
-    expect(entries.firstWhere((e) => e.athlete == 'John Smith').tracked,
-        isFalse);
+    // A 12 lb shot comes in as a 12 lb, not as a rounded 5 kg.
+    expect(jakob.implementKg, 5.44);
+    expect(
+        entries.firstWhere((e) => e.athlete == 'John Smith').tracked, isFalse);
   });
 
   testWidgets('takes an event the coach ticks on as well', (tester) async {
@@ -147,7 +145,7 @@ Event 16  Girls Discus
           id: 'e1',
           athlete: 'Jakob Sandhagen',
           event: ThrowEvent.shotPut,
-          implementKg: 5,
+          implementKg: 5.44,
         ));
     await open(tester);
     await paste(tester, sheet);
@@ -182,8 +180,7 @@ Event 16  Girls Discus
     expect(find.text('Enter 1 athlete'), findsOneWidget);
   });
 
-  testWidgets('says so when there is no throwing on the page',
-      (tester) async {
+  testWidgets('says so when there is no throwing on the page', (tester) async {
     await open(tester);
     await paste(tester, 'Event 3 Boys 100 Meter Dash\n 1 Smith, John  11.20');
     expect(find.textContaining('No throwing events'), findsOneWidget);

@@ -100,10 +100,9 @@ Sat 10 April 2027 — County Champs @ Sportcity
     expect(meets.meets.map((m) => m.name), ['County Champs']);
   });
 
-  testWidgets('will not enter a meet the calendar already has',
-      (tester) async {
-    await meets.save(Meet(
-        id: 'k1', name: 'Tiger Relays', date: DateTime(2027, 3, 13)));
+  testWidgets('will not enter a meet the calendar already has', (tester) async {
+    await meets.save(
+        Meet(id: 'k1', name: 'Tiger Relays', date: DateTime(2027, 3, 13)));
     await open(tester);
     await paste(tester, schedule);
 
@@ -137,8 +136,7 @@ Sat 10 April 2027 — County Champs @ Sportcity
       expect(find.text('Add 1 meet'), findsOneWidget);
     });
 
-    testWidgets('says so when it is a scan with no text in it',
-        (tester) async {
+    testWidgets('says so when it is a scan with no text in it', (tester) async {
       await open(tester,
           readPdf: () async =>
               Uint8List.fromList(latin1.encode('%PDF-1.4\nno text here\n')));

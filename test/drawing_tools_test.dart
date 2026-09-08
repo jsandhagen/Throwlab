@@ -146,7 +146,11 @@ void main() {
           within(distance: 1, from: const Offset(420, 200)));
       expect(arrow.width, kStrokeWidths[1]);
       // A shaft plus a filled head.
-      expect(find.byType(DrawingCanvas), paints..line()..path());
+      expect(
+          find.byType(DrawingCanvas),
+          paints
+            ..line()
+            ..path());
     });
 
     testWidgets('curved arrow traces the drag and heads where it lifts',
@@ -178,7 +182,11 @@ void main() {
       expect(arrow.width, kStrokeWidths[1]);
       // A curved shaft that stops where the filled head starts — drawn to
       // the tip, the shaft's round cap bulges out past the point as a blob.
-      expect(find.byType(DrawingCanvas), paints..path()..path());
+      expect(
+          find.byType(DrawingCanvas),
+          paints
+            ..path()
+            ..path());
     });
 
     testWidgets('undo removes the whole arrow', (tester) async {
@@ -318,9 +326,8 @@ void main() {
           paints..path(strokeWidth: kStrokeWidths[1]));
 
       await pinchOut(tester, const Offset(400, 300), 80);
-      final zoom = tester
-          .widget<DrawingCanvas>(find.byType(DrawingCanvas))
-          .zoomScale;
+      final zoom =
+          tester.widget<DrawingCanvas>(find.byType(DrawingCanvas)).zoomScale;
       expect(zoom, greaterThan(1.5));
       // The canvas is drawn inside the zoom transform, so the damping shows
       // up as a *thinner* canvas-space stroke: width x sqrt(z) / z.

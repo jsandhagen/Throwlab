@@ -20,16 +20,15 @@ Future<MeetEntry?> showMeetEntryDialog(
 }) =>
     showDialog<MeetEntry>(
       context: context,
-      builder: (context) => _EntryDialog(
-          known: known, event: event, implementKg: implementKg),
+      builder: (context) =>
+          _EntryDialog(known: known, event: event, implementKg: implementKg),
     );
 
 /// The weight is asked for here rather than per attempt because it does not
 /// change through a competition — and a best is per weight, so guessing it
 /// would put the mark in the wrong book.
 class _EntryDialog extends StatefulWidget {
-  const _EntryDialog(
-      {required this.known, this.event, this.implementKg});
+  const _EntryDialog({required this.known, this.event, this.implementKg});
 
   final List<String> known;
 
@@ -83,8 +82,8 @@ class _EntryDialogState extends State<_EntryDialog> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                leading: EventGlyph(_event,
-                    size: 20, color: eventColor(_event)),
+                leading:
+                    EventGlyph(_event, size: 20, color: eventColor(_event)),
                 title: Text('${_event.label} · ${_implement.weightLabel}'),
               )
             else ...[
@@ -125,7 +124,7 @@ class _EntryDialogState extends State<_EntryDialog> {
               subtitle: Text(
                 _tracked
                     ? 'Marks and clips go into the library, and count '
-                        'towards their bests.'
+                        'toward their bests.'
                     : 'Tracked for the standings only — nothing is written '
                         'to your library.',
                 style: Theme.of(context).textTheme.bodySmall,

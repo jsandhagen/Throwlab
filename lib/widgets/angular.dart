@@ -131,7 +131,7 @@ class AngularSegment<T> {
   final IconData? icon;
 
   /// A drawn mark, for a segment the Material set has no honest icon for.
-  /// It is handed the colour the segment is currently painted in.
+  /// It is handed the color the segment is currently painted in.
   final Widget Function(Color color)? glyph;
 
   final String label;

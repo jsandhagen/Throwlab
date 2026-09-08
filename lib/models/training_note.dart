@@ -99,7 +99,7 @@ class TrainingNote {
   List<NoteBlock> blocks;
 
   /// What the note is called in a list. An untitled note is named by its
-  /// first line, the way a notes app does, so it is still recognisable.
+  /// first line, the way a notes app does, so it is still recognizable.
   String get displayTitle {
     if (title.trim().isNotEmpty) return title.trim();
     for (final block in blocks) {
@@ -214,8 +214,8 @@ List<InlineRun> inlineRuns(String text, {bool keepMarkers = false}) {
   }
 
   for (var i = 0; i < text.length;) {
-    final marker = _markers.firstWhere((m) => text.startsWith(m, i),
-        orElse: () => '');
+    final marker =
+        _markers.firstWhere((m) => text.startsWith(m, i), orElse: () => '');
     if (marker.isEmpty) {
       buffer.write(text[i]);
       i++;
@@ -223,8 +223,8 @@ List<InlineRun> inlineRuns(String text, {bool keepMarkers = false}) {
     }
     flush();
     if (keepMarkers) {
-      runs.add(InlineRun(marker,
-          bold: bold, italic: italic, underline: underline));
+      runs.add(
+          InlineRun(marker, bold: bold, italic: italic, underline: underline));
     }
     switch (marker) {
       case '**':
@@ -264,8 +264,7 @@ List<InlineSpan> inlineSpans(
               : (base ?? const TextStyle()).copyWith(
                   fontWeight: run.bold ? FontWeight.w700 : null,
                   fontStyle: run.italic ? FontStyle.italic : null,
-                  decoration:
-                      run.underline ? TextDecoration.underline : null,
+                  decoration: run.underline ? TextDecoration.underline : null,
                 ),
         ),
     ];

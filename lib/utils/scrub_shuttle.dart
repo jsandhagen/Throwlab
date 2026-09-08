@@ -65,7 +65,8 @@ class ScrubShuttle extends ChangeNotifier {
   bool _handoff = false;
 
   /// Whether the still overlay should be covering the video right now.
-  bool get overlayVisible => _frames != null && ((_scrubbing && _moved) || _handoff);
+  bool get overlayVisible =>
+      _frames != null && ((_scrubbing && _moved) || _handoff);
 
   /// Something scrub-related is still in flight; used to hold off work that
   /// would compete with it (re-extracting stills, tearing the set down).

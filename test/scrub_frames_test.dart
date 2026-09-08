@@ -7,36 +7,29 @@ import 'package:throwlab/utils/scrub_frames.dart';
 void main() {
   group('ScrubFrames.indexForPosition', () {
     test('every frame extracted (stride 1) maps position to frame number', () {
-      final frames =
-          ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
+      final frames = ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
       expect(frames.indexForPosition(Duration.zero), 0);
       expect(frames.indexForPosition(const Duration(seconds: 1)), 60);
-      expect(
-          frames.indexForPosition(const Duration(milliseconds: 500)), 30);
+      expect(frames.indexForPosition(const Duration(milliseconds: 500)), 30);
     });
 
     test('strided extraction divides the source frame by the stride', () {
       // 120 source frames at 60 fps kept as 40 images (every 3rd).
-      final frames =
-          ScrubFrames(dir: '/none', count: 40, stride: 3, fps: 60);
+      final frames = ScrubFrames(dir: '/none', count: 40, stride: 3, fps: 60);
       // 0.5 s = source frame 30 -> image 10.
-      expect(
-          frames.indexForPosition(const Duration(milliseconds: 500)), 10);
+      expect(frames.indexForPosition(const Duration(milliseconds: 500)), 10);
       expect(frames.indexForPosition(Duration.zero), 0);
     });
 
     test('clamps within the available frames', () {
-      final frames =
-          ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
+      final frames = ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
       // 2 s would be frame 120, but only 0..119 exist.
       expect(frames.indexForPosition(const Duration(seconds: 2)), 119);
-      expect(
-          frames.indexForPosition(const Duration(seconds: -1)), 0);
+      expect(frames.indexForPosition(const Duration(seconds: -1)), 0);
     });
 
     test('picks the still whose timestamp the position is nearest', () {
-      final frames =
-          ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
+      final frames = ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 60);
       // Frame 1 is stamped 16.67 ms and frame 2 at 33.33 ms, so the still
       // changes over halfway between them. Seeks aim a quarter frame
       // *before* a stamp (see positionForIndex), so a floor of the display
@@ -50,8 +43,7 @@ void main() {
     });
 
     test('an exact frame boundary is that frame', () {
-      final frames =
-          ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 50);
+      final frames = ScrubFrames(dir: '/none', count: 120, stride: 1, fps: 50);
       // 20 ms per frame.
       expect(frames.indexForPosition(const Duration(milliseconds: 20)), 1);
       expect(frames.indexForPosition(const Duration(milliseconds: 40)), 2);
@@ -62,11 +54,10 @@ void main() {
       // The round trip that decides whether a scrub hands back the frame it
       // ended on: the position built for a still must name that still again.
       for (final stride in [1, 2, 5]) {
-        final frames = ScrubFrames(
-            dir: '/none', count: 500, stride: stride, fps: 60);
+        final frames =
+            ScrubFrames(dir: '/none', count: 500, stride: stride, fps: 60);
         for (final index in [0, 1, 7, 42, 99]) {
-          expect(
-              frames.indexForPosition(frames.positionForIndex(index)), index,
+          expect(frames.indexForPosition(frames.positionForIndex(index)), index,
               reason: 'stride $stride, index $index');
         }
       }
@@ -76,8 +67,7 @@ void main() {
       // The player renders the first frame at or after the seek position, so
       // a target inside the still's own display window lands on the *next*
       // frame — the one-frame skip at the end of every scrub.
-      final frames =
-          ScrubFrames(dir: '/none', count: 100, stride: 1, fps: 30);
+      final frames = ScrubFrames(dir: '/none', count: 100, stride: 1, fps: 30);
       const frameUs = Duration.microsecondsPerSecond / 30;
       for (final index in [1, 5, 60]) {
         final us = frames.positionForIndex(index).inMicroseconds;
@@ -97,8 +87,8 @@ void main() {
     });
     tearDown(() async => dir.delete(recursive: true));
 
-    Future<ScrubFrames> framesWithTimes(
-        List<double> times, {int stride = 1, double fps = 30}) async {
+    Future<ScrubFrames> framesWithTimes(List<double> times,
+        {int stride = 1, double fps = 30}) async {
       await File('${dir.path}/times.csv').writeAsString(times.join('\n'));
       final frames = ScrubFrames(
           dir: dir.path, count: times.length, stride: stride, fps: fps);
@@ -152,8 +142,7 @@ void main() {
         'a short, out-of-order or missing times file falls back to the '
         'arithmetic', () async {
       await File('${dir.path}/times.csv').writeAsString('0.0\n0.033');
-      final short =
-          ScrubFrames(dir: dir.path, count: 10, stride: 1, fps: 30);
+      final short = ScrubFrames(dir: dir.path, count: 10, stride: 1, fps: 30);
       await short.loadTimes('times.csv');
       // Fallback: 25 ms at 30 fps is the seek target for frame 1.
       expect(short.indexForPosition(const Duration(milliseconds: 25)), 1);
@@ -164,8 +153,7 @@ void main() {
       // misaligning the stills it covers.
       await File('${dir.path}/times.csv')
           .writeAsString('0.0\n0.066\n0.033\n0.099');
-      final jumbled =
-          ScrubFrames(dir: dir.path, count: 4, stride: 1, fps: 30);
+      final jumbled = ScrubFrames(dir: dir.path, count: 4, stride: 1, fps: 30);
       await jumbled.loadTimes('times.csv');
       expect(jumbled.indexForPosition(const Duration(milliseconds: 66)), 2);
 
@@ -190,8 +178,7 @@ void main() {
       const step = 1 / 30;
       await File('${dir.path}/times.csv')
           .writeAsString([for (var i = 0; i < 10; i++) i * step].join('\n'));
-      final frames =
-          ScrubFrames(dir: dir.path, count: 4, stride: 1, fps: 30);
+      final frames = ScrubFrames(dir: dir.path, count: 4, stride: 1, fps: 30);
       await frames.loadTimes('times.csv');
       // Only stills 0..3 exist; a position past them clamps to the last.
       expect(frames.indexForPosition(const Duration(milliseconds: 300)), 3);

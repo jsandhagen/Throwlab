@@ -105,8 +105,8 @@ class NotesLibrary extends ChangeNotifier {
   /// The gallery's copy can be moved or cleaned up at any time, and on
   /// Android the picker's own temporary file certainly will be — so a note
   /// that pointed at either would quietly lose its pictures.
-  Future<String?> adoptPicture(String noteId, String blockId,
-      String sourcePath) async {
+  Future<String?> adoptPicture(
+      String noteId, String blockId, String sourcePath) async {
     try {
       final docs = await getApplicationDocumentsDirectory();
       final dir = Directory('${docs.path}/notes/$noteId');
@@ -146,8 +146,7 @@ class NotesLibrary extends ChangeNotifier {
     }
   }
 
-  void _sort() =>
-      _notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  void _sort() => _notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
   Future<void> _persist() async {
     try {

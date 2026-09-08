@@ -1,7 +1,7 @@
 enum ThrowEvent { shotPut, discus, hammer, javelin }
 
 /// One legal implement: what it weighs, and the regulated dimension the
-/// analyzer calibrates the camera against. All sizes are in metres.
+/// analyzer calibrates the camera against. All sizes are in meters.
 ///
 /// Weight rather than a gender is what actually fixes those dimensions. A
 /// 4 kg shot is 95–110 mm across whether it is a senior woman's, an U16
@@ -15,6 +15,7 @@ class ImplementSpec {
     required this.minSize,
     required this.maxSize,
     required this.usedBy,
+    this.label,
   });
 
   final double weightKg;
@@ -28,14 +29,23 @@ class ImplementSpec {
   /// use it, not a rule the app enforces.
   final String usedBy;
 
+  /// What the implement is called where it is thrown, when that is not its
+  /// weight in kilos. A U.S. high school shot is a 12 lb: it is ordered as
+  /// one, written '12lb' on the heat sheet and called one at the ring, and
+  /// naming it 5.44 kg names the same ball in a way nobody there would use.
+  final String? label;
+
   /// Midpoint of the legal range — the default calibration value.
   double get nominalSize => (minSize + maxSize) / 2;
 
-  /// '7.26 kg', '600 g' — implements under a kilo are sold and spoken about
-  /// in grams.
-  String get weightLabel => weightKg < 1
-      ? '${(weightKg * 1000).round()} g'
-      : '${weightKg.toString().replaceFirst(RegExp(r'\.0$'), '')} kg';
+  /// '7.26 kg', '600 g', '12 lb' — implements under a kilo are sold and
+  /// spoken about in grams, and one named in pounds where it is thrown
+  /// keeps that name.
+  String get weightLabel =>
+      label ??
+      (weightKg < 1
+          ? '${(weightKg * 1000).round()} g'
+          : '${weightKg.toString().replaceFirst(RegExp(r'\.0$'), '')} kg');
 }
 
 /// Diameters and lengths are World Athletics' implement specifications; the
@@ -56,6 +66,17 @@ const _shotPut = [
       minSize: 0.105,
       maxSize: 0.125,
       usedBy: 'U20 men, M50–M59'),
+  // The U.S. high school boys' shot, which has no World Athletics entry of
+  // its own and is thrown as the 5 kg shell — see the note above. Kept as
+  // its own weight rather than folded into the 5 kg, because a best is per
+  // implement and 12 lb and 5 kg are not the same throw.
+  ImplementSpec(
+      weightKg: 5.44,
+      referenceLabel: 'Ball diameter',
+      minSize: 0.100,
+      maxSize: 0.120,
+      usedBy: 'U.S. high school boys',
+      label: '12 lb'),
   ImplementSpec(
       weightKg: 5,
       referenceLabel: 'Ball diameter',

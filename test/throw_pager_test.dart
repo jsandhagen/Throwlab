@@ -82,8 +82,7 @@ void main() {
       expect(find.byType(ThrowThumbnail), findsNWidgets(3));
     });
 
-    testWidgets('tapping next moves on to the following throw',
-        (tester) async {
+    testWidgets('tapping next moves on to the following throw', (tester) async {
       await mount(tester, video: throwNumber(2));
       await tester.tap(find.byIcon(Icons.chevron_right));
       await pumpFrames(tester, 12);

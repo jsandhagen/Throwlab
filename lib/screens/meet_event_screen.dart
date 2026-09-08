@@ -149,8 +149,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                     ),
                     Expanded(
                       child: _view == _MeetView.series
-                          ? _seriesList(meet, meets, library, competition,
-                              standings)
+                          ? _seriesList(
+                              meet, meets, library, competition, standings)
                           : _standingsList(meet, standings),
                     ),
                   ],
@@ -300,8 +300,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       round: round,
       filmed: result is ThrowVideo,
       existing: attempt?.kind,
-      metres: series.distanceAt(round),
-      unit: result?.distanceUnit ?? DistanceUnit.metres,
+      meters: series.distanceAt(round),
+      unit: result?.distanceUnit ?? DistanceUnit.meters,
     );
     if (outcome == null || !mounted) return;
 
@@ -310,7 +310,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
         await _film(meet, entry, round);
       case AttemptAction.save:
         await _saveMark(meet, entry, round,
-            metres: outcome.metres!, unit: outcome.unit!);
+            meters: outcome.meters!, unit: outcome.unit!);
       case AttemptAction.foul:
       case AttemptAction.pass:
         final kind = outcome.action == AttemptAction.foul
@@ -354,7 +354,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     Meet meet,
     MeetEntry entry,
     int round, {
-    required double metres,
+    required double meters,
     required DistanceUnit unit,
   }) async {
     final meets = context.read<MeetLibrary>();
@@ -365,7 +365,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     // 60 m would turn up in the library as somebody's personal best.
     if (!entry.tracked) {
       await meets.setAttempt(meet.id, entry.id, round,
-          MeetAttempt.untracked(metres, distanceUnit: unit));
+          MeetAttempt.untracked(meters, distanceUnit: unit));
       return;
     }
 
@@ -374,16 +374,16 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     // Filmed: the clip is the throw, so the mark belongs on it rather than
     // beside it as a second record of the same attempt.
     if (existing is ThrowVideo) {
-      existing.distance = metres;
+      existing.distance = meters;
       existing.distanceUnit = unit;
       await library.update(existing);
-      await meets.setAttempt(meet.id, entry.id, round,
-          MeetAttempt.mark(existing.id));
+      await meets.setAttempt(
+          meet.id, entry.id, round, MeetAttempt.mark(existing.id));
       return;
     }
 
     if (existing is ThrowMark) {
-      existing.distance = metres;
+      existing.distance = meters;
       existing.distanceUnit = unit;
       await library.updateMark(existing);
       await meets.setAttempt(
@@ -396,7 +396,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       athlete: entry.athlete,
       event: entry.event,
       implementKg: entry.implementKg,
-      distance: metres,
+      distance: meters,
       distanceUnit: unit,
       achievedOn: meet.date,
       note: meet.name,
@@ -437,8 +437,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     final path = await VideoOptimizer.stashCapture(picked.path, id);
     if (path == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Couldn't save the recording.")));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Couldn't save the recording.")));
       }
       return null;
     }
@@ -468,7 +468,6 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
           builder: (_) => AnalysisScreen(video: video, siblings: [video]),
         ),
       );
-
 
   /// Adds somebody to this event — already in it, since that is the one
   /// the coach is standing at.
@@ -509,7 +508,6 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     );
     if (confirmed == true) await meets.removeEntry(meet.id, entry.id);
   }
-
 }
 
 /// One athlete's competition: who they are, the series so far, and the two
@@ -556,8 +554,7 @@ class _EntryCard extends StatelessWidget {
     final best = series.best;
     final bestRound = series.bestRound;
     final bestResult = bestRound == null ? null : series.resultAt(bestRound);
-    final isBest =
-        bestResult != null && library.isPersonalBest(bestResult);
+    final isBest = bestResult != null && library.isPersonalBest(bestResult);
 
     return Card(
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
@@ -575,8 +572,8 @@ class _EntryCard extends StatelessWidget {
                   width: 22,
                   child: Text(
                     '$position',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
                 // No event on the card: everyone on this screen is in the
@@ -650,12 +647,11 @@ class _EntryCard extends StatelessWidget {
                       key: ValueKey('round-$round'),
                       round: round,
                       accent: accent,
-                      closed:
-                          closedFrom != null && round >= closedFrom!,
+                      closed: closedFrom != null && round >= closedFrom!,
                       attempt: entry.attemptAt(round),
                       distance: series.distanceAt(round),
                       unit: series.resultAt(round)?.distanceUnit ??
-                          DistanceUnit.metres,
+                          DistanceUnit.meters,
                       filmed: series.filmedAt(round),
                       isBest: round == bestRound,
                       onTap: () => onEnter(round),
@@ -698,7 +694,7 @@ class _EntryCard extends StatelessWidget {
                                 formatDistance(
                                     best,
                                     series.resultAt(bestRound!)?.distanceUnit ??
-                                        DistanceUnit.metres),
+                                        DistanceUnit.meters),
                                 style: theme.textTheme.titleSmall?.copyWith(
                                     fontWeight: FontWeight.w600, color: accent),
                               ),
@@ -711,26 +707,26 @@ class _EntryCard extends StatelessWidget {
                 if (closedFrom != null && entry.nextRound >= closedFrom!)
                   Text(
                     'out of the final',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant),
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   )
                 else ...[
-                // Nothing is filmed for the rest of the field: a clip has
-                // to land in the library under somebody's name, and these
-                // are not the coach's athletes to keep.
-                if (entry.tracked) ...[
-                  TextButton.icon(
-                    icon: const Icon(Icons.videocam_outlined, size: 20),
-                    label: const Text('Film'),
-                    onPressed: () => onFilm(entry.nextRound),
+                  // Nothing is filmed for the rest of the field: a clip has
+                  // to land in the library under somebody's name, and these
+                  // are not the coach's athletes to keep.
+                  if (entry.tracked) ...[
+                    TextButton.icon(
+                      icon: const Icon(Icons.videocam_outlined, size: 20),
+                      label: const Text('Film'),
+                      onPressed: () => onFilm(entry.nextRound),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  FilledButton.tonalIcon(
+                    icon: const Icon(Icons.straighten, size: 20),
+                    label: const Text('Mark'),
+                    onPressed: () => onEnter(entry.nextRound),
                   ),
-                  const SizedBox(width: 4),
-                ],
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.straighten, size: 20),
-                  label: const Text('Mark'),
-                  onPressed: () => onEnter(entry.nextRound),
-                ),
                 ],
               ],
             ),
@@ -761,7 +757,7 @@ class _AttemptBox extends StatelessWidget {
 
   final int round;
 
-  /// The event's colour, so the leading attempt reads as part of the card
+  /// The event's color, so the leading attempt reads as part of the card
   /// rather than as the app's own accent landing on it.
   final Color accent;
 
@@ -803,7 +799,7 @@ class _AttemptBox extends StatelessWidget {
         onLongPress: closed ? null : onLongPress,
         borderRadius: BorderRadius.circular(8),
         child: Opacity(
-          // Greyed rather than gone, so the series still reads as six.
+          // Grayed rather than gone, so the series still reads as six.
           opacity: closed && attempt == null ? 0.35 : 1,
           child: Container(
             height: 46,
@@ -825,17 +821,15 @@ class _AttemptBox extends StatelessWidget {
                   child: Text(
                     '${round + 1}',
                     style: TextStyle(
-                        fontSize: 9,
-                        height: 1,
-                        color: scheme.onSurfaceVariant),
+                        fontSize: 9, height: 1, color: scheme.onSurfaceVariant),
                   ),
                 ),
                 if (filmed)
                   Positioned(
                     top: 2,
                     right: 3,
-                    child: Icon(Icons.videocam,
-                        size: 10, color: scheme.primary),
+                    child:
+                        Icon(Icons.videocam, size: 10, color: scheme.primary),
                   ),
                 Positioned.fill(
                   top: 8,
@@ -868,7 +862,8 @@ class _AttemptBox extends StatelessWidget {
 /// One competition's table: who is where, where the cut falls, and what a
 /// coach's own athlete has to throw to get past it.
 class _StandingsCard extends StatelessWidget {
-  const _StandingsCard({required this.standings, required this.onSetFinalOrder});
+  const _StandingsCard(
+      {required this.standings, required this.onSetFinalOrder});
 
   final MeetStandings standings;
   final VoidCallback onSetFinalOrder;
@@ -987,7 +982,7 @@ class _PlaceRow extends StatelessWidget {
     final mine = place.entry.tracked;
     final best = place.best;
     final unit = place.series.bestRound == null
-        ? DistanceUnit.metres
+        ? DistanceUnit.meters
         : place.series.unitAt(place.series.bestRound!);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1032,8 +1027,8 @@ class _PlaceRow extends StatelessWidget {
               padding: const EdgeInsets.only(left: 24, top: 2),
               child: Text(
                 'needs ${formatDistance(needed!, unit)} to make the final',
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: scheme.primary),
+                style:
+                    theme.textTheme.labelSmall?.copyWith(color: scheme.primary),
               ),
             ),
         ],

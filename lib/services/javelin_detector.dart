@@ -76,8 +76,7 @@ class JavelinDetector {
     final dir = await getTemporaryDirectory();
     final outPath =
         '${dir.path}/measure_${DateTime.now().microsecondsSinceEpoch}.jpg';
-    final seconds =
-        position.inMicroseconds / Duration.microsecondsPerSecond;
+    final seconds = position.inMicroseconds / Duration.microsecondsPerSecond;
     final session = await FFmpegKit.execute(
         '-y -ss ${seconds.toStringAsFixed(4)} -i "$videoPath" '
         '-frames:v 1 -q:v 3 "$outPath"');
@@ -119,10 +118,9 @@ class JavelinDetector {
     for (var y = 1; y < height - 1; y++) {
       for (var x = 1; x < width - 1; x++) {
         final i = y * width + x;
-        final gx = (luma[i - width + 1] +
-                2 * luma[i + 1] +
-                luma[i + width + 1]) -
-            (luma[i - width - 1] + 2 * luma[i - 1] + luma[i + width - 1]);
+        final gx =
+            (luma[i - width + 1] + 2 * luma[i + 1] + luma[i + width + 1]) -
+                (luma[i - width - 1] + 2 * luma[i - 1] + luma[i + width - 1]);
         final gy = (luma[i + width - 1] +
                 2 * luma[i + width] +
                 luma[i + width + 1]) -
@@ -323,9 +321,7 @@ class JavelinDetector {
     } else {
       e1IsTip = true;
     }
-    return e1IsTip
-        ? [e1x, e1y, e2x, e2y]
-        : [e2x, e2y, e1x, e1y];
+    return e1IsTip ? [e1x, e1y, e2x, e2y] : [e2x, e2y, e1x, e1y];
   }
 }
 
@@ -354,8 +350,7 @@ List<double>? _findShaftInRgba(_ShaftJob job) {
   for (var i = 0; i < luma.length; i++) {
     final o = i * 4;
     luma[i] =
-        (77 * job.rgba[o] + 150 * job.rgba[o + 1] + 29 * job.rgba[o + 2]) >>
-            8;
+        (77 * job.rgba[o] + 150 * job.rgba[o + 1] + 29 * job.rgba[o + 2]) >> 8;
   }
   return JavelinDetector.findShaft(
     luma,

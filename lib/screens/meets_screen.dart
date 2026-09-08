@@ -563,7 +563,7 @@ class _MeetCalendarState extends State<_MeetCalendar> {
                 ),
               ),
               const SizedBox(height: 3),
-              // One mark per event on the day, in the event's own colour —
+              // One mark per event on the day, in the event's own color —
               // a Saturday with a discus and a javelin on it reads as two
               // competitions rather than as one busy square.
               SizedBox(

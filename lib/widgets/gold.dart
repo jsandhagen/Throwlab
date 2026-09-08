@@ -108,7 +108,7 @@ class _MedalPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final radius = w / 2;
-    final centre = Offset(w / 2, h - radius);
+    final center = Offset(w / 2, h - radius);
     final bounds = Offset.zero & size;
 
     final metal = Paint()..shader = goldShader(bounds);
@@ -121,7 +121,7 @@ class _MedalPainter extends CustomPainter {
     // the middle, ending under the disc. Wide, long, and crossing is what
     // makes them read as ribbon; the narrowing gap between them is the
     // fold. Drawn first so the disc covers where they cross.
-    final ribbonBottom = centre.dy;
+    final ribbonBottom = center.dy;
     canvas
       ..drawPath(
         Path()
@@ -141,24 +141,26 @@ class _MedalPainter extends CustomPainter {
           ..close(),
         metal,
       )
-      ..drawCircle(centre, radius, metal)
+      ..drawCircle(center, radius, metal)
       ..drawPath(
-        _star(centre, radius * 0.62),
+        _star(center, radius * 0.62),
         Paint()..blendMode = BlendMode.clear,
       )
       ..restore();
   }
 
   /// A five-pointed star, one point straight up.
-  Path _star(Offset centre, double outer) {
+  Path _star(Offset center, double outer) {
     final inner = outer * 0.46;
     final path = Path();
     for (var i = 0; i < 10; i++) {
       final radius = i.isEven ? outer : inner;
       final angle = -math.pi / 2 + i * math.pi / 5;
-      final point = centre +
-          Offset(math.cos(angle) * radius, math.sin(angle) * radius);
-      i == 0 ? path.moveTo(point.dx, point.dy) : path.lineTo(point.dx, point.dy);
+      final point =
+          center + Offset(math.cos(angle) * radius, math.sin(angle) * radius);
+      i == 0
+          ? path.moveTo(point.dx, point.dy)
+          : path.lineTo(point.dx, point.dy);
     }
     return path..close();
   }

@@ -23,7 +23,8 @@ enum ComparisonMode { sideBySide, overlay }
 /// scrubber (plus all transport controls) drives both videos with the
 /// release frames aligned. The link can be toggled to re-adjust one clip.
 class ComparisonScreen extends StatefulWidget {
-  const ComparisonScreen({super.key, required this.videoA, required this.videoB});
+  const ComparisonScreen(
+      {super.key, required this.videoA, required this.videoB});
 
   final ThrowVideo videoA;
   final ThrowVideo videoB;
@@ -53,7 +54,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   late final ScrubShuttle _shuttleB;
 
   /// One set of annotations per clip — they are different videos, so a mark
-  /// on A has no meaning on B. The tool, colour and weight are shared: the
+  /// on A has no meaning on B. The tool, color and weight are shared: the
   /// rail sets them on whichever pane was drawn on last, and a listener
   /// carries them to the other, so picking the pen once arms both panes.
   final DrawingController _drawA = DrawingController();
@@ -106,10 +107,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     _framesA = _framesFor(widget.videoA);
     _framesB = _framesFor(widget.videoB);
     _controllerA = VideoPlayerController.file(File(widget.videoA.path))
-      ..initialize().then((_) => mounted ? setState(() {}) : null)
+      ..initialize()
+          .then((_) => mounted ? setState(() {}) : null)
           .catchError((Object _) => mounted ? setState(() {}) : null);
     _controllerB = VideoPlayerController.file(File(widget.videoB.path))
-      ..initialize().then((_) => mounted ? setState(() {}) : null)
+      ..initialize()
+          .then((_) => mounted ? setState(() {}) : null)
           .catchError((Object _) => mounted ? setState(() {}) : null);
     _shuttleA = ScrubShuttle(
       controller: _controllerA,
@@ -185,8 +188,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   Duration _clampToDuration(Duration position, VideoPlayerController c) =>
       Duration(
-        microseconds: position.inMicroseconds
-            .clamp(0, c.value.duration.inMicroseconds),
+        microseconds:
+            position.inMicroseconds.clamp(0, c.value.duration.inMicroseconds),
       );
 
   void _seekBoth(Duration positionA) {
@@ -198,8 +201,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   }
 
   Future<void> _stepBoth(int frames) async {
-    final step = Duration(
-        microseconds: (Duration.microsecondsPerSecond / _fps).round());
+    final step =
+        Duration(microseconds: (Duration.microsecondsPerSecond / _fps).round());
     _seekBoth(await _seekerA.freshPosition() + step * frames);
   }
 
@@ -273,9 +276,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   /// quarter second of throw — so the loop comes round when the window has
   /// actually played, whatever speed it is running at.
   void _onLoopTick(Duration elapsed) {
-    final dt =
-        ((elapsed - _loopTickAt).inMicroseconds / Duration.microsecondsPerSecond)
-            .clamp(0.0, 0.25);
+    final dt = ((elapsed - _loopTickAt).inMicroseconds /
+            Duration.microsecondsPerSecond)
+        .clamp(0.0, 0.25);
     _loopTickAt = elapsed;
     _loopPlayed += dt * _speed;
     if (_loopPlayed <
@@ -434,12 +437,10 @@ class _ComparisonScreenState extends State<ComparisonScreen>
             ),
           ),
           TextButton.icon(
-            icon: Icon(sync == Duration.zero
-                ? Icons.flag_outlined
-                : Icons.flag),
-            label: Text(sync == Duration.zero
-                ? 'Set release'
-                : formatPosition(sync)),
+            icon:
+                Icon(sync == Duration.zero ? Icons.flag_outlined : Icons.flag),
+            label: Text(
+                sync == Duration.zero ? 'Set release' : formatPosition(sync)),
             // freshPosition: the cached position can lag the displayed
             // frame right after pausing, mismarking the release.
             onPressed: () async => onSet(await seeker.freshPosition()),
@@ -534,8 +535,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
         MediaQuery.of(context).orientation == Orientation.landscape;
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-            '${widget.videoA.event.label}: compare throws'),
+        title: Text('${widget.videoA.event.label}: compare throws'),
         actions: [
           IconButton(
             tooltip: _fill
@@ -612,12 +612,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     Row(
                       children: [
                         Expanded(
-                          child: _syncRow('A', _shuttleA, widget.videoA,
-                              _syncA, (d) => _setSync(a: d)),
+                          child: _syncRow('A', _shuttleA, widget.videoA, _syncA,
+                              (d) => _setSync(a: d)),
                         ),
                         Expanded(
-                          child: _syncRow('B', _shuttleB, widget.videoB,
-                              _syncB, (d) => _setSync(b: d)),
+                          child: _syncRow('B', _shuttleB, widget.videoB, _syncB,
+                              (d) => _setSync(b: d)),
                         ),
                       ],
                     )
@@ -700,7 +700,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 /// with the sky and the runway taking the space — so the pane fills instead
 /// and the surplus hangs outside the clip rect. Which part shows is the
 /// user's call: drag to reframe, pinch to zoom in further, double-tap to
-/// recentre. The clip's own aspect ratio is never touched, so nothing is
+/// recenter. The clip's own aspect ratio is never touched, so nothing is
 /// ever stretched.
 class _VideoPane extends StatefulWidget {
   const _VideoPane({
@@ -735,7 +735,7 @@ class _VideoPane extends StatefulWidget {
 }
 
 class _VideoPaneState extends State<_VideoPane> {
-  /// Extra zoom on top of the base fit, and the drag away from centre.
+  /// Extra zoom on top of the base fit, and the drag away from center.
   double _zoom = 1;
   Offset _pan = Offset.zero;
   double _zoomAtGestureStart = 1;
@@ -784,8 +784,8 @@ class _VideoPaneState extends State<_VideoPane> {
     if (details.pointerCount > 1 || !_drawingActive) {
       setState(() {
         _zoom = (_zoomAtGestureStart * details.scale).clamp(1.0, 4.0);
-        _pan = _clampPan(
-            _pan + details.focalPointDelta, pane, _contentSize(pane));
+        _pan =
+            _clampPan(_pan + details.focalPointDelta, pane, _contentSize(pane));
       });
       return;
     }
@@ -815,7 +815,7 @@ class _VideoPaneState extends State<_VideoPane> {
   }
 
   /// Keeps the clip covering the pane on any axis where it is bigger, and
-  /// centred on any axis where it is not — so a drag can never open a gap.
+  /// centerd on any axis where it is not — so a drag can never open a gap.
   Offset _clampPan(Offset pan, Size pane, Size content) {
     double axis(double offset, double paneExtent, double contentExtent) {
       final slack = (contentExtent - paneExtent) / 2;

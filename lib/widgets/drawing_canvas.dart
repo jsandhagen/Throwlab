@@ -8,7 +8,7 @@ enum DrawTool { none, pen, line, arrow, curvedArrow, angle }
 /// middle one is the default.
 const kStrokeWidths = [1.5, 3.0, 6.0];
 
-/// Annotation colours, in the order the rail offers them: bright against
+/// Annotation colors, in the order the rail offers them: bright against
 /// grass, sky and a runway alike.
 const kAnnotationColors = [
   Colors.orangeAccent,
@@ -117,8 +117,7 @@ class AngleAnnotation extends Annotation {
     final a = points[0] - points[1];
     final b = points[2] - points[1];
     if (a.distance == 0 || b.distance == 0) return null;
-    final cosine =
-        (a.dx * b.dx + a.dy * b.dy) / (a.distance * b.distance);
+    final cosine = (a.dx * b.dx + a.dy * b.dy) / (a.distance * b.distance);
     return math.acos(cosine.clamp(-1.0, 1.0)) * 180 / math.pi;
   }
 }
@@ -190,8 +189,8 @@ class DrawingController extends ChangeNotifier {
 bool beginAnnotation(DrawingController controller, Offset point) {
   switch (controller.tool) {
     case DrawTool.pen:
-      controller.add(
-          PenStroke(controller.color, controller.strokeWidth, [point]));
+      controller
+          .add(PenStroke(controller.color, controller.strokeWidth, [point]));
       return true;
     case DrawTool.line:
       controller.add(LineAnnotation(
@@ -250,9 +249,8 @@ void addAngleVertex(DrawingController controller, Offset point) {
     last.points.add(point);
     controller.notifyChanged();
   } else {
-    controller.add(
-        AngleAnnotation(controller.color, controller.strokeWidth)
-          ..points.add(point));
+    controller.add(AngleAnnotation(controller.color, controller.strokeWidth)
+      ..points.add(point));
   }
 }
 
@@ -364,8 +362,8 @@ class _AnnotationPainter extends CustomPainter {
   }
 
   /// Filled triangle pointing along [direction], its tip at [tip].
-  void _paintHead(Canvas canvas, Offset tip, Offset direction, double length,
-      Color color) {
+  void _paintHead(
+      Canvas canvas, Offset tip, Offset direction, double length, Color color) {
     final base = tip - direction * length;
     final normal = Offset(-direction.dy, direction.dx) * (length * 0.45);
     canvas.drawPath(
@@ -390,8 +388,7 @@ class _AnnotationPainter extends CustomPainter {
 
   void _paintAngle(
       Canvas canvas, Size size, AngleAnnotation angle, Paint paint) {
-    final points =
-        angle.points.map((p) => _denormalize(p, size)).toList();
+    final points = angle.points.map((p) => _denormalize(p, size)).toList();
     final dotPaint = Paint()..color = angle.color;
     // Vertex dots grow with the pen so a thin angle stays precise and a
     // thick one stays visible.
@@ -420,8 +417,7 @@ class _AnnotationPainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      textPainter.paint(
-          canvas, points[1] + Offset(_fixed(10), _fixed(10)));
+      textPainter.paint(canvas, points[1] + Offset(_fixed(10), _fixed(10)));
     }
   }
 

@@ -77,7 +77,7 @@ class _EventGlyphPainter extends CustomPainter {
     canvas.drawPath(path, _fill);
   }
 
-  /// Disc seen face-on: a solid ring with an open centre, the record-like
+  /// Disc seen face-on: a solid ring with an open center, the record-like
   /// look of the original discus icon.
   void _discus(Canvas canvas, double s) {
     final center = Offset(s * 0.5, s * 0.5);
@@ -126,10 +126,10 @@ class _EventGlyphPainter extends CustomPainter {
     final right = <Offset>[];
     for (var i = 0; i <= steps; i++) {
       final t = i / steps;
-      final centre = tail + u * (length * t);
+      final center = tail + u * (length * t);
       final w = halfWidth(t);
-      left.add(centre + p * w);
-      right.add(centre - p * w);
+      left.add(center + p * w);
+      right.add(center - p * w);
     }
     canvas.drawPath(
         Path()..addPolygon([...left, ...right.reversed], true), _fill);
@@ -191,8 +191,8 @@ class _ThrowsGlyphPainter extends CustomPainter {
 
     // The line the implement is travelling along as it leaves the trail,
     // 30° above horizontal. Both the end of the curve and its control point
-    // sit on this line through the centre of the ball, so the curve's last
-    // tangent aims at that centre instead of passing under it — eyeballed
+    // sit on this line through the center of the ball, so the curve's last
+    // tangent aims at that center instead of passing under it — eyeballed
     // endpoints read as a flight the implement isn't on.
     const approach = Offset(0.866, -0.5);
 

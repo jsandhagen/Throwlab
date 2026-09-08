@@ -53,15 +53,16 @@ List<Map<String, dynamic>> _marks() => [
       ).toJson(),
     ];
 
-Map<String, dynamic> _mark(String id, String athlete, ThrowEvent event,
-        double kg, double distance, {bool feet = false}) =>
+Map<String, dynamic> _mark(
+        String id, String athlete, ThrowEvent event, double kg, double distance,
+        {bool feet = false}) =>
     ThrowMark(
       id: id,
       athlete: athlete,
       event: event,
       implementKg: kg,
       distance: distance,
-      distanceUnit: feet ? DistanceUnit.feet : DistanceUnit.metres,
+      distanceUnit: feet ? DistanceUnit.feet : DistanceUnit.meters,
       achievedOn: _date,
       note: 'County Champs',
     ).toJson();
@@ -140,10 +141,7 @@ List<Map<String, dynamic>> _meets() {
     date: DateTime(2026, 5, 2),
     rounds: 4,
   )..entries.add(MeetEntry(
-      id: 'e0',
-      athlete: 'Anna Sofia',
-      event: ThrowEvent.discus,
-      implementKg: 1)
+      id: 'e0', athlete: 'Anna Sofia', event: ThrowEvent.discus, implementKg: 1)
     ..setAttempt(0, MeetAttempt.mark('mk-old')));
 
   return [champs.toJson(), spring.toJson()];
@@ -177,8 +175,8 @@ void main() {
         matchesGoldenFile('$_out/meets_calendar.png'));
 
     // One meet: the events being contested at it, and where each stands.
-    await _shoot(tester, library, meets,
-        const MeetScreen(meetId: 'k1'), 'meet_events');
+    await _shoot(
+        tester, library, meets, const MeetScreen(meetId: 'k1'), 'meet_events');
 
     // The discus itself, part-way through.
     await _shoot(
@@ -203,8 +201,8 @@ void main() {
     // and a closed round has no sheet to open.
     await tester.tap(find.byKey(const ValueKey('round-2')).first);
     await settle(tester);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/meet_attempt.png'));
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('$_out/meet_attempt.png'));
   });
 }
 

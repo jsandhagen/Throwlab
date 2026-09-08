@@ -17,7 +17,7 @@ import 'package:path_provider/path_provider.dart';
 /// ~100+ Mbps bitrate makes continuous playback stutter.)
 class VideoOptimizer {
   /// Returns the path of the optimized copy, or [srcPath] if encoding
-  /// fails or is cancelled — the original still plays, scrubbing is just
+  /// fails or is canceled — the original still plays, scrubbing is just
   /// slower. [onProgress] gets 0..1 while encoding (null when the clip's
   /// duration is unknown).
   static Future<String> optimizeForScrubbing(
@@ -275,7 +275,7 @@ class VideoOptimizer {
   /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
   /// display rate instead of waiting on the decoder to seek. Returns the
   /// directory, the number of frames written, and the stride (1 = every
-  /// frame), or null if extraction failed or was cancelled — the caller then
+  /// frame), or null if extraction failed or was canceled — the caller then
   /// keeps the seek-based scrub path. [onProgress] gets 0..1 while running.
   static Future<({String dir, int count, int stride})?> extractScrubFrames(
     String videoPath,
@@ -286,7 +286,7 @@ class VideoOptimizer {
     final docs = await getApplicationDocumentsDirectory();
     // Extract beside the live directory and swap in only when complete, so
     // a re-extraction (resolution upgrade) can't destroy a working set of
-    // frames if it fails or is cancelled partway.
+    // frames if it fails or is canceled partway.
     final finalDir = Directory('${docs.path}/throws/frames/$id');
     final dir = Directory('${docs.path}/throws/frames/$id.tmp');
     if (await dir.exists()) await dir.delete(recursive: true);
@@ -301,7 +301,8 @@ class VideoOptimizer {
       // Total unknown → assume no striding is needed.
     }
     final total = (seconds != null && fps > 0) ? (seconds * fps).round() : 0;
-    final stride = total > _maxScrubFrames ? (total / _maxScrubFrames).ceil() : 1;
+    final stride =
+        total > _maxScrubFrames ? (total / _maxScrubFrames).ceil() : 1;
 
     // select drops all but every Nth frame; -vsync 0 stops ffmpeg from
     // re-timing (duplicating/dropping) what select left, so output image k
@@ -337,10 +338,7 @@ class VideoOptimizer {
       dir.delete(recursive: true).ignore();
       return null;
     }
-    final count = dir
-        .listSync()
-        .where((e) => e.path.endsWith('.jpg'))
-        .length;
+    final count = dir.listSync().where((e) => e.path.endsWith('.jpg')).length;
     if (count == 0) {
       dir.delete(recursive: true).ignore();
       return null;
@@ -423,10 +421,10 @@ class VideoOptimizer {
         if (stream.getType() != 'video') continue;
         playback ??= parseRate(stream.getAverageFrameRate()) ??
             parseRate(stream.getRealFrameRate());
-        capture ??= parseRate(
-            '${stream.getTags()?['com.android.capture.fps'] ?? ''}');
-        recordedAt ??= DateTime.tryParse(
-            '${stream.getTags()?['creation_time'] ?? ''}');
+        capture ??=
+            parseRate('${stream.getTags()?['com.android.capture.fps'] ?? ''}');
+        recordedAt ??=
+            DateTime.tryParse('${stream.getTags()?['creation_time'] ?? ''}');
       }
       capture ??=
           parseRate('${info.getTags()?['com.android.capture.fps'] ?? ''}');
@@ -455,8 +453,7 @@ class VideoOptimizer {
   }
 
   /// Extracts a still frame for the library list; null when it fails.
-  static Future<String?> extractThumbnail(
-      String videoPath, String id) async {
+  static Future<String?> extractThumbnail(String videoPath, String id) async {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/throws');
     await dir.create(recursive: true);

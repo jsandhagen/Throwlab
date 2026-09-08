@@ -75,8 +75,8 @@ void main() {
     // parser had to guess the year for, with the line it read underneath.
     await tester.tap(find.byIcon(Icons.edit_outlined).last);
     await settle(tester);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/schedule_edit.png'));
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('$_out/schedule_edit.png'));
     await tester.tap(find.text('Cancel'));
     await settle(tester);
 

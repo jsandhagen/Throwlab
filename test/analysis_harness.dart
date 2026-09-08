@@ -54,6 +54,7 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   Future<void> dispose(int playerId) async {}
   @override
   Future<void> setLooping(int playerId, bool looping) async {}
+
   /// Which players were told to run, in order, so a test can prove that
   /// both clips of a comparison actually started.
   final List<int> plays = [];
@@ -67,6 +68,7 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   Future<void> setVolume(int playerId, double volume) async {}
   @override
   Future<void> setPlaybackSpeed(int playerId, double speed) async {}
+
   /// Every seek the app asked for, so a test can prove which players moved.
   final List<({int playerId, Duration position})> seeks = [];
 
@@ -132,8 +134,8 @@ Future<void> mountAnalysisScreen(
   await tester.pumpWidget(
     ChangeNotifierProvider<VideoLibrary>.value(
       value: library ?? VideoLibrary(),
-      child: MaterialApp(
-          home: AnalysisScreen(video: video, siblings: siblings)),
+      child:
+          MaterialApp(home: AnalysisScreen(video: video, siblings: siblings)),
     ),
   );
   await pumpFrames(tester);
@@ -167,9 +169,9 @@ Future<void> selectTool(WidgetTester tester, IconData icon) async {
   await tapRail(tester, find.byIcon(icon));
 }
 
-/// Picks a colour from the rail's colour menu.
-Future<void> selectColour(WidgetTester tester, String name) async {
-  await tapRail(tester, find.byKey(const ValueKey('rail-colour')));
+/// Picks a color from the rail's color menu.
+Future<void> selectColor(WidgetTester tester, String name) async {
+  await tapRail(tester, find.byKey(const ValueKey('rail-color')));
   await tapRail(tester, find.text(name));
 }
 
@@ -182,14 +184,16 @@ Future<void> selectWidth(WidgetTester tester, String label) async {
 List<T> annotationsOf<T extends Annotation>(WidgetTester tester) {
   final paint = tester.widget<CustomPaint>(find.descendant(
       of: find.byType(DrawingCanvas), matching: find.byType(CustomPaint)));
-  return ((paint.painter as dynamic).annotations as List).whereType<T>().toList();
+  return ((paint.painter as dynamic).annotations as List)
+      .whereType<T>()
+      .toList();
 }
 
 /// Where the annotation layer paints a stored (normalized) point.
 Offset inkFor(WidgetTester tester, Offset normalized) {
   final box = tester.renderObject<RenderBox>(find.byType(DrawingCanvas));
-  return box.localToGlobal(Offset(
-      normalized.dx * box.size.width, normalized.dy * box.size.height));
+  return box.localToGlobal(
+      Offset(normalized.dx * box.size.width, normalized.dy * box.size.height));
 }
 
 /// Drags a finger along [path] — a stroke with whichever tool is selected.

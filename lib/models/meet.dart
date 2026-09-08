@@ -31,18 +31,18 @@ class MeetAttempt {
     required this.kind,
     this.resultId,
     this.distance,
-    this.distanceUnit = DistanceUnit.metres,
+    this.distanceUnit = DistanceUnit.meters,
   });
 
   MeetAttempt.mark(String this.resultId)
       : kind = AttemptKind.mark,
         distance = null,
-        distanceUnit = DistanceUnit.metres;
+        distanceUnit = DistanceUnit.meters;
 
   /// A measured throw by someone the record book has no business holding —
   /// see [MeetEntry.tracked]. The number lives on the attempt itself.
   MeetAttempt.untracked(double this.distance,
-      {this.distanceUnit = DistanceUnit.metres})
+      {this.distanceUnit = DistanceUnit.meters})
       : kind = AttemptKind.mark,
         resultId = null;
 
@@ -50,12 +50,12 @@ class MeetAttempt {
       : kind = AttemptKind.foul,
         resultId = null,
         distance = null,
-        distanceUnit = DistanceUnit.metres;
+        distanceUnit = DistanceUnit.meters;
   MeetAttempt.pass()
       : kind = AttemptKind.pass,
         resultId = null,
         distance = null,
-        distanceUnit = DistanceUnit.metres;
+        distanceUnit = DistanceUnit.meters;
 
   final AttemptKind kind;
 
@@ -67,7 +67,7 @@ class MeetAttempt {
   /// that didn't count can't stand as a personal best.
   final String? resultId;
 
-  /// Metres, for an attempt with no [resultId] behind it. Only a rival's
+  /// Meters, for an attempt with no [resultId] behind it. Only a rival's
   /// throw is stored this way; one of the coach's own athletes keeps its
   /// distance in the library, where a personal best can see it.
   final double? distance;
@@ -89,7 +89,7 @@ class MeetAttempt {
         distance: (json['distance'] as num?)?.toDouble(),
         distanceUnit: DistanceUnit.values
                 .asNameMap()[json['distanceUnit'] as String? ?? ''] ??
-            DistanceUnit.metres,
+            DistanceUnit.meters,
       );
 }
 
@@ -403,7 +403,7 @@ class MeetSeries {
   DistanceUnit unitAt(int round) =>
       resultAt(round)?.distanceUnit ??
       entry.attemptAt(round)?.distanceUnit ??
-      DistanceUnit.metres;
+      DistanceUnit.meters;
 
   /// Every legal mark of the series, furthest first. This is the series a
   /// competition is placed on: the best decides, and the rest of it breaks
@@ -593,8 +593,8 @@ class MeetStandings {
 
   /// What [entryId] has to throw to reach [place].
   ///
-  /// A centimetre past whoever is standing there, because a competition is
-  /// measured to the centimetre and equalling a mark does not overtake it —
+  /// A centimeter past whoever is standing there, because a competition is
+  /// measured to the centimeter and equalling a mark does not overtake it —
   /// it goes to a countback the athlete behind has already lost. Null when
   /// the place is empty or already theirs: any legal throw will do.
   double? neededFor(String entryId, {required int place}) {

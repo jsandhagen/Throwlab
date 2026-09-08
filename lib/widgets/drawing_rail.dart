@@ -7,7 +7,7 @@ import 'drawing_canvas.dart';
 /// Vertical, collapsible tool rail anchored to the bottom-right corner of
 /// the video, kept short enough for a landscape phone: the tools that build
 /// on a drag (line, arrow, curved arrow) share one menu button, and the pen
-/// weight and colour are menus too, so the column stays ~7 buttons instead
+/// weight and color are menus too, so the column stays ~7 buttons instead
 /// of the 17 controls it offers. A dedicated chevron button at the bottom —
 /// always there, open or closed, and never also a tool — collapses the rail
 /// down to just that button, keeping the right-center and upper-right of
@@ -75,8 +75,8 @@ class _DrawingRailState extends State<DrawingRail> {
         backgroundColor: selected ? scheme.primaryContainer : null,
       );
 
-  Widget _toolButton(DrawTool tool, IconData icon, String tip,
-      ColorScheme scheme) {
+  Widget _toolButton(
+      DrawTool tool, IconData icon, String tip, ColorScheme scheme) {
     return IconButton(
       tooltip: tip,
       iconSize: 20,
@@ -200,8 +200,8 @@ class _DrawingRailState extends State<DrawingRail> {
                             children: [
                               SizedBox(
                                   width: 24,
-                                  child: _weightPreview(
-                                      width, controller.color)),
+                                  child:
+                                      _weightPreview(width, controller.color)),
                               const SizedBox(width: 12),
                               Text('${_thicknessLabels[index]} line'),
                             ],
@@ -211,8 +211,8 @@ class _DrawingRailState extends State<DrawingRail> {
                     onSelected: (width) => controller.strokeWidth = width,
                   ),
                   _menuButton<Color>(
-                    key: const ValueKey('rail-colour'),
-                    tooltip: 'Colour',
+                    key: const ValueKey('rail-color'),
+                    tooltip: 'Color',
                     icon: Container(
                       width: 16,
                       height: 16,
@@ -224,8 +224,7 @@ class _DrawingRailState extends State<DrawingRail> {
                     ),
                     selected: false,
                     items: [
-                      for (final (index, color)
-                          in kAnnotationColors.indexed)
+                      for (final (index, color) in kAnnotationColors.indexed)
                         PopupMenuItem(
                           value: color,
                           child: Row(
@@ -258,8 +257,8 @@ class _DrawingRailState extends State<DrawingRail> {
                     iconSize: 20,
                     padding: EdgeInsets.zero,
                     style: _styleFor(false, scheme),
-                    constraints: const BoxConstraints.tightFor(
-                        width: 40, height: 36),
+                    constraints:
+                        const BoxConstraints.tightFor(width: 40, height: 36),
                     icon: const Icon(Icons.undo),
                     onPressed: controller.undo,
                   ),
@@ -316,6 +315,6 @@ class _DrawingRailState extends State<DrawingRail> {
   }
 }
 
-/// Names for the annotation colours, in [kAnnotationColors] order, for the
-/// rail's colour menu.
+/// Names for the annotation colors, in [kAnnotationColors] order, for the
+/// rail's color menu.
 const _colorNames = ['Orange', 'Green', 'Cyan', 'Pink', 'White'];

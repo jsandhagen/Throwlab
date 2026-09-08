@@ -17,8 +17,7 @@ class FrameSeeker {
   Duration? _accumulatedDelta;
 
   /// Where the video will be once pending seeks complete.
-  Duration get position =>
-      _pending ?? _inFlight ?? controller.value.position;
+  Duration get position => _pending ?? _inFlight ?? controller.value.position;
 
   /// Like [position], but asks the platform where the video actually is
   /// when no seek is queued. The cached [VideoPlayerValue.position] only

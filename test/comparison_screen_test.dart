@@ -93,13 +93,13 @@ void main() {
       expect(after.right, greaterThanOrEqualTo(pane.right - 0.5));
     });
 
-    testWidgets('double tap recentres', (tester) async {
+    testWidgets('double tap recenters', (tester) async {
       await mount(tester);
-      final centred = tester.getRect(find.byType(VideoPlayer).first);
+      final centerd = tester.getRect(find.byType(VideoPlayer).first);
       await tester.drag(find.byType(VideoPlayer).first, const Offset(-150, 0));
       await pumpFrames(tester);
       expect(tester.getRect(find.byType(VideoPlayer).first).left,
-          isNot(closeTo(centred.left, 1)));
+          isNot(closeTo(centerd.left, 1)));
 
       await tester.tap(find.byType(VideoPlayer).first);
       await tester.pump(const Duration(milliseconds: 50));
@@ -107,7 +107,7 @@ void main() {
       await pumpFrames(tester);
 
       expect(tester.getRect(find.byType(VideoPlayer).first).left,
-          closeTo(centred.left, 1));
+          closeTo(centerd.left, 1));
     });
   });
 
@@ -143,9 +143,8 @@ void main() {
   });
 
   group('the release loop', () {
-    Duration lastSeek(int playerId) => platform.seeks
-        .lastWhere((seek) => seek.playerId == playerId)
-        .position;
+    Duration lastSeek(int playerId) =>
+        platform.seeks.lastWhere((seek) => seek.playerId == playerId).position;
 
     /// Scrubs each clip somewhere different and marks it as the release,
     /// which is what links the two.
@@ -286,13 +285,13 @@ void main() {
       expect(paneAnnotations<PenStroke>(tester, 0), hasLength(1));
     });
 
-    testWidgets('the colour picked once arms both panes', (tester) async {
+    testWidgets('the color picked once arms both panes', (tester) async {
       // Mirroring the pen between the panes used to bounce the change back
       // and forth until the stack ran out, taking the screen down with it.
       await mount(tester);
       await openRail(tester);
       await selectTool(tester, Icons.draw);
-      await selectColour(tester, 'Cyan');
+      await selectColor(tester, 'Cyan');
 
       await drawInPane(tester, 0);
       await drawInPane(tester, 1);
@@ -340,7 +339,8 @@ void main() {
       return (frames - frames.roundToDouble()).abs();
     }
 
-    testWidgets('a wheel drag runs through the shuttle, like the analysis '
+    testWidgets(
+        'a wheel drag runs through the shuttle, like the analysis '
         'screen', (tester) async {
       // The clip has stills extracted, so scrubbing plays them rather than
       // hammering the decoder with a seek per frame.
@@ -376,11 +376,12 @@ void main() {
       expect(platform.seeks, isNotEmpty);
       // Frame steps off the player's own position land on the frame
       // boundary, without the stills' quarter-frame lead.
-      expect(leadOf(platform.seeks.last.position, videoA.fps),
-          closeTo(0, 0.02));
+      expect(
+          leadOf(platform.seeks.last.position, videoA.fps), closeTo(0, 0.02));
     });
 
-    testWidgets('linked, both clips move by the same time even at different '
+    testWidgets(
+        'linked, both clips move by the same time even at different '
         'frame rates', (tester) async {
       videoB.fps = 60;
       videoB.captureFps = 60;

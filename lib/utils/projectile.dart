@@ -19,8 +19,7 @@ double predictedDistance(double speed, double angleDeg,
   final theta = _radians(angleDeg);
   final vx = speed * math.cos(theta);
   final vy = speed * math.sin(theta);
-  return vx * (vy + math.sqrt(vy * vy + 2 * gravity * releaseHeight)) /
-      gravity;
+  return vx * (vy + math.sqrt(vy * vy + 2 * gravity * releaseHeight)) / gravity;
 }
 
 /// Time from release to landing, in seconds.

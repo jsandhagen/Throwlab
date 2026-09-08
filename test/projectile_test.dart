@@ -5,14 +5,13 @@ void main() {
   group('predictedDistance', () {
     test('matches the closed form for a ground-level 45° release', () {
       // R = v^2 / g at 45 degrees from ground level.
-      expect(predictedDistance(10, 45),
-          closeTo(100 / gravity, 1e-9));
+      expect(predictedDistance(10, 45), closeTo(100 / gravity, 1e-9));
     });
 
     test('complementary angles land at the same distance from ground level',
         () {
-      expect(predictedDistance(13, 30),
-          closeTo(predictedDistance(13, 60), 1e-9));
+      expect(
+          predictedDistance(13, 30), closeTo(predictedDistance(13, 60), 1e-9));
     });
 
     test('release height adds distance', () {

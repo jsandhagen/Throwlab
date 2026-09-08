@@ -9,7 +9,7 @@ import 'package:throwlab/widgets/throw_card.dart';
 /// threw it.
 void main() {
   group('distance', () {
-    test('keeps centimetres, including trailing zeros', () {
+    test('keeps centimeters, including trailing zeros', () {
       expect(formatDistance(58.42), '58.42 m');
       expect(formatDistance(58.4), '58.40 m');
       expect(formatDistance(9), '9.00 m');
@@ -31,7 +31,7 @@ void main() {
     });
 
     test('reads back in the unit it was measured in', () {
-      expect(formatDistance(58.42, DistanceUnit.metres), '58.42 m');
+      expect(formatDistance(58.42, DistanceUnit.meters), '58.42 m');
       // 58.42 m is 191 feet 8 inches, which is 191.67 ft.
       expect(formatDistance(58.42, DistanceUnit.feet), '191.67 ft');
       expect(formatDistance(12.19, DistanceUnit.feet), '39.99 ft');
@@ -52,54 +52,54 @@ void main() {
   group('DistanceField', () {
     testWidgets('fills in the conversion as you type, either way',
         (tester) async {
-      double? metres;
+      double? meters;
       DistanceUnit? unit;
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: DistanceField(
-            metres: null,
-            unit: DistanceUnit.metres,
+            meters: null,
+            unit: DistanceUnit.meters,
             onChanged: (value, entered) {
-              metres = value;
+              meters = value;
               unit = entered;
             },
           ),
         ),
       ));
 
-      final metresBox = find.byType(TextField).first;
+      final metersBox = find.byType(TextField).first;
       final feetBox = find.byType(TextField).last;
 
-      await tester.enterText(metresBox, '58.42');
+      await tester.enterText(metersBox, '58.42');
       await tester.pump();
-      expect(metres, closeTo(58.42, 1e-9));
-      expect(unit, DistanceUnit.metres);
+      expect(meters, closeTo(58.42, 1e-9));
+      expect(unit, DistanceUnit.meters);
       expect(tester.widget<TextField>(feetBox).controller!.text, '191.67');
 
       await tester.enterText(feetBox, '150-06');
       await tester.pump();
       expect(unit, DistanceUnit.feet);
-      expect(metres, closeTo(150.5 * 0.3048, 1e-9));
-      expect(tester.widget<TextField>(metresBox).controller!.text, '45.87');
+      expect(meters, closeTo(150.5 * 0.3048, 1e-9));
+      expect(tester.widget<TextField>(metersBox).controller!.text, '45.87');
 
       // Clearing a box clears the throw's distance, and the other box.
       await tester.enterText(feetBox, '');
       await tester.pump();
-      expect(metres, isNull);
-      expect(tester.widget<TextField>(metresBox).controller!.text, '');
+      expect(meters, isNull);
+      expect(tester.widget<TextField>(metersBox).controller!.text, '');
     });
 
     testWidgets('opens on the distance a throw already has', (tester) async {
       await tester.pumpWidget(MaterialApp(
         home: Scaffold(
           body: DistanceField(
-            metres: 58.42,
+            meters: 58.42,
             unit: DistanceUnit.feet,
             onChanged: (_, __) {},
           ),
         ),
       ));
-      // By the controllers, not by find.text: the metres box hints with
+      // By the controllers, not by find.text: the meters box hints with
       // an example distance, which is a "58.42" of its own.
       final fields = tester.widgetList<TextField>(find.byType(TextField));
       expect(fields.first.controller!.text, '58.42');
@@ -125,8 +125,7 @@ void main() {
       ));
     }
 
-    testWidgets('offers the library\'s athletes as a dropdown',
-        (tester) async {
+    testWidgets('offers the library\'s athletes as a dropdown', (tester) async {
       var picked = '';
       await pump(tester,
           known: ['Riley', 'Sam'], onChanged: (name) => picked = name);
@@ -144,9 +143,7 @@ void main() {
     testWidgets('"Someone new" swaps the list for a field', (tester) async {
       var picked = 'Riley';
       await pump(tester,
-          known: ['Riley'],
-          value: 'Riley',
-          onChanged: (name) => picked = name);
+          known: ['Riley'], value: 'Riley', onChanged: (name) => picked = name);
       expect(find.byType(TextField), findsNothing);
 
       await tester.tap(find.byType(DropdownButtonFormField<String>));
@@ -170,8 +167,7 @@ void main() {
 
     testWidgets('starts on the field for a name not in the library',
         (tester) async {
-      await pump(tester,
-          known: ['Riley'], value: 'Ana', onChanged: (_) {});
+      await pump(tester, known: ['Riley'], value: 'Ana', onChanged: (_) {});
       expect(find.byType(TextField), findsOneWidget);
       expect(find.text('Ana'), findsOneWidget);
     });

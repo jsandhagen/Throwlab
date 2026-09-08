@@ -86,8 +86,8 @@ void main() {
       scrub.reset();
       expect(scrub.lastGain, 1);
       // Fraction was cleared, so a lone 0.6-frame step emits nothing.
-      expect(scrub.addDrag(6, 10,
-          timestamp: const Duration(milliseconds: 200)), 0);
+      expect(scrub.addDrag(6, 10, timestamp: const Duration(milliseconds: 200)),
+          0);
     });
 
     test('scrubs backward symmetrically', () {

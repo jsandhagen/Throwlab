@@ -95,8 +95,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Future<void> enterDistance(WidgetTester tester, String metres) async {
-    await tester.enterText(find.byType(TextField).first, metres);
+  Future<void> enterDistance(WidgetTester tester, String meters) async {
+    await tester.enterText(find.byType(TextField).first, meters);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save mark'));
     await tester.pumpAndSettle();
@@ -144,8 +144,7 @@ void main() {
       expect(find.text('Mark'), findsNothing);
     });
 
-    testWidgets('an event opens the competition it stands for',
-        (tester) async {
+    testWidgets('an event opens the competition it stands for', (tester) async {
       await mountMeet(tester);
       await tester.tap(find.text('Discus · 1 kg'));
       await tester.pumpAndSettle();
@@ -175,8 +174,7 @@ void main() {
   });
 
   group('writing a mark down', () {
-    testWidgets('puts it in the series and in the record book',
-        (tester) async {
+    testWidgets('puts it in the series and in the record book', (tester) async {
       await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
@@ -416,8 +414,7 @@ void main() {
       expect(find.text('44.90 m'), findsOneWidget);
     });
 
-    testWidgets('say what my athlete needs to make the final',
-        (tester) async {
+    testWidgets('say what my athlete needs to make the final', (tester) async {
       // A final of two, and Ana is third.
       final meet = meets.byId('k1')!..advancing = 2;
       await meets.save(meet);
@@ -528,7 +525,7 @@ void main() {
       await mountEvent(tester);
 
       // Ana is third of three with everyone's prelims thrown: rounds 4-6
-      // are not hers to enter, and are greyed out to say so.
+      // are not hers to enter, and are grayed out to say so.
       final closed = tester.widget<Opacity>(find.descendant(
           of: find.byKey(const ValueKey('round-3')).first,
           matching: find.byType(Opacity)));
@@ -551,8 +548,7 @@ void main() {
 
     testWidgets('leaves them open while anyone still has a prelim to throw',
         (tester) async {
-      await setUpThreeAndThree(
-          ana: const [30.0, 31.0, 32.0], complete: false);
+      await setUpThreeAndThree(ana: const [30.0, 31.0, 32.0], complete: false);
       await mountEvent(tester);
 
       // Fischer has thrown once. Nobody is out yet, so Ana can still be
@@ -589,7 +585,7 @@ void main() {
       await tester.tap(find.byType(DropdownButtonFormField<(int, int)>));
       await tester.pumpAndSettle();
 
-      // Two formats a coach reads off a programme, each named in full.
+      // Two formats a coach reads off a program, each named in full.
       expect(find.text('3 + 3 · cut after 3'), findsWidgets);
       expect(find.text('6 throws · everyone'), findsWidgets);
       expect(find.text('4 throws · everyone'), findsWidgets);

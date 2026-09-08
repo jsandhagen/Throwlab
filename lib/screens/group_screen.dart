@@ -68,8 +68,7 @@ class GroupScreen extends StatelessWidget {
                 )
               : GridView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
@@ -87,8 +86,8 @@ class GroupScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => AnalysisScreen(
-                              video: video, siblings: videos),
+                          builder: (_) =>
+                              AnalysisScreen(video: video, siblings: videos),
                         ),
                       ),
                       onLongPress: () => showThrowActions(context, video),

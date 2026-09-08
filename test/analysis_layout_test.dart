@@ -30,13 +30,13 @@ void main() {
       );
 
   /// Everything the rail shows at rest, top to bottom: scrub, pen, the
-  /// shape menu, width, colour, undo, more, and the collapse chevron.
+  /// shape menu, width, color, undo, more, and the collapse chevron.
   final railControls = <Finder>[
     find.byIcon(Icons.pan_tool_alt),
     find.byIcon(Icons.draw),
     find.byKey(const ValueKey('rail-shapes')),
     find.byKey(const ValueKey('rail-width')),
-    find.byKey(const ValueKey('rail-colour')),
+    find.byKey(const ValueKey('rail-color')),
     find.byIcon(Icons.undo),
     find.byKey(const ValueKey('rail-more')),
     find.byKey(const ValueKey('rail-collapse')),

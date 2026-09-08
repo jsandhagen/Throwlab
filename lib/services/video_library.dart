@@ -165,8 +165,7 @@ class VideoLibrary extends ChangeNotifier {
 
   /// Records a throw nobody filmed. Ids carry an 'm' so a mark and a clip
   /// can never collide in the set of record holders.
-  static String newMarkId() =>
-      'm${DateTime.now().microsecondsSinceEpoch}';
+  static String newMarkId() => 'm${DateTime.now().microsecondsSinceEpoch}';
 
   Future<void> addMark(ThrowMark mark) async {
     _marks.add(mark);

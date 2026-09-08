@@ -84,7 +84,8 @@ class ScrubFrames {
       final file = File('$dir/$fileName');
       if (!await file.exists()) return;
       final times = <double>[];
-      for (final line in const LineSplitter().convert(await file.readAsString())) {
+      for (final line
+          in const LineSplitter().convert(await file.readAsString())) {
         final value = double.tryParse(line.trim());
         if (value != null) times.add(value);
       }

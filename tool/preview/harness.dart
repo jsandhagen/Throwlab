@@ -61,7 +61,7 @@ Future<void> warmImages(WidgetTester tester, List<String> paths) async {
 /// Pumps until the tree is idle.
 Future<void> settle(WidgetTester tester) async {
   await tester.pumpAndSettle();
-  await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 100)));
+  await tester
+      .runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
   await tester.pumpAndSettle();
 }

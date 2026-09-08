@@ -31,7 +31,7 @@ class PersonalBest {
   double get implementKg => result.implementKg;
   ImplementSpec get implementSpec => event.specFor(implementKg);
 
-  /// Metres. Non-null by construction: a best is only ever built from a
+  /// Meters. Non-null by construction: a best is only ever built from a
   /// throw that was measured.
   double get distance => result.distance!;
 
@@ -100,8 +100,7 @@ class AthleteProfile {
   }
 
   /// Their most recent throw's date, null when they have none.
-  DateTime? get lastThrewOn =>
-      isEmpty ? null : results.first.displayDate;
+  DateTime? get lastThrewOn => isEmpty ? null : results.first.displayDate;
 
   /// Their oldest throw's date, null when they have none.
   DateTime? get firstThrewOn => isEmpty ? null : results.last.displayDate;
@@ -134,16 +133,13 @@ class AthleteProfile {
     ]..sort((a, b) => b.displayDate.compareTo(a.displayDate));
 
     final bests = <PersonalBest>[];
-    for (final entry
-        in _bestsByImplement([...clips, ...typed]).entries) {
+    for (final entry in _bestsByImplement([...clips, ...typed]).entries) {
       bests.add(PersonalBest(
           result: entry.value.result, attempts: entry.value.attempts));
     }
     bests.sort((a, b) {
       final byEvent = a.event.index.compareTo(b.event.index);
-      return byEvent != 0
-          ? byEvent
-          : b.implementKg.compareTo(a.implementKg);
+      return byEvent != 0 ? byEvent : b.implementKg.compareTo(a.implementKg);
     });
 
     // The most recent throw spells the name; fall back to what was asked

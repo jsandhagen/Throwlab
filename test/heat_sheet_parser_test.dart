@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/utils/heat_sheet_parser.dart';
 
-/// A meet programme as a meet manager prints one: a title, rules, column
+/// A meet program as a meet manager prints one: a title, rules, column
 /// headers, flights, and the events of a whole afternoon — most of which is
 /// not throwing.
-const _programme = '''
+const _program = '''
                     Central Invitational - 4/12/2027
                           Meet Program
 
@@ -31,12 +31,12 @@ Event 17  Boys 4x100 Meter Relay
 ''';
 
 void main() {
-  group('a meet programme', () {
-    final found = parseHeatSheet(_programme);
+  group('a meet program', () {
+    final found = parseHeatSheet(_program);
 
     test('reads only the throwing off it', () {
-      expect(found.map((e) => e.event),
-          [ThrowEvent.shotPut, ThrowEvent.discus]);
+      expect(
+          found.map((e) => e.event), [ThrowEvent.shotPut, ThrowEvent.discus]);
     });
 
     test('leaves the relay field where it found it', () {
@@ -70,10 +70,10 @@ void main() {
         parseHeatSheet('$heading\n 1 Diaz, Ana  Central  40.00m').single;
 
     test('comes off the heading in pounds', () {
-      // A 12 lb shot is 5.44 kg, which is nobody's implement: it is thrown
-      // as the 5 kg shell, and that is the weight a best is kept under.
+      // A 12 lb shot is its own implement, not a rounded 5 kg: it is what
+      // a U.S. high school boy throws all season, and a best is per weight.
       final shot = one('Event 15 Boys Shot Put 12lb');
-      expect(shot.implementKg, 5);
+      expect(shot.implementKg, 5.44);
       expect(shot.weightGuessed, isFalse);
     });
 
@@ -98,14 +98,16 @@ void main() {
     });
 
     test('leaves a weight throw alone — it is not one of the four', () {
-      expect(parseHeatSheet('Event 8 Mens Weight Throw 35lb\n'
-          ' 1 Smith, John  Central  55-00.00'), isEmpty);
+      expect(
+          parseHeatSheet('Event 8 Mens Weight Throw 35lb\n'
+              ' 1 Smith, John  Central  55-00.00'),
+          isEmpty);
     });
   });
 
   group('a competitor is not a heading', () {
     test('however metric their seed mark reads', () {
-      // '41.20m' on the end of a row is a throw, not the 20 metres — and
+      // '41.20m' on the end of a row is a throw, not the 20 meters — and
       // reading it as another event closed the discus over it.
       final found = parseHeatSheet('Event 16 Girls Discus\n'
               '  1 Diaz, Ana                   11 Central HS      41.20m')

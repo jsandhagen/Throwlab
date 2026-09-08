@@ -28,15 +28,16 @@ List<Map<String, dynamic>> sampleNotes() {
       'updatedAt': daysAgo(2),
       'title': 'Throws day — 4 Sep',
       'blocks': [
-        block('b1', 'paragraph',
+        block(
+            'b1',
+            'paragraph',
             'Best session since the break. **Left side stayed long** all '
-            'the way through the delivery.'),
+                'the way through the delivery.'),
         block('b2', 'heading', 'What worked'),
         block('b3', 'bullet', 'Slower first turn, then *let it run*'),
         block('b4', 'bullet', 'Chin over the left knee at the block'),
         block('b5', 'heading', 'Next session'),
-        block('b6', 'checklist', 'Six standing throws, 1.25 kg',
-            checked: true),
+        block('b6', 'checklist', 'Six standing throws, 1.25 kg', checked: true),
         block('b7', 'checklist', 'Film from behind as well as side-on'),
         block('b8', 'checklist', 'Ask about the __County entry deadline__'),
       ],
@@ -49,8 +50,11 @@ List<Map<String, dynamic>> sampleNotes() {
       'title': '',
       'blocks': [
         block('b1', 'paragraph', 'Wind straight down the sector, no use.'),
-        block('b2', 'paragraph', 'Kept the reverse in — worth a look on '
-            'video before the next meet.'),
+        block(
+            'b2',
+            'paragraph',
+            'Kept the reverse in — worth a look on '
+                'video before the next meet.'),
       ],
     },
   ];
@@ -71,7 +75,7 @@ List<Map<String, dynamic>> sampleMarks() {
     double distance,
     String achievedOn, {
     String note = '',
-    String distanceUnit = 'metres',
+    String distanceUnit = 'meters',
   }) =>
       {
         'id': id,
@@ -106,7 +110,7 @@ List<Map<String, dynamic>> sampleLibrary(List<String> thumbs) {
     double captureFps = 30,
     String note = '',
     double? distance,
-    String distanceUnit = 'metres',
+    String distanceUnit = 'meters',
     String? thumbnail,
   }) =>
       {
@@ -131,16 +135,23 @@ List<Map<String, dynamic>> sampleLibrary(List<String> thumbs) {
 
   return [
     video('1', 'Anna Sofia', 'discus', 1, daysAgo(2, 15),
-        captureFps: 240, note: 'PB attempt, slight headwind',
-        distance: 52.18, thumbnail: thumbs[0]),
+        captureFps: 240,
+        note: 'PB attempt, slight headwind',
+        distance: 52.18,
+        thumbnail: thumbs[0]),
     video('2', 'Anna Sofia', 'discus', 1, daysAgo(2, 14),
         distance: 49.80, thumbnail: thumbs[2]),
     video('3', 'Anna Sofia', 'discus', 1, daysAgo(9, 11),
-        captureFps: 120, note: 'Standing throws', distance: 47.05,
+        captureFps: 120,
+        note: 'Standing throws',
+        distance: 47.05,
         thumbnail: thumbs[0]),
     video('4', 'Jakob', 'javelin', 0.8, daysAgo(21, 12),
-        captureFps: 240, note: 'Full approach', distance: 61.44,
-        distanceUnit: 'feet', thumbnail: thumbs[1]),
+        captureFps: 240,
+        note: 'Full approach',
+        distance: 61.44,
+        distanceUnit: 'feet',
+        thumbnail: thumbs[1]),
     video('5', 'Jakob', 'javelin', 0.8, daysAgo(22, 12),
         note: '~2.5 m/s tailwind', distance: 58.9, thumbnail: thumbs[1]),
     video('6', 'Adam', 'shotPut', 7.26, daysAgo(30, 9),
@@ -171,8 +182,11 @@ List<String> sampleThumbnails() {
     return lane.floor().isEven ? [172, 74, 58] : [188, 88, 68];
   }
 
-  List<int> indoor(double x, double y) =>
-      [channel(60 + 50 * x * (1 - y)), channel(58 + 40 * x), channel(70 + 55 * x)];
+  List<int> indoor(double x, double y) => [
+        channel(60 + 50 * x * (1 - y)),
+        channel(58 + 40 * x),
+        channel(70 + 55 * x)
+      ];
 
   return [
     _writePng('${dir.path}/field.png', field),
@@ -194,7 +208,8 @@ String _writePng(String path, List<int> Function(double x, double y) shade) {
     }
   }
 
-  final png = BytesBuilder()..add([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+  final png = BytesBuilder()
+    ..add([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
   void chunk(String type, List<int> data) {
     final body = <int>[...ascii.encode(type), ...data];
     png

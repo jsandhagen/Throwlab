@@ -65,8 +65,8 @@ void main() {
     });
 
     test('spans carry the styling a reader sees', () {
-      final spans = inlineSpans('plain **loud**',
-          base: const TextStyle(fontSize: 12));
+      final spans =
+          inlineSpans('plain **loud**', base: const TextStyle(fontSize: 12));
       expect(spans, hasLength(2));
       expect((spans.last as TextSpan).style?.fontWeight, FontWeight.w700);
       expect((spans.first as TextSpan).style?.fontWeight, isNull);
@@ -77,8 +77,7 @@ void main() {
     test('its title, or its first line when it has none', () {
       expect(_note(title: 'Throws day').displayTitle, 'Throws day');
       expect(
-        _note(blocks: [_block('b1', '**Left side** stayed long')])
-            .displayTitle,
+        _note(blocks: [_block('b1', '**Left side** stayed long')]).displayTitle,
         'Left side stayed long',
       );
       expect(_note().displayTitle, 'Untitled note');
@@ -180,13 +179,13 @@ void main() {
     test('a block kind it has never heard of reads as a paragraph', () {
       // A note written by a newer version should lose the styling of one
       // line, not the whole note.
-      final block = NoteBlock.fromJson({'id': 'b1', 'kind': 'quote', 'text': 'x'});
+      final block =
+          NoteBlock.fromJson({'id': 'b1', 'kind': 'quote', 'text': 'x'});
       expect(block.kind, NoteBlockKind.paragraph);
       expect(block.text, 'x');
     });
 
-    test('a corrupt store recovers with no notes rather than no app',
-        () async {
+    test('a corrupt store recovers with no notes rather than no app', () async {
       SharedPreferences.setMockInitialValues(
           {'flutter.throwlab.notes': '{not json'});
       final broken = NotesLibrary();

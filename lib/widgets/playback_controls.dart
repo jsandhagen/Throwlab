@@ -113,8 +113,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
             max: duration == 0 ? 1 : duration.toDouble(),
             onChanged: (ms) {
               controller.pause();
-              _seeker.seekTo(
-                  snapToFrame(Duration(milliseconds: ms.round()), fps));
+              _seeker
+                  .seekTo(snapToFrame(Duration(milliseconds: ms.round()), fps));
             },
           ),
         );
@@ -148,8 +148,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         );
         final playPause = IconButton(
           iconSize: widget.horizontal ? 38 : (dense ? 44 : 56),
-          icon: Icon(
-              value.isPlaying ? Icons.pause_circle : Icons.play_circle),
+          icon: Icon(value.isPlaying ? Icons.pause_circle : Icons.play_circle),
           onPressed: () =>
               value.isPlaying ? controller.pause() : controller.play(),
         );
@@ -211,8 +210,8 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child: Align(
-                        alignment: Alignment.centerLeft, child: timeText),
+                    child:
+                        Align(alignment: Alignment.centerLeft, child: timeText),
                   ),
                 ),
                 stepBack,
@@ -342,8 +341,8 @@ class _ScrubWheelState extends State<ScrubWheel>
   }
 
   void _onTick(Duration elapsed) {
-    final dt = (elapsed - _lastTick).inMicroseconds /
-        Duration.microsecondsPerSecond;
+    final dt =
+        (elapsed - _lastTick).inMicroseconds / Duration.microsecondsPerSecond;
     _lastTick = elapsed;
     // Coast at 1× — the velocity already carries the drag's acceleration.
     _emit(_scrub.addRaw(_velocity * dt, _pixelsPerFrame));
@@ -461,8 +460,7 @@ class SpeedMenuButton extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         child: Text('${speed}x',
-            style: const TextStyle(
-                fontWeight: FontWeight.bold, fontSize: 17)),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
       ),
     );
   }

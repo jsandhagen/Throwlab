@@ -1,4 +1,4 @@
-// Renders the heat sheet import to PNGs — the page a programme is pasted
+// Renders the heat sheet import to PNGs — the page a program is pasted
 // into, the events it found, one of them opened on its field, and the meet
 // it leaves entered — so the screens can be reviewed without an emulator or
 // a track.
@@ -24,7 +24,7 @@ import 'harness.dart';
 
 const _out = '../../build/preview';
 
-/// A programme as a meet manager prints one: two throws events among the
+/// A program as a meet manager prints one: two throws events among the
 /// running, in columns, with a flight break and a rule under each heading.
 const _sheet = '''
                     Central Invitational - 13 June 2026

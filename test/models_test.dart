@@ -1,9 +1,47 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_event.dart';
+import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/services/video_optimizer.dart';
 
 void main() {
+  group('an implement named in pounds', () {
+    test('is offered as its own weight, not folded into the nearest kilo', () {
+      final twelve = ThrowEvent.shotPut.implements
+          .firstWhere((spec) => spec.weightKg == 5.44);
+      expect(twelve.weightLabel, '12 lb');
+      // A best is per implement, so it has to be distinct from the 5 kg.
+      expect(ThrowEvent.shotPut.implements.map((s) => s.weightKg),
+          containsAll([5.44, 5]));
+    });
+
+    test('is what a weight in pounds resolves to', () {
+      expect(ThrowEvent.shotPut.specFor(12 * 0.45359237).weightKg, 5.44);
+    });
+
+    test('leaves the metric implements naming themselves in kilos', () {
+      expect(ThrowEvent.shotPut.specFor(7.26).weightLabel, '7.26 kg');
+      expect(ThrowEvent.javelin.specFor(0.6).weightLabel, '600 g');
+    });
+  });
+
+  test('a throw stored as metres still reads as meters', () {
+    // Spelled the British way before the app settled on American English.
+    // Nothing migrates it: the fallback every fromJson already had names
+    // the same unit it was written as.
+    final mark = ThrowMark.fromJson({
+      'id': 'm1',
+      'athlete': 'Ana Diaz',
+      'event': 'discus',
+      'implementKg': 1,
+      'distance': 41.2,
+      'distanceUnit': 'metres',
+      'achievedOn': DateTime(2026, 5, 1).toIso8601String(),
+    });
+    expect(mark.distanceUnit, DistanceUnit.meters);
+    expect(mark.distance, 41.2);
+  });
+
   group('ImplementSpec', () {
     test('javelin reference is its length', () {
       final spec = ThrowEvent.javelin.specFor(0.8);
@@ -25,12 +63,12 @@ void main() {
       }
     });
 
-    test('an event lists its implements heaviest first, each weight once',
-        () {
+    test('an event lists its implements heaviest first, each weight once', () {
       for (final event in ThrowEvent.values) {
         final weights = [for (final spec in event.implements) spec.weightKg];
         expect(weights, weights.toSet().toList());
-        expect(weights, orderedEquals([...weights]..sort((a, b) => b.compareTo(a))));
+        expect(weights,
+            orderedEquals([...weights]..sort((a, b) => b.compareTo(a))));
         expect(event.defaultImplement, event.implements.first);
       }
     });
@@ -120,7 +158,7 @@ void main() {
           closeTo(0.181, 1e-9));
     });
 
-    test('a distance with no stored unit is metres', () {
+    test('a distance with no stored unit is meters', () {
       final restored = ThrowVideo.fromJson({
         'id': '1',
         'path': '/v.mp4',
@@ -129,7 +167,7 @@ void main() {
         'importedAt': '2026-06-11T10:30:00',
         'distance': 58.42,
       });
-      expect(restored.distanceUnit, DistanceUnit.metres);
+      expect(restored.distanceUnit, DistanceUnit.meters);
     });
 
     test('has no distance until one is recorded', () {
@@ -202,8 +240,7 @@ void main() {
       expect(restored.scrubFramesVersion, VideoOptimizer.scrubFramesVersion);
     });
 
-    test('clips stored before scrub frames report none, at no resolution',
-        () {
+    test('clips stored before scrub frames report none, at no resolution', () {
       final legacy = ThrowVideo.fromJson({
         'id': '5',
         'path': '/v.mp4',
@@ -224,8 +261,7 @@ void main() {
       // the playback copy carried a recipe is due to be re-made, otherwise
       // its square-pixel stills would keep covering a non-square video.
       expect(legacy.playbackVersion, 0);
-      expect(
-          legacy.playbackVersion, lessThan(VideoOptimizer.playbackVersion));
+      expect(legacy.playbackVersion, lessThan(VideoOptimizer.playbackVersion));
     });
 
     test('a current playback copy survives a round trip and is not re-made',
@@ -260,8 +296,8 @@ void main() {
         'scrubFramesVersion': 2,
       });
       expect(old.scrubFrameLongSide, VideoOptimizer.scrubFrameMax);
-      expect(old.scrubFramesVersion,
-          lessThan(VideoOptimizer.scrubFramesVersion));
+      expect(
+          old.scrubFramesVersion, lessThan(VideoOptimizer.scrubFramesVersion));
     });
   });
 }

@@ -135,7 +135,7 @@ class MeetScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               // The whole field in one go, which is what the meet handed
-              // out a programme for.
+              // out a program for.
               TextButton.icon(
                 onPressed: () => _importSheet(context, meet),
                 icon: const Icon(Icons.upload_file_outlined),
@@ -285,7 +285,7 @@ class _EventCard extends StatelessWidget {
                             formatDistance(
                                 leader.best!,
                                 leader.series.bestRound == null
-                                    ? DistanceUnit.metres
+                                    ? DistanceUnit.meters
                                     : leader.series
                                         .unitAt(leader.series.bestRound!)),
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -346,7 +346,7 @@ class _MeetDialogState extends State<_MeetDialog> {
   /// The formats a throws competition is actually run in. Both of the
   /// common ones are here in their own right — six throws for everybody,
   /// and three then a final — rather than one being an option hung off the
-  /// other, because a coach reads them off a programme as two formats.
+  /// other, because a coach reads them off a program as two formats.
   /// The cuts a final is drawn at.
   static const _finals = [6, 8, 9, 12];
 

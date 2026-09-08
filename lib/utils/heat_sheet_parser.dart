@@ -1,10 +1,10 @@
 /// Reading a heat sheet: which events are being contested, and who is in
 /// them.
 ///
-/// A heat sheet is the programme a meet hands out — every event at it, in
+/// A heat sheet is the program a meet hands out — every event at it, in
 /// order, with the field listed under each. Most of it is not throwing, and
 /// most of the names are not the coach's athletes, so this reads the whole
-/// page and hands back only the throws, leaving both of those judgements to
+/// page and hands back only the throws, leaving both of those judgments to
 /// the screen that shows the result.
 ///
 /// It is written against what a meet manager actually prints: a heading
@@ -201,7 +201,7 @@ _Heading? _heading(String line) {
 
   // A competitor is never a heading, whatever their school is called and
   // whatever their seed mark reads like — '41.20m' on the end of a row is
-  // a throw, not the 20 metres. Only a numbered heading is trusted past
+  // a throw, not the 20 meters. Only a numbered heading is trusted past
   // this, because that is the one shape nothing else has.
   if (!numbered && (_leadingPlace.hasMatch(line) || _seed(line) != null)) {
     return null;

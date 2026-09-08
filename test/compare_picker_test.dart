@@ -25,7 +25,8 @@ void main() {
     temp = await Directory.systemTemp.createTemp('throwlab_test');
     javelinA = testVideo(temp, id: 'jav-a', athlete: 'Ana');
     javelinB = testVideo(temp, id: 'jav-b', athlete: 'Bea');
-    shot = testVideo(temp, id: 'shot', event: ThrowEvent.shotPut, athlete: 'Cy');
+    shot =
+        testVideo(temp, id: 'shot', event: ThrowEvent.shotPut, athlete: 'Cy');
     library = VideoLibrary();
     for (final video in [javelinA, javelinB, shot]) {
       await library.add(video);

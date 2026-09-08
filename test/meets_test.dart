@@ -82,7 +82,8 @@ void main() {
       entry.setAttempt(0, MeetAttempt.mark('m1'));
       entry.setAttempt(1, MeetAttempt.foul());
       entry.setAttempt(2, MeetAttempt.mark('m2'));
-      final series = MeetSeries(entry, [_mark('m1', 41.20), _mark('m2', 43.06)]);
+      final series =
+          MeetSeries(entry, [_mark('m1', 41.20), _mark('m2', 43.06)]);
       expect(series.best, 43.06);
       expect(series.bestRound, 2);
     });
@@ -91,15 +92,15 @@ void main() {
       final entry = _entry();
       entry.setAttempt(0, MeetAttempt.mark('m1'));
       entry.setAttempt(1, MeetAttempt.mark('m2'));
-      final series = MeetSeries(entry, [_mark('m1', 41.20), _mark('m2', 41.20)]);
+      final series =
+          MeetSeries(entry, [_mark('m1', 41.20), _mark('m2', 41.20)]);
       expect(series.bestRound, 0);
     });
 
     test('a filmed foul keeps its clip and counts for nothing', () {
       final entry = _entry();
       // The throw was filmed, then called out of the sector.
-      entry.setAttempt(
-          0, MeetAttempt(kind: AttemptKind.foul, resultId: 'v1'));
+      entry.setAttempt(0, MeetAttempt(kind: AttemptKind.foul, resultId: 'v1'));
       final series = MeetSeries(entry, [_clip('v1', distance: 44)]);
       expect(series.filmedAt(0), isTrue);
       expect(series.distanceAt(0), isNull);
@@ -152,8 +153,7 @@ void main() {
       expect(read.entries.single.attemptAt(2)?.kind, AttemptKind.pass);
     });
 
-    test('meets reload in the order they were thrown, newest first',
-        () async {
+    test('meets reload in the order they were thrown, newest first', () async {
       final library = MeetLibrary();
       await library.load();
       await library.save(_meet(id: 'old', on: DateTime(2026, 4, 1)));
@@ -168,8 +168,8 @@ void main() {
       final library = MeetLibrary();
       await library.load();
       await library.save(_meet(id: 'k0', on: DateTime(2026, 4, 1)));
-      await library.save(_meet(id: 'k1', on: DateTime(2026, 6, 1))
-        ..entries.add(_entry()));
+      await library.save(
+          _meet(id: 'k1', on: DateTime(2026, 6, 1))..entries.add(_entry()));
 
       await library.remove('k1');
       expect(library.meets.map((m) => m.id), ['k0']);
@@ -227,8 +227,7 @@ void main() {
   });
 
   group('the rest of the field', () {
-    test('a rival keeps their distance on the attempt, not in the library',
-        () {
+    test('a rival keeps their distance on the attempt, not in the library', () {
       final entry = _entry(id: 'r1', athlete: 'M. Okoye')..tracked = false;
       entry.setAttempt(0, MeetAttempt.untracked(42.10));
       // Nothing in the record book, and the series still reads.
@@ -295,11 +294,8 @@ void main() {
         );
         for (var round = 0; round < marks.length; round++) {
           final mark = marks[round];
-          entry.setAttempt(
-              round,
-              mark == null
-                  ? MeetAttempt.foul()
-                  : MeetAttempt.untracked(mark));
+          entry.setAttempt(round,
+              mark == null ? MeetAttempt.foul() : MeetAttempt.untracked(mark));
         }
         meet.entries.add(entry);
       });
@@ -318,7 +314,8 @@ void main() {
         'okoye': [44.90],
         'smith': [38.44],
       }));
-      expect(standings.places.map((p) => p.entry.id), ['okoye', 'mine', 'smith']);
+      expect(
+          standings.places.map((p) => p.entry.id), ['okoye', 'mine', 'smith']);
       expect(standings.places.map((p) => p.place), [1, 2, 3]);
     });
 
@@ -340,8 +337,7 @@ void main() {
       expect(standings.places.first.entry.id, 'okoye');
     });
 
-    test('two identical series share the place, and the next one skips it',
-        () {
+    test('two identical series share the place, and the next one skips it', () {
       final standings = standingsOf(fieldOf({
         'mine': [41.20],
         'okoye': [41.20],
@@ -385,9 +381,9 @@ void main() {
       return meet;
     }
 
-    MeetStandings standingsOf(Meet meet) => MeetStandings(
-        MeetCompetition.of(meet).single, const [],
-        advancing: meet.advancing);
+    MeetStandings standingsOf(Meet meet) =>
+        MeetStandings(MeetCompetition.of(meet).single, const [],
+            advancing: meet.advancing);
 
     test('the top of the field goes through, the rest do not', () {
       final standings = standingsOf(cutOf([44, 43, 40]));
@@ -402,7 +398,7 @@ void main() {
       expect(standings.neededToQualify('e1'), isNull);
     });
 
-    test('what my athlete needs is a centimetre past the cut', () {
+    test('what my athlete needs is a centimeter past the cut', () {
       // 40 m is last; 43 m holds the second and final qualifying place.
       final standings = standingsOf(cutOf([44, 43, 40]));
       expect(standings.neededToQualify('e2'), closeTo(43.01, 1e-9));
@@ -413,7 +409,7 @@ void main() {
       expect(standings.neededToQualify('e2'), isNull);
     });
 
-    test('what it takes to win is a centimetre past the leader', () {
+    test('what it takes to win is a centimeter past the leader', () {
       final standings = standingsOf(cutOf([44, 43, 40]));
       expect(standings.neededFor('e2', place: 1), closeTo(44.01, 1e-9));
     });
@@ -532,8 +528,7 @@ void main() {
     final today = DateTime(2026, 6, 13);
     Meet on(String id, DateTime date) => _meet(id: id, on: date);
 
-    test('puts today, what is coming and what is done in their own piles',
-        () {
+    test('puts today, what is coming and what is done in their own piles', () {
       final season = MeetSeason([
         on('past', DateTime(2026, 5, 2)),
         on('soon', DateTime(2026, 6, 20)),
@@ -567,7 +562,8 @@ void main() {
       expect(away(DateTime(2026, 6, 1)), -12);
       // Counted between the days, not by the hours: a meet at nine
       // tomorrow morning is one day off at any time tonight.
-      expect(daysUntil(DateTime(2026, 6, 14, 9), now: DateTime(2026, 6, 13, 23)),
+      expect(
+          daysUntil(DateTime(2026, 6, 14, 9), now: DateTime(2026, 6, 13, 23)),
           1);
     });
 

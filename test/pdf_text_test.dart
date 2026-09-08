@@ -39,11 +39,10 @@ class _Pdf {
 /// A one-page PDF in a plain font, showing [content].
 Uint8List onePage(String content, {bool compress = false}) {
   final pdf = _Pdf();
-  final font = pdf.object(
-      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  final font =
+      pdf.object('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   final body = latin1.encode(content);
-  final stream = pdf.object(
-      compress ? '<< /Filter /FlateDecode >>' : '<< >>',
+  final stream = pdf.object(compress ? '<< /Filter /FlateDecode >>' : '<< >>',
       stream: compress ? ZLibCodec().encode(body) : body);
   pdf.object('<< /Type /Page /Resources << /Font << /F1 $font 0 R >> >> '
       '/Contents $stream 0 R >>');
@@ -52,7 +51,8 @@ Uint8List onePage(String content, {bool compress = false}) {
 
 void main() {
   test('reads a line of text out of an uncompressed page', () {
-    final text = pdfText(onePage('BT /F1 12 Tf 72 700 Td (Tiger Relays) Tj ET'));
+    final text =
+        pdfText(onePage('BT /F1 12 Tf 72 700 Td (Tiger Relays) Tj ET'));
     expect(text, 'Tiger Relays');
   });
 
@@ -107,13 +107,11 @@ endbfchar
 endbfrange
 endcmap
 ''';
-      final toUnicode =
-          pdf.object('<< >>', stream: latin1.encode(cmap));
+      final toUnicode = pdf.object('<< >>', stream: latin1.encode(cmap));
       final font = pdf.object('<< /Type /Font /Subtype /Type0 '
           '/Encoding /Identity-H '
           '${withMap ? '/ToUnicode $toUnicode 0 R ' : ''}>>');
-      final stream =
-          pdf.object('<< >>', stream: latin1.encode(content));
+      final stream = pdf.object('<< >>', stream: latin1.encode(content));
       pdf.object('<< /Type /Page /Resources << /Font << /F1 $font 0 R >> >> '
           '/Contents $stream 0 R >>');
       return pdf.done();
@@ -141,7 +139,8 @@ endcmap
 
     test('a scan, which has a picture where the words should be', () {
       final pdf = _Pdf();
-      final image = pdf.object('<< /Type /XObject /Subtype /Image '
+      final image = pdf.object(
+          '<< /Type /XObject /Subtype /Image '
           '/Filter /DCTDecode /Width 100 /Height 100 >>',
           stream: List.filled(64, 0xFF));
       pdf.object('<< /Type /Page /Resources << /XObject << /Im0 $image 0 R >> '

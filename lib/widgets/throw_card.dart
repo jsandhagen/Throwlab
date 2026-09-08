@@ -22,13 +22,12 @@ String shortThrowDate(DateTime when, {DateTime? now}) {
   return local.year == today.year ? date : '$date ${local.year}';
 }
 
-/// "58.42 m", or "191.67 ft" for a throw measured in feet. Centimetres are
+/// "58.42 m", or "191.67 ft" for a throw measured in feet. Centimeters are
 /// how a throw is measured, and the trailing zeros of "58.40" carry
 /// meaning, so two decimals always.
-String formatDistance(double metres,
-    [DistanceUnit unit = DistanceUnit.metres]) {
-  final value =
-      unit == DistanceUnit.feet ? metres / metresPerFoot : metres;
+String formatDistance(double meters,
+    [DistanceUnit unit = DistanceUnit.meters]) {
+  final value = unit == DistanceUnit.feet ? meters / metersPerFoot : meters;
   return '${value.toStringAsFixed(2)} ${unit == DistanceUnit.feet ? 'ft' : 'm'}';
 }
 
@@ -56,7 +55,7 @@ double? parseFeet(String text) {
   return parseDistanceValue(cleaned);
 }
 
-/// Metres, whatever a distance was typed in. Kept for the metres box and
+/// Meters, whatever a distance was typed in. Kept for the meters box and
 /// for anything that only deals in the stored unit.
 double? parseDistance(String text) => parseDistanceValue(text);
 
@@ -64,7 +63,7 @@ double? parseDistance(String text) => parseDistanceValue(text);
 ///
 /// The library used to be text rows with a 72×48 stamp on the left, which
 /// asked a coach to tell two throws apart by reading "Shot Put · Men ·
-/// 2026-09-02 14:31" twice. A throw is something you recognise by looking
+/// 2026-09-02 14:31" twice. A throw is something you recognize by looking
 /// at it, so the frame is the whole card and the words sit on it — which
 /// buys the still every pixel of the cell instead of the two thirds left
 /// over after a caption.
@@ -116,131 +115,131 @@ class ThrowCard extends StatelessWidget {
           return Stack(
             fit: StackFit.expand,
             children: [
-            _still(accent),
-            // Scrims: keep the overlaid text and badges readable whatever
-            // the frame is — bright sky at the top, grass or runway below.
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0, 0.3],
-                  colors: [Color(0x73000000), Colors.transparent],
-                ),
-              ),
-            ),
-            const DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: [0.3, 1],
-                  colors: [Colors.transparent, Color(0xE6000000)],
-                ),
-              ),
-            ),
-            // A wash of the event's colour across the bottom corner —
-            // texture, and a second read on which event this is.
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomLeft,
-                  end: Alignment.topRight,
-                  stops: const [0, 0.55],
-                  colors: [accent.withOpacity(0.26), Colors.transparent],
-                ),
-              ),
-            ),
-            // A best glows from the corner its medal hangs in.
-            if (isPersonalBest)
+              _still(accent),
+              // Scrims: keep the overlaid text and badges readable whatever
+              // the frame is — bright sky at the top, grass or runway below.
               const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                    stops: [0, 0.6],
-                    colors: [Color(0x40FFC94D), Colors.transparent],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0, 0.3],
+                    colors: [Color(0x73000000), Colors.transparent],
                   ),
                 ),
               ),
-            if (roomy)
-              Center(
-                child: DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: Color(0x59000000),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Padding(
-                    padding: EdgeInsets.all(7),
-                    child: Icon(Icons.play_arrow_rounded,
-                        color: Colors.white, size: 22),
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.3, 1],
+                    colors: [Colors.transparent, Color(0xE6000000)],
                   ),
                 ),
               ),
-            if (distance != null && roomy)
+              // A wash of the event's color across the bottom corner —
+              // texture, and a second read on which event this is.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomLeft,
+                    end: Alignment.topRight,
+                    stops: const [0, 0.55],
+                    colors: [accent.withOpacity(0.26), Colors.transparent],
+                  ),
+                ),
+              ),
+              // A best glows from the corner its medal hangs in.
+              if (isPersonalBest)
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topRight,
+                      end: Alignment.bottomLeft,
+                      stops: [0, 0.6],
+                      colors: [Color(0x40FFC94D), Colors.transparent],
+                    ),
+                  ),
+                ),
+              if (roomy)
+                Center(
+                  child: DecoratedBox(
+                    decoration: const BoxDecoration(
+                      color: Color(0x59000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.all(7),
+                      child: Icon(Icons.play_arrow_rounded,
+                          color: Colors.white, size: 22),
+                    ),
+                  ),
+                ),
+              if (distance != null && roomy)
+                Positioned(
+                  left: 8,
+                  top: 8,
+                  child: _Badge(
+                    label: formatDistance(distance, video.distanceUnit),
+                    gold: isPersonalBest,
+                  ),
+                ),
+              if (isPersonalBest && roomy)
+                const Positioned(
+                  right: 8,
+                  top: 6,
+                  child: FirstPlaceMedal(size: 20),
+                ),
+              // Last, so the metal is stroked over the scrims and the wash
+              // rather than under them.
+              if (isPersonalBest)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(painter: GoldEdgePainter()),
+                  ),
+                ),
               Positioned(
-                left: 8,
-                top: 8,
-                child: _Badge(
-                  label: formatDistance(distance, video.distanceUnit),
-                  gold: isPersonalBest,
-                ),
-              ),
-            if (isPersonalBest && roomy)
-              const Positioned(
-                right: 8,
-                top: 6,
-                child: FirstPlaceMedal(size: 20),
-              ),
-            // Last, so the metal is stroked over the scrims and the wash
-            // rather than under them.
-            if (isPersonalBest)
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: CustomPaint(painter: GoldEdgePainter()),
-                ),
-              ),
-            Positioned(
-              left: 10,
-              right: 10,
-              bottom: 9,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                            color: accent, shape: BoxShape.circle),
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                left: 10,
+                right: 10,
+                bottom: 9,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                              color: accent, shape: BoxShape.circle),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 11.5),
-                  ),
-                ],
+                      ],
+                    ),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 11.5),
+                    ),
+                  ],
+                ),
               ),
-            ),
             ],
           );
         }),

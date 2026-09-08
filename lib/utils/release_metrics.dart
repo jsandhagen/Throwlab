@@ -101,10 +101,8 @@ ReleaseMetrics _javelinMetrics(
 
   final mirror = vx < 0 ? -1.0 : 1.0;
   final releaseAngle = math.atan2(-vy, vx * mirror) * 180 / math.pi;
-  final attitudeA =
-      math.atan2(-axisA.dy, axisA.dx * mirror) * 180 / math.pi;
-  final attitudeB =
-      math.atan2(-axisB.dy, axisB.dx * mirror) * 180 / math.pi;
+  final attitudeA = math.atan2(-axisA.dy, axisA.dx * mirror) * 180 / math.pi;
+  final attitudeB = math.atan2(-axisB.dy, axisB.dx * mirror) * 180 / math.pi;
   var diff = (attitudeA + attitudeB) / 2 - releaseAngle;
   // A consistently reversed tip/tail order flips the attitude by 180°;
   // fold into [-90, 90].

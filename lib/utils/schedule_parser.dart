@@ -111,7 +111,7 @@ const _crowdedDay = 4;
 
 /// A schedule's timetable read as a fixture list is the mistake this can't
 /// catch on its own — a day with four rows against it is either a busy
-/// Saturday or one meet's programme, and only the coach knows which.
+/// Saturday or one meet's program, and only the coach knows which.
 List<ScheduleCandidate> _flagCrowdedDays(List<ScheduleCandidate> found) {
   final perDay = <DateTime, int>{};
   for (final candidate in found) {

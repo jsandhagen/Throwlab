@@ -9,9 +9,9 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote`, `Meet` (a competition and its series) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's programme, read into its field), `analysis_screen`, `comparison_screen` |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's programme (`heat_sheet_parser`), and `pdf_text` to get the words out of either as a PDF |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), and `pdf_text` to get the words out of either as a PDF |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -57,7 +57,7 @@ the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
 and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
-leaves behind — and the heat sheet import: the programme pasted in, the
+leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field, and the meet it leaves
 entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
@@ -96,6 +96,12 @@ like the app rather than a bare Material default.
 - Type is Barlow, bundled under `assets/fonts/` (OFL) rather than fetched at
   runtime — the app is used at a track, often with no signal. It is set once
   as `ThemeData.fontFamily`; don't name a family anywhere else.
+- American English throughout — strings, comments and identifiers: meters,
+  color, gray, center, program. The one deliberate exception is
+  `heat_sheet_parser`, which matches both spellings of a distance event
+  because a programme printed in Britain says '100 metres'. A throw stored
+  before this holds `'metres'` as its unit and still reads as
+  `DistanceUnit.meters`, through the fallback every `fromJson` already had.
 - `prefer_single_quotes` is on. Comments explain *why*, not what — match the
   density already in the file you're editing.
 - The library is stored as JSON in SharedPreferences by `VideoLibrary`; it
@@ -107,10 +113,15 @@ like the app rather than a bare Material default.
 - A throw is tagged with what was thrown, by weight: `ThrowVideo.implementKg`
   picks an `ImplementSpec` whose regulated dimension is what the analyzer
   calibrates against. Add a weight by adding a row to the table in
-  `throw_event.dart` — nothing else enumerates them.
-- A throw's distance (`ThrowVideo.distance`, always metres, null until
+  `throw_event.dart` — nothing else enumerates them. A weight named in
+  pounds where it is thrown carries a `label` and wears it everywhere
+  (`weightLabel`): a U.S. high school shot reads as a 12 lb, because that
+  is what it is ordered as and called at the ring, not as 5.44 kg. It is
+  its own weight rather than a rounded 5 kg, since a best is per
+  implement.
+- A throw's distance (`ThrowVideo.distance`, always meters, null until
   recorded) is the badge on its card, shown in the unit it was entered in
-  (`distanceUnit`). `DistanceField` is the metres/feet pair that converts
+  (`distanceUnit`). `DistanceField` is the meters/feet pair that converts
   as you type; `parseFeet` also takes "191-08" the way a meet writes it.
 - A personal best is per athlete, per event, *per implement weight* — a
   lighter implement never erases the mark set with the heavy one. The rule
@@ -188,12 +199,12 @@ like the app rather than a bare Material default.
   bites once every entry has had its prelims — `MeetStandings.cutMade` —
   because an athlete sitting ninth with a throw in hand is not out, and
   closing their rounds while they still have one would be wrong. After
-  that, `throwsInFinal` is what greys the last three boxes on a card.
+  that, `throwsInFinal` is what grays the last three boxes on a card.
 - Standings are worked out per `MeetCompetition` — everyone on the same
   event *and* implement, since that is the contest an athlete is placed in
   — and ties are broken by countback down the series, the way a
   competition breaks them. `Meet.advancing` draws the cut, which is what
-  `neededToQualify` measures against: a centimetre past whoever holds the
+  `neededToQualify` measures against: a centimeter past whoever holds the
   last qualifying place, because equalling a mark loses the countback.
   `MeetStandings.finalOrder` is the redraw for the final, leader last.
 - A season can be read off a schedule rather than typed in a meet at a
@@ -209,7 +220,7 @@ like the app rather than a bare Material default.
   instead of guessed at. A meet carries a `venue` because that is most of
   what a fixture list has to say beyond the name and the date.
 - A meet's field can be read off its heat sheet rather than entered a name
-  at a time. `heat_sheet_parser` picks the throwing out of a programme —
+  at a time. `heat_sheet_parser` picks the throwing out of a program —
   every other event on the afternoon is there to close the throws event
   before it, so a relay's field is never read as shot putters — and
   `HeatSheetImportScreen` puts the events up to be chosen. The column that
@@ -219,8 +230,8 @@ like the app rather than a bare Material default.
   own spelling so a season can't split between two spellings of one person.
   Everybody else comes in untracked, which is what the rest of the field is.
   A weight named on the heading is snapped to the nearest implement the
-  event is actually thrown at (a 12 lb shot is the 5 kg shell); a heading
-  that names only a division is guessed at and says so.
+  event is actually thrown at (a heat sheet's '12lb' is the 12 lb shot); a
+  heading that names only a division is guessed at and says so.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

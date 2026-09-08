@@ -53,8 +53,7 @@ void main() {
     // A mark entered in feet, which is how it reads back.
     await _shoot(tester, library, notes, 'Jakob', 'athlete_feet');
     // A whole season with nothing filmed.
-    await _shoot(tester, library, notes, 'Priya Raman',
-        'athlete_marks_only');
+    await _shoot(tester, library, notes, 'Priya Raman', 'athlete_marks_only');
   });
 }
 

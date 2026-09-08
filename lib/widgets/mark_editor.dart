@@ -11,7 +11,7 @@ import 'throw_card.dart';
 
 /// Records a throw that was never filmed, or edits one already recorded.
 ///
-/// Returns the mark to save, or null if it was cancelled. The caller saves
+/// Returns the mark to save, or null if it was canceled. The caller saves
 /// it, so the same sheet serves "add" from an athlete's profile — where the
 /// name is already known — and "add" from the library, where it isn't.
 Future<ThrowMark?> showMarkEditor(
@@ -37,15 +37,14 @@ class _MarkDialog extends StatefulWidget {
 }
 
 class _MarkDialogState extends State<_MarkDialog> {
-  late String _athlete =
-      widget.existing?.athlete ?? widget.athlete ?? '';
+  late String _athlete = widget.existing?.athlete ?? widget.athlete ?? '';
   late ThrowEvent _event = widget.existing?.event ?? ThrowEvent.shotPut;
   late ImplementSpec _implement = widget.existing == null
       ? _event.defaultImplement
       : _event.specFor(widget.existing!.implementKg);
   late double? _distance = widget.existing?.distance;
   late DistanceUnit _unit =
-      widget.existing?.distanceUnit ?? DistanceUnit.metres;
+      widget.existing?.distanceUnit ?? DistanceUnit.meters;
   late DateTime _achievedOn = widget.existing?.achievedOn ?? DateTime.now();
   late final TextEditingController _note =
       TextEditingController(text: widget.existing?.note ?? '');
@@ -124,10 +123,10 @@ class _MarkDialogState extends State<_MarkDialog> {
             ),
             const SizedBox(height: 12),
             DistanceField(
-              metres: _distance,
+              meters: _distance,
               unit: _unit,
-              onChanged: (metres, entered) => setState(() {
-                _distance = metres;
+              onChanged: (meters, entered) => setState(() {
+                _distance = meters;
                 _unit = entered;
               }),
             ),

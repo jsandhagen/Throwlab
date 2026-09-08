@@ -65,8 +65,8 @@ void main() {
         gravity: 0,
         javelin: true,
       );
-      expect(m.speed,
-          closeTo(math.sqrt(50 * 50 + 50 * 50) * 0.026 / 0.05, 1e-6));
+      expect(
+          m.speed, closeTo(math.sqrt(50 * 50 + 50 * 50) * 0.026 / 0.05, 1e-6));
       expect(m.releaseAngleDeg, closeTo(45, 1e-6));
       expect(m.attackAngleDeg, closeTo(-45, 1e-6));
     });
@@ -118,8 +118,8 @@ void main() {
         dtSeconds: dt,
       );
       expect(m.speed, closeTo(math.sqrt(vx * vx + vy * vy), 1e-6));
-      expect(m.releaseAngleDeg,
-          closeTo(math.atan2(vy, vx) * 180 / math.pi, 1e-6));
+      expect(
+          m.releaseAngleDeg, closeTo(math.atan2(vy, vx) * 180 / math.pi, 1e-6));
     });
 
     test('degenerate input returns zeros instead of NaN', () {
@@ -171,8 +171,7 @@ void main() {
     });
 
     test('parses fractional rates', () {
-      expect(VideoOptimizer.parseRate('30000/1001'),
-          closeTo(29.97, 0.001));
+      expect(VideoOptimizer.parseRate('30000/1001'), closeTo(29.97, 0.001));
     });
 
     test('rejects garbage', () {

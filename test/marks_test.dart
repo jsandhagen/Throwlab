@@ -150,8 +150,7 @@ void main() {
       expect(library.isPersonalBest(clip), isTrue);
     });
 
-    test('marks survive a reload, and clips are untouched by them',
-        () async {
+    test('marks survive a reload, and clips are untouched by them', () async {
       await library.add(_clip('filmed', distance: 14.10));
       await library.addMark(_mark('m1', distance: 15.02, note: 'County'));
 
@@ -165,9 +164,8 @@ void main() {
     test('a corrupt mark list costs the marks, never the clips', () async {
       await library.add(_clip('filmed', distance: 14.10));
       SharedPreferences.setMockInitialValues({
-        'flutter.throwlab.videos':
-            (await SharedPreferences.getInstance())
-                .getString('throwlab.videos')!,
+        'flutter.throwlab.videos': (await SharedPreferences.getInstance())
+            .getString('throwlab.videos')!,
         'flutter.throwlab.marks': '{not json',
       });
 

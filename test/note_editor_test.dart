@@ -65,7 +65,8 @@ void main() {
             body: TextButton(
               onPressed: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => NoteEditorScreen(note: which)),
+                MaterialPageRoute(
+                    builder: (_) => NoteEditorScreen(note: which)),
               ),
               child: const Text('Open the note'),
             ),
@@ -112,9 +113,12 @@ void main() {
 
   testWidgets('Enter ends a line and starts another of the same kind',
       (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', kind: NoteBlockKind.bullet, text: 'Block earlier'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(
+              id: 'b1', kind: NoteBlockKind.bullet, text: 'Block earlier'),
+        ]));
     await tester.enterText(blockField(0), 'Block earlier\nStay tall');
     await pumpFrames(tester, 8);
 
@@ -127,9 +131,11 @@ void main() {
 
   testWidgets('a heading gives way to body text on the next line',
       (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', kind: NoteBlockKind.heading, text: 'Session 3'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(id: 'b1', kind: NoteBlockKind.heading, text: 'Session 3'),
+        ]));
     await tester.enterText(blockField(0), 'Session 3\nWindy');
     await pumpFrames(tester, 8);
 
@@ -138,9 +144,11 @@ void main() {
   });
 
   testWidgets('the toolbar bolds the selection', (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', text: 'left side long'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(id: 'b1', text: 'left side long'),
+        ]));
     await tester.tap(blockField(0));
     await pumpFrames(tester, 4);
     // Select "left side".
@@ -156,8 +164,7 @@ void main() {
         '**left side** long');
   });
 
-  testWidgets('the toolbar turns a line into a list and back',
-      (tester) async {
+  testWidgets('the toolbar turns a line into a list and back', (tester) async {
     await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Cue')]));
     await tester.tap(blockField(0));
     await pumpFrames(tester, 4);
@@ -177,20 +184,24 @@ void main() {
 
   testWidgets('numbering restarts after a line that is not in the list',
       (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', kind: NoteBlockKind.numbered, text: 'One'),
-      NoteBlock(id: 'b2', kind: NoteBlockKind.numbered, text: 'Two'),
-      NoteBlock(id: 'b3', text: 'Then a thought'),
-      NoteBlock(id: 'b4', kind: NoteBlockKind.numbered, text: 'One again'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(id: 'b1', kind: NoteBlockKind.numbered, text: 'One'),
+          NoteBlock(id: 'b2', kind: NoteBlockKind.numbered, text: 'Two'),
+          NoteBlock(id: 'b3', text: 'Then a thought'),
+          NoteBlock(id: 'b4', kind: NoteBlockKind.numbered, text: 'One again'),
+        ]));
     expect(find.text('1.'), findsNWidgets(2));
     expect(find.text('2.'), findsOneWidget);
   });
 
   testWidgets('a checklist item ticks, and stays ticked', (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', kind: NoteBlockKind.checklist, text: 'Warm up'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(id: 'b1', kind: NoteBlockKind.checklist, text: 'Warm up'),
+        ]));
     await tester.tap(find.byType(Checkbox));
     await pumpFrames(tester, 6);
 
@@ -198,10 +209,12 @@ void main() {
   });
 
   testWidgets('a line can be moved and deleted', (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', text: 'First'),
-      NoteBlock(id: 'b2', text: 'Second'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(id: 'b1', text: 'First'),
+          NoteBlock(id: 'b2', text: 'Second'),
+        ]));
     await tester.tap(blockField(1));
     await pumpFrames(tester, 4);
 
@@ -213,13 +226,14 @@ void main() {
 
     await tester.tap(find.byTooltip('Delete this line'));
     await pumpFrames(tester, 6);
-    expect(notes.notesFor('Ana Diaz').single.blocks.map((b) => b.text),
-        ['First']);
+    expect(
+        notes.notesFor('Ana Diaz').single.blocks.map((b) => b.text), ['First']);
   });
 
   testWidgets('deleting the only line clears it rather than the editor',
       (tester) async {
-    await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Only')]));
+    await mountEditor(
+        tester, note(blocks: [NoteBlock(id: 'b1', text: 'Only')]));
     await tester.tap(blockField(0));
     await pumpFrames(tester, 4);
     await scrollToolbar(tester);
@@ -233,12 +247,16 @@ void main() {
   });
 
   testWidgets('a whole list goes in one tap', (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(id: 'b1', kind: NoteBlockKind.heading, text: 'Session 3'),
-      NoteBlock(id: 'b2', kind: NoteBlockKind.bullet, text: 'Stay tall'),
-      NoteBlock(id: 'b3', kind: NoteBlockKind.bullet, text: 'Block the left'),
-      NoteBlock(id: 'b4', kind: NoteBlockKind.bullet, text: 'Finish through'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(id: 'b1', kind: NoteBlockKind.heading, text: 'Session 3'),
+          NoteBlock(id: 'b2', kind: NoteBlockKind.bullet, text: 'Stay tall'),
+          NoteBlock(
+              id: 'b3', kind: NoteBlockKind.bullet, text: 'Block the left'),
+          NoteBlock(
+              id: 'b4', kind: NoteBlockKind.bullet, text: 'Finish through'),
+        ]));
     // Nothing to delete until the cursor is in a list.
     expect(find.byTooltip('Delete this list'), findsNothing);
     await tester.tap(blockField(1));
@@ -256,10 +274,12 @@ void main() {
   });
 
   testWidgets('a picture carries a caption', (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(
-          id: 'b1', kind: NoteBlockKind.image, imagePath: picture.path),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(
+              id: 'b1', kind: NoteBlockKind.image, imagePath: picture.path),
+        ]));
     expect(find.byType(Image), findsOneWidget);
     expect(find.text('Caption this picture'), findsOneWidget);
 
@@ -271,20 +291,24 @@ void main() {
   });
 
   testWidgets('a picture that has gone missing says so', (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(
-          id: 'b1', kind: NoteBlockKind.image, imagePath: '/gone.png'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(
+              id: 'b1', kind: NoteBlockKind.image, imagePath: '/gone.png'),
+        ]));
     expect(find.text('Picture missing'), findsOneWidget);
   });
 
   testWidgets('a picture can be deleted from the picture itself',
       (tester) async {
-    await mountEditor(tester, note(blocks: [
-      NoteBlock(
-          id: 'b1', kind: NoteBlockKind.image, imagePath: picture.path),
-      NoteBlock(id: 'b2', text: 'What it should look like'),
-    ]));
+    await mountEditor(
+        tester,
+        note(blocks: [
+          NoteBlock(
+              id: 'b1', kind: NoteBlockKind.image, imagePath: picture.path),
+          NoteBlock(id: 'b2', text: 'What it should look like'),
+        ]));
 
     await tester.tap(find.byTooltip('Delete this picture'));
     await pumpFrames(tester, 20);
@@ -323,8 +347,8 @@ void main() {
     // The next note opens with the bar where it was left.
     await mountEditor(tester, note(blocks: [NoteBlock(id: 'b1', text: 'Cue')]));
     expect(tester.getTopLeft(bar).dy, lessThan(200));
-    expect(find.byTooltip('Put the controls above the keyboard'),
-        findsOneWidget);
+    expect(
+        find.byTooltip('Put the controls above the keyboard'), findsOneWidget);
   });
 
   testWidgets('a deleted note stays deleted once the screen closes',

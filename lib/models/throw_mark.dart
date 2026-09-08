@@ -17,7 +17,7 @@ class ThrowMark implements ThrowResult {
     required this.implementKg,
     required this.distance,
     required this.achievedOn,
-    this.distanceUnit = DistanceUnit.metres,
+    this.distanceUnit = DistanceUnit.meters,
     this.note = '',
   });
 
@@ -33,7 +33,7 @@ class ThrowMark implements ThrowResult {
   @override
   double implementKg;
 
-  /// Metres. Never null — an unmeasured mark is not a mark, it is a memory.
+  /// Meters. Never null — an unmeasured mark is not a mark, it is a memory.
   @override
   double distance;
 
@@ -70,9 +70,9 @@ class ThrowMark implements ThrowResult {
         event: ThrowEvent.values.byName(json['event'] as String),
         implementKg: (json['implementKg'] as num).toDouble(),
         distance: (json['distance'] as num).toDouble(),
-        distanceUnit:
-            DistanceUnit.values.asNameMap()[json['distanceUnit'] as String? ?? ''] ??
-                DistanceUnit.metres,
+        distanceUnit: DistanceUnit.values
+                .asNameMap()[json['distanceUnit'] as String? ?? ''] ??
+            DistanceUnit.meters,
         achievedOn: DateTime.parse(json['achievedOn'] as String),
         note: json['note'] as String? ?? '',
       );

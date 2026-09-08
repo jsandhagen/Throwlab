@@ -58,8 +58,8 @@ class AthleteScreen extends StatelessWidget {
                 Text(profile.name),
                 Text(
                   _summary(profile),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ],
             ),
@@ -136,8 +136,7 @@ class AthleteScreen extends StatelessWidget {
                   // written down opens the thing it actually is, the entry.
                   onTap: () => best.isFilmed
                       ? _openThrow(context, best.video!, profile.throws)
-                      : _editMark(
-                          context, library, best.result as ThrowMark),
+                      : _editMark(context, library, best.result as ThrowMark),
                 ),
               );
             },
@@ -217,8 +216,7 @@ class AthleteScreen extends StatelessWidget {
                     'session plans, cues that worked, and pictures of a '
                     'position worth remembering.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant),
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 )
               else
@@ -373,8 +371,7 @@ class _BestTile extends StatelessWidget {
     return Material(
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.55),
       clipBehavior: Clip.antiAlias,
-      shape: angularShape(14,
-          side: const BorderSide(color: Color(0x66FFC94D))),
+      shape: angularShape(14, side: const BorderSide(color: Color(0x66FFC94D))),
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -427,8 +424,8 @@ class _BestTile extends StatelessWidget {
                       _footnote(best),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -493,8 +490,7 @@ class _MarkTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(
             children: [
-              EventGlyph(mark.event,
-                  size: 18, color: eventColor(mark.event)),
+              EventGlyph(mark.event, size: 18, color: eventColor(mark.event)),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -512,8 +508,8 @@ class _MarkTile extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -605,8 +601,7 @@ class _NoteTile extends StatelessWidget {
                           const SizedBox(width: 3),
                           Text('${note.pictureCount}',
                               style: theme.textTheme.labelSmall?.copyWith(
-                                  color:
-                                      theme.colorScheme.onSurfaceVariant)),
+                                  color: theme.colorScheme.onSurfaceVariant)),
                         ],
                         if (checklist.total > 0) ...[
                           const SizedBox(width: 10),
@@ -616,8 +611,7 @@ class _NoteTile extends StatelessWidget {
                           const SizedBox(width: 3),
                           Text('${checklist.done}/${checklist.total}',
                               style: theme.textTheme.labelSmall?.copyWith(
-                                  color:
-                                      theme.colorScheme.onSurfaceVariant)),
+                                  color: theme.colorScheme.onSurfaceVariant)),
                         ],
                       ],
                     ),
@@ -675,8 +669,10 @@ class _NoClips extends StatelessWidget {
       child: Text(
         'Nothing filmed yet. Import a clip from the library to break one '
         'down frame by frame.',
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
       ),
     );
   }

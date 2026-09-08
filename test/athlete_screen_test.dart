@@ -55,8 +55,7 @@ void main() {
         ChangeNotifierProvider<NotesLibrary>.value(value: notes),
       ],
       child: MaterialApp(
-        home: AthleteScreen(
-            name: name, titleFor: (video) => video.event.label),
+        home: AthleteScreen(name: name, titleFor: (video) => video.event.label),
       ),
     ));
     await pumpFrames(tester, 8);
@@ -118,8 +117,7 @@ void main() {
 
     final cards = tester.widgetList<ThrowCard>(find.byType(ThrowCard));
     expect(cards.map((card) => card.video.id), ['far', 'near', 'unmeasured']);
-    expect(cards.map((card) => card.isPersonalBest),
-        [true, false, false]);
+    expect(cards.map((card) => card.isPersonalBest), [true, false, false]);
     // The medal is the card's; the bests section is all marks already.
     expect(find.byType(FirstPlaceMedal), findsOneWidget);
   });
@@ -137,9 +135,7 @@ void main() {
   testWidgets('sums up the season under the name', (tester) async {
     await fill([
       testVideo(temp,
-          id: 'jav',
-          athlete: 'Ana Diaz',
-          importedAt: DateTime(2026, 3, 4)),
+          id: 'jav', athlete: 'Ana Diaz', importedAt: DateTime(2026, 3, 4)),
       testVideo(temp,
           id: 'shot',
           athlete: 'Ana Diaz',
@@ -203,8 +199,7 @@ void main() {
       expect(find.textContaining('County Champs'), findsOneWidget);
     });
 
-    testWidgets('an athlete with no clips still has a profile',
-        (tester) async {
+    testWidgets('an athlete with no clips still has a profile', (tester) async {
       await library.addMark(mark(distance: 15.02));
       await library.addMark(mark(id: 'm2', distance: 14.10));
       await mountProfile(tester);
@@ -222,13 +217,11 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.emoji_events_outlined).first);
       await pumpFrames(tester, 20);
-      expect(find.widgetWithText(AlertDialog, 'Record a mark'),
-          findsOneWidget);
+      expect(find.widgetWithText(AlertDialog, 'Record a mark'), findsOneWidget);
       // The name is already known, so the sheet doesn't ask for it again.
       expect(find.text('Athlete'), findsNothing);
 
-      await tester.enterText(
-          find.widgetWithText(TextField, 'Metres'), '17.55');
+      await tester.enterText(find.widgetWithText(TextField, 'Meters'), '17.55');
       await pumpFrames(tester, 4);
       await tester.tap(find.text('Save'));
       await pumpFrames(tester, 20);
