@@ -97,6 +97,18 @@ class MeetLibrary extends ChangeNotifier {
     return entry;
   }
 
+  /// Enters a whole field at once — a heat sheet's worth.
+  ///
+  /// One write rather than sixty: a meet's entries are stored as one blob,
+  /// so adding them a name at a time rewrites the season on every one.
+  Future<void> addEntries(String meetId, List<MeetEntry> entries) async {
+    final meet = byId(meetId);
+    if (meet == null || entries.isEmpty) return;
+    meet.entries.addAll(entries);
+    await _persist();
+    notifyListeners();
+  }
+
   Future<void> removeEntry(String meetId, String entryId) async {
     final meet = byId(meetId);
     if (meet == null) return;

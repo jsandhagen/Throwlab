@@ -10,6 +10,7 @@ import '../widgets/event_glyph.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
+import 'heat_sheet_import_screen.dart';
 import 'meet_event_screen.dart';
 
 /// One meet: the events being contested at it, and the state each of them
@@ -53,6 +54,11 @@ class MeetScreen extends StatelessWidget {
             ),
             actions: [
               IconButton(
+                tooltip: 'Import a heat sheet',
+                icon: const Icon(Icons.upload_file_outlined),
+                onPressed: () => _importSheet(context, meet),
+              ),
+              IconButton(
                 tooltip: 'Meet settings',
                 icon: const Icon(Icons.more_horiz),
                 onPressed: () => _editMeet(context, meets, meet),
@@ -72,7 +78,7 @@ class MeetScreen extends StatelessWidget {
                 ),
               ),
               if (competitions.isEmpty)
-                _empty(context)
+                _empty(context, meet)
               else
                 ListView(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
@@ -110,7 +116,7 @@ class MeetScreen extends StatelessWidget {
         '$entries athlete${entries == 1 ? '' : 's'}';
   }
 
-  Widget _empty(BuildContext context) => Center(
+  Widget _empty(BuildContext context, Meet meet) => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
           child: Column(
@@ -127,8 +133,23 @@ class MeetScreen extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
+              const SizedBox(height: 16),
+              // The whole field in one go, which is what the meet handed
+              // out a programme for.
+              TextButton.icon(
+                onPressed: () => _importSheet(context, meet),
+                icon: const Icon(Icons.upload_file_outlined),
+                label: const Text('Import a heat sheet'),
+              ),
             ],
           ),
+        ),
+      );
+
+  void _importSheet(BuildContext context, Meet meet) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HeatSheetImportScreen(meetId: meet.id),
         ),
       );
 

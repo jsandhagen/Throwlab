@@ -8,6 +8,7 @@ import '../models/meet.dart';
 import '../services/meet_library.dart';
 import '../utils/pdf_text.dart';
 import '../utils/schedule_parser.dart';
+import '../widgets/import_source.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/throw_card.dart';
 
@@ -177,64 +178,18 @@ class _ScheduleImportScreenState extends State<ScheduleImportScreen> {
   }
 
   /// Where a schedule comes in: pasted, or out of a PDF.
-  Widget _source(BuildContext context) {
-    final theme = Theme.of(context);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Paste a fixture list — an email, a page off the league site, '
-              'a PDF the association put out. Anything with a date at the '
-              'start of the row.',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: TextField(
-                controller: _text,
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: '3/13   Tiger Relays          Auburn, AL\n'
-                      '3/27   Spring Invitational   Home',
-                ),
-              ),
-            ),
-            if (_problem != null) ...[
-              const SizedBox(height: 12),
-              _Problem(_problem!),
-            ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _busy ? null : _openPdf,
-                    icon: const Icon(Icons.picture_as_pdf_outlined),
-                    label: const Text('Open a PDF'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: _busy ? null : _read,
-                    icon: const Icon(Icons.search),
-                    label: const Text('Read it'),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget _source(BuildContext context) => ImportSource(
+        controller: _text,
+        busy: _busy,
+        problem: _problem,
+        onRead: _read,
+        onOpenPdf: _openPdf,
+        blurb: 'Paste a fixture list — an email, a page off the league '
+            'site, a PDF the association put out. Anything with a date at '
+            'the start of the row.',
+        hint: '3/13   Tiger Relays          Auburn, AL\n'
+            '3/27   Spring Invitational   Home',
+      );
 
   /// What it made of the page, a row at a time.
   Widget _review(BuildContext context, MeetLibrary meets) {
@@ -348,37 +303,6 @@ class _CandidateCard extends StatelessWidget {
                 ],
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Problem extends StatelessWidget {
-  const _Problem(this.message);
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer.withOpacity(0.4),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.report_outlined,
-              size: 18, color: theme.colorScheme.onErrorContainer),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(message,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onErrorContainer)),
-          ),
         ],
       ),
     );

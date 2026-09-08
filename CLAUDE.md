@@ -9,9 +9,9 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote`, `Meet` (a competition and its series) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, drawing canvas and rail, playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`, and `pdf_text` to get the words out of a PDF) |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's programme, read into its field), `analysis_screen`, `comparison_screen` |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's programme (`heat_sheet_parser`), and `pdf_text` to get the words out of either as a PDF |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -44,7 +44,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/athlete_preview.dart \
                               tool/preview/note_preview.dart \
                               tool/preview/meet_preview.dart \
-                              tool/preview/schedule_preview.dart
+                              tool/preview/schedule_preview.dart \
+                              tool/preview/heat_sheet_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
@@ -55,7 +56,9 @@ the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
 and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
-leaves behind. Open the PNGs to see exactly what the screen paints. **Re-run it
+leaves behind — and the heat sheet import: the programme pasted in, the
+events found in it, one opened on its field, and the meet it leaves
+entered. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -187,6 +190,19 @@ like the app rather than a bare Material default.
   returns null rather than mojibake, so a scanned schedule is turned away
   instead of guessed at. A meet carries a `venue` because that is most of
   what a fixture list has to say beyond the name and the date.
+- A meet's field can be read off its heat sheet rather than entered a name
+  at a time. `heat_sheet_parser` picks the throwing out of a programme —
+  every other event on the afternoon is there to close the throws event
+  before it, so a relay's field is never read as shot putters — and
+  `HeatSheetImportScreen` puts the events up to be chosen. The column that
+  matters is the one no sheet has: `matchKnown` says which names the
+  library already holds, by spelling or by surname and first initial
+  ('J Sandhagen' is Jakob), and those come in `tracked` under the library's
+  own spelling so a season can't split between two spellings of one person.
+  Everybody else comes in untracked, which is what the rest of the field is.
+  A weight named on the heading is snapped to the nearest implement the
+  event is actually thrown at (a 12 lb shot is the 5 kg shell); a heading
+  that names only a division is guessed at and says so.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which
