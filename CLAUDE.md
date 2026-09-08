@@ -134,6 +134,12 @@ like the app rather than a bare Material default.
   under the keyboard, which is exactly when the tools are wanted. It can be
   pinned under the app bar instead (remembered in `throwlab.noteToolbarTop`),
   and the delete tools stay put at its end rather than scrolling off it.
+- The season reads forwards, not backwards. `MeetSeason` splits the meets
+  into today, what is coming (soonest first) and what has been thrown (most
+  recent first) — a list newest-first is a record of a season, which buries
+  the next fixture under everything already done. `countdownTo` is what a
+  card says about a meet close enough to pack for, and says nothing about
+  next spring, which is read by its date.
 - A meet is a day, not a competition: the trophy in the library's app bar
   opens the season — a list, or a calendar of the months it falls in
   (remembered in `throwlab.meetsCalendar`) — a meet lists the events being

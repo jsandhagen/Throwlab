@@ -141,6 +141,69 @@ void main() {
     });
   });
 
+  group('the season', () {
+    /// A library of this test's own, so the headings depend on dates this
+    /// test chose rather than on the shared fixture's.
+    Future<void> seedSeason(List<Meet> season) async {
+      SharedPreferences.setMockInitialValues({});
+      meets = MeetLibrary();
+      await meets.load();
+      for (final meet in season) {
+        await meets.save(meet);
+      }
+    }
+
+    final now = DateTime.now();
+
+    testWidgets('splits what is coming from what has been thrown',
+        (tester) async {
+      await seedSeason([
+        Meet(
+            id: 'p',
+            name: 'Winter Open',
+            date: now.subtract(const Duration(days: 21))),
+        Meet(
+            id: 'u',
+            name: 'Spring Open',
+            date: now.add(const Duration(days: 5))),
+      ]);
+      await mountMeets(tester);
+      expect(find.text('Upcoming'), findsOneWidget);
+      expect(find.text('Past'), findsOneWidget);
+      // The next fixture reads above the season behind it.
+      final upcoming = tester.getTopLeft(find.text('Spring Open')).dy;
+      final past = tester.getTopLeft(find.text('Winter Open')).dy;
+      expect(upcoming, lessThan(past));
+    });
+
+    testWidgets("today's meet gets a heading of its own", (tester) async {
+      await seedSeason([
+        Meet(id: 'now', name: 'County Champs', date: now),
+        Meet(
+            id: 'u',
+            name: 'Spring Open',
+            date: now.add(const Duration(days: 5))),
+      ]);
+      await mountMeets(tester);
+      expect(find.text('Today'), findsOneWidget);
+      expect(find.text('Upcoming'), findsOneWidget);
+      expect(find.text('Past'), findsNothing);
+    });
+
+    testWidgets('says how far off a fixture is on its card', (tester) async {
+      await seedSeason([
+        Meet(
+            id: 'u',
+            name: 'Spring Open',
+            date: now.add(const Duration(days: 1)),
+            venue: 'Sportcity'),
+      ]);
+      await mountMeets(tester);
+      expect(find.textContaining('tomorrow'), findsOneWidget);
+      expect(find.textContaining('Sportcity'), findsOneWidget);
+    });
+  });
+
   group('the trophy', () {
     Future<void> mountHome(WidgetTester tester) async {
       tester.view.physicalSize = const Size(420, 900);

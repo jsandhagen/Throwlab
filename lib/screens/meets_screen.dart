@@ -150,20 +150,69 @@ class _MeetsScreenState extends State<MeetsScreen> {
     );
   }
 
-  Widget _list(BuildContext context, MeetLibrary meets) => ListView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-        children: [
-          for (final meet in meets.meets)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: MeetCard(
-                meet: meet,
-                onOpen: () => _open(context, meet),
-                onDelete: () => _confirmDelete(context, meets, meet),
+  Widget _list(BuildContext context, MeetLibrary meets) {
+    final season = MeetSeason(meets.meets);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+      children: [
+        // Today first, then what is coming, then the season behind you.
+        ..._section(context, meets, 'Today', season.today, live: true),
+        ..._section(context, meets, 'Upcoming', season.upcoming),
+        ..._section(context, meets, 'Past', season.past),
+      ],
+    );
+  }
+
+  /// One heading and the meets under it, or nothing at all when there are
+  /// none — an empty 'Today' is not news.
+  List<Widget> _section(
+    BuildContext context,
+    MeetLibrary meets,
+    String heading,
+    List<Meet> section, {
+    bool live = false,
+  }) {
+    if (section.isEmpty) return const [];
+    final theme = Theme.of(context);
+    return [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
+        child: Row(
+          children: [
+            if (live) ...[
+              Icon(Icons.circle, size: 8, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              heading,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+                color: live
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant,
               ),
             ),
-        ],
-      );
+            const SizedBox(width: 8),
+            Text(
+              '${section.length}',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+      for (final meet in section)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: MeetCard(
+            meet: meet,
+            onOpen: () => _open(context, meet),
+            onDelete: () => _confirmDelete(context, meets, meet),
+          ),
+        ),
+    ];
+  }
 
   Widget _empty(BuildContext context) {
     final theme = Theme.of(context);
@@ -570,6 +619,7 @@ class MeetCard extends StatelessWidget {
         subtitle: Text(
           [
             shortThrowDate(meet.date),
+            if (countdownTo(meet.date) case final away?) away,
             if (meet.venue.isNotEmpty) meet.venue,
             // A meet with nobody in it yet is one on the calendar, not one
             // that went badly: counting its nothing reads as the latter.

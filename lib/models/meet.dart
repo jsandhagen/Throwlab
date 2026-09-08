@@ -297,6 +297,69 @@ class Meet {
       );
 }
 
+/// The season split the way a coach reads it: what is on today, what is
+/// coming, and what has been thrown.
+///
+/// A list of meets newest-first is a record of a season, which is the
+/// wrong way round for planning one — the next fixture is the one being
+/// asked about, and it sits at the bottom of that list under everything
+/// that has already happened. So the future comes first here, and it runs
+/// forwards.
+class MeetSeason {
+  MeetSeason(List<Meet> meets, {DateTime? today})
+      : today = [],
+        upcoming = [],
+        past = [] {
+    final now = _startOfDay(today ?? DateTime.now());
+    for (final meet in meets) {
+      final day = _startOfDay(meet.date.toLocal());
+      if (day == now) {
+        this.today.add(meet);
+      } else if (day.isAfter(now)) {
+        upcoming.add(meet);
+      } else {
+        past.add(meet);
+      }
+    }
+    // Forwards through what is coming, backwards through what is done: both
+    // run away from today, which is where the coach is standing.
+    upcoming.sort((a, b) => a.date.compareTo(b.date));
+    past.sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  /// The meet being thrown right now, if there is one.
+  final List<Meet> today;
+
+  /// Still to come, soonest first.
+  final List<Meet> upcoming;
+
+  /// Already thrown, most recent first.
+  final List<Meet> past;
+
+  bool get isEmpty => today.isEmpty && upcoming.isEmpty && past.isEmpty;
+}
+
+DateTime _startOfDay(DateTime when) =>
+    DateTime(when.year, when.month, when.day);
+
+/// How far off a meet is, as a coach would say it: 'tomorrow', 'in 5 days',
+/// 'in 3 weeks'. Null for today and for anything already thrown, which the
+/// season says by which heading it puts them under.
+///
+/// Also null for anything further off than a couple of months. 'In 34
+/// weeks' is not something anybody counts, and next spring's fixtures are
+/// read by their dates — the countdown is for the meets close enough to be
+/// packing for.
+String? countdownTo(DateTime date, {DateTime? now}) {
+  final days = _startOfDay(date.toLocal())
+      .difference(_startOfDay((now ?? DateTime.now()).toLocal()))
+      .inDays;
+  if (days <= 0 || days > 60) return null;
+  if (days == 1) return 'tomorrow';
+  if (days < 14) return 'in $days days';
+  return 'in ${(days / 7).round()} weeks';
+}
+
 /// One entry's series read against the record book: the distances behind
 /// its measured attempts, and which of them won the competition.
 ///

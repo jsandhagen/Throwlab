@@ -80,6 +80,21 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await settle(tester);
 
+    // A season the coach has already been throwing in, so the shot below
+    // shows all three headings rather than only what was just imported.
+    await meets.save(Meet(
+      id: 'k-past',
+      name: 'Winter Throws',
+      date: DateTime.now().subtract(const Duration(days: 26)),
+      venue: 'Lee Valley',
+    ));
+    await meets.save(Meet(
+      id: 'k-today',
+      name: 'Club Open',
+      date: DateTime.now(),
+      venue: 'Sportcity',
+    ));
+
     // The season it leaves behind: meets with a place and a date, and
     // nobody entered for them yet.
     await tester.tap(find.text('Add 3 meets'));

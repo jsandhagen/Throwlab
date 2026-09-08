@@ -528,6 +528,49 @@ void main() {
     });
   });
 
+  group('the season', () {
+    final today = DateTime(2026, 6, 13);
+    Meet on(String id, DateTime date) => _meet(id: id, on: date);
+
+    test('puts today, what is coming and what is done in their own piles',
+        () {
+      final season = MeetSeason([
+        on('past', DateTime(2026, 5, 2)),
+        on('soon', DateTime(2026, 6, 20)),
+        on('now', today),
+        on('later', DateTime(2026, 7, 4)),
+        on('older', DateTime(2026, 4, 1)),
+      ], today: today);
+      expect(season.today.map((m) => m.id), ['now']);
+      // Forwards through what is coming...
+      expect(season.upcoming.map((m) => m.id), ['soon', 'later']);
+      // ...and backwards through what is done.
+      expect(season.past.map((m) => m.id), ['past', 'older']);
+    });
+
+    test('counts a meet later today as today, whatever time it is', () {
+      final season = MeetSeason([on('now', DateTime(2026, 6, 13, 19, 30))],
+          today: DateTime(2026, 6, 13, 7));
+      expect(season.today.map((m) => m.id), ['now']);
+    });
+
+    test('is empty when there are no meets', () {
+      expect(MeetSeason(const [], today: today).isEmpty, isTrue);
+    });
+
+    test('says how far off a fixture is', () {
+      String? away(DateTime date) => countdownTo(date, now: today);
+      expect(away(DateTime(2026, 6, 14)), 'tomorrow');
+      expect(away(DateTime(2026, 6, 18)), 'in 5 days');
+      expect(away(DateTime(2026, 7, 4)), 'in 3 weeks');
+      // Today and anything already thrown say nothing: the heading has.
+      expect(away(today), isNull);
+      expect(away(DateTime(2026, 6, 1)), isNull);
+      // Nor does next season, which is read by its dates.
+      expect(away(DateTime(2027, 3, 13)), isNull);
+    });
+  });
+
   group('the meet in progress', () {
     test("is today's", () async {
       final library = MeetLibrary();
