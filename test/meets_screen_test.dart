@@ -168,8 +168,8 @@ void main() {
             date: now.add(const Duration(days: 5))),
       ]);
       await mountMeets(tester);
-      expect(find.text('Upcoming'), findsOneWidget);
-      expect(find.text('Past'), findsOneWidget);
+      expect(find.text('UPCOMING'), findsOneWidget);
+      expect(find.text('PAST'), findsOneWidget);
       // The next fixture reads above the season behind it.
       final upcoming = tester.getTopLeft(find.text('Spring Open')).dy;
       final past = tester.getTopLeft(find.text('Winter Open')).dy;
@@ -185,9 +185,9 @@ void main() {
             date: now.add(const Duration(days: 5))),
       ]);
       await mountMeets(tester);
-      expect(find.text('Today'), findsOneWidget);
-      expect(find.text('Upcoming'), findsOneWidget);
-      expect(find.text('Past'), findsNothing);
+      expect(find.text('TODAY'), findsOneWidget);
+      expect(find.text('UPCOMING'), findsOneWidget);
+      expect(find.text('PAST'), findsNothing);
     });
 
     testWidgets('says how far off a fixture is on its card', (tester) async {

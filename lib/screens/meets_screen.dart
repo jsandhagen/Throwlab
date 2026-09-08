@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/meet.dart';
 import '../models/throw_event.dart';
+import '../models/throw_video.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../widgets/angular.dart';
@@ -19,6 +20,19 @@ import 'schedule_import_screen.dart';
 /// months they fall in.
 enum _MeetsView { list, calendar }
 
+/// The three ways the season list is being tried out. Temporary: one of
+/// these wins and the others go.
+enum MeetsLayout {
+  /// A date down the left edge, rows in one continuous group.
+  rail,
+
+  /// The next fixture full size, everything after it a line.
+  hero,
+
+  /// A card each, carrying what actually happened at the meet.
+  cards,
+}
+
 /// The competitions, and the way into the one happening now.
 ///
 /// Today's meet opens straight from the trophy rather than making the coach
@@ -26,7 +40,9 @@ enum _MeetsView { list, calendar }
 /// list is what the season looks like from behind; the calendar is what it
 /// looks like from in front, which is the half of it a coach plans against.
 class MeetsScreen extends StatefulWidget {
-  const MeetsScreen({super.key});
+  const MeetsScreen({super.key, this.layout = MeetsLayout.rail});
+
+  final MeetsLayout layout;
 
   @override
   State<MeetsScreen> createState() => _MeetsScreenState();
@@ -127,7 +143,7 @@ class _MeetsScreenState extends State<MeetsScreen> {
                     child: _view == _MeetsView.list
                         ? (meets.meets.isEmpty
                             ? _empty(context)
-                            : _list(context, meets))
+                            : _list(context, meets, library))
                         : _MeetCalendar(
                             meets: meets.meets,
                             onOpen: (meet) => _open(context, meet),
@@ -150,15 +166,22 @@ class _MeetsScreenState extends State<MeetsScreen> {
     );
   }
 
-  Widget _list(BuildContext context, MeetLibrary meets) {
+  Widget _list(BuildContext context, MeetLibrary meets, VideoLibrary library) {
     final season = MeetSeason(meets.meets);
+    // The next fixture, which the hero layout puts at full size: today's
+    // meet if there is one, otherwise the soonest one coming.
+    final next = season.today.isNotEmpty
+        ? season.today.first
+        : (season.upcoming.isNotEmpty ? season.upcoming.first : null);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
       children: [
         // Today first, then what is coming, then the season behind you.
-        ..._section(context, meets, 'Today', season.today, live: true),
-        ..._section(context, meets, 'Upcoming', season.upcoming),
-        ..._section(context, meets, 'Past', season.past),
+        ..._section(context, meets, library, 'Today', season.today,
+            live: true, next: next),
+        ..._section(context, meets, library, 'Upcoming', season.upcoming,
+            next: next),
+        ..._section(context, meets, library, 'Past', season.past),
       ],
     );
   }
@@ -168,49 +191,63 @@ class _MeetsScreenState extends State<MeetsScreen> {
   List<Widget> _section(
     BuildContext context,
     MeetLibrary meets,
+    VideoLibrary library,
     String heading,
     List<Meet> section, {
     bool live = false,
+    Meet? next,
   }) {
     if (section.isEmpty) return const [];
-    final theme = Theme.of(context);
-    return [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-        child: Row(
-          children: [
-            if (live) ...[
-              Icon(Icons.circle, size: 8, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              heading,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.5,
-                color: live
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${section.length}',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
+    final rest = [
       for (final meet in section)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: MeetCard(
-            meet: meet,
-            onOpen: () => _open(context, meet),
-            onDelete: () => _confirmDelete(context, meets, meet),
-          ),
+        if (widget.layout != MeetsLayout.hero || meet != next) meet,
+    ];
+    return [
+      _SectionHeading(heading, count: section.length, live: live),
+      if (widget.layout == MeetsLayout.hero && section.contains(next))
+        _MeetHero(
+          meet: next!,
+          library: library,
+          onOpen: () => _open(context, next),
+          onDelete: () => _confirmDelete(context, meets, next),
         ),
+      if (rest.isNotEmpty)
+        switch (widget.layout) {
+          // One surface with the meets ruled off inside it, rather than a
+          // card each floating on the sector: a season is a list of one
+          // thing, and cutting it into separate boxes said it wasn't.
+          MeetsLayout.rail => _Grouped([
+              for (final meet in rest)
+                _MeetRailRow(
+                  meet: meet,
+                  library: library,
+                  onOpen: () => _open(context, meet),
+                  onDelete: () => _confirmDelete(context, meets, meet),
+                ),
+            ]),
+          MeetsLayout.hero => _Grouped([
+              for (final meet in rest)
+                _MeetLine(
+                  meet: meet,
+                  onOpen: () => _open(context, meet),
+                  onDelete: () => _confirmDelete(context, meets, meet),
+                ),
+            ]),
+          MeetsLayout.cards => Column(
+              children: [
+                for (final meet in rest)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: MeetCard(
+                      meet: meet,
+                      library: library,
+                      onOpen: () => _open(context, meet),
+                      onDelete: () => _confirmDelete(context, meets, meet),
+                    ),
+                  ),
+              ],
+            ),
+        },
     ];
   }
 
@@ -586,14 +623,342 @@ class _MeetCalendarState extends State<_MeetCalendar> {
   ];
 }
 
-/// One meet in a list: when it was, how big it was, and what was thrown at
-/// it. Shared by the list and the calendar's day.
-class MeetCard extends StatelessWidget {
-  const MeetCard(
-      {super.key,
-      required this.meet,
-      required this.onOpen,
-      required this.onDelete});
+/// Month names for the date rail, which has room for three letters.
+const _monthShort = [
+  'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', //
+  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+];
+
+const _weekdayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// What a meet has to say for itself.
+///
+/// A fixture and a meet already thrown are two different rows: one is a
+/// date and a place, the other is what happened. Both are read off the same
+/// meet, so the layouts ask this rather than each working it out again.
+class _Facts {
+  _Facts(this.meet, VideoLibrary? library)
+      : events = {for (final entry in meet.entries) entry.event}.toList(),
+        athletes = meet.entries.length {
+    var attempts = 0;
+    double? best;
+    final results = library == null
+        ? const <String, ThrowResult>{}
+        : {for (final result in library.results) result.id: result};
+    for (final entry in meet.entries) {
+      for (final attempt in entry.attempts) {
+        if (attempt == null) continue;
+        attempts++;
+        if (attempt.kind != AttemptKind.mark) continue;
+        final distance =
+            results[attempt.resultId ?? '']?.distance ?? attempt.distance;
+        if (distance != null && (best == null || distance > best)) {
+          best = distance;
+        }
+      }
+    }
+    this.attempts = attempts;
+    this.best = best;
+  }
+
+  final Meet meet;
+  final List<ThrowEvent> events;
+  final int athletes;
+  late final int attempts;
+
+  /// The furthest thrown at it, by anybody — the one number a season list
+  /// can say about a meet that is over.
+  late final double? best;
+
+  bool get thrown => attempts > 0;
+
+  /// The line under the name: where and when for a fixture, what happened
+  /// for a meet already thrown.
+  String get line {
+    final away = countdownTo(meet.date);
+    return [
+      if (meet.venue.isNotEmpty) meet.venue,
+      if (away != null) away,
+      if (thrown) ...[
+        '$athletes athlete${athletes == 1 ? '' : 's'}',
+        if (best != null) 'best ${formatDistance(best!)}',
+      ] else if (athletes > 0)
+        '$athletes entered',
+    ].join(' · ');
+  }
+}
+
+/// A heading over one part of the season.
+///
+/// Set in capitals and tracked out rather than written as a sentence: it is
+/// a label on a group, not a line of the list, and the two read as the same
+/// weight when both are sentence case.
+class _SectionHeading extends StatelessWidget {
+  const _SectionHeading(this.heading, {required this.count, this.live = false});
+
+  final String heading;
+  final int count;
+  final bool live;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color =
+        live ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(6, 18, 6, 8),
+      child: Row(
+        children: [
+          if (live) ...[
+            Icon(Icons.circle, size: 7, color: color),
+            const SizedBox(width: 7),
+          ],
+          Text(
+            heading.toUpperCase(),
+            style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700, letterSpacing: 1.4, color: color),
+          ),
+          const SizedBox(width: 8),
+          Text('$count',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: color.withOpacity(0.6))),
+        ],
+      ),
+    );
+  }
+}
+
+/// The meets of one section on a single surface, ruled off from each other.
+class _Grouped extends StatelessWidget {
+  const _Grouped(this.rows);
+
+  final List<Widget> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.4),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0)
+              Divider(
+                  height: 1,
+                  thickness: 1,
+                  indent: 16,
+                  color: theme.colorScheme.outlineVariant.withOpacity(0.3)),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The date, stacked, at a fixed width so a column of them lines up.
+class _DateRail extends StatelessWidget {
+  const _DateRail(this.date);
+
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final local = date.toLocal();
+    final color = theme.colorScheme.onSurface;
+    return SizedBox(
+      width: 42,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${local.day}',
+              style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700, height: 1.1, color: color)),
+          Text(
+            // The year only when it isn't this one, which is most of a
+            // fixture list read in September.
+            local.year == DateTime.now().year
+                ? _monthShort[local.month - 1]
+                : "${_monthShort[local.month - 1]} '${local.year % 100}",
+            style: theme.textTheme.labelSmall?.copyWith(
+                letterSpacing: 0.6, color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Event glyphs for a meet, at most a handful.
+class _EventDots extends StatelessWidget {
+  const _EventDots(this.events, {this.size = 16});
+
+  final List<ThrowEvent> events;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final event in events.take(4))
+            Padding(
+              padding: const EdgeInsets.only(left: 5),
+              child: EventGlyph(event, size: size, color: eventColor(event)),
+            ),
+        ],
+      );
+}
+
+/// One meet as a row with the date down the left edge.
+class _MeetRailRow extends StatelessWidget {
+  const _MeetRailRow({
+    required this.meet,
+    required this.library,
+    required this.onOpen,
+    required this.onDelete,
+  });
+
+  final Meet meet;
+  final VideoLibrary library;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final facts = _Facts(meet, library);
+    return InkWell(
+      onTap: onOpen,
+      onLongPress: onDelete,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        child: Row(
+          children: [
+            _DateRail(meet.date),
+            const SizedBox(width: 12),
+            Container(
+              width: 1,
+              height: 30,
+              color: theme.colorScheme.outlineVariant.withOpacity(0.35),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(meet.name.isEmpty ? 'Meet' : meet.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                  if (facts.line.isNotEmpty)
+                    Text(facts.line,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ),
+            ),
+            _EventDots(facts.events),
+            Icon(Icons.chevron_right,
+                size: 20, color: theme.colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The next fixture, at the size of the thing you are actually asking
+/// about.
+class _MeetHero extends StatelessWidget {
+  const _MeetHero({
+    required this.meet,
+    required this.library,
+    required this.onOpen,
+    required this.onDelete,
+  });
+
+  final Meet meet;
+  final VideoLibrary library;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final facts = _Facts(meet, library);
+    final local = meet.date.toLocal();
+    final away = countdownTo(meet.date) ?? 'today';
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: theme.colorScheme.primary.withOpacity(0.35), width: 1),
+      ),
+      child: InkWell(
+        onTap: onOpen,
+        onLongPress: onDelete,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(away.toUpperCase(),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.4,
+                      color: theme.colorScheme.primary)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(meet.name.isEmpty ? 'Meet' : meet.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                  ),
+                  _EventDots(facts.events, size: 20),
+                  Icon(Icons.chevron_right,
+                      color: theme.colorScheme.onSurfaceVariant),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  '${_weekdayShort[local.weekday - 1]} '
+                      '${shortThrowDate(meet.date)}',
+                  if (meet.venue.isNotEmpty) meet.venue,
+                  if (facts.athletes > 0)
+                    '${facts.athletes} entered'
+                  else
+                    'nobody entered yet',
+                ].join(' · '),
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A meet that is not the next one: a date, a name, and where.
+class _MeetLine extends StatelessWidget {
+  const _MeetLine(
+      {required this.meet, required this.onOpen, required this.onDelete});
 
   final Meet meet;
   final VoidCallback onOpen;
@@ -602,9 +967,63 @@ class MeetCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final events = {for (final entry in meet.entries) entry.event}.toList();
-    final attempts =
-        meet.entries.fold<int>(0, (sum, entry) => sum + entry.taken);
+    return InkWell(
+      onTap: onOpen,
+      onLongPress: onDelete,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 62,
+              child: Text(shortThrowDate(meet.date),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurfaceVariant)),
+            ),
+            Expanded(
+              child: Text(
+                [
+                  meet.name.isEmpty ? 'Meet' : meet.name,
+                  if (meet.venue.isNotEmpty) meet.venue,
+                ].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+            Icon(Icons.chevron_right,
+                size: 18, color: theme.colorScheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One meet in a list: when it was, how big it was, and what was thrown at
+/// it. Shared by the list and the calendar's day.
+class MeetCard extends StatelessWidget {
+  const MeetCard(
+      {super.key,
+      required this.meet,
+      required this.onOpen,
+      required this.onDelete,
+      this.library});
+
+  final Meet meet;
+
+  /// Where the distances are, for a card that says what was thrown at the
+  /// meet. Null from the calendar, which only has room for the name.
+  final VideoLibrary? library;
+  final VoidCallback onOpen;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final facts = _Facts(meet, library);
+    final events = facts.events;
     return Card(
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
       child: ListTile(
@@ -619,15 +1038,10 @@ class MeetCard extends StatelessWidget {
         subtitle: Text(
           [
             shortThrowDate(meet.date),
-            if (countdownTo(meet.date) case final away?) away,
-            if (meet.venue.isNotEmpty) meet.venue,
             // A meet with nobody in it yet is one on the calendar, not one
             // that went badly: counting its nothing reads as the latter.
-            if (meet.entries.isNotEmpty) ...[
-              '${meet.entries.length} '
-                  'athlete${meet.entries.length == 1 ? '' : 's'}',
-              '$attempts attempt${attempts == 1 ? '' : 's'}',
-            ],
+            if (_Facts(meet, library).line case final line when line.isNotEmpty)
+              line,
           ].join(' · '),
           style: theme.textTheme.bodySmall
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
