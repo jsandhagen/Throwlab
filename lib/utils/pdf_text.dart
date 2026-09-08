@@ -37,11 +37,31 @@ String? pdfText(Uint8List bytes) {
     final content = _streamOf(object);
     if (content == null) continue;
     final text = latin1.decode(content, allowInvalid: true);
-    if (!text.contains('BT')) continue;
+    if (!text.contains('BT') || !_isContent(content)) continue;
     page.run(text);
   }
 
   return page.finish();
+}
+
+/// Whether a stream is page content rather than data that happens to spell
+/// `BT`.
+///
+/// Operators and their operands are written in ASCII, so a content stream
+/// holds no control bytes at all; a color profile or an image is a third
+/// of the way made of them, and scanning one yields nothing but the
+/// occasional two bytes that look like the start of a run of text.
+bool _isContent(List<int> bytes) {
+  var control = 0;
+  for (final byte in bytes) {
+    // Tab, newline, form feed and return are the whitespace a generator
+    // lays its operators out with; nothing else below a space belongs.
+    if ((byte < 0x20 && byte != 9 && byte != 10 && byte != 12 && byte != 13) ||
+        byte == 0x7F) {
+      control++;
+    }
+  }
+  return control * 20 < bytes.length;
 }
 
 /// Object number to its body, from `obj` to `endobj`.
@@ -82,9 +102,14 @@ List<int>? _streamOf(String object) {
   return null;
 }
 
-/// What a font's codes mean, per font resource name.
+/// Half an em, which is about what a character of prose averages and the
+/// closest honest guess for a font that never published its widths.
+const _unknownAdvance = 0.5;
+
+/// What a font's codes mean, and how wide they are, per font resource name.
 class _FontMap {
-  _FontMap(this.codes, this.bytesPerCode, this.readable);
+  _FontMap(this.codes, this.bytesPerCode, this.readable,
+      [this.widths = const {}]);
 
   /// Empty for a font whose codes are its characters, which is most of the
   /// ones that spell out a schedule.
@@ -95,6 +120,40 @@ class _FontMap {
   /// codes are indexes into a table this can't see, so its text is dropped
   /// rather than emitted as the mojibake it would decode to.
   final bool readable;
+
+  /// How far each code carries the pen along, in ems, out of the font's
+  /// own `/Widths`. It is what tells a cell that ended from a column that
+  /// started: without it the gap between two runs is unreadable, since
+  /// most of it is the width of the words in front of it.
+  final Map<int, double> widths;
+
+  double advance(int code) => widths[code] ?? _unknownAdvance;
+}
+
+/// A simple font's widths, code by code, in ems.
+///
+/// A composite font keeps its widths somewhere this doesn't look, and a
+/// base font may publish none at all; both fall back to half an em.
+Map<int, double> _widths(String font, Map<int, String> objects) {
+  final first = RegExp(r'/FirstChar\s+(\d+)').firstMatch(font);
+  final firstCode = first == null ? null : int.tryParse(first.group(1)!);
+  if (firstCode == null) return const {};
+  var array = RegExp(r'/Widths\s*\[([^\]]*)\]').firstMatch(font)?.group(1);
+  if (array == null) {
+    // Long fonts keep the array in an object of its own.
+    final ref = RegExp(r'/Widths\s+(\d+)\s+\d+\s+R').firstMatch(font);
+    final body = ref == null ? null : objects[int.tryParse(ref.group(1)!) ?? -1];
+    array =
+        body == null ? null : RegExp(r'\[([^\]]*)\]').firstMatch(body)?.group(1);
+  }
+  if (array == null) return const {};
+
+  final widths = <int, double>{};
+  var code = firstCode;
+  for (final value in RegExp(r'-?[\d.]+').allMatches(array)) {
+    widths[code++] = (double.tryParse(value.group(0)!) ?? 0) / 1000;
+  }
+  return widths;
 }
 
 /// Every font in the file, wired to the ToUnicode table it declares.
@@ -112,21 +171,22 @@ Map<String, _FontMap> _fontMaps(String raw, Map<int, String> objects) {
       if (maps.containsKey(name)) continue;
       final font = objects[int.parse(match.group(2)!)];
       if (font == null || !font.contains('/Font')) continue;
+      final widths = _widths(font, objects);
       final toUnicode =
           RegExp(r'/ToUnicode\s+(\d+)\s+\d+\s+R').firstMatch(font);
       if (toUnicode == null) {
         // A simple font with no table is its own encoding: byte in,
         // character out. A composite one without a table is unreadable.
-        maps[name] = _FontMap(const {}, 1, !font.contains('/Type0'));
+        maps[name] = _FontMap(const {}, 1, !font.contains('/Type0'), widths);
         continue;
       }
       final stream = objects[int.parse(toUnicode.group(1)!)];
       final cmap = stream == null ? null : _streamOf(stream);
       if (cmap == null) {
-        maps[name] = _FontMap(const {}, 1, !font.contains('/Type0'));
+        maps[name] = _FontMap(const {}, 1, !font.contains('/Type0'), widths);
         continue;
       }
-      maps[name] = _parseCMap(latin1.decode(cmap, allowInvalid: true));
+      maps[name] = _parseCMap(latin1.decode(cmap, allowInvalid: true), widths);
     }
   }
 
@@ -142,7 +202,7 @@ Map<String, _FontMap> _fontMaps(String raw, Map<int, String> objects) {
 
 /// A ToUnicode CMap: the table a subset font ships so its glyph codes can
 /// be read back as words.
-_FontMap _parseCMap(String cmap) {
+_FontMap _parseCMap(String cmap, Map<int, double> widths) {
   final codes = <int, String>{};
   var width = 0;
 
@@ -192,7 +252,7 @@ _FontMap _parseCMap(String cmap) {
     }
   }
 
-  return _FontMap(codes, width == 0 ? 2 : width, true);
+  return _FontMap(codes, width == 0 ? 2 : width, true, widths);
 }
 
 /// A CMap destination: UTF-16BE, however many characters long.
@@ -208,10 +268,13 @@ String _utf16(String hex) {
 }
 
 /// How far apart two pieces of text have to be to be on different lines,
-/// and how far along one has to jump to be in the next column. Both in text
-/// space, which is points for every generator that isn't being clever.
-const _lineGap = 1.5;
-const _columnGap = 3.0;
+/// how far along one has to jump to be a column over, and how wide a gap
+/// between two runs is a space rather than a kern. All as a fraction of
+/// the type's own size: a schedule set in 8pt rules its columns closer
+/// together than one set in 12, and only the type says which this is.
+const _lineGap = 0.3;
+const _columnGap = 0.9;
+const _wordGap = 0.2;
 
 /// The page being built up, an operator at a time.
 class _Page {
@@ -222,8 +285,25 @@ class _Page {
   final List<String> _lines = [];
 
   _FontMap? _font;
+
+  /// The pen: where the next glyph lands, moved along by every glyph
+  /// written.
   double _x = 0;
   double _y = 0;
+
+  /// The start of the run of text, which `Td` and `T*` step from.
+  double _lineX = 0;
+  double _lineY = 0;
+
+  /// Where the last glyph left off, which is what says whether the next
+  /// one is beside it, a column over, or on the line below. A page that
+  /// has had nothing written on it yet has nowhere to measure from.
+  double _lastX = 0;
+  double _lastY = 0;
+  bool _written = false;
+
+  double _size = 0;
+  double _scale = 1;
   double _leading = 0;
   int _kept = 0;
 
@@ -231,7 +311,21 @@ class _Page {
   /// what they meant. A page that is mostly this is not text.
   int _dropped = 0;
 
+  /// The type's size where the text is being laid down, which every gap is
+  /// measured against. `Tf` gives it in text space and `Tm` scales that up,
+  /// so a generator is free to set 12pt type as one unit blown up
+  /// seventy-five times, and plenty do.
+  double get _em {
+    final em = _size * _scale;
+    return em > 0 ? em : 12;
+  }
+
   void run(String content) {
+    // Each stream is a page, near enough: what is at the top of the next
+    // one does not carry on from the bottom of this one.
+    _break();
+    _written = false;
+
     final operands = <Object>[];
     final scanner = _Scanner(content);
     while (true) {
@@ -252,16 +346,16 @@ class _Page {
   void _apply(String op, List<Object> operands) {
     switch (op) {
       case 'BT':
-        _x = 0;
-        _y = 0;
-        break;
-      case 'ET':
-        _break();
+        // A generator is free to open a run of text for every cell of a
+        // table, so `BT` and `ET` say nothing about where the words are:
+        // the line is decided by where the next ones land.
+        _place(0, 0);
         break;
       case 'Tf':
         final name =
             operands.length >= 2 ? operands[operands.length - 2] : null;
         if (name is _Name) _font = fonts[name.value] ?? _soleFont();
+        _size = _number(operands, 0) ?? _size;
         break;
       case 'TL':
         _leading = _number(operands, 0) ?? _leading;
@@ -271,18 +365,23 @@ class _Page {
         final ty = _number(operands, 0) ?? 0;
         final tx = _number(operands, 1) ?? 0;
         if (op == 'TD') _leading = -ty;
-        _move(_x + tx, _y + ty);
+        _place(_lineX + tx * _scale, _lineY + ty * _scale);
         break;
       case 'Tm':
-        _move(_number(operands, 1) ?? 0, _number(operands, 0) ?? 0);
+        // The first column of the matrix is how big the type is drawn; a
+        // page turned on its side carries it in the second.
+        final a = (_number(operands, 5) ?? 1).abs();
+        final b = (_number(operands, 4) ?? 0).abs();
+        _scale = a > 0 ? a : (b > 0 ? b : 1);
+        _place(_number(operands, 1) ?? 0, _number(operands, 0) ?? 0);
         break;
       case 'T*':
-        _move(_x, _y - _leading);
+        _place(_lineX, _lineY - _leading * _scale);
         break;
       case 'Tj':
       case '\'':
       case '"':
-        if (op != 'Tj') _move(_x, _y - _leading);
+        if (op != 'Tj') _place(_lineX, _lineY - _leading * _scale);
         final text = operands.isEmpty ? null : operands.last;
         if (text is _Str) _write(text);
         break;
@@ -292,9 +391,11 @@ class _Page {
           for (final part in array) {
             if (part is _Str) {
               _write(part);
-            } else if (part is num && part < -100) {
-              // A wide backwards kern is how a generator spells a space.
-              _space();
+            } else if (part is num) {
+              // A kern, in thousandths of an em and backwards. A wide one
+              // is how a generator spells a space, which the gap between
+              // this run and the next then reads as one.
+              _x -= part / 1000 * _em;
             }
           }
         }
@@ -313,17 +414,29 @@ class _Page {
     return value is num ? value.toDouble() : null;
   }
 
-  void _move(double x, double y) {
-    if ((y - _y).abs() > _lineGap) {
+  /// Start a run of text at (x, y), with the pen at its head.
+  void _place(double x, double y) {
+    _lineX = x;
+    _lineY = y;
+    _x = x;
+    _y = y;
+  }
+
+  /// The line break, column rule or space that the gap between the last
+  /// glyph and the pen calls for.
+  void _separate() {
+    if (!_written) return;
+    final em = _em;
+    if ((_y - _lastY).abs() > _lineGap * em) {
       _break();
-    } else if (x - _x > _columnGap) {
+    } else if (_x - _lastX > _columnGap * em) {
       // Text jumped along the same line: a column rule, in the only terms
       // a plain-text schedule has for one.
       _space();
       _space();
+    } else if (_x - _lastX > _wordGap * em) {
+      _space();
     }
-    _x = x;
-    _y = y;
   }
 
   void _space() {
@@ -342,24 +455,43 @@ class _Page {
       _dropped += text.bytes.length;
       return;
     }
-    if (font == null || font.codes.isEmpty) {
-      _line.write(latin1.decode(text.bytes, allowInvalid: true));
-      _kept += text.bytes.length;
-      return;
-    }
-    final width = font.bytesPerCode;
+    // A font whose codes are its characters is read a byte at a time; one
+    // that ships a table says how wide its codes are.
+    final plain = font == null || font.codes.isEmpty;
+    final width = plain ? 1 : font.bytesPerCode;
+
+    final glyphs = StringBuffer();
+    var advance = 0.0;
+    var kept = 0;
+    var dropped = 0;
     for (var i = 0; i + width <= text.bytes.length; i += width) {
       var code = 0;
       for (var b = 0; b < width; b++) {
         code = (code << 8) | text.bytes[i + b];
       }
-      final glyph = font.codes[code];
+      advance += font?.advance(code) ?? _unknownAdvance;
+      final glyph = plain ? String.fromCharCode(code) : font.codes[code];
       if (glyph == null) {
-        _dropped++;
+        dropped++;
       } else {
-        _line.write(glyph);
-        _kept++;
+        glyphs.write(glyph);
+        kept++;
       }
+    }
+
+    if (kept > 0) {
+      _separate();
+      _line.write(glyphs);
+    }
+    _kept += kept;
+    _dropped += dropped;
+    // The pen ends up past what was just written, which is where the gap
+    // to whatever comes next is measured from.
+    _x += advance * _em;
+    if (kept > 0) {
+      _lastX = _x;
+      _lastY = _y;
+      _written = true;
     }
   }
 
@@ -516,7 +648,14 @@ class _Scanner {
 
   Object _number() {
     final match = RegExp(r'^[-+]?[\d.]+').firstMatch(
-        _source.substring(_at, (_at + 32).clamp(0, _source.length)))!;
+        _source.substring(_at, (_at + 32).clamp(0, _source.length)));
+    if (match == null) {
+      // A sign with nothing behind it. Not a number, and not a reason to
+      // give up on the page: step over it the way an unknown operator is
+      // stepped over.
+      _at++;
+      return 0;
+    }
     _at += match.group(0)!.length;
     return double.tryParse(match.group(0)!) ?? 0;
   }

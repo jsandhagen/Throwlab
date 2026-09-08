@@ -37,14 +37,19 @@ class _Pdf {
 }
 
 /// A one-page PDF in a plain font, showing [content].
-Uint8List onePage(String content, {bool compress = false}) {
+///
+/// [font] is the font dictionary, for a page whose type has to say how wide
+/// it is.
+Uint8List onePage(String content,
+    {bool compress = false,
+    String font =
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'}) {
   final pdf = _Pdf();
-  final font =
-      pdf.object('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  final fontRef = pdf.object(font);
   final body = latin1.encode(content);
   final stream = pdf.object(compress ? '<< /Filter /FlateDecode >>' : '<< >>',
       stream: compress ? ZLibCodec().encode(body) : body);
-  pdf.object('<< /Type /Page /Resources << /Font << /F1 $font 0 R >> >> '
+  pdf.object('<< /Type /Page /Resources << /Font << /F1 $fontRef 0 R >> >> '
       '/Contents $stream 0 R >>');
   return pdf.done();
 }
@@ -72,6 +77,43 @@ void main() {
     final text = pdfText(onePage(
         'BT /F1 12 Tf 72 700 Td (3/13) Tj 120 0 Td (Tiger Relays) Tj ET'));
     expect(text, '3/13  Tiger Relays');
+  });
+
+  test('reads a table whose every cell is a run of text of its own', () {
+    // What a word processor writes: the cells of a row share a line only
+    // by where they are on the page, and each opens and closes its own run
+    // of text.
+    final text = pdfText(onePage(
+        'BT /F1 12 Tf 72 700 Td (March 25) Tj ET '
+        'BT /F1 12 Tf 160 700 Td (League Meet) Tj ET '
+        'BT /F1 12 Tf 72 680 Td (March 28) Tj ET '
+        'BT /F1 12 Tf 160 680 Td (Patriot Invitational) Tj ET'));
+    expect(text, 'March 25  League Meet\nMarch 28  Patriot Invitational');
+  });
+
+  test('reads type set as one unit blown up by the text matrix', () {
+    // A generator is free to draw 12pt type as one unit scaled seventy-five
+    // times, and the gap that makes a column has to grow with it.
+    final text = pdfText(onePage('BT /F1 1 Tf 75 0 0 75 450 4375 Tm (3/13) Tj '
+        '75 0 0 75 1200 4375 Tm (Tiger Relays) Tj '
+        '75 0 0 75 450 4250 Tm (4/10) Tj ET'));
+    expect(text, '3/13  Tiger Relays\n4/10');
+  });
+
+  test('measures a cell by the widths its font publishes', () {
+    // Two runs that meet exactly are one word, however far apart they look
+    // to a reader who assumed how wide the type is.
+    final text = pdfText(onePage(
+        'BT /F1 12 Tf 72 700 Td (WWW) Tj 36 0 Td (WWW) Tj ET',
+        font: '<< /Type /Font /Subtype /TrueType /BaseFont /Impact '
+            '/FirstChar 87 /Widths [ 1000 ] >>'));
+    expect(text, 'WWWWWW');
+  });
+
+  test('steps over a sign with no number behind it', () {
+    final text = pdfText(onePage(
+        'BT /F1 12 Tf 72 700 Td (Tiger) Tj - 0 -14 Td (Relays) Tj ET'));
+    expect(text, 'Tiger\nRelays');
   });
 
   test('spaces words a generator kerned apart', () {
@@ -135,6 +177,24 @@ endcmap
   group('what it will not pretend to read', () {
     test('a file that is not a PDF', () {
       expect(pdfText(Uint8List.fromList(latin1.encode('not a pdf'))), isNull);
+    });
+
+    test('a color profile that happens to spell BT', () {
+      // An ICC profile is a third made of the control bytes no operator is
+      // written with, and the two letters that open a run of text turn up
+      // in one often enough to matter.
+      final pdf = _Pdf();
+      final font =
+          pdf.object('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+      pdf.object('<< /N 3 /Alternate /DeviceRGB >>', stream: [
+        for (var i = 0; i < 400; i++) i % 7,
+        ...latin1.encode('BT 1 0 0 1 - Tm (mojibake) Tj ET'),
+      ]);
+      final stream = pdf.object('<< >>',
+          stream: latin1.encode('BT /F1 12 Tf 72 700 Td (Tiger Relays) Tj ET'));
+      pdf.object('<< /Type /Page /Resources << /Font << /F1 $font 0 R >> >> '
+          '/Contents $stream 0 R >>');
+      expect(pdfText(pdf.done()), 'Tiger Relays');
     });
 
     test('a scan, which has a picture where the words should be', () {

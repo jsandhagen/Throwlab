@@ -61,6 +61,18 @@ Date      Meet                       Site
           DateTime(2027, 4, 12));
     });
 
+    test('starts a two-day meet written over a slash on its first day', () {
+      final found = parse('May 20/21, 2027  Concorde District Meet').single;
+      expect(found.date, DateTime(2027, 5, 20));
+      expect(found.name, 'Concorde District Meet');
+    });
+
+    test('starts a meet that runs into the next month on its first day', () {
+      final found = parse('March 30 - Apr 3, 2027  Spring Break').single;
+      expect(found.date, DateTime(2027, 3, 30));
+      expect(found.name, 'Spring Break');
+    });
+
     test('assumes the season that has not happened yet', () {
       final found = parse('April 12  Spring Open').single;
       expect(found.date, DateTime(2027, 4, 12));
@@ -103,6 +115,13 @@ Date      Meet                       Site
       final found = parse('12 April 2027 | Spring Open – Sportcity').single;
       expect(found.name, 'Spring Open');
       expect(found.venue, 'Sportcity');
+    });
+
+    test('reads past a time column that has not been settled yet', () {
+      final found = parse('May 6, 2027  TBD  Mega Meet Part 2  Chantilly HS')
+          .single;
+      expect(found.name, 'Mega Meet Part 2');
+      expect(found.venue, 'Chantilly HS');
     });
 
     test('drops a start time rather than storing it as the day', () {

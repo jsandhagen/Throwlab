@@ -149,18 +149,24 @@ List<String> _lines(String text) => text
 /// have some of to be worth reading.
 String _strip(String value) => value.replaceAll(RegExp(r'[^A-Za-z0-9]'), '');
 
-const _monthNames = r'(january|jan|february|feb|march|mar|april|apr|may|'
+const _monthNames = r'january|jan|february|feb|march|mar|april|apr|may|'
     r'june|jun|july|jul|august|aug|september|sept|sep|october|oct|'
-    r'november|nov|december|dec)';
+    r'november|nov|december|dec';
 
 const _monthNumbers = {
   'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6, //
   'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
 };
 
-/// A range — 'April 12-13' — is a two-day meet, which is one meet starting
-/// on the first of them.
-const _dayRange = r'(?:\s*(?:-|–|—|&|and)\s*\d{1,2}(?:st|nd|rd|th)?)?';
+/// A range — 'April 12-13', 'May 20/21' — is a two-day meet, which is one
+/// meet starting on the first of them.
+const _dayRange = r'(?:\s*(?:-|–|—|/|&|and)\s*\d{1,2}(?:st|nd|rd|th)?)?';
+
+/// A range that runs into the next month — 'March 30 - Apr 3'. Still one
+/// meet, still starting on the first day of it, and the second month has
+/// to be swallowed or it reads as the name.
+const _monthRange = '(?:\\s*(?:-|–|—|&|and)\\s*(?:$_monthNames)\\.?'
+    r'\s*\d{1,2}(?:st|nd|rd|th)?)?';
 
 final _isoDate = RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b');
 
@@ -169,12 +175,13 @@ final _isoDate = RegExp(r'\b(\d{4})-(\d{1,2})-(\d{1,2})\b');
 final _numericDate = RegExp(r'\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b');
 
 final _monthFirst = RegExp(
-    '\\b$_monthNames\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?$_dayRange'
+    '\\b($_monthNames)\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?'
+    '$_dayRange$_monthRange'
     r'(?:\s*,?\s*((?:19|20)\d{2}))?',
     caseSensitive: false);
 
 final _dayFirst = RegExp(
-    '\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+$_monthNames\\.?'
+    '\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+($_monthNames)\\.?'
     r'(?:\s*,?\s*((?:19|20)\d{2}))?',
     caseSensitive: false);
 
@@ -365,7 +372,13 @@ final _leadingAt = RegExp(r'^(?:@|at)\s+', caseSensitive: false);
     name = rest.substring(0, at);
     venue = rest.substring(at + 1);
   } else if (_columns.hasMatch(rest)) {
-    final parts = rest.split(_columns).where((p) => _strip(p).isNotEmpty);
+    final parts =
+        rest.split(_columns).where((p) => _strip(p).isNotEmpty).toList();
+    // A schedule's time column says 'TBD' where the time isn't settled,
+    // and a row that starts with one still has a meet in it further along.
+    while (parts.length > 1 && _isPlaceholder(parts.first)) {
+      parts.removeAt(0);
+    }
     name = parts.first;
     venue = parts.skip(1).join(', ');
   } else if (_dashes.hasMatch(rest)) {
@@ -396,6 +409,12 @@ String _tidy(String value) {
   if (tidy.length > 80) tidy = '${tidy.substring(0, 79).trimRight()}…';
   return tidy;
 }
+
+final _placeholders =
+    RegExp(r'^[\s\-–—]*(?:tba|tbd|n/?a)[\s.]*$', caseSensitive: false);
+
+/// A column with nothing in it yet, which is not what the meet is called.
+bool _isPlaceholder(String field) => _placeholders.hasMatch(field);
 
 final _headings = RegExp(
     r'^(date|day|days|meet|meets|event|events|location|locations|site|venue|'
