@@ -45,7 +45,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/note_preview.dart \
                               tool/preview/meet_preview.dart \
                               tool/preview/schedule_preview.dart \
-                              tool/preview/heat_sheet_preview.dart
+                              tool/preview/heat_sheet_preview.dart \
+                              tool/preview/season_preview.dart
 ```
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
@@ -58,7 +59,8 @@ and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the programme pasted in, the
 events found in it, one opened on its field, and the meet it leaves
-entered. Open the PNGs to see exactly what the screen paints. **Re-run it
+entered — and the season list: the next fixture at full size over the rest
+of it, both on a day with a meet on and on a day without. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -140,9 +142,20 @@ like the app rather than a bare Material default.
 - The season reads forwards, not backwards. `MeetSeason` splits the meets
   into today, what is coming (soonest first) and what has been thrown (most
   recent first) — a list newest-first is a record of a season, which buries
-  the next fixture under everything already done. `countdownTo` is what a
-  card says about a meet close enough to pack for, and says nothing about
-  next spring, which is read by its date.
+  the next fixture under everything already done. The next fixture is drawn
+  at the size of the question being asked — `_MeetHero`, with the days to
+  it — and everything else is a row with the date down the left edge, at a
+  fixed width so a column of dates lines up. A section is one surface with
+  its meets ruled off inside it rather than a card each: a season is a list
+  of one thing, and cutting it into separate boxes said it wasn't. A row
+  says where and how far off for a fixture, and what happened for a meet
+  already thrown — `_Facts` reads the entries against the library for the
+  athletes, the events and the furthest thrown.
+- Two countdowns, on purpose. `countdownTo` rounds ('in 3 weeks') for a row
+  read at a glance, and says nothing about next spring, which is read by
+  its date. The hero counts exact days, because that is the meet being
+  packed for — and says nothing at all on the day itself, where the heading
+  above it already says TODAY.
 - A meet is a day, not a competition: the trophy in the library's app bar
   opens the season — a list, or a calendar of the months it falls in
   (remembered in `throwlab.meetsCalendar`) — a meet lists the events being

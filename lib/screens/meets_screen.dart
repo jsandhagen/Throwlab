@@ -20,19 +20,6 @@ import 'schedule_import_screen.dart';
 /// months they fall in.
 enum _MeetsView { list, calendar }
 
-/// The three ways the season list is being tried out. Temporary: one of
-/// these wins and the others go.
-enum MeetsLayout {
-  /// A date down the left edge, rows in one continuous group.
-  rail,
-
-  /// The next fixture full size, everything after it a line.
-  hero,
-
-  /// A card each, carrying what actually happened at the meet.
-  cards,
-}
-
 /// The competitions, and the way into the one happening now.
 ///
 /// Today's meet opens straight from the trophy rather than making the coach
@@ -40,9 +27,7 @@ enum MeetsLayout {
 /// list is what the season looks like from behind; the calendar is what it
 /// looks like from in front, which is the half of it a coach plans against.
 class MeetsScreen extends StatefulWidget {
-  const MeetsScreen({super.key, this.layout = MeetsLayout.rail});
-
-  final MeetsLayout layout;
+  const MeetsScreen({super.key});
 
   @override
   State<MeetsScreen> createState() => _MeetsScreenState();
@@ -198,56 +183,37 @@ class _MeetsScreenState extends State<MeetsScreen> {
     Meet? next,
   }) {
     if (section.isEmpty) return const [];
+    // The next fixture is the one being asked about, so it is the size of
+    // the question. Everything else in its section carries on below it.
+    final hero = section.contains(next) ? next : null;
     final rest = [
       for (final meet in section)
-        if (widget.layout != MeetsLayout.hero || meet != next) meet,
+        if (meet != hero) meet,
     ];
     return [
       _SectionHeading(heading, count: section.length, live: live),
-      if (widget.layout == MeetsLayout.hero && section.contains(next))
+      if (hero != null) ...[
         _MeetHero(
-          meet: next!,
+          meet: hero,
           library: library,
-          onOpen: () => _open(context, next),
-          onDelete: () => _confirmDelete(context, meets, next),
+          onOpen: () => _open(context, hero),
+          onDelete: () => _confirmDelete(context, meets, hero),
         ),
+        if (rest.isNotEmpty) const SizedBox(height: 10),
+      ],
+      // One surface with the meets ruled off inside it, rather than a card
+      // each floating on the sector: a season is a list of one thing, and
+      // cutting it into separate boxes said it wasn't.
       if (rest.isNotEmpty)
-        switch (widget.layout) {
-          // One surface with the meets ruled off inside it, rather than a
-          // card each floating on the sector: a season is a list of one
-          // thing, and cutting it into separate boxes said it wasn't.
-          MeetsLayout.rail => _Grouped([
-              for (final meet in rest)
-                _MeetRailRow(
-                  meet: meet,
-                  library: library,
-                  onOpen: () => _open(context, meet),
-                  onDelete: () => _confirmDelete(context, meets, meet),
-                ),
-            ]),
-          MeetsLayout.hero => _Grouped([
-              for (final meet in rest)
-                _MeetLine(
-                  meet: meet,
-                  onOpen: () => _open(context, meet),
-                  onDelete: () => _confirmDelete(context, meets, meet),
-                ),
-            ]),
-          MeetsLayout.cards => Column(
-              children: [
-                for (final meet in rest)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: MeetCard(
-                      meet: meet,
-                      library: library,
-                      onOpen: () => _open(context, meet),
-                      onDelete: () => _confirmDelete(context, meets, meet),
-                    ),
-                  ),
-              ],
+        _Grouped([
+          for (final meet in rest)
+            _MeetRailRow(
+              meet: meet,
+              library: library,
+              onOpen: () => _open(context, meet),
+              onDelete: () => _confirmDelete(context, meets, meet),
             ),
-        },
+        ]),
     ];
   }
 
@@ -896,7 +862,16 @@ class _MeetHero extends StatelessWidget {
     final theme = Theme.of(context);
     final facts = _Facts(meet, library);
     final local = meet.date.toLocal();
-    final away = countdownTo(meet.date) ?? 'today';
+    // Counted in days rather than rounded to weeks: this is the meet being
+    // planned for, and 'in 23 days' is what a coach is actually counting.
+    // Nothing at all on the day itself — the heading above already says
+    // TODAY, and saying it twice is not saying it louder.
+    final days = daysUntil(meet.date);
+    final away = switch (days) {
+      <= 0 => null,
+      1 => 'tomorrow',
+      _ => 'in $days days',
+    };
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -913,12 +888,14 @@ class _MeetHero extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(away.toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.4,
-                      color: theme.colorScheme.primary)),
-              const SizedBox(height: 6),
+              if (away != null) ...[
+                Text(away.toUpperCase(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4,
+                        color: theme.colorScheme.primary)),
+                const SizedBox(height: 6),
+              ],
               Row(
                 children: [
                   Expanded(
@@ -949,52 +926,6 @@ class _MeetHero extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A meet that is not the next one: a date, a name, and where.
-class _MeetLine extends StatelessWidget {
-  const _MeetLine(
-      {required this.meet, required this.onOpen, required this.onDelete});
-
-  final Meet meet;
-  final VoidCallback onOpen;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onOpen,
-      onLongPress: onDelete,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 62,
-              child: Text(shortThrowDate(meet.date),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurfaceVariant)),
-            ),
-            Expanded(
-              child: Text(
-                [
-                  meet.name.isEmpty ? 'Meet' : meet.name,
-                  if (meet.venue.isNotEmpty) meet.venue,
-                ].join(' · '),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            Icon(Icons.chevron_right,
-                size: 18, color: theme.colorScheme.onSurfaceVariant),
-          ],
         ),
       ),
     );

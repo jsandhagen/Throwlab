@@ -558,6 +558,19 @@ void main() {
       expect(MeetSeason(const [], today: today).isEmpty, isTrue);
     });
 
+    test('counts the days to a fixture', () {
+      int away(DateTime date) => daysUntil(date, now: today);
+      expect(away(DateTime(2026, 6, 14)), 1);
+      expect(away(DateTime(2026, 7, 6)), 23);
+      expect(away(today), 0);
+      // Already thrown, counted backwards.
+      expect(away(DateTime(2026, 6, 1)), -12);
+      // Counted between the days, not by the hours: a meet at nine
+      // tomorrow morning is one day off at any time tonight.
+      expect(daysUntil(DateTime(2026, 6, 14, 9), now: DateTime(2026, 6, 13, 23)),
+          1);
+    });
+
     test('says how far off a fixture is', () {
       String? away(DateTime date) => countdownTo(date, now: today);
       expect(away(DateTime(2026, 6, 14)), 'tomorrow');

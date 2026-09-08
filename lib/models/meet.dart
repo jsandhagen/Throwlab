@@ -342,6 +342,13 @@ class MeetSeason {
 DateTime _startOfDay(DateTime when) =>
     DateTime(when.year, when.month, when.day);
 
+/// Whole days from today to [date]: 0 for a meet on today, negative for one
+/// already thrown. Counted between the days rather than by the hours, so a
+/// meet at nine tomorrow morning is one day off at any time tonight.
+int daysUntil(DateTime date, {DateTime? now}) => _startOfDay(date.toLocal())
+    .difference(_startOfDay((now ?? DateTime.now()).toLocal()))
+    .inDays;
+
 /// How far off a meet is, as a coach would say it: 'tomorrow', 'in 5 days',
 /// 'in 3 weeks'. Null for today and for anything already thrown, which the
 /// season says by which heading it puts them under.
@@ -351,9 +358,7 @@ DateTime _startOfDay(DateTime when) =>
 /// read by their dates — the countdown is for the meets close enough to be
 /// packing for.
 String? countdownTo(DateTime date, {DateTime? now}) {
-  final days = _startOfDay(date.toLocal())
-      .difference(_startOfDay((now ?? DateTime.now()).toLocal()))
-      .inDays;
+  final days = daysUntil(date, now: now);
   if (days <= 0 || days > 60) return null;
   if (days == 1) return 'tomorrow';
   if (days < 14) return 'in $days days';

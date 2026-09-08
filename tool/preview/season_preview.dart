@@ -1,5 +1,5 @@
-// Renders the season list three ways so the layouts can be compared side by
-// side — a date rail, a hero for the next fixture, and cards.
+// Renders the season list: the next fixture at full size with the days to
+// it, and the rest of the season ruled off under its heading.
 //
 //   flutter test --update-goldens tool/preview/season_preview.dart
 //
@@ -25,7 +25,7 @@ final _now = DateTime.now();
 DateTime _days(int days) => _now.add(Duration(days: days));
 
 void main() {
-  testWidgets('the season, three ways', (tester) async {
+  testWidgets('the season', (tester) async {
     await loadPreviewFonts();
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
@@ -91,20 +91,17 @@ void main() {
         venue: 'Loughborough'));
     await thrown('past1', 'Jakob Sandhagen', ThrowEvent.shotPut, 5,
         [14.02, 14.55, 0], _days(-26));
-    await thrown('past1', 'Ana Sofia', ThrowEvent.discus, 1,
-        [41.20, 0, 43.06], _days(-26));
+    await thrown('past1', 'Ana Sofia', ThrowEvent.discus, 1, [41.20, 0, 43.06],
+        _days(-26));
 
-    await meets.save(Meet(
-        id: 'today', name: 'Club Open', date: _now, venue: 'Sportcity'));
+    await meets.save(
+        Meet(id: 'today', name: 'Club Open', date: _now, venue: 'Sportcity'));
     await thrown('today', 'Ana Sofia', ThrowEvent.discus, 1, [44.90], _now);
-    await thrown('today', 'Jakob Sandhagen', ThrowEvent.javelin, 0.8,
-        [58.34], _now);
+    await thrown(
+        'today', 'Jakob Sandhagen', ThrowEvent.javelin, 0.8, [58.34], _now);
 
     await meets.save(Meet(
-        id: 'soon',
-        name: 'Spring Open',
-        date: _days(5),
-        venue: 'Sportcity'));
+        id: 'soon', name: 'Spring Open', date: _days(5), venue: 'Sportcity'));
     await meets.save(Meet(
         id: 'champs',
         name: 'County Championships',
@@ -116,22 +113,27 @@ void main() {
         date: DateTime(_now.year + 1, 3, 13),
         venue: 'Auburn, AL'));
 
-    for (final layout in MeetsLayout.values) {
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<VideoLibrary>.value(value: library),
-            ChangeNotifierProvider<MeetLibrary>.value(value: meets),
-          ],
-          child: MaterialApp(
-            theme: ThrowLabApp.theme,
-            home: MeetsScreen(layout: layout),
-          ),
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<VideoLibrary>.value(value: library),
+          ChangeNotifierProvider<MeetLibrary>.value(value: meets),
+        ],
+        child: MaterialApp(
+          theme: ThrowLabApp.theme,
+          home: const MeetsScreen(),
         ),
-      );
-      await settle(tester);
-      await expectLater(find.byType(MaterialApp),
-          matchesGoldenFile('$_out/season_${layout.name}.png'));
-    }
+      ),
+    );
+    await settle(tester);
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('$_out/season_list.png'));
+
+    // And the day nothing is on, which is most of them: the hero is the
+    // next fixture, and it counts the days to it.
+    await meets.remove('today');
+    await settle(tester);
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('$_out/season_next.png'));
   });
 }

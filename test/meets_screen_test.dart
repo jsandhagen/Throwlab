@@ -190,17 +190,46 @@ void main() {
       expect(find.text('PAST'), findsNothing);
     });
 
-    testWidgets('says how far off a fixture is on its card', (tester) async {
+    testWidgets('counts the days to the next fixture on its own card',
+        (tester) async {
       await seedSeason([
         Meet(
-            id: 'u',
+            id: 'soon',
             name: 'Spring Open',
-            date: now.add(const Duration(days: 1)),
+            date: now.add(const Duration(days: 12)),
             venue: 'Sportcity'),
+        Meet(
+            id: 'later',
+            name: 'County Champs',
+            date: now.add(const Duration(days: 40))),
       ]);
       await mountMeets(tester);
-      expect(find.textContaining('tomorrow'), findsOneWidget);
+      // The soonest one is the hero, and it counts in days rather than
+      // rounding to weeks: this is the meet being planned for.
+      expect(find.text('IN 12 DAYS'), findsOneWidget);
       expect(find.textContaining('Sportcity'), findsOneWidget);
+      // The one behind it is a row, not a second hero.
+      expect(find.text('County Champs'), findsOneWidget);
+      expect(find.textContaining('IN '), findsOneWidget);
+    });
+
+    testWidgets('says tomorrow rather than in 1 day', (tester) async {
+      await seedSeason([
+        Meet(
+            id: 'soon',
+            name: 'Spring Open',
+            date: now.add(const Duration(days: 1))),
+      ]);
+      await mountMeets(tester);
+      expect(find.text('TOMORROW'), findsOneWidget);
+    });
+
+    testWidgets("counts nothing on today's meet — the heading said it",
+        (tester) async {
+      await seedSeason([Meet(id: 'now', name: 'Club Open', date: now)]);
+      await mountMeets(tester);
+      expect(find.text('TODAY'), findsOneWidget);
+      expect(find.textContaining('IN '), findsNothing);
     });
   });
 
