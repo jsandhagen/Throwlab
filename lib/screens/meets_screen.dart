@@ -38,7 +38,13 @@ class _MeetsScreenState extends State<MeetsScreen> {
   /// preference about how they think about a season, not about one meet.
   static const _viewKey = 'throwlab.meetsCalendar';
 
+  /// Which headings the coach has folded away. Remembered for the same
+  /// reason the view is: a season somebody reads forwards only wants what
+  /// has already been thrown when they go looking for it.
+  static const _foldedKey = 'throwlab.meetsFolded';
+
   _MeetsView _view = _MeetsView.list;
+  final Set<String> _folded = {};
 
   @override
   void initState() {
@@ -50,11 +56,28 @@ class _MeetsScreenState extends State<MeetsScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
-      if (prefs.getBool(_viewKey) ?? false) {
-        setState(() => _view = _MeetsView.calendar);
-      }
+      final folded = prefs.getStringList(_foldedKey) ?? const <String>[];
+      setState(() {
+        if (prefs.getBool(_viewKey) ?? false) _view = _MeetsView.calendar;
+        _folded
+          ..clear()
+          ..addAll(folded);
+      });
     } catch (_) {
-      // Storage is allowed to fail; the list is a fine place to land.
+      // Storage is allowed to fail; the list is a fine place to land, with
+      // everything open.
+    }
+  }
+
+  Future<void> _fold(String heading) async {
+    setState(() {
+      if (!_folded.remove(heading)) _folded.add(heading);
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_foldedKey, _folded.toList());
+    } catch (_) {
+      // Not worth telling anyone about: the section still folded.
     }
   }
 
@@ -165,8 +188,8 @@ class _MeetsScreenState extends State<MeetsScreen> {
         ..._section(context, meets, library, 'Today', season.today,
             live: true, next: next),
         ..._section(context, meets, library, 'Upcoming', season.upcoming,
-            next: next),
-        ..._section(context, meets, library, 'Past', season.past),
+            next: next, fold: true),
+        ..._section(context, meets, library, 'Past', season.past, fold: true),
       ],
     );
   }
@@ -181,8 +204,18 @@ class _MeetsScreenState extends State<MeetsScreen> {
     List<Meet> section, {
     bool live = false,
     Meet? next,
+    bool fold = false,
   }) {
     if (section.isEmpty) return const [];
+    if (fold && _folded.contains(heading)) {
+      return [
+        _SectionHeading(heading,
+            count: section.length,
+            live: live,
+            folded: true,
+            onFold: () => _fold(heading)),
+      ];
+    }
     // The next fixture is the one being asked about, so it is the size of
     // the question. Everything else in its section carries on below it.
     final hero = section.contains(next) ? next : null;
@@ -191,7 +224,10 @@ class _MeetsScreenState extends State<MeetsScreen> {
         if (meet != hero) meet,
     ];
     return [
-      _SectionHeading(heading, count: section.length, live: live),
+      _SectionHeading(heading,
+          count: section.length,
+          live: live,
+          onFold: fold ? () => _fold(heading) : null),
       if (hero != null) ...[
         _MeetHero(
           meet: hero,
@@ -660,19 +696,31 @@ class _Facts {
 /// a label on a group, not a line of the list, and the two read as the same
 /// weight when both are sentence case.
 class _SectionHeading extends StatelessWidget {
-  const _SectionHeading(this.heading, {required this.count, this.live = false});
+  const _SectionHeading(
+    this.heading, {
+    required this.count,
+    this.live = false,
+    this.folded = false,
+    this.onFold,
+  });
 
   final String heading;
   final int count;
   final bool live;
+  final bool folded;
+
+  /// Null for a heading that doesn't fold. Today's is one meet and the
+  /// reason the screen was opened; there is nothing there to get out of
+  /// the way.
+  final VoidCallback? onFold;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color =
         live ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 18, 6, 8),
+    final row = Padding(
+      padding: EdgeInsets.fromLTRB(6, 18, onFold == null ? 6 : 2, 8),
       child: Row(
         children: [
           if (live) ...[
@@ -685,11 +733,27 @@ class _SectionHeading extends StatelessWidget {
                 fontWeight: FontWeight.w700, letterSpacing: 1.4, color: color),
           ),
           const SizedBox(width: 8),
+          // The count stays up when the section is folded away, so what is
+          // behind the heading is still known without opening it.
           Text('$count',
               style: theme.textTheme.labelMedium
                   ?.copyWith(color: color.withOpacity(0.6))),
+          if (onFold != null) ...[
+            const Spacer(),
+            AnimatedRotation(
+              turns: folded ? -0.25 : 0,
+              duration: const Duration(milliseconds: 150),
+              child: Icon(Icons.expand_more, size: 20, color: color),
+            ),
+          ],
         ],
       ),
+    );
+    if (onFold == null) return row;
+    return InkWell(
+      onTap: onFold,
+      borderRadius: BorderRadius.circular(8),
+      child: row,
     );
   }
 }

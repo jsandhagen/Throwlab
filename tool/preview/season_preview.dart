@@ -135,5 +135,12 @@ void main() {
     await settle(tester);
     await expectLater(
         find.byType(MaterialApp), matchesGoldenFile('$_out/season_next.png'));
+
+    // With what has been thrown folded away, which is how a season looks
+    // to somebody only planning the next one.
+    await tester.tap(find.text('PAST'));
+    await settle(tester);
+    await expectLater(
+        find.byType(MaterialApp), matchesGoldenFile('$_out/season_folded.png'));
   });
 }

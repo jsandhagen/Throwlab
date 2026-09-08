@@ -60,7 +60,8 @@ fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the programme pasted in, the
 events found in it, one opened on its field, and the meet it leaves
 entered — and the season list: the next fixture at full size over the rest
-of it, both on a day with a meet on and on a day without. Open the PNGs to see exactly what the screen paints. **Re-run it
+of it, both on a day with a meet on and on a day without, and with what has been
+thrown folded away. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -151,6 +152,10 @@ like the app rather than a bare Material default.
   says where and how far off for a fixture, and what happened for a meet
   already thrown — `_Facts` reads the entries against the library for the
   athletes, the events and the furthest thrown.
+  Upcoming and Past fold away at their headings, remembered in
+  `throwlab.meetsFolded`, and a folded heading keeps its count so what is
+  behind it is still known. Today never folds — it is one meet, and the
+  reason the screen was opened.
 - Two countdowns, on purpose. `countdownTo` rounds ('in 3 weeks') for a row
   read at a glance, and says nothing about next spring, which is read by
   its date. The hero counts exact days, because that is the meet being

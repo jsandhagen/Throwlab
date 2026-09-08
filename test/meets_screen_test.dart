@@ -224,6 +224,48 @@ void main() {
       expect(find.text('TOMORROW'), findsOneWidget);
     });
 
+    testWidgets('folds a heading away, and remembers it was folded',
+        (tester) async {
+      await seedSeason([
+        Meet(
+            id: 'p',
+            name: 'Winter Open',
+            date: now.subtract(const Duration(days: 21))),
+        Meet(
+            id: 'u',
+            name: 'Spring Open',
+            date: now.add(const Duration(days: 5))),
+      ]);
+      await mountMeets(tester);
+      expect(find.text('Winter Open'), findsOneWidget);
+
+      await tester.tap(find.text('PAST'));
+      await tester.pumpAndSettle();
+      // Folded away, but the heading still says how much is behind it.
+      expect(find.text('Winter Open'), findsNothing);
+      expect(find.text('PAST'), findsOneWidget);
+      expect(find.text('1'), findsWidgets);
+      // What is coming is untouched by folding what is done.
+      expect(find.text('Spring Open'), findsOneWidget);
+
+      // Still folded when the screen comes back.
+      await mountMeets(tester);
+      expect(find.text('Winter Open'), findsNothing);
+
+      await tester.tap(find.text('PAST'));
+      await tester.pumpAndSettle();
+      expect(find.text('Winter Open'), findsOneWidget);
+    });
+
+    testWidgets("today's heading does not fold — it is the one meet",
+        (tester) async {
+      await seedSeason([Meet(id: 'now', name: 'Club Open', date: now)]);
+      await mountMeets(tester);
+      await tester.tap(find.text('TODAY'));
+      await tester.pumpAndSettle();
+      expect(find.text('Club Open'), findsOneWidget);
+    });
+
     testWidgets("counts nothing on today's meet — the heading said it",
         (tester) async {
       await seedSeason([Meet(id: 'now', name: 'Club Open', date: now)]);
