@@ -450,6 +450,10 @@ class _RowDialogState extends State<_RowDialog> {
             ),
             // The line it was read off, so a correction can be checked
             // against what the schedule actually said.
+            const SizedBox(height: 8),
+            Text('On the schedule',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             Text(
               widget.candidate.source,
               style: theme.textTheme.bodySmall

@@ -71,6 +71,15 @@ void main() {
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('$_out/schedule_review.png'));
 
+    // Correcting a row before it becomes a meet — opened on the one the
+    // parser had to guess the year for, with the line it read underneath.
+    await tester.tap(find.byIcon(Icons.edit_outlined).last);
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/schedule_edit.png'));
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+
     // The season it leaves behind: meets with a place and a date, and
     // nobody entered for them yet.
     await tester.tap(find.text('Add 3 meets'));
