@@ -17,6 +17,7 @@ import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
 import '../utils/scrub_shuttle.dart';
+import '../widgets/angular.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/drawing_rail.dart';
@@ -849,8 +850,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Release metrics',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Row(
+                children: [
+                  Text('Release metrics',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(width: 10),
+                  const _BetaBadge(),
+                ],
+              ),
               const SizedBox(height: 12),
               _metricRow(
                   'Release speed', '~${metrics.speed.toStringAsFixed(1)} m/s'),
@@ -869,13 +876,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               ],
               const SizedBox(height: 8),
               Text(
-                ballistic
-                    ? 'Estimates assume a side-on tripod and '
-                        '~${height.toStringAsFixed(1)} m release height.'
-                    : 'Distance prediction is skipped for '
-                        '${event.label.toLowerCase()} — aerodynamic '
-                        'lift/drag isn\'t modeled yet. Estimates assume '
-                        'a side-on tripod.',
+                'Beta. These numbers only hold when the camera is exactly '
+                'side-on — square to the throw, 90° to the direction it '
+                'goes. A few degrees off the line and the speed and angle '
+                'both drift.'
+                '${ballistic ? ' Distance assumes a '
+                    '~${height.toStringAsFixed(1)} m release height.' : ' '
+                    'Distance is left off ${event.label.toLowerCase()} — its '
+                    'aerodynamic lift and drag aren\'t modeled yet.'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
@@ -1070,7 +1078,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         onPressed: _compareWithAnother,
       ),
       IconButton(
-        tooltip: 'Measure release (speed & angles)',
+        tooltip: 'Measure release — speed & angle (beta)',
         icon: const Icon(Icons.speed),
         onPressed: _measureStep == null ? _startMeasure : null,
       ),
@@ -1109,9 +1117,29 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             const SizedBox(width: 8),
             Flexible(
               fit: pill ? FlexFit.loose : FlexFit.tight,
-              child: Text(
-                  _detecting ? 'Finding the javelin…' : _measureInstruction,
-                  style: Theme.of(context).textTheme.bodyMedium),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                      _detecting
+                          ? 'Finding the javelin…'
+                          : _measureInstruction,
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  // Said as the measurement begins: the whole result rests on
+                  // the camera being square to the throw, and this is a beta
+                  // tool that can't tell when it wasn't.
+                  if (!_detecting && _measureStep == _MeasureStep.refA)
+                    Text(
+                      'Beta — needs an exact side-on (90°) camera angle.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSecondaryContainer
+                              .withOpacity(0.75)),
+                    ),
+                ],
+              ),
             ),
             TextButton(
               onPressed: _cancelMeasure,
@@ -1492,4 +1520,31 @@ class _MeasurePainter extends CustomPainter {
       pointA != oldDelegate.pointA ||
       pointB != oldDelegate.pointB ||
       zoomScale != oldDelegate.zoomScale;
+}
+
+/// A small 'BETA' tag for the release-metrics sheet, so the numbers are read
+/// as an estimate a beta tool produced rather than a measurement to trust to
+/// the centimeter.
+class _BetaBadge extends StatelessWidget {
+  const _BetaBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: ShapeDecoration(
+        color: scheme.tertiaryContainer,
+        shape: angularShape(6),
+      ),
+      child: Text(
+        'BETA',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: scheme.onTertiaryContainer,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1,
+            ),
+      ),
+    );
+  }
 }
