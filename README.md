@@ -1,51 +1,93 @@
 # ThrowLab
 
-An Android app for coaching the throws — **shot put, discus, hammer, and
-javelin**. Film a throw on a phone, break it down frame by frame, keep every
-athlete's marks and bests in one place, and run a competition from the ring.
+A coaching app for the throws — **shot put, discus, hammer, and javelin**. It
+started as a way to break a throw down on a phone, and has grown into the
+whole coaching record: every athlete's marks and bests, their training notes,
+and the meets they throw at, all on the one device and all working offline.
 
-It is built to be used at a track, often with no signal: everything works
-offline, and there is no account to make.
+There is no account to make and no signal needed — it is built to be used at a
+track.
 
 > **[⬇ Download ThrowLab.apk — latest build](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk)**
 >
 > [![Latest APK](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fjsandhagen%2FThrowlab%2Freleases%2Flatest&query=%24.name&label=APK&logo=android&color=3ddc84)](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk)
 
-## What it does
+## Break down a throw
 
-**Break down a throw.** Import a clip from the camera roll and scrub it frame
-by frame, from 0.1× to full speed. Step one frame at a time, read the exact
-millisecond, and draw over any frame — freehand, straight lines, or a
-three-point angle with a live degree readout — to mark a position worth
-talking about.
+Import a clip from the camera roll and scrub it frame by frame, from 0.1× to
+full speed. Step a single frame at a time and read the exact millisecond.
 
-**Compare two throws.** Pick any two clips, mark the release on each, and play
-them back in sync — side by side, or one ghosted over the other with the
-opacity you choose. A good day next to a bad one, or this month next to last.
+Draw over any frame — freehand, straight lines, or a three-point angle with a
+live degree readout — to mark a position worth talking about.
 
-**Keep every athlete's record.** Each athlete has a profile: their throws,
-their personal bests, and the marks from meets nobody filmed. A best is kept
-per event *and* per implement weight, so a lighter implement never overwrites
-the mark set with the heavy one. Give an athlete a nickname to show them by,
-and their full name and school so a heat sheet finds them. Distances go in
-meters or feet, whichever you threw in.
+Pick any two throws and play them back in sync: mark the release on each, then
+watch them side by side, or with one ghosted over the other at the opacity you
+choose. A good day next to a bad one, this season next to last.
 
-**Write it down.** Training notes per athlete — session plans, cues that
-worked, pictures of a position to remember — with headings, checklists, and
-formatting, kept alongside their throws.
+## Athlete profiles
 
-**Run the meet.** Build a season as a list or a calendar. A meet holds the
-whole field, tracks the rounds and the cut, works out the standings with a
-countback, and puts every measured attempt straight into the athlete's record.
-Read a meet's program in from a heat sheet and its schedule in from a fixture
-list — paste the text or open the PDF, and pick out the throwing.
+Every athlete has a profile that gathers their whole season: their filmed
+throws, their personal bests, and the marks from meets nobody had a camera up
+for. A best is kept per event **and per implement weight**, so a lighter
+implement never overwrites the mark set with the heavy one — and a throw that
+was only ever written down can hold the record just as a filmed one can.
 
-**Measure the release _(beta)_.** Tag a couple of points on the release frame
-and the app estimates release speed, release angle, and angle of attack — plus
-a predicted distance for the shot and hammer. This is a beta feature and needs
-an **exact side-on camera angle**: the phone square to the throw, 90° to the
-direction it goes. A few degrees off the line and the numbers drift, so read
-them as an estimate, not a measurement.
+Give an athlete a nickname to show them by, and record their full name and
+school so a heat sheet can find them automatically. Distances go in meters or
+feet, whichever they were thrown in — typed either way and converted as you go.
+
+## Training notes
+
+Keep session plans, cues that worked, and pictures of a position to remember —
+written per athlete, alongside their throws. Notes take headings, bullets,
+numbered lists, checklists, and pictures with captions, with bold/italic/
+underline formatting, so a training log reads like one rather than a wall of
+text.
+
+## Meets and the season
+
+Build a season and read it forwards: today's meet, what's coming, and what has
+been thrown — as a list, or as a calendar of the months it falls in.
+
+A meet holds the **whole field**, not just your own athletes. It tracks the
+format (a 3 + 3 is six rounds cut after three), works out the standings per
+event and implement, and breaks ties by countback down the series the way a
+competition does. Enter each round from the ring as it's thrown; a foul or a
+pass is recorded as one.
+
+Every measured attempt becomes a mark in the thrower's record the moment it's
+entered, so a Saturday's competition lands in their personal bests without a
+second step — and a rival's throw, entered against the field but not tracked,
+never turns up as one of your athletes' marks.
+
+## Read a schedule
+
+Rather than typing a season in a meet at a time, paste a fixture list — or open
+the PDF the meet sent — and ThrowLab picks the meets out of it and puts them up
+for approval. Nothing is added until you tick it. Where the text is ambiguous
+(a date with no year, a `4/12` that could go either way) it reads it the most
+likely way and says so on the row, so you can check.
+
+## Read a heat sheet
+
+Read a meet's program the same way: paste it or open the PDF, and the throwing
+events are pulled out — everything else on the afternoon is left alone. Your
+own athletes are matched against the field (by name, or by the full name and
+school on their profile) and **highlighted**, so you can see who's yours in a
+long list at a glance. They come in tracked, under your own spelling of their
+name; the rest of the field comes in as the rest of the field. When a heading
+names a division but no weight, the implement is guessed from it — a boys' shot
+is a 12 lb, a girls' discus is a 1 kg — and flagged so you can confirm.
+
+## Measure the release _(beta)_
+
+Tag a couple of points on the release frame and ThrowLab estimates release
+speed, release angle, and angle of attack — plus a predicted distance for the
+shot and hammer.
+
+This is a beta feature and needs an **exact side-on camera angle**: the phone
+square to the throw, 90° to the direction it goes. A few degrees off the line
+and the numbers drift, so read them as an estimate rather than a measurement.
 
 ## Filming for the app
 
@@ -60,12 +102,12 @@ the app uses that implement's regulated size — the ball's diameter, the
 javelin's length — as the reference to measure against. No markers or extra
 gear to set up.
 
-| Event    | Reference     | Common weights it measures against |
-| -------- | ------------- | ---------------------------------- |
-| Shot Put | Ball diameter | 7.26 kg / 16 lb down to the 3 kg   |
-| Discus   | Disc diameter | 2 kg down to the 1 kg              |
-| Hammer   | Head diameter | 7.26 kg down to the 3 kg           |
-| Javelin  | Length        | 800 g down to the 600 g            |
+| Event    | Reference     | Measured against            |
+| -------- | ------------- | --------------------------- |
+| Shot Put | Ball diameter | 7.26 kg / 16 lb down to 3 kg |
+| Discus   | Disc diameter | 2 kg down to 1 kg           |
+| Hammer   | Head diameter | 7.26 kg down to 3 kg        |
+| Javelin  | Length        | 800 g down to 600 g         |
 
 ## Installing it
 
