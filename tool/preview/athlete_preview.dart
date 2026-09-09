@@ -13,9 +13,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/main.dart';
+import 'package:throwlab/models/athlete_record.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
+import 'package:throwlab/services/athlete_library.dart';
 import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 
@@ -45,25 +47,39 @@ void main() {
     await library.load();
     final notes = NotesLibrary();
     await notes.load();
+    final athletes = AthleteLibrary();
+    await athletes.load();
+    // A nickname to show Adam by, with the full name and school kept for a
+    // heat sheet — so the heading reads 'AJ' and the record line names who.
+    await athletes.save(const AthleteRecord(
+        name: 'Adam',
+        nickname: 'AJ',
+        fullName: 'Adam Okafor',
+        school: 'Central HS'));
 
     // Sessions on one implement, meet marks, and written-up notes.
-    await _shoot(tester, library, notes, 'Anna Sofia', 'athlete_bests');
-    // Two weights at once — each keeps its own mark.
-    await _shoot(tester, library, notes, 'Adam', 'athlete_two_implements');
+    await _shoot(tester, library, notes, athletes, 'Anna Sofia',
+        'athlete_bests');
+    // Two weights at once — each keeps its own mark, under an edited nickname.
+    await _shoot(tester, library, notes, athletes, 'Adam',
+        'athlete_two_implements');
     // A mark entered in feet, which is how it reads back.
-    await _shoot(tester, library, notes, 'Jakob', 'athlete_feet');
+    await _shoot(tester, library, notes, athletes, 'Jakob', 'athlete_feet');
     // A whole season with nothing filmed.
-    await _shoot(tester, library, notes, 'Priya Raman', 'athlete_marks_only');
+    await _shoot(tester, library, notes, athletes, 'Priya Raman',
+        'athlete_marks_only');
   });
 }
 
 Future<void> _shoot(WidgetTester tester, VideoLibrary library,
-    NotesLibrary notes, String name, String file) async {
+    NotesLibrary notes, AthleteLibrary athletes, String name,
+    String file) async {
   await tester.pumpWidget(
     MultiProvider(
       providers: [
         ChangeNotifierProvider<VideoLibrary>.value(value: library),
         ChangeNotifierProvider<NotesLibrary>.value(value: notes),
+        ChangeNotifierProvider<AthleteLibrary>.value(value: athletes),
       ],
       child: MaterialApp(
         theme: ThrowLabApp.theme,

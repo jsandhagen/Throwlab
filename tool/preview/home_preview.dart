@@ -30,6 +30,11 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'flutter.throwlab.videos': jsonEncode(sampleLibrary(thumbs)),
       'flutter.throwlab.marks': jsonEncode(sampleMarks()),
+      // A nickname on one athlete, so the library heading shows it in place
+      // of the name their throws are filed under.
+      'flutter.throwlab.athletes': jsonEncode([
+        {'name': 'Adam', 'nickname': 'AJ', 'school': 'Central HS'},
+      ]),
     });
 
     // A tall phone, the way the app is actually held.

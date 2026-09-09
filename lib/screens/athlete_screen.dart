@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/athlete_profile.dart';
+import '../models/athlete_record.dart';
 import '../models/throw_event.dart';
 import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
 import '../models/training_note.dart';
+import '../services/athlete_library.dart';
 import '../services/notes_library.dart';
 import '../services/video_library.dart';
 import '../widgets/angular.dart';
@@ -49,13 +51,16 @@ class AthleteScreen extends StatelessWidget {
       builder: (context, library, _) {
         final profile = library.profileFor(name);
         final theme = Theme.of(context);
+        // The nickname is what to show; the profile's own spelling stays the
+        // identity every throw is tagged with.
+        final record = athleteRecordsOf(context)?.recordFor(profile.name);
         return Scaffold(
           appBar: AppBar(
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(profile.name),
+                Text(record?.displayName ?? profile.name),
                 Text(
                   _summary(profile),
                   style: theme.textTheme.bodySmall
@@ -64,6 +69,11 @@ class AthleteScreen extends StatelessWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Edit athlete',
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () => _editAthlete(context, profile.name, record),
+              ),
               IconButton(
                 tooltip: 'Record a mark',
                 icon: const Icon(Icons.emoji_events_outlined),
@@ -112,10 +122,31 @@ class AthleteScreen extends StatelessWidget {
     if (mark != null) await library.addMark(mark);
   }
 
+  /// Opens the record editor and stores whatever comes back. The library
+  /// spelling stays the athlete's identity — only the nickname, full name
+  /// and school are the coach's to set.
+  Future<void> _editAthlete(
+      BuildContext context, String athlete, AthleteRecord? existing) async {
+    final records = athleteRecordsOf(context, listen: false);
+    if (records == null) return;
+    final edited = await showDialog<AthleteRecord>(
+      context: context,
+      builder: (context) => _AthleteEditDialog(
+        record: existing ?? AthleteRecord(name: athlete),
+      ),
+    );
+    if (edited != null) await records.save(edited);
+  }
+
   Widget _body(
       BuildContext context, VideoLibrary library, AthleteProfile profile) {
+    final record = athleteRecordsOf(context)?.recordFor(profile.name);
     return CustomScrollView(
       slivers: [
+        if (record != null && !record.isEmpty)
+          SliverToBoxAdapter(
+            child: _IdentityLine(record: record, filedAs: profile.name),
+          ),
         const SliverToBoxAdapter(child: _SectionHeading('Personal bests')),
         if (profile.bests.isEmpty)
           SliverToBoxAdapter(
@@ -692,6 +723,144 @@ class _NoThrows extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ),
+    );
+  }
+}
+
+/// The record under the name: the full name and school a coach filled in,
+/// shown when they gave one so the heading's nickname still says who it is.
+class _IdentityLine extends StatelessWidget {
+  const _IdentityLine({required this.record, required this.filedAs});
+
+  final AthleteRecord record;
+
+  /// The library spelling, worth showing beside a nickname so the person
+  /// tagging a clip knows which name the throws carry.
+  final String filedAs;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // The full name is only news when it isn't already what the heading
+    // shows; the same goes for a nickname sitting over the filed spelling.
+    final shown = record.displayName;
+    final parts = <String>[
+      if (record.fullName.isNotEmpty && record.fullName != shown)
+        record.fullName,
+      if (record.school.isNotEmpty) record.school,
+      if (record.nickname.trim().isNotEmpty && filedAs != shown)
+        'filed as $filedAs',
+    ];
+    if (parts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        children: [
+          Icon(Icons.badge_outlined,
+              size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              parts.join(' · '),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Editing what a coach knows about an athlete that no throw records: a
+/// nickname to show them by, and the full name and school a heat sheet is
+/// matched against.
+class _AthleteEditDialog extends StatefulWidget {
+  const _AthleteEditDialog({required this.record});
+
+  final AthleteRecord record;
+
+  @override
+  State<_AthleteEditDialog> createState() => _AthleteEditDialogState();
+}
+
+class _AthleteEditDialogState extends State<_AthleteEditDialog> {
+  late final TextEditingController _nickname =
+      TextEditingController(text: widget.record.nickname);
+  late final TextEditingController _fullName =
+      TextEditingController(text: widget.record.fullName);
+  late final TextEditingController _school =
+      TextEditingController(text: widget.record.school);
+
+  @override
+  void dispose() {
+    _nickname.dispose();
+    _fullName.dispose();
+    _school.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit athlete'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Filed as ${widget.record.name}. The throws stay tagged with '
+              'that; a nickname only changes what is shown.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _nickname,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Nickname',
+                helperText: 'Shown instead of the filed name',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _fullName,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Full name',
+                helperText: 'How a meet program prints them',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _school,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'School or club',
+                helperText: 'Used to find them on a heat sheet',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(
+            context,
+            widget.record.copyWith(
+              nickname: _nickname.text.trim(),
+              fullName: _fullName.text.trim(),
+              school: _school.text.trim(),
+            ),
+          ),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

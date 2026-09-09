@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/meet.dart';
 import '../models/throw_event.dart';
+import '../services/athlete_library.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../utils/heat_sheet_parser.dart';
@@ -88,7 +89,18 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
   }
 
   void _read() {
-    final known = context.read<VideoLibrary>().knownAthletes;
+    // The coach's athletes, each with whatever full name and school their
+    // record holds — so a program that prints someone's full name links
+    // them even when the library knows them by a nickname no sheet would use.
+    final records = athleteRecordsOf(context, listen: false);
+    final known = [
+      for (final name in context.read<VideoLibrary>().knownAthletes)
+        KnownAthlete(
+          name: name,
+          fullName: records?.recordFor(name)?.fullName ?? '',
+          school: records?.recordFor(name)?.school ?? '',
+        ),
+    ];
     final found = parseHeatSheet(_text.text);
     final rows = [
       for (final event in found)
@@ -96,7 +108,8 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
           event,
           [
             for (final athlete in event.athletes)
-              _AthleteRow(athlete, matchKnown(athlete.name, known)),
+              _AthleteRow(
+                  athlete, matchAthlete(athlete.name, athlete.team, known)),
           ],
         ),
     ];
@@ -371,32 +384,49 @@ class _EventCard extends StatelessWidget {
             ),
           ),
           for (final athlete in row.athletes)
-            CheckboxListTile(
-              dense: true,
-              value: athlete.chosen,
-              onChanged: (value) => onAthlete(athlete, value ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(athlete.known ?? athlete.athlete.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: athlete.known != null
-                          ? FontWeight.w600
-                          : FontWeight.w400)),
-              subtitle: Text(
-                [
-                  if (athlete.athlete.team.isNotEmpty) athlete.athlete.team,
-                  if (athlete.athlete.seed.isNotEmpty)
-                    'seed ${athlete.athlete.seed}',
-                ].join(' · '),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-              secondary: athlete.known == null
-                  ? null
-                  : Tooltip(
-                      message: 'One of your athletes',
-                      child: Icon(Icons.person,
-                          size: 18, color: theme.colorScheme.primary),
+            // One of the coach's own is tinted and struck down its leading
+            // edge, so a long field can be skimmed for them without reading
+            // every name — which is the whole reason a heat sheet is imported.
+            DecoratedBox(
+              decoration: athlete.known == null
+                  ? const BoxDecoration()
+                  : BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.12),
+                      border: Border(
+                        left: BorderSide(
+                            color: theme.colorScheme.primary, width: 3),
+                      ),
                     ),
+              child: CheckboxListTile(
+                dense: true,
+                value: athlete.chosen,
+                onChanged: (value) => onAthlete(athlete, value ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(athlete.known ?? athlete.athlete.name,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: athlete.known != null
+                            ? FontWeight.w600
+                            : FontWeight.w400)),
+                subtitle: Text(
+                  [
+                    if (athlete.known != null) 'Your athlete',
+                    if (athlete.athlete.team.isNotEmpty) athlete.athlete.team,
+                    if (athlete.athlete.seed.isNotEmpty)
+                      'seed ${athlete.athlete.seed}',
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: athlete.known != null
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant),
+                ),
+                secondary: athlete.known == null
+                    ? null
+                    : Tooltip(
+                        message: 'One of your athletes',
+                        child: Icon(Icons.person,
+                            size: 18, color: theme.colorScheme.primary),
+                      ),
+              ),
             ),
           const SizedBox(height: 8),
         ],

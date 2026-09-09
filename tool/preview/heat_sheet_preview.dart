@@ -15,8 +15,10 @@ import 'package:throwlab/main.dart';
 import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
+import 'package:throwlab/models/athlete_record.dart';
 import 'package:throwlab/screens/heat_sheet_import_screen.dart';
 import 'package:throwlab/screens/meet_screen.dart';
+import 'package:throwlab/services/athlete_library.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/video_library.dart';
 
@@ -86,12 +88,27 @@ void main() {
         achievedOn: DateTime(2026, 5, 2),
       ));
     }
+    // Another of theirs, filed under a nickname a sheet would never print —
+    // matched off the full name and school on their record instead.
+    await library.addMark(ThrowMark(
+      id: 'm${id++}',
+      athlete: 'Dave',
+      event: ThrowEvent.shotPut,
+      implementKg: 5,
+      distance: 15.2,
+      achievedOn: DateTime(2026, 5, 2),
+    ));
+    final athletes = AthleteLibrary();
+    await athletes.load();
+    await athletes.save(const AthleteRecord(
+        name: 'Dave', fullName: 'David Okonkwo', school: 'Eastside'));
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<VideoLibrary>.value(value: library),
           ChangeNotifierProvider<MeetLibrary>.value(value: meets),
+          ChangeNotifierProvider<AthleteLibrary>.value(value: athletes),
         ],
         child: MaterialApp(
           theme: ThrowLabApp.theme,
