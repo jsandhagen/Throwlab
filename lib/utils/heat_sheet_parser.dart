@@ -92,6 +92,12 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
   _Heading? open;
   var athletes = <HeatSheetAthlete>[];
 
+  // Whether this field's rows carry a place or lane number in front of the
+  // name. Once one has, a line without one is the page turning under the
+  // field — the meet's name and the date printed again at the top of the
+  // next one — and not a competitor.
+  bool? numbered;
+
   void close() {
     final heading = open;
     if (heading?.event != null && athletes.isNotEmpty) {
@@ -105,6 +111,7 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
     }
     open = null;
     athletes = <HeatSheetAthlete>[];
+    numbered = null;
   }
 
   for (final line in lines) {
@@ -121,8 +128,10 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
     }
 
     if (open == null || _isFurniture(line)) continue;
+    if (numbered == true && !_leadingPlace.hasMatch(line)) continue;
     final athlete = _athlete(line);
     if (athlete != null && athletes.length < _maxField) {
+      numbered ??= _leadingPlace.hasMatch(line);
       athletes.add(athlete);
     }
   }
@@ -162,7 +171,7 @@ final _furniture = RegExp(
     r'^\s*name\b|'
     r'\bseed\s+mark\b|'
     r'^\s*\d+\s*$|'
-    r'^\s*page\s+\d+',
+    r'^\s*page\s+\d+|\bpage\s+\d+(\s+of\s+\d+)?\s*$',
     caseSensitive: false);
 
 bool _isFurniture(String line) =>

@@ -281,7 +281,12 @@ class _Page {
   _Page(this.fonts);
 
   final Map<String, _FontMap> fonts;
-  final StringBuffer _line = StringBuffer();
+
+  /// The line being built up, as the pieces of text that landed on it —
+  /// kept apart until the line ends, because a generator is free to lay a
+  /// row down in any order it likes and only where each piece sits says
+  /// what order it reads in.
+  final List<_Run> _runs = [];
   final List<String> _lines = [];
 
   _FontMap? _font;
@@ -295,10 +300,9 @@ class _Page {
   double _lineX = 0;
   double _lineY = 0;
 
-  /// Where the last glyph left off, which is what says whether the next
-  /// one is beside it, a column over, or on the line below. A page that
-  /// has had nothing written on it yet has nowhere to measure from.
-  double _lastX = 0;
+  /// Which line the last glyph went on, which is what says whether the
+  /// next one is on it too. A page that has had nothing written on it yet
+  /// has nowhere to measure from.
   double _lastY = 0;
   bool _written = false;
 
@@ -422,31 +426,50 @@ class _Page {
     _y = y;
   }
 
-  /// The line break, column rule or space that the gap between the last
-  /// glyph and the pen calls for.
-  void _separate() {
-    if (!_written) return;
-    final em = _em;
-    if ((_y - _lastY).abs() > _lineGap * em) {
-      _break();
-    } else if (_x - _lastX > _columnGap * em) {
-      // Text jumped along the same line: a column rule, in the only terms
-      // a plain-text schedule has for one.
-      _space();
-      _space();
-    } else if (_x - _lastX > _wordGap * em) {
-      _space();
-    }
-  }
+  /// Whether the pen has moved far enough down or up the page to have left
+  /// the line the last glyph was on.
+  bool get _newLine => _written && (_y - _lastY).abs() > _lineGap * _em;
 
-  void _space() {
-    if (_line.isNotEmpty && !_line.toString().endsWith('  ')) _line.write(' ');
-  }
-
+  /// The line, read left to right, however it was written.
+  ///
+  /// A meet program lays a row down a cell at a time in whatever order its
+  /// report was built — the team, then the name to the left of it, then the
+  /// position number to the left of that — so the order the pieces arrive
+  /// in is not the order they are read in. Where each one landed is, and
+  /// the gap between one and the next is what says whether they are a
+  /// column apart, a word apart, or the same word.
   void _break() {
-    final line = _line.toString().trimRight();
-    if (line.isNotEmpty) _lines.add(line);
-    _line.clear();
+    final order = List<int>.generate(_runs.length, (index) => index);
+    // Sorting is not stable, so two pieces starting at the same place fall
+    // back to the order they were written in.
+    order.sort((a, b) {
+      final across = _runs[a].start.compareTo(_runs[b].start);
+      return across != 0 ? across : a.compareTo(b);
+    });
+
+    final line = StringBuffer();
+    double? pen;
+    for (final index in order) {
+      final run = _runs[index];
+      if (pen != null) {
+        final gap = run.start - pen;
+        if (gap > _columnGap * run.em) {
+          // A column rule, in the only terms plain text has for one.
+          line.write('  ');
+        } else if (gap > _wordGap * run.em) {
+          line.write(' ');
+        }
+      }
+      line.write(run.text);
+      // Two pieces that overlap leave the pen wherever the further one
+      // ended, so the gap to the next is measured from the right edge of
+      // everything written so far.
+      pen = pen == null || run.end > pen ? run.end : pen;
+    }
+    _runs.clear();
+
+    final text = line.toString().trimRight();
+    if (text.isNotEmpty) _lines.add(text);
   }
 
   void _write(_Str text) {
@@ -480,8 +503,8 @@ class _Page {
     }
 
     if (kept > 0) {
-      _separate();
-      _line.write(glyphs);
+      if (_newLine) _break();
+      _runs.add(_Run(_x, _x + advance * _em, _em, glyphs.toString()));
     }
     _kept += kept;
     _dropped += dropped;
@@ -489,7 +512,6 @@ class _Page {
     // to whatever comes next is measured from.
     _x += advance * _em;
     if (kept > 0) {
-      _lastX = _x;
       _lastY = _y;
       _written = true;
     }
@@ -501,6 +523,20 @@ class _Page {
     final text = _lines.join('\n');
     return text.trim().isEmpty ? null : text;
   }
+}
+
+/// A piece of text on a line, and the stretch of the line it covers.
+class _Run {
+  const _Run(this.start, this.end, this.em, this.text);
+
+  final double start;
+  final double end;
+
+  /// The size the text was set at, which is what the gap either side of it
+  /// is measured against.
+  final double em;
+
+  final String text;
 }
 
 class _Name {

@@ -91,6 +91,16 @@ void main() {
     expect(text, 'March 25  League Meet\nMarch 28  Patriot Invitational');
   });
 
+  test('reads a row a report laid down right to left', () {
+    // What a meet manager's report writer prints: the team, then the name
+    // to the left of it, then the position number to the left of that. The
+    // order the cells arrive in is not the order they are read in — only
+    // where each one landed says that.
+    final text = pdfText(onePage('BT /F1 8 Tf 453 700 Td (Concordia) Tj ET '
+        'BT /F1 8 Tf 334 700 Td (Koch, Josh) Tj -14 0 Td (1) Tj ET'));
+    expect(text, '1  Koch, Josh  Concordia');
+  });
+
   test('reads type set as one unit blown up by the text matrix', () {
     // A generator is free to draw 12pt type as one unit scaled seventy-five
     // times, and the gap that makes a column has to grow with it.

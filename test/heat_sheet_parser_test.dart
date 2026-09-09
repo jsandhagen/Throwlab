@@ -149,6 +149,28 @@ void main() {
     });
   });
 
+  group('a page turning under a field', () {
+    // What a meet program prints across a page break: the meet's masthead
+    // again, in the middle of a flight, with the rest of the field under
+    // it.
+    final found = parseHeatSheet('''
+Event 36 Men Shot Put
+Flight   1 of  1   Finals
+  1  Koch, Josh  Concordia
+  2  Jensen, Connor  Concordia
+Washington Track Events LLC  Hy-Tek's MEET MANAGER  7:05 PM  Page 9
+Portland Twilight
+Portland, OR
+Meet Program
+  3  Mitchell, Cody  Linfield
+''').single;
+
+    test('is not three more competitors', () {
+      expect(found.athletes.map((a) => a.name),
+          ['Josh Koch', 'Connor Jensen', 'Cody Mitchell']);
+    });
+  });
+
   group('what it will not read', () {
     test('a page with no events on it', () {
       expect(parseHeatSheet('Squad list\nBring your own implements'), isEmpty);
