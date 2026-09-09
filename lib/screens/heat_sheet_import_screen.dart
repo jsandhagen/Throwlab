@@ -387,46 +387,50 @@ class _EventCard extends StatelessWidget {
             // One of the coach's own is tinted and struck down its leading
             // edge, so a long field can be skimmed for them without reading
             // every name — which is the whole reason a heat sheet is imported.
-            DecoratedBox(
-              decoration: athlete.known == null
-                  ? const BoxDecoration()
-                  : BoxDecoration(
-                      color: theme.colorScheme.primary.withOpacity(0.12),
-                      border: Border(
-                        left: BorderSide(
-                            color: theme.colorScheme.primary, width: 3),
-                      ),
+            //
+            // The tint and the edge are the tile's own `tileColor` and
+            // `shape` rather than a box wrapped around it: a ListTile paints
+            // its background on the nearest Material ancestor, so a
+            // decorated box in between would cover both that and the ink
+            // splash — which Flutter asserts on.
+            CheckboxListTile(
+              dense: true,
+              tileColor: athlete.known == null
+                  ? null
+                  : theme.colorScheme.primary.withOpacity(0.12),
+              shape: athlete.known == null
+                  ? null
+                  : Border(
+                      left: BorderSide(
+                          color: theme.colorScheme.primary, width: 3),
                     ),
-              child: CheckboxListTile(
-                dense: true,
-                value: athlete.chosen,
-                onChanged: (value) => onAthlete(athlete, value ?? false),
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(athlete.known ?? athlete.athlete.name,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: athlete.known != null
-                            ? FontWeight.w600
-                            : FontWeight.w400)),
-                subtitle: Text(
-                  [
-                    if (athlete.known != null) 'Your athlete',
-                    if (athlete.athlete.team.isNotEmpty) athlete.athlete.team,
-                    if (athlete.athlete.seed.isNotEmpty)
-                      'seed ${athlete.athlete.seed}',
-                  ].join(' · '),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                      color: athlete.known != null
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant),
-                ),
-                secondary: athlete.known == null
-                    ? null
-                    : Tooltip(
-                        message: 'One of your athletes',
-                        child: Icon(Icons.person,
-                            size: 18, color: theme.colorScheme.primary),
-                      ),
+              value: athlete.chosen,
+              onChanged: (value) => onAthlete(athlete, value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(athlete.known ?? athlete.athlete.name,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: athlete.known != null
+                          ? FontWeight.w600
+                          : FontWeight.w400)),
+              subtitle: Text(
+                [
+                  if (athlete.known != null) 'Your athlete',
+                  if (athlete.athlete.team.isNotEmpty) athlete.athlete.team,
+                  if (athlete.athlete.seed.isNotEmpty)
+                    'seed ${athlete.athlete.seed}',
+                ].join(' · '),
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: athlete.known != null
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant),
               ),
+              secondary: athlete.known == null
+                  ? null
+                  : Tooltip(
+                      message: 'One of your athletes',
+                      child: Icon(Icons.person,
+                          size: 18, color: theme.colorScheme.primary),
+                    ),
             ),
           const SizedBox(height: 8),
         ],
