@@ -6,10 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:throwlab/models/athlete_record.dart';
 import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/screens/heat_sheet_import_screen.dart';
+import 'package:throwlab/services/athlete_library.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/video_library.dart';
 
@@ -18,6 +20,7 @@ import 'package:throwlab/services/video_library.dart';
 void main() {
   late MeetLibrary meets;
   late VideoLibrary library;
+  late AthleteLibrary athletes;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -25,6 +28,8 @@ void main() {
     await meets.load();
     library = VideoLibrary();
     await library.load();
+    athletes = AthleteLibrary();
+    await athletes.load();
     await meets.save(
         Meet(id: 'k1', name: 'County Champs', date: DateTime(2026, 6, 13)));
     // One of the coach's own, known to the library from a mark.
@@ -58,6 +63,7 @@ Event 16  Girls Discus
       providers: [
         ChangeNotifierProvider<MeetLibrary>.value(value: meets),
         ChangeNotifierProvider<VideoLibrary>.value(value: library),
+        ChangeNotifierProvider<AthleteLibrary>.value(value: athletes),
       ],
       child: const MaterialApp(home: Scaffold(body: SizedBox.shrink())),
     ));
@@ -151,6 +157,37 @@ Event 16  Girls Discus
     await paste(tester, sheet);
     // Jakob is already down for it, so only the rival is left to enter.
     expect(find.text('Enter 1 athlete'), findsOneWidget);
+  });
+
+  testWidgets('links an athlete by the full name and school on their record',
+      (tester) async {
+    // Known to the library only as 'Bud' — a nickname no program prints —
+    // but with the full name and school filled in on the record.
+    await library.addMark(ThrowMark(
+      id: 'm2',
+      athlete: 'Bud',
+      event: ThrowEvent.shotPut,
+      implementKg: 5.44,
+      distance: 15.0,
+      achievedOn: DateTime(2026, 5, 1),
+    ));
+    await athletes.save(const AthleteRecord(
+        name: 'Bud', fullName: 'Robert Fischer', school: 'Central HS'));
+    await open(tester);
+    await paste(
+        tester,
+        'Event 15  Boys Shot Put 12lb\n'
+        '=====\n'
+        '  1 Fischer, Robert            12 Central HS            48-00.00\n');
+    // Jakob (from a mark) and now Bud, matched off his record, are both mine.
+    expect(find.textContaining('1 of mine'), findsOneWidget);
+    await tester.tap(find.text('Enter 1 athlete'));
+    await tester.pumpAndSettle();
+    // Filed under the library spelling, tracked, so his throw reaches his
+    // own record book rather than starting a second athlete.
+    final entry = meets.byId('k1')!.entries.single;
+    expect(entry.athlete, 'Bud');
+    expect(entry.tracked, isTrue);
   });
 
   testWidgets('says when a weight had to be guessed', (tester) async {

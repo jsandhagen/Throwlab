@@ -7,8 +7,8 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `TrainingNote`, `Meet` (a competition and its series) |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series) |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), and `pdf_text` to get the words out of either as a PDF |
@@ -131,6 +131,26 @@ like the app rather than a bare Material default.
   throws hold no marks: "Unassigned" is not a person. An athlete's heading
   in the library opens `AthleteScreen` — their bests, notes, marks and
   throws — while an event or a date opens the plain `GroupScreen` grid.
+- An `AthleteProfile` is *derived* from the throws — there is nothing stored
+  to edit. What a coach fills in that no throw carries lives in an
+  `AthleteRecord` in `AthleteLibrary` instead: a nickname, a full name and a
+  school. The record is keyed to the athlete by their library spelling (the
+  athlete tag every throw already holds) and never renames it, so a nickname
+  is a label over the identity rather than a new one — retagging a clip can't
+  orphan the record. Screens resolve what to show through
+  `AthleteLibrary.displayName` (the `displayNameOf`/`athleteRecordsOf`
+  helpers look the service up softly, so a screen mounted in a test without
+  it still paints under the plain spelling). The full name and school are
+  what `heat_sheet_parser.matchAthlete` links a program's entry against, so
+  an athlete filed under a nickname a sheet would never print is still found
+  on one — by the full name, or by the same surname at the same school.
+- A heat sheet heading that names a division but no weight is guessed at in
+  `heat_sheet_parser`: a bare 'Men'/'Women' is the senior implement, and
+  'Boys'/'Girls'/'High School'/U18-and-under is the U.S. school one — the
+  12 lb shot and 1.6 kg discus for the boys, the same 4 kg / 1 kg as the
+  women for the girls, the 800 g javelin for both. The screen still says the
+  weight was guessed, because a division is not a spec and a best is per
+  weight.
 - Bests are scored over `ThrowResult`, which a clip (`ThrowVideo`) and a
   typed-in mark (`ThrowMark`) both implement — most of what an athlete
   throws is measured at a meet nobody filmed, and a record book that

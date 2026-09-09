@@ -90,9 +90,19 @@ void main() {
       expect(girls.implementKg, 1);
       expect(girls.weightGuessed, isTrue);
 
-      final boys = one('Event 17 Boys Discus');
-      expect(boys.implementKg, 2);
-      expect(boys.weightGuessed, isTrue);
+      // Boys is a high-school division, so an unweighted heading is read as
+      // the U.S. school implements — the 1.6 kg discus and the 12 lb shot —
+      // rather than the senior men's.
+      final boysDiscus = one('Event 17 Boys Discus');
+      expect(boysDiscus.implementKg, 1.6);
+      expect(boysDiscus.weightGuessed, isTrue);
+
+      final boysShot = one('Event 18 Boys Shot Put');
+      expect(boysShot.implementKg, 5.44);
+
+      // A senior heading still gets the senior weight.
+      expect(one('Event 19 Mens Shot Put').implementKg, 7.26);
+      expect(one('Event 20 Mens Discus').implementKg, 2);
     });
 
     test('reads a shot put as a shot put, not as a shot', () {
@@ -146,6 +156,51 @@ void main() {
       expect(matchKnown('J Sandhagen', ['Ana Diaz', 'Jakob Sandhagen']),
           'Jakob Sandhagen');
       expect(matchKnown('M Okoye', ['Ana Diaz']), isNull);
+    });
+  });
+
+  group('matching on a record', () {
+    // The coach knows this athlete by a nickname no program would print, but
+    // has filled in the full name and school off one.
+    const bud = KnownAthlete(
+        name: 'Bud', fullName: 'Robert Fischer', school: 'Central HS');
+
+    // The names come in as the parser hands them over — first name first,
+    // however the sheet wrote them round.
+    test('finds a full name the library spelling could never reach', () {
+      expect(matchAthlete('Robert Fischer', 'Central HS', [bud]), 'Bud');
+      expect(matchAthlete('R Fischer', 'Central', [bud]), 'Bud');
+    });
+
+    test('takes a same-surname athlete at the same school', () {
+      // The sheet prints 'Bobby', which is neither the nickname nor the full
+      // first name — the school is what makes the surname match safe.
+      expect(matchAthlete('Bobby Fischer', 'Central High School', [bud]),
+          'Bud');
+    });
+
+    test('will not link a shared surname at a different school', () {
+      expect(matchAthlete('Bobby Fischer', 'Northside', [bud]), isNull);
+    });
+
+    test('still takes a plain name match with no record filled in', () {
+      const plain = KnownAthlete(name: 'Ana Diaz');
+      expect(matchAthlete('Ana Diaz', 'Barnet', [plain]), 'Ana Diaz');
+      expect(matchAthlete('M Okoye', 'Barnet', [plain]), isNull);
+    });
+  });
+
+  group('reading a school two ways', () {
+    test('sees past the kind-of-school words', () {
+      expect(sameSchool('Central HS', 'Central High School'), isTrue);
+      expect(sameSchool('Central', 'Central HS'), isTrue);
+      expect(sameSchool('St. Mary Academy', 'St Mary'), isTrue);
+    });
+
+    test('keeps two different schools apart', () {
+      expect(sameSchool('Central HS', 'Northside HS'), isFalse);
+      // Two bare kind-words are not a school in common.
+      expect(sameSchool('High School', 'Track Club'), isFalse);
     });
   });
 

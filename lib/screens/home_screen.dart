@@ -9,6 +9,7 @@ import '../models/meet.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/app_updater.dart';
+import '../services/athlete_library.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
@@ -343,23 +344,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return videos;
     return videos.where((video) {
-      final haystack = '${video.athlete} ${video.event.label} '
+      final haystack = '${video.athlete} ${_athleteLabel(video.athlete)} '
+          '${video.event.label} '
           '${video.implementSpec.weightLabel} ${video.note}';
       return haystack.toLowerCase().contains(query);
     }).toList()
       ..sort((a, b) => b.displayDate.compareTo(a.displayDate));
   }
 
+  /// What to show for an athlete: their nickname when they have one, else
+  /// the name their throws are filed under. Unassigned is not a person, so
+  /// it is left alone.
+  String _athleteLabel(String athlete) => athlete.isEmpty
+      ? _unassigned
+      : displayNameOf(context, athlete, listen: false);
+
+  /// What to show for a heading, which is only an athlete under that
+  /// grouping — an event or a date is its own label.
+  String _headingLabel(String heading) =>
+      _grouping == LibraryGrouping.athlete && heading != _unassigned
+          ? displayNameOf(context, heading, listen: false)
+          : heading;
+
   /// What a card says about a throw, given what its heading already said.
   String _cardTitle(ThrowVideo video) => switch (_grouping) {
         LibraryGrouping.athlete =>
           '${video.event.label} · ${video.implementSpec.weightLabel}',
         LibraryGrouping.event =>
-          '${video.athlete.isEmpty ? _unassigned : video.athlete} '
+          '${_athleteLabel(video.athlete)} '
               '· ${video.implementSpec.weightLabel}',
         LibraryGrouping.date =>
-          '${video.athlete.isEmpty ? _unassigned : video.athlete} '
-              '· ${video.event.label}',
+          '${_athleteLabel(video.athlete)} · ${video.event.label}',
       };
 
   void _openThrow(ThrowVideo video, List<ThrowVideo> siblings) {
@@ -394,6 +409,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribe to the records so a nickname edited on a profile redraws the
+    // headings here. Absent in a bare test mount, which is why it is soft.
+    athleteRecordsOf(context);
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -553,8 +571,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return const [];
     return [
+      // Match the nickname too — someone searching "Bud" is looking for the
+      // Robert filed under it, and the chip they want should still turn up.
       for (final name in library.knownAthletes)
-        if (name.toLowerCase().contains(query)) name,
+        if (name.toLowerCase().contains(query) ||
+            _athleteLabel(name).toLowerCase().contains(query))
+          name,
     ];
   }
 
@@ -600,8 +622,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           video: video,
           // A search crosses headings, so the card has to say whose it is
           // whichever grouping is selected.
-          title: '${video.athlete.isEmpty ? _unassigned : video.athlete} '
-              '· ${video.event.label}',
+          title: '${_athleteLabel(video.athlete)} · ${video.event.label}',
           isPersonalBest: library.isPersonalBest(video),
           onTap: () => _openThrow(video, matches),
           onLongPress: () => showThrowActions(context, video),
@@ -619,7 +640,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         for (final name in names)
           ActionChip(
             avatar: const Icon(Icons.person_outline, size: 18),
-            label: Text(name),
+            label: Text(_athleteLabel(name)),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
@@ -667,7 +688,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(heading,
+                      Text(_headingLabel(heading),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium
@@ -786,8 +807,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       return '$count · ${shortThrowDate(videos.first.displayDate)}';
     }
     final names = {
-      for (final video in videos)
-        video.athlete.isEmpty ? _unassigned : video.athlete
+      for (final video in videos) _athleteLabel(video.athlete)
     }.toList();
     return names.length > 2
         ? '$count · ${names.take(2).join(', ')} +${names.length - 2}'
@@ -837,7 +857,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       radius: 18,
       backgroundColor: scheme.primaryContainer,
       child: Text(
-        _initials(heading),
+        _initials(_headingLabel(heading)),
         style: TextStyle(
             color: scheme.onPrimaryContainer,
             fontWeight: FontWeight.w700,

@@ -268,23 +268,44 @@ double _snap(double kg, ThrowEvent event) => event.specFor(kg).weightKg;
 final _womens = RegExp(r"\b(women|woman|girls?|female|ladies|w)\b'?s?",
     caseSensitive: false);
 
+/// A high-school division, which throws a lighter implement than the senior
+/// one a bare 'Men'/'Women' heading means. 'Boys' and 'Girls' are the words
+/// a U.S. sheet uses for it; 'High School' and the U18-and-under age groups
+/// land on the same weight. A bare 'HS' is deliberately not here — it turns
+/// up in a host school's name often enough to mis-weight a senior heading.
+final _highSchool = RegExp(
+    r'\b(boys?|girls?|high\s*school|u1[0-8]|under[-\s]*1[0-8])\b',
+    caseSensitive: false);
+
 /// What a division throws, for a sheet that didn't say.
 ///
-/// Only two guesses are worth making — the senior men's implement and the
-/// senior women's — because those are the two a heading names by division
-/// rather than by weight. Anything else is a number the coach has to set,
-/// and the screen says the weight was guessed so they know to look.
+/// A heading names a division rather than a weight often enough that a
+/// guess beats leaving it blank — but the guess is only as good as the two
+/// axes a division word carries: senior or school, and men or women. The
+/// screen still says the weight was guessed, because a division heading is
+/// not a spec and a best is per weight.
+///
+/// The school implements are the U.S. high-school ones: the boys' 12 lb shot
+/// and 1.6 kg discus, both their own weight rather than a rounded senior
+/// shell (see [ImplementSpec]). Girls throw the 4 kg shot and 1 kg discus
+/// that are also the senior women's, so only the boys' side needs the split.
+/// Javelin is the 800 g for men and boys alike, which is why it doesn't.
 double _defaultWeight(String line, ThrowEvent event) {
-  if (!_womens.hasMatch(line)) return event.defaultImplement.weightKg;
+  final women = _womens.hasMatch(line);
+  final school = _highSchool.hasMatch(line);
   switch (event) {
     case ThrowEvent.shotPut:
-      return 4;
+      if (women) return 4;
+      return school ? 5.44 : 7.26;
     case ThrowEvent.discus:
-      return 1;
+      if (women) return 1;
+      return school ? 1.6 : 2;
     case ThrowEvent.hammer:
-      return 4;
+      // Not a high-school event, so no school weight to guess: senior men's
+      // or senior women's is the most a bare division heading can say.
+      return women ? 4 : 7.26;
     case ThrowEvent.javelin:
-      return 0.6;
+      return women ? 0.6 : 0.8;
   }
 }
 
@@ -406,3 +427,87 @@ String? matchKnown(String sheet, List<String> known) {
   }
   return null;
 }
+
+/// One of the coach's athletes, as much of them as helps place a name on a
+/// sheet: the library spelling to file them under, and the full name and
+/// school a coach may have filled in on their record.
+class KnownAthlete {
+  const KnownAthlete({required this.name, this.fullName = '', this.school = ''});
+
+  /// The library's own spelling — what a match is filed under, whichever
+  /// field it was found on.
+  final String name;
+
+  /// The full name a program prints, when the library knows them by
+  /// something shorter or by a nickname. Blank when the coach hasn't said.
+  final String fullName;
+
+  /// Their school or club, for the surname-and-school match below. Blank
+  /// when unset.
+  final String school;
+}
+
+/// The library name for a competitor written [sheet] from [team] on a
+/// program, or null when none of the coach's athletes is this person.
+///
+/// Checked in order of how sure it is: the name or the full name by the same
+/// exact-or-initial rule [sameAthlete] uses, then — only when the coach has
+/// filled in a school — the same surname at the same school. The second
+/// catches the athlete a sheet prints under a first name the library never
+/// stored (a 'Robert' filed as 'Bud'), pinned down by where they throw so it
+/// never links two strangers who happen to share a surname.
+String? matchAthlete(String sheet, String team, List<KnownAthlete> known) {
+  for (final athlete in known) {
+    if (sameAthlete(sheet, athlete.name)) return athlete.name;
+    if (athlete.fullName.isNotEmpty && sameAthlete(sheet, athlete.fullName)) {
+      return athlete.name;
+    }
+  }
+  if (team.trim().isEmpty) return null;
+  for (final athlete in known) {
+    if (athlete.school.isEmpty || !sameSchool(team, athlete.school)) continue;
+    if (_sharesSurname(sheet, athlete.name) ||
+        (athlete.fullName.isNotEmpty &&
+            _sharesSurname(sheet, athlete.fullName))) {
+      return athlete.name;
+    }
+  }
+  return null;
+}
+
+/// Whether two names end on the same surname — the looser half of a
+/// school-backed match, which the school is there to make safe.
+bool _sharesSurname(String a, String b) {
+  final x = _tokens(a);
+  final y = _tokens(b);
+  return x.isNotEmpty && y.isNotEmpty && x.last == y.last;
+}
+
+/// Whether two schools are the same one written two ways. 'Central', 'Central
+/// HS' and 'Central High School' all read as one, because the words that say
+/// *what kind* of school it is carry no identity — only 'Central' does.
+bool sameSchool(String a, String b) {
+  final x = _schoolTokens(a);
+  final y = _schoolTokens(b);
+  if (x.isEmpty || y.isEmpty) return false;
+  // One a subset of the other covers an abbreviation against its spelled-out
+  // form, and a bare 'Central' against 'Central Catholic'.
+  return x.every(y.contains) || y.every(x.contains);
+}
+
+/// The words in a school name that actually name it — the kind-of-school
+/// words ('HS', 'high school', 'academy'…) dropped, so they never stand in
+/// for a match on their own.
+final _schoolKind = RegExp(
+    r'\b(hs|jhs|shs|high|junior|senior|middle|elementary|school|academy|'
+    r'college|university|univ|institute|club|tc|track|field|athletics?|'
+    r'the|of|at)\b',
+    caseSensitive: false);
+
+List<String> _schoolTokens(String school) => school
+    .toLowerCase()
+    .replaceAll(_schoolKind, ' ')
+    .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+    .split(RegExp(r'\s+'))
+    .where((token) => token.isNotEmpty)
+    .toList();
