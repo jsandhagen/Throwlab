@@ -6,9 +6,24 @@ Film a throw, break it down frame by frame, and keep the whole season in one pla
 
 Works offline. No account, no signup, no signal needed.
 
+---
+
+## Install
+
+No computer, no Play Store, no account.
+
 > **[⬇ Download ThrowLab.apk (latest build)](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk)**
 >
 > [![Latest APK](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.github.com%2Frepos%2Fjsandhagen%2FThrowlab%2Freleases%2Flatest&query=%24.name&label=APK&logo=android&color=3ddc84)](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk)
+
+1. Open the download link above **on your phone**
+2. Open the downloaded file
+3. Allow the install when Android asks
+
+> [!NOTE]
+> First time only: Android will ask you to allow installs from your browser. That's under **Settings > Apps > Special app access > Install unknown apps**.
+
+**Updates are automatic.** On launch the app checks for a newer build and shows an Update banner that downloads and installs it in place. Android still asks you to confirm.
 
 ---
 
@@ -155,22 +170,6 @@ Tag a couple of points on the release frame and get:
 
 ---
 
-## Install
-
-No computer, no Play Store, no account.
-
-1. Open the [download link](https://github.com/jsandhagen/Throwlab/releases/download/latest/ThrowLab.apk) on your phone
-2. Open the downloaded file and allow the install when Android asks
-
-> [!NOTE]
-> First time only: Android will ask you to allow installs from your browser. That's under **Settings > Apps > Special app access > Install unknown apps**.
-
-**Updates are automatic.** On launch the app checks for a newer build and shows an Update banner that downloads and installs it in place. Android still asks you to confirm.
-
-Builds are signed with the repo's debug key. That's meant for personal sideloading, not Play Store distribution.
-
----
-
 ## Roadmap
 
 Still under active development. What's built and what's planned (automatic implement detection, pose estimation, progress tracking) is in [ROADMAP.md](ROADMAP.md).
@@ -183,5 +182,3 @@ flutter pub get
 flutter test
 flutter run
 ```
-
-On iOS, `image_picker` needs `NSPhotoLibraryUsageDescription` in `ios/Runner/Info.plist`. Recent Android SDKs need nothing extra. Code layout and contributor notes are in [CLAUDE.md](CLAUDE.md).
