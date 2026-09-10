@@ -1429,18 +1429,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             bottom: 0,
             child: SafeArea(
               child: Padding(
-                // Hugs the bottom-right corner: the throw action lives in
-                // the right-center and upper-right of the frame, and the
-                // inset keeps it clear of the scrubber/transport overlay
-                // (a single shorter row in landscape).
-                padding: EdgeInsets.only(
-                    bottom: landscape
-                        ? 60
-                        : (_set.length > 1 ? 150 + _stripHeight : 150)),
+                // Up in the top-right, clear of the scrubber, transport and
+                // filmstrip that crowd the bottom. The top inset drops it
+                // below the header actions in portrait so the tools don't
+                // sit on top of them; landscape carries those on the left
+                // rail and leaves the top edge free.
+                padding: EdgeInsets.only(top: landscape ? 4 : 56, bottom: 8),
                 child: Align(
-                  alignment: Alignment.bottomRight,
+                  alignment: Alignment.topRight,
                   child: SingleChildScrollView(
-                    reverse: true,
                     child: DrawingRail(controller: _drawing),
                   ),
                 ),

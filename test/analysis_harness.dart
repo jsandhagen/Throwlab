@@ -154,6 +154,7 @@ const shapeToolIcons = [
   Icons.timeline,
   Icons.arrow_right_alt,
   Icons.turn_slight_right,
+  Icons.circle_outlined,
   Icons.square_foot,
 ];
 

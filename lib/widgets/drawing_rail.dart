@@ -4,14 +4,14 @@ import 'package:flutter/material.dart';
 
 import 'drawing_canvas.dart';
 
-/// Vertical, collapsible tool rail anchored to the bottom-right corner of
-/// the video, kept short enough for a landscape phone: the tools that build
-/// on a drag (line, arrow, curved arrow) share one menu button, and the pen
-/// weight and color are menus too, so the column stays ~7 buttons instead
-/// of the 17 controls it offers. A dedicated chevron button at the bottom —
-/// always there, open or closed, and never also a tool — collapses the rail
-/// down to just that button, keeping the right-center and upper-right of
-/// the frame — where the throw happens — unobstructed.
+/// Vertical, collapsible tool rail anchored to the top-right corner of the
+/// video, kept short enough for a landscape phone: the shapes that build on
+/// a drag (line, arrow, curved arrow, circle) share one menu button, and the
+/// pen weight and color are menus too, so the column stays ~7 buttons instead
+/// of the controls it offers. A dedicated chevron button at the top — always
+/// there, open or closed, and never also a tool — collapses the rail down to
+/// just that button, so it can be tucked away clear of the frame while a
+/// throw plays.
 class DrawingRail extends StatefulWidget {
   const DrawingRail({
     super.key,
@@ -53,6 +53,7 @@ class _DrawingRailState extends State<DrawingRail> {
       Icons.turn_slight_right,
       'Curved arrow (trace a path, head where you lift)'
     ),
+    (DrawTool.circle, Icons.circle_outlined, 'Circle (drag to size)'),
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
   ];
 
@@ -156,7 +157,32 @@ class _DrawingRailState extends State<DrawingRail> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // Collapsing the rail is its own button, fixed at the top
+                // the rail hangs from — always in the same spot, open or
+                // closed, never buried in a menu and never doubling as a
+                // tool, so there is one steady target for getting the tools
+                // out of the way and back.
+                IconButton(
+                  key: const ValueKey('rail-collapse'),
+                  tooltip: _open ? 'Hide drawing tools' : 'Show drawing tools',
+                  iconSize: 20,
+                  padding: EdgeInsets.zero,
+                  style: _styleFor(false, scheme),
+                  constraints:
+                      const BoxConstraints.tightFor(width: 40, height: 36),
+                  icon: Icon(_open
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down),
+                  onPressed: () => setState(() => _open = !_open),
+                ),
                 if (_open) ...[
+                  Divider(
+                    height: 5,
+                    thickness: 1,
+                    indent: 8,
+                    endIndent: 8,
+                    color: scheme.onSurface.withOpacity(0.2),
+                  ),
                   _toolButton(_directTools[0].$1, _directTools[0].$2,
                       _directTools[0].$3, scheme),
                   _toolButton(_directTools[1].$1, _directTools[1].$2,
@@ -281,31 +307,7 @@ class _DrawingRailState extends State<DrawingRail> {
                       if (choice == 'clear') controller.clear();
                     },
                   ),
-                  Divider(
-                    height: 5,
-                    thickness: 1,
-                    indent: 8,
-                    endIndent: 8,
-                    color: scheme.onSurface.withOpacity(0.2),
-                  ),
                 ],
-                // Collapsing the rail is its own button, always in the same
-                // spot at the bottom, open or closed — never buried in a
-                // menu and never doubling as a tool, so there is one fixed
-                // target for getting the tools out of the way and back.
-                IconButton(
-                  key: const ValueKey('rail-collapse'),
-                  tooltip: _open ? 'Hide drawing tools' : 'Show drawing tools',
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  style: _styleFor(false, scheme),
-                  constraints:
-                      const BoxConstraints.tightFor(width: 40, height: 36),
-                  icon: Icon(_open
-                      ? Icons.keyboard_arrow_down
-                      : Icons.keyboard_arrow_up),
-                  onPressed: () => setState(() => _open = !_open),
-                ),
               ],
             ),
           ),

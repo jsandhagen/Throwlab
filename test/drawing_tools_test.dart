@@ -200,6 +200,60 @@ void main() {
     });
   });
 
+  group('circle tool', () {
+    late Directory temp;
+    late ThrowVideo video;
+
+    setUp(() async {
+      temp = await Directory.systemTemp.createTemp('throwlab_test');
+      video = testVideo(temp);
+    });
+
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    testWidgets('drags out an oval bounded by the gesture', (tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await selectTool(tester, Icons.circle_outlined);
+
+      await drawAlong(tester, const [
+        Offset(300, 200),
+        Offset(360, 260),
+        Offset(420, 320),
+      ]);
+
+      final circle = annotationsOf<CircleAnnotation>(tester).single;
+      expect(inkFor(tester, circle.start),
+          within(distance: 1, from: const Offset(300, 200)));
+      expect(inkFor(tester, circle.end),
+          within(distance: 1, from: const Offset(420, 320)));
+      expect(circle.width, kStrokeWidths[1]);
+      expect(
+        find.byType(DrawingCanvas),
+        paints
+          ..something((symbol, arguments) =>
+              symbol == #drawOval &&
+              (arguments.last as Paint).style == PaintingStyle.stroke),
+      );
+    });
+
+    testWidgets('undo removes the whole circle', (tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await selectTool(tester, Icons.circle_outlined);
+      await drawAlong(
+          tester, const [Offset(300, 200), Offset(360, 260), Offset(420, 320)]);
+      expect(annotationsOf<CircleAnnotation>(tester), hasLength(1));
+
+      await tapRail(tester, find.byIcon(Icons.undo));
+      expect(annotationsOf<CircleAnnotation>(tester), isEmpty);
+    });
+  });
+
   group('trimPathEnd', () {
     double lengthOf(List<Offset> points) {
       var total = 0.0;

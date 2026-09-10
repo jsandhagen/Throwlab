@@ -574,13 +574,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       children: [
                         Positioned.fill(child: _panes(landscape)),
                         // Same rail as the analysis screen, in the same
-                        // corner: it acts on the pane last drawn in, and the
-                        // tool it sets arms both.
+                        // top-right corner: it acts on the pane last drawn
+                        // in, and the tool it sets arms both.
                         Positioned(
+                          top: 4,
                           right: 4,
-                          bottom: 4,
                           child: SingleChildScrollView(
-                            reverse: true,
                             child: DrawingRail(
                                 controller: _activeDrawing,
                                 initiallyOpen: false),

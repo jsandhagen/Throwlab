@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-enum DrawTool { none, pen, line, arrow, curvedArrow, angle }
+enum DrawTool { none, pen, line, arrow, curvedArrow, angle, circle }
 
 /// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
 /// middle one is the default.
@@ -102,6 +102,16 @@ class ArrowAnnotation extends Annotation {
 class CurvedArrowAnnotation extends Annotation {
   CurvedArrowAnnotation(super.color, super.width, this.points);
   final List<Offset> points;
+}
+
+/// A ring around a spot on the frame — the release point, a foot at the
+/// board, a body position. Drawn as the ellipse bounding the drag, so it
+/// ovals to whatever it is put around rather than only a true circle, and
+/// the non-square video never squashes a marked-out circle.
+class CircleAnnotation extends Annotation {
+  CircleAnnotation(super.color, super.width, this.start, this.end);
+  Offset start;
+  Offset end;
 }
 
 /// Three taps: first arm point, vertex, second arm point. The measured angle
@@ -205,6 +215,10 @@ bool beginAnnotation(DrawingController controller, Offset point) {
       controller.add(CurvedArrowAnnotation(
           controller.color, controller.strokeWidth, [point]));
       return true;
+    case DrawTool.circle:
+      controller.add(CircleAnnotation(
+          controller.color, controller.strokeWidth, point, point));
+      return true;
     case DrawTool.angle:
     case DrawTool.none:
       return false;
@@ -233,6 +247,11 @@ void extendAnnotation(DrawingController controller, Offset point) {
     case DrawTool.curvedArrow:
       if (last is CurvedArrowAnnotation) {
         last.points.add(point);
+        controller.notifyChanged();
+      }
+    case DrawTool.circle:
+      if (last is CircleAnnotation) {
+        last.end = point;
         controller.notifyChanged();
       }
     case DrawTool.angle:
@@ -323,6 +342,11 @@ class _AnnotationPainter extends CustomPainter {
           _paintArrow(canvas, size, annotation, paint);
         case CurvedArrowAnnotation():
           _paintCurvedArrow(canvas, size, annotation, paint);
+        case CircleAnnotation(:final start, :final end):
+          canvas.drawOval(
+              Rect.fromPoints(
+                  _denormalize(start, size), _denormalize(end, size)),
+              paint);
         case AngleAnnotation():
           _paintAngle(canvas, size, annotation, paint);
       }

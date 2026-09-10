@@ -29,9 +29,11 @@ void main() {
         videoSize: const Size(1920, 1080),
       );
 
-  /// Everything the rail shows at rest, top to bottom: scrub, pen, the
-  /// shape menu, width, color, undo, more, and the collapse chevron.
+  /// Everything the rail shows at rest, top to bottom: the collapse chevron
+  /// at the top the rail hangs from, then scrub, pen, the shape menu, width,
+  /// color, undo, and more.
   final railControls = <Finder>[
+    find.byKey(const ValueKey('rail-collapse')),
     find.byIcon(Icons.pan_tool_alt),
     find.byIcon(Icons.draw),
     find.byKey(const ValueKey('rail-shapes')),
@@ -39,7 +41,6 @@ void main() {
     find.byKey(const ValueKey('rail-color')),
     find.byIcon(Icons.undo),
     find.byKey(const ValueKey('rail-more')),
-    find.byKey(const ValueKey('rail-collapse')),
   ];
 
   void expectOnScreen(WidgetTester tester, Finder finder, Size screen,
@@ -70,7 +71,7 @@ void main() {
 
       await tester.tap(collapse);
       await tester.pump();
-      // Only the collapse button is left, still in the bottom-right corner.
+      // Only the collapse button is left, still in the top-right corner.
       expect(find.byIcon(Icons.undo), findsNothing);
       expect(find.byKey(const ValueKey('rail-more')), findsNothing);
       expect(collapse, findsOneWidget);

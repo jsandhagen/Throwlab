@@ -67,23 +67,31 @@ void main() {
         ),
       ));
 
-      final metersBox = find.byType(TextField).first;
-      final feetBox = find.byType(TextField).last;
+      final metersBox = find.byType(TextField).at(0);
+      final feetBox = find.byType(TextField).at(1);
+      final inchesBox = find.byType(TextField).at(2);
 
       await tester.enterText(metersBox, '58.42');
       await tester.pump();
       expect(meters, closeTo(58.42, 1e-9));
       expect(unit, DistanceUnit.meters);
-      expect(tester.widget<TextField>(feetBox).controller!.text, '191.67');
+      // 191.67 ft reads as 191 ft 8 in in the two imperial boxes.
+      expect(tester.widget<TextField>(feetBox).controller!.text, '191');
+      expect(tester.widget<TextField>(inchesBox).controller!.text, '8');
 
-      await tester.enterText(feetBox, '150-06');
+      // Feet and inches are read together — no dash to type on a phone.
+      await tester.enterText(feetBox, '150');
+      await tester.pump();
+      await tester.enterText(inchesBox, '6');
       await tester.pump();
       expect(unit, DistanceUnit.feet);
       expect(meters, closeTo(150.5 * 0.3048, 1e-9));
       expect(tester.widget<TextField>(metersBox).controller!.text, '45.87');
 
-      // Clearing a box clears the throw's distance, and the other box.
+      // Clearing both imperial boxes clears the throw's distance and meters.
       await tester.enterText(feetBox, '');
+      await tester.pump();
+      await tester.enterText(inchesBox, '');
       await tester.pump();
       expect(meters, isNull);
       expect(tester.widget<TextField>(metersBox).controller!.text, '');
@@ -101,9 +109,11 @@ void main() {
       ));
       // By the controllers, not by find.text: the meters box hints with
       // an example distance, which is a "58.42" of its own.
-      final fields = tester.widgetList<TextField>(find.byType(TextField));
-      expect(fields.first.controller!.text, '58.42');
-      expect(fields.last.controller!.text, '191.67');
+      final fields =
+          tester.widgetList<TextField>(find.byType(TextField)).toList();
+      expect(fields[0].controller!.text, '58.42');
+      expect(fields[1].controller!.text, '191');
+      expect(fields[2].controller!.text, '8');
     });
   });
 
