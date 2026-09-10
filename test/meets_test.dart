@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:throwlab/models/meet.dart';
+import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
@@ -594,6 +595,177 @@ void main() {
       await library.load();
       await library.save(_meet(id: 'past', on: DateTime(2026, 4, 1)));
       expect(library.live, isNull);
+    });
+  });
+
+  group('the flight', () {
+    /// A discus competition with a field of [names], each carrying the
+    /// rounds already thrown.
+    MeetCompetition field(Map<String, List<double?>> series) {
+      final entries = <MeetEntry>[];
+      var order = 0;
+      for (final name in series.keys) {
+        final entry = MeetEntry(
+          id: 'e${order + 1}',
+          athlete: name,
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          tracked: false,
+          order: order++,
+        );
+        final thrown = series[name]!;
+        for (var round = 0; round < thrown.length; round++) {
+          entry.setAttempt(
+              round,
+              thrown[round] == null
+                  ? MeetAttempt.foul()
+                  : MeetAttempt.untracked(thrown[round]!));
+        }
+        entries.add(entry);
+      }
+      return MeetCompetition(ThrowEvent.discus, 1, entries);
+    }
+
+    test('is on the earliest round anybody is still owed', () {
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': [41.20, 42.00],
+          'M. Okoye': [44.90],
+          'J. Smith': [38.44],
+        }),
+        rounds: 6,
+      );
+      expect(flight.round, 1);
+      expect(flight.label, 'Round 2 of 6');
+      // Ana has had her second; the other two have not.
+      expect(flight.thrown, 1);
+      expect(flight.fieldSize, 3);
+    });
+
+    test('puts the next athlete owed a throw in the circle', () {
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': [41.20],
+          'M. Okoye': <double?>[],
+          'J. Smith': <double?>[],
+        }),
+        rounds: 6,
+      );
+      expect(flight.inTheCircle?.athlete, 'M. Okoye');
+      expect(flight.onDeck?.athlete, 'J. Smith');
+      expect(flight.throwsUntil('e2'), 0);
+      expect(flight.throwsUntil('e3'), 1);
+      // Ana has thrown this round: nothing of hers is coming.
+      expect(flight.throwsUntil('e1'), isNull);
+    });
+
+    test('an athlete whose earlier round was skipped is up now', () {
+      final competition = field({
+        'Ana Diaz': [41.20, 42.00],
+        'M. Okoye': [44.90, 45.00],
+      });
+      // The coach missed Okoye's first and filled the second in; the round
+      // still owed is behind the one being thrown.
+      competition.entries[1].setAttempt(0, null);
+      final flight = MeetFlight(competition, rounds: 6);
+      expect(flight.round, 0);
+      expect(flight.inTheCircle?.athlete, 'M. Okoye');
+    });
+
+    test('says nothing about who is next on the last throw of a round', () {
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': [41.20],
+          'M. Okoye': <double?>[],
+        }),
+        rounds: 6,
+      );
+      expect(flight.inTheCircle?.athlete, 'M. Okoye');
+      expect(flight.onDeck, isNull);
+    });
+
+    test('is done once the last attempt of the competition is in', () {
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': [41.20, 42.00, 43.00],
+        }),
+        rounds: 3,
+      );
+      expect(flight.finished, isTrue);
+      expect(flight.label, 'Done');
+      expect(flight.inTheCircle, isNull);
+      expect(flight.thrown, 1);
+    });
+
+    test('leaves out the athletes the cut left behind', () {
+      final competition = field({
+        'Ana Diaz': [41.20, 42.00, 43.00],
+        'M. Okoye': [44.90, 45.00, 46.00],
+        'J. Smith': [30.00, 31.00, 32.00],
+      });
+      final standings = MeetStandings(competition, const [],
+          advancing: 2, prelimRounds: 3);
+      final flight =
+          MeetFlight(competition, rounds: 6, standings: standings);
+      // Smith is out, so the final is a competition of two — and the round
+      // is not held at three waiting for rounds he will never throw.
+      expect(flight.fieldSize, 2);
+      expect(flight.round, 3);
+      expect(flight.isFinal, isTrue);
+      expect(flight.label, 'Final · round 4');
+    });
+  });
+
+  group('the conditions', () {
+    test('are nothing until somebody writes something down', () {
+      expect(const MeetConditions().isEmpty, isTrue);
+      expect(const MeetConditions(wind: MeetWind.head).isEmpty, isFalse);
+      expect(const MeetConditions(note: '  ').isEmpty, isTrue);
+    });
+
+    test('read as a coach would say them', () {
+      const conditions = MeetConditions(
+        sky: MeetSky.overcast,
+        temperature: 53.6,
+        wind: MeetWind.head,
+      );
+      expect(conditions.summary, 'Overcast · 54°F · Headwind');
+    });
+
+    test('leave out what nobody said', () {
+      expect(const MeetConditions(wind: MeetWind.tail).summary, 'Tailwind');
+      expect(const MeetConditions().summary, '');
+    });
+
+    test('survive the meet being stored and read back', () async {
+      final library = MeetLibrary();
+      await library.load();
+      await library.save(_meet()
+        ..conditions = const MeetConditions(
+          sky: MeetSky.rain,
+          temperature: 8,
+          temperatureUnit: TemperatureUnit.celsius,
+          wind: MeetWind.cross,
+          note: 'wet ring',
+        ));
+
+      final reread = MeetLibrary();
+      await reread.load();
+      final conditions = reread.byId('k1')!.conditions;
+      expect(conditions.sky, MeetSky.rain);
+      expect(conditions.temperature, 8);
+      expect(conditions.temperatureUnit, TemperatureUnit.celsius);
+      expect(conditions.wind, MeetWind.cross);
+      expect(conditions.note, 'wet ring');
+    });
+
+    test('a meet stored before there were any reads back with none', () {
+      final meet = Meet.fromJson({
+        'id': 'k1',
+        'name': 'County Champs',
+        'date': DateTime(2026, 6, 13).toIso8601String(),
+      });
+      expect(meet.conditions.isEmpty, isTrue);
     });
   });
 }

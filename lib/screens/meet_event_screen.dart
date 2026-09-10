@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/meet.dart';
 import '../models/throw_event.dart';
@@ -65,7 +66,40 @@ class MeetEventScreen extends StatefulWidget {
 enum _MeetView { series, standings }
 
 class _MeetEventScreenState extends State<MeetEventScreen> {
+  /// Which density the coach last left a field at. Remembered rather than
+  /// reset per meet: it is a preference about how they read a competition,
+  /// and somebody who tracks the whole heat sheet wants the short rows
+  /// every Saturday, not just the one they turned them on at.
+  static const _compactKey = 'throwlab.meetCompact';
+
   _MeetView _view = _MeetView.series;
+  bool _compact = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreDensity();
+  }
+
+  Future<void> _restoreDensity() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() => _compact = prefs.getBool(_compactKey) ?? false);
+    } catch (_) {
+      // Storage is allowed to fail; full cards are a fine place to land.
+    }
+  }
+
+  Future<void> _setCompact(bool compact) async {
+    setState(() => _compact = compact);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_compactKey, compact);
+    } catch (_) {
+      // Not worth telling anyone about: the format still changed.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,6 +122,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
         );
         final standings = MeetStandings(competition, library.results,
             advancing: meet.advancing, prelimRounds: meet.prelimRounds);
+        final flight =
+            MeetFlight(competition, rounds: meet.rounds, standings: standings);
 
         return Scaffold(
           appBar: AppBar(
@@ -112,6 +148,15 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                 ),
               ],
             ),
+            actions: [
+              IconButton(
+                tooltip: _compact ? 'Full cards' : 'Compact the field',
+                icon: Icon(_compact
+                    ? Icons.density_medium
+                    : Icons.density_small),
+                onPressed: () => _setCompact(!_compact),
+              ),
+            ],
           ),
           body: Stack(
             children: [
@@ -149,8 +194,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                     ),
                     Expanded(
                       child: _view == _MeetView.series
-                          ? _seriesList(
-                              meet, meets, library, competition, standings)
+                          ? _seriesList(meet, meets, library, competition,
+                              standings, flight)
                           : _standingsList(meet, standings),
                     ),
                   ],
@@ -168,20 +213,31 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   }
 
   /// The field in the order it throws, which is the order a coach's eye
-  /// goes down the list in as the round works through.
-  Widget _seriesList(Meet meet, MeetLibrary meets, VideoLibrary library,
-      MeetCompetition competition, MeetStandings standings) {
+  /// goes down the list in as the round works through, under a bar saying
+  /// where the round has got to.
+  Widget _seriesList(
+      Meet meet,
+      MeetLibrary meets,
+      VideoLibrary library,
+      MeetCompetition competition,
+      MeetStandings standings,
+      MeetFlight flight) {
     final field = competition.entries;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+      padding: EdgeInsets.fromLTRB(12, 12, 12, _compact ? 88 : 96),
       children: [
+        _FlightBar(flight: flight, standings: standings),
+        const SizedBox(height: 12),
         for (var i = 0; i < field.length; i++)
           Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: EdgeInsets.only(bottom: _compact ? 6 : 12),
             child: _EntryCard(
               meet: meet,
               entry: field[i],
               position: i + 1,
+              place: standings.placeOf(field[i].id),
+              upIn: flight.throwsUntil(field[i].id),
+              compact: _compact,
               // Null when nothing is closed: no final, or they made it. A
               // 3 + 3 only closes the last rounds once the whole field has
               // had its three, which is what throwsInFinal waits for.
@@ -302,6 +358,9 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       existing: attempt?.kind,
       meters: series.distanceAt(round),
       unit: result?.distanceUnit ?? DistanceUnit.meters,
+      // The rest of the field is recorded, not collected — the card offers
+      // them no Film button, and neither should the sheet behind it.
+      canFilm: entry.tracked,
     );
     if (outcome == null || !mounted) return;
 
@@ -510,13 +569,214 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   }
 }
 
-/// One athlete's competition: who they are, the series so far, and the two
-/// buttons that are worth having on a phone held at chest height.
+/// Where the round has got to: how far through it the field is, who is in
+/// the circle, who follows them, and who is winning.
+///
+/// This is what a coach looks up for between attempts, and until now it had
+/// to be counted off the cards by eye. It keeps itself right as marks go in
+/// because it is worked out from the series rather than tracked alongside
+/// them — nobody standing at a sector has a hand free to tell an app whose
+/// turn it is.
+///
+/// It scrolls with the field rather than being pinned above it: the flight
+/// order means a coach is scrolling to their own athlete anyway, and the
+/// 'up now' on the cards carries the same answer the whole way down.
+class _FlightBar extends StatelessWidget {
+  const _FlightBar({required this.flight, required this.standings});
+
+  final MeetFlight flight;
+  final MeetStandings standings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = eventColor(flight.competition.event);
+    final inTheCircle = flight.inTheCircle;
+    final onDeck = flight.onDeck;
+    // Nobody leads a competition of one; and the leader of a real one is
+    // worth a line of their own only when they are not already on one.
+    final front = !flight.hasOrder || standings.places.isEmpty
+        ? null
+        : standings.places.first;
+    final leader = front == null ||
+            front.entry.id == inTheCircle?.id ||
+            front.entry.id == onDeck?.id
+        ? null
+        : front;
+    return Card(
+      color: scheme.surfaceContainerHighest.withOpacity(0.45),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    flight.label.toUpperCase(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.1),
+                  ),
+                ),
+                Text(
+                  flight.finished
+                      ? 'all in'
+                      : '${flight.thrown} of ${flight.fieldSize} thrown',
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: flight.fieldSize == 0
+                    ? 0
+                    : flight.thrown / flight.fieldSize,
+                minHeight: 5,
+                color: accent,
+                backgroundColor: scheme.outlineVariant.withOpacity(0.5),
+              ),
+            ),
+            if (inTheCircle != null) ...[
+              const SizedBox(height: 10),
+              _WhoRow(
+                label: 'up now',
+                entry: inTheCircle,
+                place: standings.placeOf(inTheCircle.id),
+                color: accent,
+                lead: true,
+              ),
+            ],
+            if (onDeck != null) ...[
+              const SizedBox(height: 4),
+              _WhoRow(
+                label: 'on deck',
+                entry: onDeck,
+                place: standings.placeOf(onDeck.id),
+                color: scheme.onSurfaceVariant,
+                lead: false,
+              ),
+            ],
+            if (leader != null && leader.best != null) ...[
+              const SizedBox(height: 8),
+              Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
+              const SizedBox(height: 8),
+              _WhoRow(
+                // A competition that is over has a winner; one still being
+                // thrown has somebody in front, which is not the same thing
+                // and shouldn't be written as though it were.
+                label: flight.finished ? 'won by' : 'leading',
+                entry: leader.entry,
+                place: leader,
+                color: scheme.onSurfaceVariant,
+                lead: false,
+                icon: Icons.emoji_events_outlined,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One named athlete in the bar: what they are to this round, who they are,
+/// and what they are standing on.
+class _WhoRow extends StatelessWidget {
+  const _WhoRow({
+    required this.label,
+    required this.entry,
+    required this.place,
+    required this.color,
+    required this.lead,
+    this.icon,
+  });
+
+  final String label;
+  final MeetEntry entry;
+  final MeetPlace? place;
+  final Color color;
+
+  /// The one the coach is about to write a mark for, set in the event's
+  /// color so it is found without reading.
+  final bool lead;
+
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final best = place?.best;
+    final bestRound = place?.series.bestRound;
+    return Row(
+      children: [
+        SizedBox(
+          width: 62,
+          child: Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 4),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontWeight: lead ? FontWeight.w700 : FontWeight.w500),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Text(
+            entry.athlete.isEmpty ? 'Unassigned' : entry.athlete,
+            style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: lead ? FontWeight.w600 : FontWeight.w500,
+                color: entry.tracked ? null : scheme.onSurfaceVariant),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        if (best != null)
+          Text(
+            formatDistance(best, place!.series.unitAt(bestRound!)),
+            style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: lead ? scheme.onSurface : scheme.onSurfaceVariant),
+          ),
+      ],
+    );
+  }
+}
+
+/// One athlete's competition: who they are, the series so far, and — in the
+/// full format — the two buttons worth having on a phone held at chest
+/// height.
+///
+/// The card comes at two densities. A meet with three of the coach's own
+/// athletes in it reads best as full cards. A heat sheet's worth of field
+/// does not fit on a phone that way, and a coach scrolling to find who is
+/// up has lost the thing the screen is for — so the compact format drops to
+/// two lines, the name and where they stand over the series, and moves the
+/// buttons into the tap on the card itself.
 class _EntryCard extends StatelessWidget {
   const _EntryCard({
     required this.meet,
     required this.entry,
     required this.position,
+    required this.place,
+    required this.upIn,
+    required this.compact,
     required this.closedFrom,
     required this.series,
     required this.library,
@@ -533,6 +793,17 @@ class _EntryCard extends StatelessWidget {
   /// Where they throw in the flight, from 1.
   final int position;
 
+  /// Where they stand in the competition, or null before they have a mark
+  /// on the board.
+  final MeetPlace? place;
+
+  /// How many throws until they are up: 0 in the circle, 1 on deck, null
+  /// with nothing coming this round.
+  final int? upIn;
+
+  /// The two-line format, for a field too big to scroll through.
+  final bool compact;
+
   /// The first round they no longer have — the cut, for an athlete who
   /// missed it. Null while everyone still has throws coming.
   final int? closedFrom;
@@ -547,123 +818,85 @@ class _EntryCard extends StatelessWidget {
   /// Moves them one place up (-1) or down (1) the order.
   final ValueChanged<int> onMove;
 
+  /// Whether there is a round left for a tap on the card to open.
+  bool get _hasRoundLeft =>
+      entry.nextRound < meet.rounds &&
+      (closedFrom == null || entry.nextRound < closedFrom!);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = eventColor(entry.event);
-    final best = series.best;
-    final bestRound = series.bestRound;
-    final bestResult = bestRound == null ? null : series.resultAt(bestRound);
-    final isBest = bestResult != null && library.isPersonalBest(bestResult);
-
-    return Card(
+    final card = Card(
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
-      child: Padding(
+      // The compact rows space themselves off the list rather than off the
+      // card's own margin: two gaps stacked is a row's worth of screen
+      // given away every four athletes.
+      margin: compact ? EdgeInsets.zero : null,
+      // The athlete in the circle is edged in the event's color, so a coach
+      // looking down at the phone finds the row they are about to write on
+      // without reading a name.
+      shape: upIn == 0
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: accent.withOpacity(0.8), width: 1.5),
+            )
+          : null,
+      clipBehavior: Clip.antiAlias,
+      child: compact
+          ? InkWell(
+              // The whole row is the button in this format: there is no
+              // room for one, and the next round is what a tap wants.
+              onTap: _hasRoundLeft ? () => onEnter(entry.nextRound) : null,
+              child: _compactBody(context, theme, accent),
+            )
+          : _fullBody(context, theme, accent),
+    );
+    return card;
+  }
+
+  /// Two lines: who they are and where they stand, then the series.
+  Widget _compactBody(BuildContext context, ThemeData theme, Color accent) =>
+      Padding(
+        padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _position(theme),
+                Expanded(child: _name(theme, dense: true)),
+                _upLabel(theme, accent),
+                _placeChip(theme),
+                _placeAndBest(theme, accent, dense: true),
+                _menu(dense: true),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _boxes(accent, compact: true),
+          ],
+        ),
+      );
+
+  Widget _fullBody(BuildContext context, ThemeData theme, Color accent) =>
+      Padding(
         padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                // Where they are in the flight: the number a coach counts
-                // down to work out how long they have before their athlete
-                // is in the circle.
-                SizedBox(
-                  width: 22,
-                  child: Text(
-                    '$position',
-                    style: theme.textTheme.labelMedium
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ),
+                _position(theme),
                 // No event on the card: everyone on this screen is in the
                 // same one, and the app bar has already said which.
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          entry.athlete.isEmpty ? 'Unassigned' : entry.athlete,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              // The rest of the field sits back a shade from
-                              // the athletes the coach is here for.
-                              color: entry.tracked
-                                  ? null
-                                  : theme.colorScheme.onSurfaceVariant),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (!entry.tracked) ...[
-                        const SizedBox(width: 6),
-                        Icon(Icons.groups_outlined,
-                            size: 15,
-                            color: theme.colorScheme.onSurfaceVariant),
-                      ],
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: 'Order and entry',
-                  icon: const Icon(Icons.more_horiz, size: 20),
-                  onSelected: (choice) => switch (choice) {
-                    'up' => onMove(-1),
-                    'down' => onMove(1),
-                    _ => onRemove(),
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                        value: 'up',
-                        child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.arrow_upward, size: 18),
-                            title: Text('Throw earlier'))),
-                    PopupMenuItem(
-                        value: 'down',
-                        child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.arrow_downward, size: 18),
-                            title: Text('Throw later'))),
-                    PopupMenuItem(
-                        value: 'remove',
-                        child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.delete_outline, size: 18),
-                            title: Text('Remove'))),
-                  ],
-                ),
+                Expanded(child: _name(theme, dense: false)),
+                _upLabel(theme, accent),
+                _placeChip(theme),
+                _menu(dense: false),
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                for (var round = 0; round < meet.rounds; round++) ...[
-                  if (round > 0) const SizedBox(width: 4),
-                  Expanded(
-                    child: _AttemptBox(
-                      key: ValueKey('round-$round'),
-                      round: round,
-                      accent: accent,
-                      closed: closedFrom != null && round >= closedFrom!,
-                      attempt: entry.attemptAt(round),
-                      distance: series.distanceAt(round),
-                      unit: series.resultAt(round)?.distanceUnit ??
-                          DistanceUnit.meters,
-                      filmed: series.filmedAt(round),
-                      isBest: round == bestRound,
-                      onTap: () => onEnter(round),
-                      onLongPress: () {
-                        final result = series.resultAt(round);
-                        if (result is ThrowVideo) onOpen(result);
-                      },
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            _boxes(accent, compact: false),
             const SizedBox(height: 10),
             Row(
               children: [
@@ -672,35 +905,11 @@ class _EntryCard extends StatelessWidget {
                 // looking down, and a long mark in feet would otherwise
                 // squeeze them off the card.
                 Expanded(
-                  child: best == null
-                      ? const SizedBox.shrink()
-                      : FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (isBest) ...[
-                                const FirstPlaceMedal(size: 13),
-                                const SizedBox(width: 6),
-                              ],
-                              Text(
-                                isBest ? 'PB' : 'Best',
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                formatDistance(
-                                    best,
-                                    series.resultAt(bestRound!)?.distanceUnit ??
-                                        DistanceUnit.meters),
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w600, color: accent),
-                              ),
-                            ],
-                          ),
-                        ),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: _placeAndBest(theme, accent, dense: false),
+                  ),
                 ),
                 // Cut, with nothing left to fill in behind them: there is
                 // no round for these buttons to open.
@@ -732,9 +941,205 @@ class _EntryCard extends StatelessWidget {
             ),
           ],
         ),
+      );
+
+  /// Where they are in the flight: the number a coach counts down to work
+  /// out how long they have before their athlete is in the circle.
+  Widget _position(ThemeData theme) => SizedBox(
+        width: 22,
+        child: Text(
+          '$position',
+          style: theme.textTheme.labelMedium
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      );
+
+  Widget _name(ThemeData theme, {required bool dense}) => Row(
+        children: [
+          Flexible(
+            child: Text(
+              entry.athlete.isEmpty ? 'Unassigned' : entry.athlete,
+              style: (dense
+                      ? theme.textTheme.bodyMedium
+                      : theme.textTheme.titleMedium)
+                  ?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      // The rest of the field sits back a shade from the
+                      // athletes the coach is here for.
+                      color: entry.tracked
+                          ? null
+                          : theme.colorScheme.onSurfaceVariant),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (!entry.tracked) ...[
+            const SizedBox(width: 6),
+            Icon(Icons.groups_outlined,
+                size: 15, color: theme.colorScheme.onSurfaceVariant),
+          ],
+        ],
+      );
+
+  /// 'up now' / 'on deck'. Only the two: past that a coach counts down the
+  /// flight numbers, which is what they are there for.
+  Widget _upLabel(ThemeData theme, Color accent) {
+    if (upIn == null || upIn! > 1) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 6, right: 2),
+      child: Text(
+        upIn == 0 ? 'up now' : 'on deck',
+        style: theme.textTheme.labelSmall?.copyWith(
+            color: upIn == 0 ? accent : theme.colorScheme.onSurfaceVariant,
+            fontWeight: upIn == 0 ? FontWeight.w700 : FontWeight.w500),
       ),
     );
   }
+
+  /// Where they stand, on the name row: live, in both formats, because a
+  /// place that only exists on another tab is one a coach has to leave the
+  /// competition to read.
+  Widget _placeChip(ThemeData theme) {
+    final standing = place?.best == null ? null : place!.place;
+    if (standing == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Text(
+        _ordinal(standing),
+        style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: standing == 1 ? FontWeight.w700 : FontWeight.w500),
+      ),
+    );
+  }
+
+  /// What they are standing on: the furthest of the series, and whether it
+  /// is the furthest they have ever thrown.
+  ///
+  /// The compact format drops the word for it — a row two lines tall has no
+  /// space for a label, and the medal already says which kind of best this
+  /// is when it matters.
+  Widget _placeAndBest(ThemeData theme, Color accent, {required bool dense}) {
+    final best = series.best;
+    if (best == null) {
+      return dense
+          ? Text('—',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant))
+          : const SizedBox.shrink();
+    }
+    final bestRound = series.bestRound!;
+    // Null for the rest of the field, whose distances live on the attempt
+    // and never reach the record book — so they hold no bests either.
+    final bestResult = series.resultAt(bestRound);
+    final isPb = bestResult != null && library.isPersonalBest(bestResult);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isPb) ...[
+          const FirstPlaceMedal(size: 13),
+          const SizedBox(width: 6),
+        ],
+        if (!dense) ...[
+          Text(
+            isPb ? 'PB' : 'Best',
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: 6),
+        ],
+        Text(
+          formatDistance(best, series.unitAt(bestRound)),
+          style: theme.textTheme.titleSmall
+              ?.copyWith(fontWeight: FontWeight.w600, color: accent),
+        ),
+      ],
+    );
+  }
+
+  Widget _boxes(Color accent, {required bool compact}) => Row(
+        children: [
+          for (var round = 0; round < meet.rounds; round++) ...[
+            if (round > 0) SizedBox(width: compact ? 3 : 4),
+            Expanded(
+              child: _AttemptBox(
+                key: ValueKey('round-$round'),
+                round: round,
+                accent: accent,
+                compact: compact,
+                closed: closedFrom != null && round >= closedFrom!,
+                attempt: entry.attemptAt(round),
+                distance: series.distanceAt(round),
+                unit: series.unitAt(round),
+                filmed: series.filmedAt(round),
+                isBest: round == series.bestRound,
+                onTap: () => onEnter(round),
+                onLongPress: () {
+                  final result = series.resultAt(round);
+                  if (result is ThrowVideo) onOpen(result);
+                },
+              ),
+            ),
+          ],
+        ],
+      );
+
+  Widget _menu({required bool dense}) => PopupMenuButton<String>(
+        tooltip: 'Order and entry',
+        icon: Icon(Icons.more_horiz, size: dense ? 18 : 20),
+        padding: EdgeInsets.zero,
+        onSelected: (choice) => switch (choice) {
+          'up' => onMove(-1),
+          'down' => onMove(1),
+          'film' => onFilm(entry.nextRound),
+          _ => onRemove(),
+        },
+        itemBuilder: (context) => [
+          // Only in the compact format, which has no room for the button
+          // the full card carries — and never for the rest of the field,
+          // whose clips are not the coach's to keep.
+          if (dense && entry.tracked && _hasRoundLeft)
+            const PopupMenuItem(
+                value: 'film',
+                child: ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.videocam_outlined, size: 18),
+                    title: Text('Film the next'))),
+          const PopupMenuItem(
+              value: 'up',
+              child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.arrow_upward, size: 18),
+                  title: Text('Throw earlier'))),
+          const PopupMenuItem(
+              value: 'down',
+              child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.arrow_downward, size: 18),
+                  title: Text('Throw later'))),
+          const PopupMenuItem(
+              value: 'remove',
+              child: ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.delete_outline, size: 18),
+                  title: Text('Remove'))),
+        ],
+      );
+}
+
+/// '1st', '2nd', '3rd', '11th' — a place, written the way it is read out.
+String _ordinal(int place) {
+  final tens = place % 100;
+  if (tens >= 11 && tens <= 13) return '${place}th';
+  return switch (place % 10) {
+    1 => '${place}st',
+    2 => '${place}nd',
+    3 => '${place}rd',
+    _ => '${place}th',
+  };
 }
 
 /// One round of a series, the way it is written on a results sheet: the
@@ -745,6 +1150,7 @@ class _AttemptBox extends StatelessWidget {
     super.key,
     required this.round,
     required this.accent,
+    required this.compact,
     required this.closed,
     required this.attempt,
     required this.distance,
@@ -760,6 +1166,10 @@ class _AttemptBox extends StatelessWidget {
   /// The event's color, so the leading attempt reads as part of the card
   /// rather than as the app's own accent landing on it.
   final Color accent;
+
+  /// The shorter box the two-line card uses. Still tall enough to hit with
+  /// a thumb — a series a coach can read but not tap is half a screen.
+  final bool compact;
 
   /// A round this athlete doesn't get: they were cut before it. Shown, not
   /// hidden — a series is six boxes, and the empty ones say why.
@@ -802,7 +1212,7 @@ class _AttemptBox extends StatelessWidget {
           // Grayed rather than gone, so the series still reads as six.
           opacity: closed && attempt == null ? 0.35 : 1,
           child: Container(
-            height: 46,
+            height: compact ? 34 : 46,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
               color: attempt == null
@@ -832,7 +1242,7 @@ class _AttemptBox extends StatelessWidget {
                         Icon(Icons.videocam, size: 10, color: scheme.primary),
                   ),
                 Positioned.fill(
-                  top: 8,
+                  top: compact ? 7 : 8,
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -841,7 +1251,7 @@ class _AttemptBox extends StatelessWidget {
                         child: Text(
                           text,
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: compact ? 12 : 13,
                             fontWeight: FontWeight.w600,
                             color: color,
                           ),

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:throwlab/models/meet.dart';
+import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
@@ -634,6 +635,179 @@ void main() {
       expect(saved.prelimRounds, 3);
       expect(saved.rounds, 6);
       expect(saved.advancing, 8);
+    });
+  });
+
+  group('the round in progress', () {
+    Future<void> addRival(String id, String name, int order,
+        {double? best}) async {
+      final entry = MeetEntry(
+        id: id,
+        athlete: name,
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: false,
+        order: order,
+      );
+      if (best != null) entry.setAttempt(0, MeetAttempt.untracked(best));
+      await meets.addEntry('k1', entry: entry);
+    }
+
+    testWidgets('says which round it is and who is in the circle',
+        (tester) async {
+      await addRival('r1', 'M. Okoye', 1);
+      await addRival('r2', 'J. Smith', 2);
+      await mountEvent(tester);
+
+      expect(find.text('ROUND 1 OF 6'), findsOneWidget);
+      expect(find.text('0 of 3 thrown'), findsOneWidget);
+      // Ana throws first, Okoye follows her — said once on the bar and
+      // again on the card, so the answer is still there once the bar has
+      // scrolled off the top of a long field.
+      expect(find.text('up now'), findsNWidgets(2));
+      expect(find.text('on deck'), findsNWidgets(2));
+      expect(find.text('Ana Diaz'), findsNWidgets(2));
+      expect(find.text('M. Okoye'), findsNWidgets(2));
+    });
+
+    testWidgets('moves on as the round is written down', (tester) async {
+      await addRival('r1', 'M. Okoye', 1);
+      await addRival('r2', 'J. Smith', 2);
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+
+      expect(find.text('1 of 3 thrown'), findsOneWidget);
+      // Okoye is in the circle now. Ana is off the flight for this round —
+      // she is only on the bar at all because her 41.20 leads it.
+      expect(find.text('up now'), findsNWidgets(2));
+      expect(find.text('leading'), findsOneWidget);
+      expect(find.text('M. Okoye'), findsNWidgets(2));
+    });
+
+    testWidgets('says nothing about a flight of one', (tester) async {
+      await mountEvent(tester);
+      // The whole flight is the one card underneath; naming the athlete
+      // over it would be telling the coach what they are looking at.
+      expect(find.text('ROUND 1 OF 6'), findsOneWidget);
+      expect(find.text('up now'), findsNothing);
+      expect(find.text('Ana Diaz'), findsOneWidget);
+    });
+
+    testWidgets('names the leader once somebody is not already on the bar',
+        (tester) async {
+      await addRival('r1', 'M. Okoye', 1, best: 44.90);
+      await addRival('r2', 'J. Smith', 2);
+      await addRival('r3', 'K. Fox', 3);
+      await mountEvent(tester);
+
+      // Okoye has thrown and leads; Ana and Smith are the two on deck.
+      expect(find.text('leading'), findsOneWidget);
+      expect(find.text('44.90 m'), findsNWidgets(2));
+    });
+
+    testWidgets('says the competition is done when it is', (tester) async {
+      final meet = meets.byId('k1')!..rounds = 2;
+      meet.entries.single
+        ..setAttempt(0, MeetAttempt.foul())
+        ..setAttempt(1, MeetAttempt.foul());
+      await meets.save(meet);
+      await mountEvent(tester);
+
+      expect(find.text('DONE'), findsOneWidget);
+      expect(find.text('all in'), findsOneWidget);
+    });
+  });
+
+  group('the compact format', () {
+    testWidgets('drops the buttons and keeps the series', (tester) async {
+      await mountEvent(tester);
+      expect(find.text('Mark'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+
+      // The row itself is the button now.
+      expect(find.text('Mark'), findsNothing);
+      expect(find.text('Film'), findsNothing);
+      expect(find.text('Ana Diaz'), findsOneWidget);
+      expect(find.byKey(const ValueKey('round-5')), findsOneWidget);
+    });
+
+    testWidgets('enters the next round from a tap on the row', (tester) async {
+      await mountEvent(tester);
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Ana Diaz'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ana Diaz · round 1'), findsOneWidget);
+      await enterDistance(tester, '41.20');
+      expect(entry().attemptAt(0)?.resultId, library.marks.single.id);
+    });
+
+    testWidgets('shows where the athlete stands', (tester) async {
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'r1',
+            athlete: 'M. Okoye',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            tracked: false,
+            order: 1,
+          )..setAttempt(0, MeetAttempt.untracked(44.90)));
+      await mountEvent(tester);
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1st'), findsOneWidget);
+      // Ana has not thrown, so she has no place to be in yet.
+      expect(find.text('2nd'), findsNothing);
+    });
+
+    testWidgets('is how the next meet opens too', (tester) async {
+      await mountEvent(tester);
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('throwlab.meetCompact'), isTrue);
+    });
+  });
+
+  group('the conditions', () {
+    testWidgets('are asked for on a meet that has been thrown',
+        (tester) async {
+      await mountMeet(tester);
+      expect(find.text('What was it like out there?'), findsOneWidget);
+    });
+
+    testWidgets('are not asked for about a day that has not happened',
+        (tester) async {
+      final meet = meets.byId('k1')!
+        ..date = DateTime.now().add(const Duration(days: 20));
+      await meets.save(meet);
+      await mountMeet(tester);
+      expect(find.text('What was it like out there?'), findsNothing);
+    });
+
+    testWidgets('go on the meet, and read back on it', (tester) async {
+      await mountMeet(tester);
+      await tester.tap(find.text('What was it like out there?'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('Overcast'));
+      await tester.tap(find.text('Headwind'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '54');
+      await tester.tap(find.text('Save conditions'));
+      await tester.pumpAndSettle();
+
+      final conditions = meets.byId('k1')!.conditions;
+      expect(conditions.sky, MeetSky.overcast);
+      expect(conditions.wind, MeetWind.head);
+      expect(conditions.temperature, 54);
+      expect(find.text('Overcast · 54°F · Headwind'), findsOneWidget);
     });
   });
 }

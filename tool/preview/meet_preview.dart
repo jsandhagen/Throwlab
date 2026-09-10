@@ -15,6 +15,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/main.dart';
 import 'package:throwlab/models/meet.dart';
+import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
@@ -75,6 +76,12 @@ List<Map<String, dynamic>> _meets() {
     rounds: 6,
     prelimRounds: 3,
     advancing: 2,
+    conditions: const MeetConditions(
+      sky: MeetSky.overcast,
+      temperature: 54,
+      wind: MeetWind.head,
+      note: 'gusting down the runway',
+    ),
   );
 
   final anna = MeetEntry(
@@ -178,7 +185,8 @@ void main() {
     await _shoot(
         tester, library, meets, const MeetScreen(meetId: 'k1'), 'meet_events');
 
-    // The discus itself, part-way through.
+    // The discus itself, part-way through: the round in progress across the
+    // top, then the field in the order it throws.
     await _shoot(
         tester,
         library,
@@ -186,6 +194,14 @@ void main() {
         const MeetEventScreen(
             meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
         'meet_tracker');
+
+    // The same competition at the density a whole heat sheet is tracked at.
+    await tester.tap(find.byTooltip('Compact the field'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_compact.png'));
+    await tester.tap(find.byTooltip('Full cards'));
+    await settle(tester);
 
     // Where the competition stands, with the cut and what it takes to
     // get past it.

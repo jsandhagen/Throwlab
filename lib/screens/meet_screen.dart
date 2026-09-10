@@ -5,6 +5,7 @@ import '../models/meet.dart';
 import '../models/throw_video.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
+import '../widgets/conditions_sheet.dart';
 import '../widgets/entry_dialog.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/sector_art.dart';
@@ -77,25 +78,36 @@ class MeetScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              if (competitions.isEmpty)
-                _empty(context, meet)
-              else
-                ListView(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-                  children: [
-                    for (final competition in competitions)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _EventCard(
-                          meet: meet,
-                          standings: MeetStandings(competition, library.results,
-                              advancing: meet.advancing,
-                              prelimRounds: meet.prelimRounds),
-                          onOpen: () => _openEvent(context, meet, competition),
-                        ),
-                      ),
-                  ],
-                ),
+              Column(
+                children: [
+                  _ConditionsBar(
+                    meet: meet,
+                    onEdit: () => _editConditions(context, meets, meet),
+                  ),
+                  Expanded(
+                    child: competitions.isEmpty
+                        ? _empty(context, meet)
+                        : ListView(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                            children: [
+                              for (final competition in competitions)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: _EventCard(
+                                    meet: meet,
+                                    standings: MeetStandings(
+                                        competition, library.results,
+                                        advancing: meet.advancing,
+                                        prelimRounds: meet.prelimRounds),
+                                    onOpen: () =>
+                                        _openEvent(context, meet, competition),
+                                  ),
+                                ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
             ],
           ),
           floatingActionButton: FloatingActionButton.extended(
@@ -183,6 +195,15 @@ class MeetScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _editConditions(
+      BuildContext context, MeetLibrary meets, Meet meet) async {
+    final edited = await showConditionsSheet(context,
+        conditions: meet.conditions, meetName: meet.name);
+    if (edited == null) return;
+    meet.conditions = edited;
+    await meets.save(meet);
+  }
+
   Future<void> _editMeet(
       BuildContext context, MeetLibrary meets, Meet meet) async {
     final edited = await showDialog<Meet>(
@@ -190,6 +211,67 @@ class MeetScreen extends StatelessWidget {
       builder: (context) => _MeetDialog(existing: meet),
     );
     if (edited != null) await meets.save(edited);
+  }
+}
+
+/// What the day was like, across the top of the meet.
+///
+/// A prompt rather than a form: most meets are entered with nobody thinking
+/// about the weather, and a line that says what it was — or offers to take
+/// it down in one tap — is the only thing that gets it recorded at all. A
+/// fixture still weeks off has no weather to record, so it says nothing.
+class _ConditionsBar extends StatelessWidget {
+  const _ConditionsBar({required this.meet, required this.onEdit});
+
+  final Meet meet;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final conditions = meet.conditions;
+    // Nothing to say about a day that hasn't happened, and nothing worth
+    // asking either.
+    if (conditions.isEmpty && daysUntil(meet.date) > 0) {
+      return const SizedBox.shrink();
+    }
+    final summary = conditions.summary;
+    return InkWell(
+      onTap: onEdit,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+        child: Row(
+          children: [
+            Icon(
+              conditions.isEmpty
+                  ? Icons.wb_cloudy_outlined
+                  : Icons.thermostat_outlined,
+              size: 16,
+              color: conditions.isEmpty ? scheme.onSurfaceVariant : scheme.primary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                conditions.isEmpty
+                    ? 'What was it like out there?'
+                    : [
+                        if (summary.isNotEmpty) summary,
+                        if (conditions.note.isNotEmpty) conditions.note,
+                      ].join(' · '),
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: conditions.isEmpty
+                        ? scheme.onSurfaceVariant
+                        : scheme.onSurface),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(Icons.edit_outlined, size: 15, color: scheme.onSurfaceVariant),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -209,25 +291,12 @@ class _EventCard extends StatelessWidget {
 
   MeetCompetition get competition => standings.competition;
 
-  /// Which round the event is on: the earliest one anybody still in it has
-  /// left to throw. Athletes who missed the cut are past — leaving them in
-  /// would hold the count at the cut for the rest of the competition.
-  String get _progress {
-    final live = [
-      for (final entry in competition.entries)
-        if (!meet.hasFinal || standings.throwsInFinal(entry.id)) entry,
-    ];
-    if (live.isEmpty) return 'done';
-    var round = meet.rounds;
-    for (final entry in live) {
-      if (entry.nextRound < round) round = entry.nextRound;
-    }
-    if (round >= meet.rounds) return 'done';
-    if (standings.cutMade && round >= meet.prelimRounds) {
-      return 'final · round ${round + 1}';
-    }
-    return 'round ${round + 1} of ${meet.rounds}';
-  }
+  /// Which round the event is on, in the same words the event's own header
+  /// uses — one answer, worked out in one place.
+  String get _progress => MeetFlight(competition,
+          rounds: meet.rounds, standings: standings)
+      .label
+      .toLowerCase();
 
   @override
   Widget build(BuildContext context) {

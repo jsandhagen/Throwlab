@@ -1,3 +1,4 @@
+import 'meet_conditions.dart';
 import 'throw_event.dart';
 import 'throw_video.dart';
 
@@ -208,6 +209,7 @@ class Meet {
     this.rounds = 6,
     int? prelimRounds,
     this.advancing = 8,
+    this.conditions = const MeetConditions(),
     List<MeetEntry>? entries,
   })  : prelimRounds = prelimRounds ?? rounds,
         entries = entries ?? [];
@@ -247,6 +249,11 @@ class Meet {
   /// at or above the field size means here.
   int advancing;
 
+  /// What the day was like. Empty for a meet nobody wrote it down at, which
+  /// is the default — the weather is worth recording, not worth demanding
+  /// before a competition can be started.
+  MeetConditions conditions;
+
   final List<MeetEntry> entries;
 
   /// The entries in the order they throw.
@@ -277,6 +284,7 @@ class Meet {
         'rounds': rounds,
         'prelimRounds': prelimRounds,
         'advancing': advancing,
+        if (conditions.isNotEmpty) 'conditions': conditions.toJson(),
         'entries': [for (final entry in entries) entry.toJson()],
       };
 
@@ -290,6 +298,10 @@ class Meet {
         // entered threw every round of it.
         prelimRounds: (json['prelimRounds'] as num?)?.toInt(),
         advancing: (json['advancing'] as num?)?.toInt() ?? 8,
+        conditions: json['conditions'] == null
+            ? const MeetConditions()
+            : MeetConditions.fromJson(
+                json['conditions'] as Map<String, dynamic>),
         entries: [
           for (final raw in (json['entries'] as List<dynamic>? ?? []))
             MeetEntry.fromJson(raw as Map<String, dynamic>),
@@ -637,5 +649,123 @@ class MeetStandings {
       if (mine[i] != theirs[i]) return theirs[i].compareTo(mine[i]);
     }
     return 0;
+  }
+}
+
+/// Where a competition has got to right now: which round is being thrown,
+/// who is in the circle, and who follows them.
+///
+/// Between attempts a coach asks two questions — how far through this round
+/// are we, and how long until my athlete is up — and both are arithmetic
+/// over the throwing order and the series already entered. Working them out
+/// here rather than inside a screen keeps them testable, and keeps the
+/// meet's card and the event's own header saying the same thing.
+class MeetFlight {
+  factory MeetFlight(
+    MeetCompetition competition, {
+    required int rounds,
+    MeetStandings? standings,
+  }) {
+    // Anybody who missed the cut is out of the count. Leaving them in would
+    // hold the round at the cut for the rest of the competition, because
+    // rounds they will never throw stay empty forever.
+    final field = [
+      for (final entry in competition.entries)
+        if (standings == null || standings.throwsInFinal(entry.id)) entry,
+    ];
+    // The round being thrown is the earliest one anybody still in the
+    // competition is owed — a round is not over until the last of them has
+    // had it.
+    var round = rounds;
+    for (final entry in field) {
+      if (entry.nextRound < round) round = entry.nextRound;
+    }
+    return MeetFlight._(
+      competition: competition,
+      rounds: rounds,
+      round: round,
+      field: field,
+      waiting: round >= rounds
+          ? const []
+          : [
+              for (final entry in field)
+                // '<=' rather than '==': an athlete whose earlier round was
+                // skipped over is still owed a throw, and is up now.
+                if (entry.nextRound <= round) entry,
+            ],
+      isFinal: standings != null &&
+          standings.cutMade &&
+          round >= standings.prelimRounds,
+    );
+  }
+
+  const MeetFlight._({
+    required this.competition,
+    required this.rounds,
+    required this.round,
+    required this.field,
+    required this.waiting,
+    required this.isFinal,
+  });
+
+  final MeetCompetition competition;
+
+  /// How many attempts the meet gives.
+  final int rounds;
+
+  /// The round being thrown, from 0. Equal to [rounds] once the last
+  /// attempt of the competition is in.
+  final int round;
+
+  /// Everyone who still has throws coming — the whole field before the cut,
+  /// the qualifiers after it.
+  final List<MeetEntry> field;
+
+  /// Who has yet to throw this round, in the order they throw.
+  final List<MeetEntry> waiting;
+
+  /// Whether [round] is one of the final's.
+  final bool isFinal;
+
+  bool get finished => round >= rounds;
+
+  /// Whether there is an order worth naming anybody in.
+  ///
+  /// A competition of one is a person taking six throws. They are always
+  /// up, which is not news — and a screen that says so is telling a coach
+  /// what the only card on it already shows.
+  bool get hasOrder => fieldSize > 1;
+
+  /// Who is in the circle: the next athlete owed a throw.
+  MeetEntry? get inTheCircle =>
+      !hasOrder || waiting.isEmpty ? null : waiting.first;
+
+  /// Who follows them. Null on the last throw of a round — the next one up
+  /// is at the top of the order again, and saying so would be guessing at
+  /// a round that hasn't started.
+  MeetEntry? get onDeck =>
+      hasOrder && waiting.length > 1 ? waiting[1] : null;
+
+  /// How many of this round have been thrown, and out of how many. The pair
+  /// a progress bar is drawn from.
+  int get thrown => field.length - waiting.length;
+  int get fieldSize => field.length;
+
+  /// How many throws until [entryId] is up: 0 for the athlete in the
+  /// circle, null for one with nothing coming this round.
+  int? throwsUntil(String entryId) {
+    if (!hasOrder) return null;
+    for (var i = 0; i < waiting.length; i++) {
+      if (waiting[i].id == entryId) return i;
+    }
+    return null;
+  }
+
+  /// 'Round 3 of 6', 'Final · round 5', 'Done' — the one phrase for how far
+  /// through a competition is, wherever it is being shown.
+  String get label {
+    if (finished) return 'Done';
+    if (isFinal) return 'Final · round ${round + 1}';
+    return 'Round ${round + 1} of $rounds';
   }
 }
