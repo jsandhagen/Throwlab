@@ -8,6 +8,8 @@ import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/utils/meet_report.dart';
+import 'package:throwlab/utils/pdf_text.dart';
 import 'package:throwlab/screens/meet_event_screen.dart';
 import 'package:throwlab/screens/meet_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
@@ -776,8 +778,7 @@ void main() {
   });
 
   group('the conditions', () {
-    testWidgets('are asked for on a meet that has been thrown',
-        (tester) async {
+    testWidgets('are asked for on a meet that has been thrown', (tester) async {
       await mountMeet(tester);
       expect(find.text('What was it like out there?'), findsOneWidget);
     });
@@ -808,6 +809,71 @@ void main() {
       expect(conditions.wind, MeetWind.head);
       expect(conditions.temperature, 54);
       expect(find.text('Overcast · 54°F · Headwind'), findsOneWidget);
+    });
+  });
+
+  group('the results sheet', () {
+    /// Stands in for the file system: keeps what the button asked for.
+    late List<(Meet, MeetCompetition?)> asked;
+    late bool wrote;
+
+    setUp(() {
+      asked = [];
+      wrote = true;
+    });
+
+    Future<String?> sharer(
+        Meet meet, MeetCompetition? only, Iterable<ThrowResult> results) async {
+      asked.add((meet, only));
+      return wrote ? '/results/sheet.pdf' : null;
+    }
+
+    testWidgets('is offered for the whole day from the meet', (tester) async {
+      await mount(tester, MeetScreen(meetId: 'k1', shareResults: sharer));
+      await tester.tap(find.byTooltip('Results sheet'));
+      await tester.pumpAndSettle();
+
+      expect(asked, hasLength(1));
+      // The whole meet: no one competition singled out.
+      expect(asked.single.$2, isNull);
+      expect(find.text('Results sheet saved.'), findsOneWidget);
+    });
+
+    testWidgets('is one event from inside one', (tester) async {
+      await mount(
+          tester,
+          MeetEventScreen(
+            meetId: 'k1',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            shareResults: sharer,
+          ));
+      await tester.tap(find.byTooltip('Results sheet'));
+      await tester.pumpAndSettle();
+
+      expect(asked.single.$2?.event, ThrowEvent.discus);
+      expect(asked.single.$2?.implementKg, 1);
+    });
+
+    testWidgets('says so when it could not be written', (tester) async {
+      wrote = false;
+      await mount(tester, MeetScreen(meetId: 'k1', shareResults: sharer));
+      await tester.tap(find.byTooltip('Results sheet'));
+      await tester.pumpAndSettle();
+      expect(find.text("Couldn't write the results sheet."), findsOneWidget);
+    });
+
+    testWidgets('holds the series that were recorded on the screen',
+        (tester) async {
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+
+      final meet = meets.byId('k1')!;
+      final text = pdfText(meetResultsPdf(meet, library.results))!;
+      expect(text, contains('COUNTY CHAMPS'));
+      expect(text, contains('Ana Diaz'));
+      expect(text, contains('41.20'));
     });
   });
 }

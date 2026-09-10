@@ -22,6 +22,14 @@ String shortThrowDate(DateTime when, {DateTime? now}) {
   return local.year == today.year ? date : '$date ${local.year}';
 }
 
+/// "2 Sep 2025" — the same date with the year always on it. A results sheet
+/// is filed, printed and read again next season, and "2 Sep" on its own is
+/// a guess by then.
+String longThrowDate(DateTime when) {
+  final local = when.toLocal();
+  return '${local.day} ${_months[local.month - 1]} ${local.year}';
+}
+
 /// "58.42 m", or "191.67 ft" for a throw measured in feet. Centimeters are
 /// how a throw is measured, and the trailing zeros of "58.40" carry
 /// meaning, so two decimals always.

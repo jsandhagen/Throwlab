@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/meet.dart';
 import '../models/throw_video.dart';
 import '../services/meet_library.dart';
+import '../services/results_sheet.dart';
 import '../services/video_library.dart';
 import '../widgets/conditions_sheet.dart';
 import '../widgets/entry_dialog.dart';
@@ -21,10 +22,41 @@ import 'meet_event_screen.dart';
 /// discus at eleven and a javelin at two, and the two have separate fields,
 /// separate orders and separate cuts. So the meet lists its events, and the
 /// throwing happens one event down, on [MeetEventScreen].
+/// Writes a meet's results out and hands them to the phone. Injected so a
+/// test can drive the button without a file system under it.
+typedef ResultsSharer = Future<String?> Function(
+    Meet meet, MeetCompetition? only, Iterable<ThrowResult> results);
+
+/// The results sheet as the app writes it, saved and opened.
+Future<String?> shareResultsSheet(
+        Meet meet, MeetCompetition? only, Iterable<ThrowResult> results) =>
+    ResultsSheet.share(meet, results, only: only);
+
+/// Saves the sheet, and says so — the file lands in the app's storage and
+/// the phone opens it, which is where printing and sharing live.
+Future<void> offerResultsSheet(
+  BuildContext context, {
+  required Meet meet,
+  required Iterable<ThrowResult> results,
+  MeetCompetition? only,
+  ResultsSharer? sharer,
+}) async {
+  final saved = await (sharer ?? shareResultsSheet)(meet, only, results);
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    content: Text(saved == null
+        ? "Couldn't write the results sheet."
+        : 'Results sheet saved.'),
+  ));
+}
+
 class MeetScreen extends StatelessWidget {
-  const MeetScreen({super.key, required this.meetId});
+  const MeetScreen({super.key, required this.meetId, this.shareResults});
 
   final String meetId;
+
+  /// Overrides how the sheet is written; the file system when null.
+  final ResultsSharer? shareResults;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +86,12 @@ class MeetScreen extends StatelessWidget {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Results sheet',
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                onPressed: () => offerResultsSheet(context,
+                    meet: meet, results: library.results, sharer: shareResults),
+              ),
               IconButton(
                 tooltip: 'Import a heat sheet',
                 icon: const Icon(Icons.upload_file_outlined),
@@ -248,7 +286,8 @@ class _ConditionsBar extends StatelessWidget {
                   ? Icons.wb_cloudy_outlined
                   : Icons.thermostat_outlined,
               size: 16,
-              color: conditions.isEmpty ? scheme.onSurfaceVariant : scheme.primary,
+              color:
+                  conditions.isEmpty ? scheme.onSurfaceVariant : scheme.primary,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -293,10 +332,10 @@ class _EventCard extends StatelessWidget {
 
   /// Which round the event is on, in the same words the event's own header
   /// uses — one answer, worked out in one place.
-  String get _progress => MeetFlight(competition,
-          rounds: meet.rounds, standings: standings)
-      .label
-      .toLowerCase();
+  String get _progress =>
+      MeetFlight(competition, rounds: meet.rounds, standings: standings)
+          .label
+          .toLowerCase();
 
   @override
   Widget build(BuildContext context) {

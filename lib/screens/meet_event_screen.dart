@@ -19,6 +19,7 @@ import '../widgets/sector_art.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'meet_screen.dart';
 
 /// Films the round that is about to be thrown. Injected so a test can drive
 /// the screen without a camera.
@@ -45,6 +46,7 @@ class MeetEventScreen extends StatefulWidget {
     required this.event,
     required this.implementKg,
     this.filmAttempt,
+    this.shareResults,
   });
 
   final String meetId;
@@ -56,6 +58,9 @@ class MeetEventScreen extends StatefulWidget {
 
   /// Overrides how a round is filmed; the camera when null.
   final AttemptFilmer? filmAttempt;
+
+  /// Overrides how the results sheet is written; the file system when null.
+  final ResultsSharer? shareResults;
 
   @override
   State<MeetEventScreen> createState() => _MeetEventScreenState();
@@ -149,6 +154,17 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Results sheet',
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                // This event's sheet, not the meet's: a coach standing at
+                // the discus has no use for the javelin's pages.
+                onPressed: () => offerResultsSheet(context,
+                    meet: meet,
+                    results: library.results,
+                    only: competition,
+                    sharer: widget.shareResults),
+              ),
               IconButton(
                 tooltip: _compact ? 'Full cards' : 'Compact the field',
                 icon: Icon(_compact
