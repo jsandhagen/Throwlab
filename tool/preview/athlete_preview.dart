@@ -18,6 +18,7 @@ import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
 import 'package:throwlab/services/athlete_library.dart';
+import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 
@@ -36,6 +37,7 @@ void main() {
       'flutter.throwlab.videos': jsonEncode(sampleLibrary(thumbs)),
       'flutter.throwlab.marks': jsonEncode(sampleMarks()),
       'flutter.throwlab.notes': jsonEncode(sampleNotes()),
+      'flutter.throwlab.meets': jsonEncode(sampleMeets()),
     });
 
     tester.view.physicalSize = const Size(1080, 2280);
@@ -49,6 +51,8 @@ void main() {
     await notes.load();
     final athletes = AthleteLibrary();
     await athletes.load();
+    final meets = MeetLibrary();
+    await meets.load();
     // A nickname to show Adam by, with the full name and school kept for a
     // heat sheet — so the heading reads 'AJ' and the record line names who.
     await athletes.save(const AthleteRecord(
@@ -58,21 +62,27 @@ void main() {
         school: 'Central HS'));
 
     // Sessions on one implement, meet marks, and written-up notes.
-    await _shoot(tester, library, notes, athletes, 'Anna Sofia',
+    await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
         'athlete_bests');
     // Two weights at once — each keeps its own mark, under an edited nickname.
-    await _shoot(tester, library, notes, athletes, 'Adam',
+    await _shoot(tester, library, notes, athletes, meets, 'Adam',
         'athlete_two_implements');
     // A mark entered in feet, which is how it reads back.
-    await _shoot(tester, library, notes, athletes, 'Jakob', 'athlete_feet');
+    await _shoot(
+        tester, library, notes, athletes, meets, 'Jakob', 'athlete_feet');
     // A whole season with nothing filmed.
-    await _shoot(tester, library, notes, athletes, 'Priya Raman',
+    await _shoot(tester, library, notes, athletes, meets, 'Priya Raman',
         'athlete_marks_only');
   });
 }
 
-Future<void> _shoot(WidgetTester tester, VideoLibrary library,
-    NotesLibrary notes, AthleteLibrary athletes, String name,
+Future<void> _shoot(
+    WidgetTester tester,
+    VideoLibrary library,
+    NotesLibrary notes,
+    AthleteLibrary athletes,
+    MeetLibrary meets,
+    String name,
     String file) async {
   await tester.pumpWidget(
     MultiProvider(
@@ -80,6 +90,7 @@ Future<void> _shoot(WidgetTester tester, VideoLibrary library,
         ChangeNotifierProvider<VideoLibrary>.value(value: library),
         ChangeNotifierProvider<NotesLibrary>.value(value: notes),
         ChangeNotifierProvider<AthleteLibrary>.value(value: athletes),
+        ChangeNotifierProvider<MeetLibrary>.value(value: meets),
       ],
       child: MaterialApp(
         theme: ThrowLabApp.theme,

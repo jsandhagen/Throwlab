@@ -1,6 +1,7 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/meet.dart';
@@ -161,5 +162,20 @@ class MeetLibrary extends ChangeNotifier {
       // Keep the meet usable in memory even when persistence is broken.
       _storageError = '$e';
     }
+  }
+}
+
+/// The meets in scope, or null when there are none.
+///
+/// A meet is context a screen shows on top of the library rather than
+/// something it can't run without: an athlete's profile is their throws
+/// first, and it still paints in a test — or on a phone whose meet store
+/// failed to read — with nothing but the clips. So this is looked up
+/// softly, the way the athlete records are.
+MeetLibrary? meetsOf(BuildContext context, {bool listen = true}) {
+  try {
+    return Provider.of<MeetLibrary>(context, listen: listen);
+  } on ProviderNotFoundException {
+    return null;
   }
 }

@@ -89,14 +89,136 @@ List<Map<String, dynamic>> sampleMarks() {
       };
 
   return [
+    // Her county final, round by round: the rest of the series is what a
+    // meet actually leaves behind, and what the profile reads back.
     mark('m1', 'Anna Sofia', 'discus', 1, 54.02, daysAgo(16),
-        note: 'County Champs, final'),
+        note: 'County Champs'),
+    mark('m1a', 'Anna Sofia', 'discus', 1, 52.44, daysAgo(16),
+        note: 'County Champs'),
+    mark('m1b', 'Anna Sofia', 'discus', 1, 53.10, daysAgo(16),
+        note: 'County Champs'),
     mark('m2', 'Anna Sofia', 'discus', 1, 51.30, daysAgo(44),
+        note: 'League match'),
+    mark('m2a', 'Anna Sofia', 'discus', 1, 49.88, daysAgo(44),
         note: 'League match'),
     // Nothing of hers was ever filmed: the whole season is a results sheet.
     mark('m3', 'Priya Raman', 'hammer', 4, 58.44, daysAgo(11),
         note: 'Regional final'),
     mark('m4', 'Priya Raman', 'hammer', 4, 56.10, daysAgo(39)),
+  ];
+}
+
+/// The meets those marks were thrown at — the same competitions, from the
+/// season's side, so a profile has an afternoon to show as well as a number.
+List<Map<String, dynamic>> sampleMeets() {
+  final now = DateTime.now();
+  String daysAgo(int days) =>
+      DateTime(now.year, now.month, now.day - days, 11).toIso8601String();
+
+  /// One round: a mark in the record book, a foul, or a pass.
+  Map<String, dynamic>? round(String? markId, {bool pass = false}) =>
+      markId != null
+          ? {'kind': 'mark', 'resultId': markId}
+          : {'kind': pass ? 'pass' : 'foul'};
+
+  Map<String, dynamic> entry(
+    String id,
+    String athlete,
+    String event,
+    double implementKg,
+    int order,
+    List<Map<String, dynamic>?> attempts, {
+    bool tracked = true,
+  }) =>
+      {
+        'id': id,
+        'athlete': athlete,
+        'event': event,
+        'implementKg': implementKg,
+        'tracked': tracked,
+        'order': order,
+        'attempts': attempts,
+      };
+
+  /// Somebody else in the field: their distances live on the attempts and
+  /// never reach the record book.
+  Map<String, dynamic>? rival(double? distance) => distance == null
+      ? {'kind': 'foul'}
+      : {'kind': 'mark', 'distance': distance, 'distanceUnit': 'meters'};
+
+  return [
+    {
+      'id': 'k1',
+      'name': 'County Champs',
+      'date': daysAgo(16),
+      'venue': 'Sportcity',
+      'rounds': 6,
+      'prelimRounds': 3,
+      'advancing': 8,
+      'conditions': {
+        'sky': 'overcast',
+        'temperature': 54,
+        'temperatureUnit': 'fahrenheit',
+        'wind': 'head',
+        'note': 'gusting down the runway',
+      },
+      'entries': [
+        entry('e1', 'Anna Sofia', 'discus', 1, 0, [
+          round('m1a'),
+          round(null),
+          round('m1'),
+          round(null, pass: true),
+          round('m1b'),
+          round(null),
+        ]),
+        entry('e2', 'M. Okoye (Barnet)', 'discus', 1, 1, [
+          rival(50.10),
+          rival(null),
+          rival(52.88),
+        ], tracked: false),
+        entry('e3', 'L. Fischer (Brighton)', 'discus', 1, 2, [
+          rival(48.42),
+          rival(49.06),
+          rival(48.90),
+        ], tracked: false),
+      ],
+    },
+    {
+      'id': 'k2',
+      'name': 'League match',
+      'date': daysAgo(44),
+      'venue': 'Ashton',
+      'rounds': 4,
+      'prelimRounds': 4,
+      'advancing': 99,
+      'entries': [
+        entry('e4', 'Anna Sofia', 'discus', 1, 0, [
+          round('m2a'),
+          round('m2'),
+          round(null),
+          round(null, pass: true),
+        ]),
+        entry('e5', 'R. Hall (Sale)', 'discus', 1, 1, [
+          rival(52.60),
+          rival(51.90),
+        ], tracked: false),
+      ],
+    },
+    {
+      'id': 'k3',
+      'name': 'Regional final',
+      'date': daysAgo(11),
+      'venue': 'Hayward Field',
+      'rounds': 6,
+      'prelimRounds': 3,
+      'advancing': 8,
+      'entries': [
+        entry('e6', 'Priya Raman', 'hammer', 4, 0, [
+          round(null),
+          round('m3'),
+        ]),
+      ],
+    },
   ];
 }
 

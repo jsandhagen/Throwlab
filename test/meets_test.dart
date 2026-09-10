@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/meet_conditions.dart';
+import 'package:throwlab/models/meet_history.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
@@ -766,6 +767,133 @@ void main() {
         'date': DateTime(2026, 6, 13).toIso8601String(),
       });
       expect(meet.conditions.isEmpty, isTrue);
+    });
+  });
+
+  group("an athlete's meets", () {
+    /// A meet Ana threw at, against [rivals] who each threw once.
+    Meet meetFor(String id, DateTime on, List<double> series,
+        {List<double> rivals = const []}) {
+      final meet = _meet(id: id, on: on);
+      final mine = MeetEntry(
+        id: '$id-mine',
+        athlete: 'Ana Diaz',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+      );
+      for (var round = 0; round < series.length; round++) {
+        mine.setAttempt(round, MeetAttempt.mark('$id-m$round'));
+      }
+      meet.entries.add(mine);
+      for (var i = 0; i < rivals.length; i++) {
+        meet.entries.add(MeetEntry(
+          id: '$id-r$i',
+          athlete: 'Rival $i',
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          tracked: false,
+          order: i + 1,
+        )..setAttempt(0, MeetAttempt.untracked(rivals[i])));
+      }
+      return meet;
+    }
+
+    /// The record book behind those series.
+    List<ThrowMark> book(String id, List<double> series, DateTime on) => [
+          for (var round = 0; round < series.length; round++)
+            ThrowMark(
+              id: '$id-m$round',
+              athlete: 'Ana Diaz',
+              event: ThrowEvent.discus,
+              implementKg: 1,
+              distance: series[round],
+              achievedOn: on,
+            ),
+        ];
+
+    test('read back as the afternoons they were', () {
+      final on = DateTime(2026, 6, 13);
+      final meet = meetFor('k1', on, [41.20, 43.06], rivals: [40.00]);
+      final outings =
+          MeetOuting.forAthlete('Ana Diaz', [meet], book('k1', [41.20, 43.06], on));
+
+      expect(outings, hasLength(1));
+      final outing = outings.single;
+      expect(outing.meet.id, 'k1');
+      expect(outing.best, 43.06);
+      // The one that counted was her second, which is the shape of the
+      // afternoon rather than the number.
+      expect(outing.bestRound, 2);
+      expect(outing.taken, 2);
+      expect(outing.fieldSize, 2);
+      expect(outing.place?.place, 1);
+      expect(outing.won, isTrue);
+    });
+
+    test('run most recent first', () {
+      final june = DateTime(2026, 6, 13);
+      final may = DateTime(2026, 5, 2);
+      final outings = MeetOuting.forAthlete(
+        'Ana Diaz',
+        [meetFor('k1', may, [40.00]), meetFor('k2', june, [43.06])],
+        [...book('k1', [40.00], may), ...book('k2', [43.06], june)],
+      );
+      expect([for (final outing in outings) outing.meet.id], ['k2', 'k1']);
+    });
+
+    test('a competition of one is not a win', () {
+      final on = DateTime(2026, 6, 13);
+      final outing = MeetOuting.forAthlete(
+              'Ana Diaz', [meetFor('k1', on, [41.20])], book('k1', [41.20], on))
+          .single;
+      expect(outing.place?.place, 1);
+      expect(outing.won, isFalse);
+    });
+
+    test('a series of fouls places nowhere', () {
+      final meet = _meet();
+      meet.entries.add(MeetEntry(
+        id: 'e1',
+        athlete: 'Ana Diaz',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+      )
+        ..setAttempt(0, MeetAttempt.foul())
+        ..setAttempt(1, MeetAttempt.foul()));
+      final outing =
+          MeetOuting.forAthlete('Ana Diaz', [meet], const []).single;
+      expect(outing.best, isNull);
+      expect(outing.place, isNull);
+      expect(outing.taken, 2);
+    });
+
+    test('are matched however the name was spelled', () {
+      final on = DateTime(2026, 6, 13);
+      expect(
+        MeetOuting.forAthlete(
+            'ana diaz', [meetFor('k1', on, [41.20])], book('k1', [41.20], on)),
+        hasLength(1),
+      );
+      expect(MeetOuting.forAthlete('', [meetFor('k1', on, [41.20])], const []),
+          isEmpty);
+    });
+
+    test('add up to a record', () {
+      final june = DateTime(2026, 6, 13);
+      final may = DateTime(2026, 5, 2);
+      final record = MeetRecord(MeetOuting.forAthlete(
+        'Ana Diaz',
+        [
+          meetFor('k1', may, [40.00], rivals: [45.00]),
+          meetFor('k2', june, [44.00], rivals: [42.00]),
+        ],
+        [...book('k1', [40.00], may), ...book('k2', [44.00], june)],
+      ));
+      expect(record.outings, 2);
+      expect(record.wins, 1);
+      expect(record.podiums, 2);
+      expect(record.best, 44.00);
+      expect(record.averageBest, 42.00);
     });
   });
 }

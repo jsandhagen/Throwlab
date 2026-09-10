@@ -1004,7 +1004,7 @@ class _EntryCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Text(
-        _ordinal(standing),
+        ordinalPlace(standing),
         style: theme.textTheme.labelSmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
             fontWeight: standing == 1 ? FontWeight.w700 : FontWeight.w500),
@@ -1128,18 +1128,6 @@ class _EntryCard extends StatelessWidget {
                   title: Text('Remove'))),
         ],
       );
-}
-
-/// '1st', '2nd', '3rd', '11th' — a place, written the way it is read out.
-String _ordinal(int place) {
-  final tens = place % 100;
-  if (tens >= 11 && tens <= 13) return '${place}th';
-  return switch (place % 10) {
-    1 => '${place}st',
-    2 => '${place}nd',
-    3 => '${place}rd',
-    _ => '${place}th',
-  };
 }
 
 /// One round of a series, the way it is written on a results sheet: the

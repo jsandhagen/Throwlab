@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:throwlab/models/meet.dart';
+import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/models/training_note.dart';
 import 'package:throwlab/screens/analysis_screen.dart';
 import 'package:throwlab/screens/athlete_screen.dart';
+import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/widgets/gold.dart';
@@ -45,7 +48,7 @@ void main() {
   }
 
   Future<void> mountProfile(WidgetTester tester,
-      {String name = 'Ana Diaz'}) async {
+      {String name = 'Ana Diaz', MeetLibrary? meets}) async {
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -53,6 +56,11 @@ void main() {
       providers: [
         ChangeNotifierProvider<VideoLibrary>.value(value: library),
         ChangeNotifierProvider<NotesLibrary>.value(value: notes),
+        // A profile paints with no meets in scope at all — that is what
+        // every other test here mounts — so they only go in when the meets
+        // are the thing under test.
+        if (meets != null)
+          ChangeNotifierProvider<MeetLibrary>.value(value: meets),
       ],
       child: MaterialApp(
         home: AthleteScreen(name: name, titleFor: (video) => video.event.label),
@@ -275,5 +283,105 @@ void main() {
     await mountProfile(tester, name: 'Nobody');
     expect(find.textContaining('Nothing here any more'), findsOneWidget);
     expect(find.byType(ThrowCard), findsNothing);
+  });
+
+  group('their meets', () {
+    /// A meet Ana threw a series at, with one rival in the field.
+    Future<MeetLibrary> season({
+      List<double> series = const [41.20, 43.06],
+      double rival = 40.00,
+      MeetConditions conditions = const MeetConditions(),
+    }) async {
+      for (var round = 0; round < series.length; round++) {
+        await library.addMark(ThrowMark(
+          id: 'm$round',
+          athlete: 'Ana Diaz',
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          distance: series[round],
+          achievedOn: DateTime(2026, 6, 13),
+          note: 'County Champs',
+        ));
+      }
+      final meets = MeetLibrary();
+      await meets.load();
+      final meet = Meet(
+        id: 'k1',
+        name: 'County Champs',
+        date: DateTime(2026, 6, 13),
+        venue: 'Sportcity',
+        rounds: 6,
+        conditions: conditions,
+      );
+      final mine = MeetEntry(
+          id: 'e1',
+          athlete: 'Ana Diaz',
+          event: ThrowEvent.discus,
+          implementKg: 1);
+      for (var round = 0; round < series.length; round++) {
+        mine.setAttempt(round, MeetAttempt.mark('m$round'));
+      }
+      meet.entries.add(mine);
+      meet.entries.add(MeetEntry(
+        id: 'e2',
+        athlete: 'B. Rival',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: false,
+        order: 1,
+      )..setAttempt(0, MeetAttempt.untracked(rival)));
+      await meets.save(meet);
+      return meets;
+    }
+
+    testWidgets('show the meet, where it placed, and the series',
+        (tester) async {
+      await mountProfile(tester, meets: await season());
+
+      expect(find.text('County Champs'), findsOneWidget);
+      expect(find.text('1st of 2'), findsOneWidget);
+      expect(find.textContaining('13 Jun · Discus · 1 kg · Sportcity'),
+          findsOneWidget);
+      // The series, round by round, with the one that counted picked out.
+      expect(find.text('41.20'), findsOneWidget);
+      expect(find.text('43.06'), findsOneWidget);
+    });
+
+    testWidgets('carry what the day was like', (tester) async {
+      await mountProfile(
+        tester,
+        meets: await season(
+          conditions: const MeetConditions(
+              sky: MeetSky.overcast, wind: MeetWind.head, note: 'wet ring'),
+        ),
+      );
+      expect(find.text('Overcast · Headwind · wet ring'), findsOneWidget);
+    });
+
+    testWidgets('are nothing at all when there are no meets in scope',
+        (tester) async {
+      await fill([
+        testVideo(temp,
+            id: 'v1',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            distance: 41.20),
+      ]);
+      await mountProfile(tester);
+      expect(find.text('MEETS'), findsNothing);
+    });
+
+    testWidgets('a season of one throw draws no line', (tester) async {
+      await mountProfile(tester, meets: await season(series: [41.20]));
+      // One mark is a measurement, not a direction.
+      expect(find.textContaining('measured'), findsNothing);
+    });
+
+    testWidgets('a season of two says which way it went', (tester) async {
+      await mountProfile(tester, meets: await season());
+      expect(find.textContaining('+1.86 m since 13 Jun · 2 measured'),
+          findsOneWidget);
+    });
   });
 }

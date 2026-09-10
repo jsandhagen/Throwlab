@@ -3,11 +3,14 @@ import 'package:provider/provider.dart';
 
 import '../models/athlete_profile.dart';
 import '../models/athlete_record.dart';
+import '../models/meet.dart';
+import '../models/meet_history.dart';
 import '../models/throw_event.dart';
 import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
 import '../models/training_note.dart';
 import '../services/athlete_library.dart';
+import '../services/meet_library.dart';
 import '../services/notes_library.dart';
 import '../services/video_library.dart';
 import '../widgets/angular.dart';
@@ -15,11 +18,13 @@ import '../widgets/event_glyph.dart';
 import '../widgets/gold.dart';
 import '../widgets/mark_editor.dart';
 import '../widgets/note_text.dart';
+import '../widgets/progression.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'meet_event_screen.dart';
 import 'note_editor_screen.dart';
 
 /// One athlete: what they have thrown, what their best mark is at each of
@@ -141,6 +146,7 @@ class AthleteScreen extends StatelessWidget {
   Widget _body(
       BuildContext context, VideoLibrary library, AthleteProfile profile) {
     final record = athleteRecordsOf(context)?.recordFor(profile.name);
+    final atMeet = _meetResultIds(context);
     return CustomScrollView(
       slivers: [
         if (record != null && !record.isEmpty)
@@ -163,6 +169,7 @@ class AthleteScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _BestTile(
                   best: best,
+                  season: _progressionFor(profile, best, atMeet),
                   // A filmed best opens its clip; one that was only ever
                   // written down opens the thing it actually is, the entry.
                   onTap: () => best.isFilmed
@@ -172,6 +179,7 @@ class AthleteScreen extends StatelessWidget {
               );
             },
           ),
+        ..._meetsSection(context, profile),
         _notesSection(context, profile.name),
         if (profile.marks.isNotEmpty) ...[
           SliverToBoxAdapter(
@@ -226,6 +234,80 @@ class AthleteScreen extends StatelessWidget {
       ],
     );
   }
+
+  /// Every measured throw of theirs at one event and weight, oldest first.
+  /// Training marks included: an athlete throwing further on a Tuesday than
+  /// they manage on a Saturday is exactly what a coach wants to see, and a
+  /// chart of competition days alone would hide it.
+  List<ProgressionPoint> _progressionFor(
+      AthleteProfile profile, PersonalBest best, Set<String> atMeet) {
+    final points = [
+      for (final result in profile.results)
+        if (result.event == best.event &&
+            result.implementKg == best.implementKg &&
+            result.distance != null)
+          ProgressionPoint(
+            on: result.displayDate,
+            meters: result.distance!,
+            atMeet: atMeet.contains(result.id),
+          ),
+    ]..sort((a, b) => a.on.compareTo(b.on));
+    return points;
+  }
+
+  /// The ids of every mark and clip a meet has an attempt pointing at.
+  Set<String> _meetResultIds(BuildContext context) => {
+        for (final meet in meetsOf(context)?.meets ?? const <Meet>[])
+          for (final entry in meet.entries)
+            for (final attempt in entry.attempts)
+              if (attempt?.resultId != null) attempt!.resultId!,
+      };
+
+  /// Their meets, most recent first: the series, where it placed, and what
+  /// the day was like.
+  ///
+  /// The record book already holds the marks. What it does not hold is the
+  /// afternoon they came out of — whether the big throw was the opener or
+  /// the last one, what the field was, and whether it was into a headwind.
+  /// A coach going into a championship is asking about that half of it.
+  List<Widget> _meetsSection(BuildContext context, AthleteProfile profile) {
+    final outings = MeetOuting.forAthlete(
+      profile.name,
+      meetsOf(context)?.meets ?? const <Meet>[],
+      Provider.of<VideoLibrary>(context, listen: false).results,
+    );
+    if (outings.isEmpty) return const [];
+    return [
+      SliverToBoxAdapter(
+        child: _SectionHeading('Meets', '${outings.length}'),
+      ),
+      SliverList.separated(
+        itemCount: outings.length,
+        separatorBuilder: (context, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _OutingTile(
+            outing: outings[index],
+            onTap: () => _openCompetition(context, outings[index]),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  /// Opens the competition this series was thrown in — the rest of the
+  /// field, and the rounds as they were entered.
+  void _openCompetition(BuildContext context, MeetOuting outing) =>
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MeetEventScreen(
+            meetId: outing.meet.id,
+            event: outing.event,
+            implementKg: outing.implementKg,
+          ),
+        ),
+      );
 
   /// The athlete's training notes, most recently edited first. Lives off
   /// its own store, so a note keeps working whatever happens to the clips.
@@ -387,14 +469,192 @@ class _SectionHeading extends StatelessWidget {
   }
 }
 
+/// One meet they threw at: the series, where it placed them, and what the
+/// day was like.
+class _OutingTile extends StatelessWidget {
+  const _OutingTile({required this.outing, required this.onTap});
+
+  final MeetOuting outing;
+  final VoidCallback onTap;
+
+  /// '2nd of 12', or what happened instead. A field of one is not a
+  /// competition, so it is not a placing either.
+  String get _placing {
+    final place = outing.place?.place;
+    if (place == null) return outing.taken == 0 ? 'not thrown' : 'no mark';
+    if (outing.fieldSize <= 1) return 'unopposed';
+    return '${ordinalPlace(place)} of ${outing.fieldSize}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = eventColor(outing.event);
+    final best = outing.best;
+    final conditions = outing.meet.conditions;
+    return Card(
+      color: scheme.surfaceContainerHighest.withOpacity(0.45),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      outing.meet.name.isEmpty ? 'Meet' : outing.meet.name,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (outing.won) ...[
+                    const FirstPlaceMedal(size: 13),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    _placing,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                        color: outing.won ? accent : scheme.onSurfaceVariant,
+                        fontWeight:
+                            outing.won ? FontWeight.w700 : FontWeight.w500),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${shortThrowDate(outing.date)} · '
+                      '${outing.event.label} · '
+                      '${outing.implementSpec.weightLabel}'
+                      '${outing.meet.venue.isEmpty ? '' : ' · ${outing.meet.venue}'}',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (best != null)
+                    Text(
+                      formatDistance(
+                          best, outing.series.unitAt(outing.series.bestRound!)),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600, color: accent),
+                    ),
+                ],
+              ),
+              if (outing.taken > 0) ...[
+                const SizedBox(height: 8),
+                _SeriesLine(outing: outing, accent: accent),
+              ],
+              if (conditions.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  [
+                    if (conditions.summary.isNotEmpty) conditions.summary,
+                    if (conditions.note.isNotEmpty) conditions.note,
+                  ].join(' · '),
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The series as a results sheet writes it: every round in order, X for a
+/// foul, – for a pass, and the one that counted in the event's color.
+///
+/// Written out rather than drawn as boxes: on a profile the question is
+/// what the shape of the afternoon was, and six numbers in a row answer it
+/// in a fraction of the space the competition screen needs for something
+/// you also have to be able to hit with a thumb.
+class _SeriesLine extends StatelessWidget {
+  const _SeriesLine({required this.outing, required this.accent});
+
+  final MeetOuting outing;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final entry = outing.entry;
+    final rounds = <Widget>[];
+    for (var round = 0; round < entry.attempts.length; round++) {
+      final attempt = entry.attemptAt(round);
+      final distance = outing.series.distanceAt(round);
+      final (text, color) = switch (attempt?.kind) {
+        null => ('·', scheme.onSurfaceVariant),
+        AttemptKind.foul => ('X', scheme.error),
+        AttemptKind.pass => ('–', scheme.onSurfaceVariant),
+        AttemptKind.mark => distance == null
+            ? ('?', scheme.onSurfaceVariant)
+            : (
+                formatDistance(distance, outing.series.unitAt(round))
+                    .split(' ')
+                    .first,
+                round == outing.series.bestRound
+                    ? accent
+                    : scheme.onSurface.withOpacity(0.85)
+              ),
+      };
+      if (rounds.isNotEmpty) {
+        rounds.add(Text('  ·  ',
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: scheme.outlineVariant)));
+      }
+      rounds.add(Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: round == outing.series.bestRound
+                ? FontWeight.w700
+                : FontWeight.w500),
+      ));
+    }
+    return Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center, children: rounds);
+  }
+}
+
 /// One mark: what it was thrown with, how far it went, and the clip it came
 /// out of — tapping opens that throw, which is the point of keeping the
 /// video and the number together in the first place.
 class _BestTile extends StatelessWidget {
-  const _BestTile({required this.best, required this.onTap});
+  const _BestTile({
+    required this.best,
+    required this.season,
+    required this.onTap,
+  });
 
   final PersonalBest best;
+
+  /// Every measured throw at this event and weight, oldest first. Drawn
+  /// under the mark once there are two of them: a best is the high-water
+  /// line and says nothing about the direction of travel, and an athlete
+  /// two meters off theirs in June is either building or falling away.
+  final List<ProgressionPoint> season;
+
   final VoidCallback onTap;
+
+  /// What the season has moved, first mark to last. Not best to best: a
+  /// best only ever goes up, so measuring against it would draw every
+  /// athlete as improving.
+  double get _moved => season.last.meters - season.first.meters;
 
   @override
   Widget build(BuildContext context) {
@@ -407,71 +667,94 @@ class _BestTile extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // A filmed best leads with the frame it came out of; one that
-              // was only written down leads with the medal, so the row
-              // still reads as an achievement rather than a missing image.
-              SizedBox(
-                width: 76,
-                height: 50,
-                child: best.isFilmed
-                    ? ThrowThumbnail(best.video!, width: 76, height: 50)
-                    : const Center(child: FirstPlaceMedal(size: 28)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
+              Row(
+                children: [
+                  // A filmed best leads with the frame it came out of; one that
+                  // was only written down leads with the medal, so the row
+                  // still reads as an achievement rather than a missing image.
+                  SizedBox(
+                    width: 76,
+                    height: 50,
+                    child: best.isFilmed
+                        ? ThrowThumbnail(best.video!, width: 76, height: 50)
+                        : const Center(child: FirstPlaceMedal(size: 28)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        EventGlyph(best.event,
-                            size: 16, color: eventColor(best.event)),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(best.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w600)),
+                        Row(
+                          children: [
+                            EventGlyph(best.event,
+                                size: 16, color: eventColor(best.event)),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(best.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleSmall
+                                      ?.copyWith(fontWeight: FontWeight.w600)),
+                            ),
+                            // Said here rather than in the line below, which a
+                            // long meet name and a big number leave no room in.
+                            if (!best.isFilmed) ...[
+                              const SizedBox(width: 6),
+                              Tooltip(
+                                message: 'Not filmed',
+                                child: Icon(Icons.videocam_off_outlined,
+                                    size: 14,
+                                    color: theme.colorScheme.onSurfaceVariant),
+                              ),
+                            ],
+                          ],
                         ),
-                        // Said here rather than in the line below, which a
-                        // long meet name and a big number leave no room in.
-                        if (!best.isFilmed) ...[
-                          const SizedBox(width: 6),
-                          Tooltip(
-                            message: 'Not filmed',
-                            child: Icon(Icons.videocam_off_outlined,
-                                size: 14,
-                                color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ],
+                        const SizedBox(height: 2),
+                        Text(
+                          _footnote(best),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _footnote(best),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: 10),
+                  // No medal here: everything under this heading is one, and
+                  // the icon only crowded the mark it was pointing at.
+                  Text(
+                    formatDistance(best.distance, best.unit),
+                    style: const TextStyle(
+                      color: personalBestGold,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              // No medal here: everything under this heading is one, and
-              // the icon only crowded the mark it was pointing at.
-              Text(
-                formatDistance(best.distance, best.unit),
-                style: const TextStyle(
-                  color: personalBestGold,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
+              if (season.length > 1) ...[
+                const SizedBox(height: 6),
+                ProgressionChart(
+                    points: season, color: eventColor(best.event), height: 78),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, top: 2),
+                  child: Text(
+                    // Signed both ways, because a season that went
+                    // backwards should say so.
+                    '${_moved >= 0 ? '+' : '−'}'
+                    '${formatDistance(_moved.abs(), best.unit)} '
+                    'since ${shortThrowDate(season.first.on)} · '
+                    '${season.length} measured',
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),

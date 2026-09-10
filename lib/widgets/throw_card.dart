@@ -31,6 +31,20 @@ String formatDistance(double meters,
   return '${value.toStringAsFixed(2)} ${unit == DistanceUnit.feet ? 'ft' : 'm'}';
 }
 
+/// '1st', '2nd', '3rd', '11th' — a place, written the way it is read out.
+String ordinalPlace(int place) {
+  // The teens are the exception every naive version of this gets wrong:
+  // eleventh, not eleven-first.
+  final tens = place % 100;
+  if (tens >= 11 && tens <= 13) return '${place}th';
+  return switch (place % 10) {
+    1 => '${place}st',
+    2 => '${place}nd',
+    3 => '${place}rd',
+    _ => '${place}th',
+  };
+}
+
 /// A typed number, or null when it isn't one. Accepts a comma decimal
 /// mark, since a phone keyboard hands over whatever the locale uses, and
 /// rejects negatives — a throw can be zero-length, never less.
