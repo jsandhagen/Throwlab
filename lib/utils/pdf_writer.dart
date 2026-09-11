@@ -70,6 +70,48 @@ class PdfSheet {
     _y -= spacing ?? leading;
   }
 
+  /// One line built out of runs, each starting at a character column.
+  ///
+  /// Every glyph in Courier is the same width, so a column is an exact
+  /// position rather than a measurement — which is what lets one row of a
+  /// table carry two faces without the columns under it moving. The
+  /// winning throw of a series is set in bold where it sits in the series,
+  /// and nothing else on the line shifts by a hair.
+  void columns(
+    List<PdfRun> runs, {
+    double size = 9,
+    double? spacing,
+  }) {
+    _room(size);
+    for (final run in runs) {
+      if (run.text.isEmpty) continue;
+      _page.write('BT /${run.face.resource} ${_n(size)} Tf 1 0 0 1 '
+          '${_n(margin + run.column * size * _advance)} ${_n(_y)} Tm '
+          '(${_escape(run.text)}) Tj ET\n');
+    }
+    _y -= spacing ?? leading;
+  }
+
+  /// Sets aside a box [height] points tall and hands it to [draw].
+  ///
+  /// Drawing is worth having on a results sheet — a competition has a
+  /// shape, and a column of numbers is the one way of showing it that
+  /// hides it — but nothing outside this file should have to know what a
+  /// PDF operator looks like. So the box comes with its own coordinates,
+  /// measured in points from its bottom-left corner, and the sheet keeps
+  /// track of where on the page it actually landed.
+  void figure(double height, void Function(PdfFigure into) draw,
+      {double below = 4}) {
+    _room(height + below);
+    _y -= height;
+    draw(PdfFigure._(_page, margin, _y, width - margin * 2, height));
+    _y -= below;
+  }
+
+  /// Breaks the page unless [points] of it are left, so a heading is never
+  /// stranded at the foot of one with its table over the leaf.
+  void reserve(double points) => _room(points);
+
   /// A rule across the text column, with a little air either side of it.
   void rule({double thickness = 0.5, double above = 4, double below = 8}) {
     _room(above + below);
@@ -214,6 +256,88 @@ class PdfSheet {
     return out.toString();
   }
 }
+
+/// A run of text starting at a character column of a [PdfSheet.columns]
+/// row. See that for why a column is a count rather than a measurement.
+class PdfRun {
+  const PdfRun(this.text, this.column, [this.face = PdfFace.regular]);
+
+  final String text;
+  final int column;
+  final PdfFace face;
+}
+
+/// A box on the page to draw in, with its own coordinates: points right
+/// from its left edge, and points up from its bottom.
+///
+/// Deliberately four operations wide. A results sheet needs rules, ticks,
+/// a filled bar and a word beside them — a drawing API any larger would be
+/// a chart library, which is the dependency this whole file exists to
+/// avoid.
+class PdfFigure {
+  PdfFigure._(this._page, this._left, this._bottom, this.width, this.height);
+
+  final StringBuffer _page;
+  final double _left;
+  final double _bottom;
+
+  final double width;
+  final double height;
+
+  /// A straight line. [dash] is the on/off pattern in points, for the kind
+  /// of line that means 'this is where something falls' rather than 'this
+  /// is a thing' — the cut, mostly.
+  void line(
+    double x1,
+    double y1,
+    double x2,
+    double y2, {
+    double thickness = 0.5,
+    double gray = 0,
+    List<double>? dash,
+  }) {
+    _page.write('q ${PdfSheet._n(gray)} G ${PdfSheet._n(thickness)} w ');
+    if (dash != null) {
+      _page.write('[${dash.map(PdfSheet._n).join(' ')}] 0 d ');
+    }
+    _page.write('${PdfSheet._n(_left + x1)} ${PdfSheet._n(_bottom + y1)} m '
+        '${PdfSheet._n(_left + x2)} ${PdfSheet._n(_bottom + y2)} l S Q\n');
+  }
+
+  /// A filled rectangle.
+  void fill(double x, double y, double w, double h, {double gray = 0}) {
+    if (w <= 0 || h <= 0) return;
+    _page.write('q ${PdfSheet._n(gray)} g ${PdfSheet._n(_left + x)} '
+        '${PdfSheet._n(_bottom + y)} ${PdfSheet._n(w)} ${PdfSheet._n(h)} '
+        're f Q\n');
+  }
+
+  /// A word in the box. [y] is its baseline; [align] says which edge of it
+  /// [x] is.
+  void text(
+    String text, {
+    required double x,
+    required double y,
+    double size = 7,
+    PdfFace face = PdfFace.regular,
+    PdfAlign align = PdfAlign.left,
+    double gray = 0,
+  }) {
+    if (text.isEmpty) return;
+    final wide = text.length * size * PdfSheet._advance;
+    final at = switch (align) {
+      PdfAlign.left => x,
+      PdfAlign.right => x - wide,
+      PdfAlign.center => x - wide / 2,
+    };
+    _page.write('q ${PdfSheet._n(gray)} g BT /${face.resource} '
+        '${PdfSheet._n(size)} Tf 1 0 0 1 ${PdfSheet._n(_left + at)} '
+        '${PdfSheet._n(_bottom + y)} Tm (${PdfSheet._escape(text)}) Tj ET Q\n');
+  }
+}
+
+/// Which edge of a word in a [PdfFigure] its x is.
+enum PdfAlign { left, right, center }
 
 /// The three faces of Courier a sheet is set in.
 enum PdfFace {

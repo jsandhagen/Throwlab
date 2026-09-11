@@ -49,6 +49,19 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/season_preview.dart
 ```
 
+The results sheet is reviewed the same way, except that the artifact is the
+PDF itself — it writes no golden and asserts nothing, because looking at the
+file is the review:
+
+```sh
+flutter test tool/preview/report_preview.dart   # build/preview/results_sheet.pdf
+```
+
+It prints a championship with everything the sheet has to cope with on it: a
+discus cut to a final, a shot thrown in two flights, a javelin measured in
+feet in a field measured in meters, a personal best, and enough of a field
+to push the last event onto a second page.
+
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
 profiles (each with the season drawn under its best, and the meets it was
@@ -369,6 +382,29 @@ like the app rather than a bare Material default.
   standings order, the series with its fouls and passes still in it, and
   the cut drawn where it falls. The tests read the generated file back with
   the app's own `pdf_text`, which is the honest check.
+- The sheet is a report, not a dump. A table says what everybody threw and
+  hides what the afternoon was like, so each competition is drawn as well
+  as tabulated: a bar to the throw an athlete was placed on, a tick for
+  every other legal throw of their series, rings at a round number of
+  meters off the board's own `boardSpans`, and the cut as a dashed line
+  across all of it — whether the winner was clear or hunted, and who found
+  it once against who was there all day. The picture is drawn to the
+  table's width rather than the page's so the two read as one block, and it
+  carries no distances of its own: the table gives every mark in the unit
+  it was entered in, a chart can only have one scale, and two numbers for
+  one throw is worse than none. Under the table, how it was won — the round
+  it turned on, and by how much or on countback. `PdfSheet.figure` hands out
+  a box with its own coordinates so nothing outside `pdf_writer` has to know
+  what a PDF operator looks like, and `PdfSheet.columns` sets one row out of
+  runs so the throw somebody was placed on can be bold where it sits in the
+  series without the columns under it moving.
+- The one thing on the sheet the meet does not know is a personal best, and
+  it is the part somebody will read out. `personalBestIds` — the record
+  book's own rule — is run over the same marks the tables are built from:
+  the throw is flagged PB in its row, counted in the line across the top of
+  the sheet, and named at the foot of it with what it beat. Only a tracked
+  athlete can hold one, which falls out for free, because the rest of the
+  field's distances never reach the library to be ranked.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs
   to `AppUpdater`, not to the screen that started it, and writes into a part
