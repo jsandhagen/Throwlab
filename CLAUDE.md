@@ -257,7 +257,12 @@ like the app rather than a bare Material default.
   Everybody else comes in untracked, which is what the rest of the field is.
   A weight named on the heading is snapped to the nearest implement the
   event is actually thrown at (a heat sheet's '12lb' is the 12 lb shot); a
-  heading that names only a division is guessed at and says so.
+  heading that names only a division is guessed at and says so. A field too
+  long for the page has its heading printed again over the rest of it —
+  '(continued)', or the whole line in brackets — and that reads as the same
+  event carrying on, flight and all, rather than as a second one of the same
+  name: the fields it happens to are the long ones, which are exactly the
+  flighted ones.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

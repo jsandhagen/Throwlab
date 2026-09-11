@@ -133,15 +133,18 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
 
   /// Everything ticked, as entries ready to go into the meet.
   List<MeetEntry> _going(Meet meet) {
+    final entries = <MeetEntry>[];
+
     // An athlete already down for this event at this weight is not entered
-    // twice: a sheet read again after a scratch should not double the field.
+    // twice: a sheet read again after a scratch should not double the
+    // field, and neither should a program that printed somebody's name
+    // twice — which is what a field listed once per round looks like.
     bool already(String name, ThrowEvent event, double kg) =>
-        meet.entries.any((entry) =>
+        [...meet.entries, ...entries].any((entry) =>
             entry.event == event &&
             entry.implementKg == kg &&
             sameAthlete(entry.athlete, name));
 
-    final entries = <MeetEntry>[];
     var order = meet.entries.length;
     for (final row in _rows) {
       if (!row.chosen) continue;

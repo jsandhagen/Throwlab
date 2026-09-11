@@ -152,6 +152,20 @@ Flight 2 of 2
     expect(entries.map((e) => e.flight).toList(), [1, 2, 2]);
   });
 
+  testWidgets('enters a name the sheet printed twice once', (tester) async {
+    await open(tester);
+    await paste(tester, '''
+Event 15  Boys Shot Put 12lb
+Flight 1 of 2
+  1 Smith, John                 12 Central HS            44-06.00
+Flight 2 of 2
+  1 Smith, John                 12 Central HS            44-06.00
+''');
+    await tester.tap(find.text('Enter 1 athlete'));
+    await tester.pumpAndSettle();
+    expect(meets.byId('k1')!.entries.length, 1);
+  });
+
   testWidgets('takes an event the coach ticks on as well', (tester) async {
     await open(tester);
     await paste(tester, sheet);

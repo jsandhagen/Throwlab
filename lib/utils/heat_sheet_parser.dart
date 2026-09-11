@@ -141,9 +141,16 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
 
     final heading = _heading(line);
     if (heading != null) {
-      // Any event heading ends the last one — including the 4x100 between
-      // two throws, which is exactly what stops its field being read as
-      // shot putters.
+      // A field too long for the page has its own heading printed again
+      // over the rest of it — with '(continued)' after it, or the whole
+      // line in brackets. That is the same event carrying on, not a second
+      // one of the same name, and closing it here would cut the field in
+      // two and start the flights over. Which is the field it happens to:
+      // the long ones, and a long field is the flighted one.
+      if (open != null && heading.continues(open!)) continue;
+      // Any other event heading ends the last one — including the 4x100
+      // between two throws, which is exactly what stops its field being
+      // read as shot putters.
       close();
       open = heading.event == null ? null : heading;
       continue;
@@ -207,14 +214,55 @@ class _Heading {
     this.event,
     this.implementKg = 0,
     this.title = '',
+    this.key = '',
+    this.continued = false,
     this.weightGuessed = false,
   });
 
   final ThrowEvent? event;
   final double implementKg;
   final String title;
+
+  /// What two headings have to share to be the same event: [title] with the
+  /// wrapping a continuation adds taken off. See the continuation above.
+  final String key;
+
+  /// Whether the line says in so many words that it is carrying an event
+  /// on: '(continued)'.
+  final bool continued;
+
   final bool weightGuessed;
+
+  /// Whether this heading carries [open] on rather than starting something
+  /// new.
+  ///
+  /// Two ways to tell, because a program reprints a heading two ways. The
+  /// line may say so — and then it is allowed to be printed short, with the
+  /// weight and the division left off, because the event it is continuing
+  /// already said those. Or it is the same heading over again, brackets and
+  /// all, which is the swimming side of Hy-Tek's house style and turns up
+  /// on track programs too.
+  bool continues(_Heading open) {
+    if (event == null || open.event == null) return false;
+    if (event != open.event) return false;
+    return continued || key == open.key;
+  }
 }
+
+/// The continuation words and the brackets a reprinted heading wears.
+final _continued = RegExp(r'\(\s*cont(?:inued|\.)?\s*\)|\bcont(?:inued|\.)\b',
+    caseSensitive: false);
+
+/// A heading reduced to what identifies the event, so the same one printed
+/// twice reads as one.
+String _headingKey(String line) => line
+    .toLowerCase()
+    .replaceAll(_continued, ' ')
+    // The brackets Hy-Tek wraps a whole reprinted heading in, and every
+    // other bit of punctuation with them: two spellings of one heading are
+    // the same event, and nothing here is what tells them apart.
+    .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+    .trim();
 
 final _rule = RegExp(r'^[\s=\-_*~.]*$');
 
@@ -294,6 +342,8 @@ _Heading? _heading(String line) {
     event: event,
     implementKg: weight ?? _defaultWeight(line, event),
     title: line.trim().replaceAll(RegExp(r'\s{2,}'), ' '),
+    key: _headingKey(line),
+    continued: _continued.hasMatch(line),
     weightGuessed: weight == null,
   );
 }
