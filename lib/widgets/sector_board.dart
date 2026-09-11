@@ -437,21 +437,34 @@ class _SectorBoardPainter extends CustomPainter {
       ellipsis: '…',
     )..layout(maxWidth: math.max(right - left - distance.width - 10, 24));
 
-    // Set on a chip rather than straight onto the grass: a name has arcs
-    // and sector lines running under it, and the one thing that must stay
-    // readable on a board glanced at between attempts is whose mark it is.
+    // Two pills rather than one bar across the sector: who, and how far.
+    // A bar the width of the wedge blanks out the ground between the name
+    // and the mark, which is the ground the line itself is drawn on — the
+    // arc runs through the gap between them instead, and the board reads as
+    // a sector with names on it rather than as a stack of rows.
+    //
+    // Set on something rather than straight onto the grass, because a name
+    // has arcs and sector lines running under it and the one thing that
+    // must stay readable on a board glanced at between attempts is whose
+    // mark it is.
     final top = y - distance.height - 4;
     final bottom = top + distance.height + 2;
-    final chip = RRect.fromLTRBR(
-      left - 6,
-      top - 2,
-      right + 6,
-      bottom,
-      const Radius.circular(4),
+    // Fully round, so two of them read as two things and not as one bar
+    // somebody cut a hole in.
+    final radius = Radius.circular((bottom - top + 2) / 2);
+    final pill = Paint()..color = backdrop.withOpacity(0.88);
+    canvas.drawRRect(
+      RRect.fromLTRBR(left - 7, top - 2, left + name.width + 7, bottom, radius),
+      pill,
+    );
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+          right - distance.width - 7, top - 2, right + 7, bottom, radius),
+      pill,
     );
 
-    // The leader, under the chip so the chip ends it cleanly. Only when the
-    // label has actually been moved — a line drawn through a label sitting
+    // The leader, in the gap the two pills leave between them. Only when
+    // the label has actually been moved — a line drawn from a label sitting
     // where it belongs is noise.
     if (lineY != null && (lineY - y).abs() > 2) {
       canvas.drawLine(
@@ -462,8 +475,6 @@ class _SectorBoardPainter extends CustomPainter {
           ..color = color.withOpacity(0.55),
       );
     }
-
-    canvas.drawRRect(chip, Paint()..color = backdrop.withOpacity(0.88));
 
     // A mark the band broke off is drawn the way anything off the edge of a
     // screen is: an arrow that way, and how far that way it is. The chip
