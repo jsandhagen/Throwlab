@@ -70,9 +70,9 @@ class MeetEventScreen extends StatefulWidget {
   State<MeetEventScreen> createState() => _MeetEventScreenState();
 }
 
-/// Which way the event is being read: the order it is thrown in, the marks
-/// drawn where they landed, or the table they add up to.
-enum _MeetView { series, board, standings }
+/// Which way the event is being read: what is happening right now, the
+/// order it is thrown in, or the table it all adds up to.
+enum _MeetView { live, series, standings }
 
 class _MeetEventScreenState extends State<MeetEventScreen> {
   /// Which density the coach last left a field at. Remembered rather than
@@ -81,7 +81,12 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// every Saturday, not just the one they turned them on at.
   static const _compactKey = 'throwlab.meetCompact';
 
-  _MeetView _view = _MeetView.series;
+  /// And which view they last left an event on. A coach who works out of
+  /// the series list all afternoon shouldn't be put back on the board every
+  /// time they walk to the next ring.
+  static const _viewKey = 'throwlab.meetView';
+
+  _MeetView _view = _MeetView.live;
   bool _compact = false;
 
   @override
@@ -94,9 +99,24 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
-      setState(() => _compact = prefs.getBool(_compactKey) ?? false);
+      final view = _MeetView.values.asNameMap()[prefs.getString(_viewKey)];
+      setState(() {
+        _compact = prefs.getBool(_compactKey) ?? false;
+        if (view != null) _view = view;
+      });
     } catch (_) {
-      // Storage is allowed to fail; full cards are a fine place to land.
+      // Storage is allowed to fail; the live card is a fine place to land,
+      // in full cards behind it.
+    }
+  }
+
+  Future<void> _setView(_MeetView view) async {
+    setState(() => _view = view);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_viewKey, view.name);
+    } catch (_) {
+      // Not worth telling anyone about: the view still changed.
     }
   }
 
@@ -198,19 +218,19 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: AngularSegmentedBar<_MeetView>(
                         value: _view,
-                        onChanged: (view) => setState(() => _view = view),
+                        onChanged: _setView,
                         segments: [
-                          const AngularSegment(
-                              value: _MeetView.series,
-                              icon: Icons.format_list_numbered,
-                              label: 'Series'),
                           AngularSegment(
-                              value: _MeetView.board,
+                              value: _MeetView.live,
                               // Drawn rather than borrowed: the Material
                               // set has no mark for a throwing sector, and
                               // every other sector in the app is drawn too.
                               glyph: (color) => _SectorGlyph(color: color),
-                              label: 'Sector'),
+                              label: 'Live'),
+                          const AngularSegment(
+                              value: _MeetView.series,
+                              icon: Icons.format_list_numbered,
+                              label: 'Series'),
                           const AngularSegment(
                               value: _MeetView.standings,
                               icon: Icons.emoji_events_outlined,
@@ -222,7 +242,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                       child: switch (_view) {
                         _MeetView.series => _seriesList(meet, meets, library,
                             competition, standings, flight),
-                        _MeetView.board => _boardView(standings, flight),
+                        _MeetView.live => _liveView(meet, standings, flight),
                         _MeetView.standings => _standingsList(meet, standings),
                       },
                     ),
@@ -280,53 +300,81 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     );
   }
 
-  /// The competition drawn on the sector, with the round it is in above it
-  /// and what the next throw has to do under it.
-  Widget _boardView(MeetStandings standings, MeetFlight flight) {
+  /// The event as it stands right now: where the round has got to, the
+  /// competition drawn on the sector, and the mark for whoever is in the
+  /// circle, entered without leaving the screen.
+  ///
+  /// One card rather than three. Between attempts a coach looks down once,
+  /// and everything they look down for is the same thing — who is up, what
+  /// it will take, and the number they are about to write.
+  Widget _liveView(Meet meet, MeetStandings standings, MeetFlight flight) {
     final board = MeetBoard(standings, inTheCircle: flight.inTheCircle);
     final theme = Theme.of(context);
-    if (board.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            'Nothing on the board yet.\n'
-            'The first mark of the competition draws the first line.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ),
-      );
-    }
+    // Whoever throws next, named or not: a competition of one has no flight
+    // to call, but it still has a mark to write down.
+    final up = flight.next;
     return ListView(
-      // Clear of the button that adds an athlete: the caption is the point
-      // of the screen and can't sit behind it.
+      // Clear of the button that adds an athlete.
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
       children: [
-        _FlightBar(flight: flight, standings: standings),
-        const SizedBox(height: 12),
-        // Wider than it is tall, and that is geometry rather than taste:
-        // the sector opens at 34.92°, so a tall box would run the two lines
-        // together into a point inside the card — drawing a circle at the
-        // near edge of a band that starts forty meters out from one.
-        AspectRatio(
-          aspectRatio: 4 / 3,
-          child: Card(
-            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
-            clipBehavior: Clip.antiAlias,
-            child: SectorBoard(
-              board: board,
-              event: widget.event,
-              accent: eventColor(widget.event),
+        Card(
+          // Opaque, unlike every other card in the app: the screen's own
+          // sector art runs behind this one, and two sectors drawn over
+          // each other at different angles is a picture of nothing.
+          color: _opaque(theme),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _FlightBody(flight: flight, standings: standings),
+                const SizedBox(height: 12),
+                if (board.isEmpty)
+                  _NothingOnTheBoard(event: widget.event)
+                else
+                  AspectRatio(
+                    // Wider than it is tall, and that is geometry rather
+                    // than taste: the sector opens at 34.92°, so a tall box
+                    // runs the two lines together into a point inside the
+                    // card — drawing a circle at the near edge of a band
+                    // that starts forty meters out from one.
+                    aspectRatio: 4 / 3,
+                    child: SectorBoard(
+                      board: board,
+                      event: widget.event,
+                      accent: eventColor(widget.event),
+                      backdrop: _opaque(theme),
+                    ),
+                  ),
+                _BoardCaption(standings: standings, flight: flight),
+                if (up != null) ...[
+                  const SizedBox(height: 12),
+                  _EnterUp(
+                    entry: up,
+                    round: up.nextRound,
+                    rounds: meet.rounds,
+                    onEnter: () => _enter(meet, up, up.nextRound),
+                    onFilm: () => _film(meet, up, up.nextRound),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        _BoardCaption(standings: standings, flight: flight),
       ],
     );
   }
+
+  /// The card color the rest of the app uses, flattened onto the surface.
+  ///
+  /// Every other card is translucent so the sector backdrop shows through
+  /// it, which is the app's texture. Blending it here rather than picking a
+  /// new color keeps this card exactly the tone of all the others while
+  /// letting nothing through it.
+  Color _opaque(ThemeData theme) => Color.alphaBlend(
+      theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      theme.colorScheme.surface);
 
   /// Where the competition stands — one table, because everyone on this
   /// screen is in the one an athlete is actually placed in.
@@ -720,13 +768,15 @@ class _BoardCaption extends StatelessWidget {
     } else {
       // The bar above has already said who is up. This says what the throw
       // has to do, which is the only thing the lines don't say themselves.
+      // Nothing at all when they are already leading it: the row above
+      // names them and the gold line on the board is theirs.
       final toLead = standings.neededFor(up.id, place: 1);
-      lines.add((
-        toLead == null
-            ? '${_named(up)} is up, and leads it'
-            : '${formatDistance(toLead, _unitOf(mine))} takes the lead',
-        accent,
-      ));
+      if (toLead != null) {
+        lines.add((
+          '${formatDistance(toLead, _unitOf(mine))} takes the lead',
+          accent,
+        ));
+      }
     }
 
     // And what the coach's own best-placed athlete is short of, which is
@@ -750,13 +800,13 @@ class _BoardCaption extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final (text, color) in lines)
+        for (var i = 0; i < lines.length; i++)
           Padding(
-            padding: const EdgeInsets.only(top: 2),
+            padding: EdgeInsets.only(top: i == 0 ? 12 : 2),
             child: Text(
-              text,
+              lines[i].$1,
               style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: color, fontWeight: FontWeight.w600),
+                  ?.copyWith(color: lines[i].$2, fontWeight: FontWeight.w600),
             ),
           ),
       ],
@@ -773,18 +823,121 @@ class _BoardCaption extends StatelessWidget {
       : place.series.unitAt(place.series.bestRound!);
 }
 
-/// Where the round has got to: how far through it the field is, who is in
-/// the circle, who follows them, and who is winning.
+/// Where the round has got to: how far through it the field is, and the
+/// three athletes an infield calls out.
 ///
 /// This is what a coach looks up for between attempts, and until now it had
 /// to be counted off the cards by eye. It keeps itself right as marks go in
 /// because it is worked out from the series rather than tracked alongside
 /// them — nobody standing at a sector has a hand free to tell an app whose
 /// turn it is.
+class _FlightBody extends StatelessWidget {
+  const _FlightBody({
+    required this.flight,
+    required this.standings,
+    this.showLeader = false,
+  });
+
+  final MeetFlight flight;
+  final MeetStandings standings;
+
+  /// Whether to name whoever is winning. The live card draws them as the
+  /// gold line across its sector instead, and saying it twice on one card
+  /// is saying it once too often.
+  final bool showLeader;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = eventColor(flight.competition.event);
+    // The three an infield calls: up, on deck, in the hole.
+    final calling = <(String, MeetEntry)>[
+      if (flight.inTheCircle != null) ('up', flight.inTheCircle!),
+      if (flight.onDeck != null) ('on deck', flight.onDeck!),
+      if (flight.inTheHole != null) ('in the hole', flight.inTheHole!),
+    ];
+    final front = !flight.hasOrder || standings.places.isEmpty
+        ? null
+        : standings.places.first;
+    // The leader is worth a line of their own only when they are not
+    // already on one.
+    final leader = !showLeader ||
+            front == null ||
+            calling.any((who) => who.$2.id == front.entry.id)
+        ? null
+        : front;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                flight.label.toUpperCase(),
+                style: theme.textTheme.labelMedium?.copyWith(
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1),
+              ),
+            ),
+            Text(
+              flight.finished
+                  ? 'all in'
+                  : '${flight.thrown} of ${flight.fieldSize} thrown',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: flight.fieldSize == 0 ? 0 : flight.thrown / flight.fieldSize,
+            minHeight: 5,
+            color: accent,
+            backgroundColor: scheme.outlineVariant.withOpacity(0.5),
+          ),
+        ),
+        for (var i = 0; i < calling.length; i++)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 10 : 4),
+            child: _WhoRow(
+              label: calling[i].$1,
+              entry: calling[i].$2,
+              place: standings.placeOf(calling[i].$2.id),
+              color: i == 0 ? accent : scheme.onSurfaceVariant,
+              lead: i == 0,
+            ),
+          ),
+        if (leader != null) ...[
+          const SizedBox(height: 8),
+          Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
+          const SizedBox(height: 8),
+          _WhoRow(
+            // A competition that is over has a winner; one still being
+            // thrown has somebody in front, which is not the same thing and
+            // shouldn't be written as though it were.
+            label: flight.finished ? 'won by' : 'leading',
+            entry: leader.entry,
+            place: leader,
+            color: scheme.onSurfaceVariant,
+            lead: false,
+            icon: Icons.emoji_events_outlined,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The same, on a card of its own, over the field in the series view.
 ///
 /// It scrolls with the field rather than being pinned above it: the flight
 /// order means a coach is scrolling to their own athlete anyway, and the
-/// 'up now' on the cards carries the same answer the whole way down.
+/// 'up' on the cards carries the same answer the whole way down.
 class _FlightBar extends StatelessWidget {
   const _FlightBar({required this.flight, required this.standings});
 
@@ -792,100 +945,103 @@ class _FlightBar extends StatelessWidget {
   final MeetStandings standings;
 
   @override
+  Widget build(BuildContext context) => Card(
+        color: Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withOpacity(0.45),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          child: _FlightBody(
+              flight: flight, standings: standings, showLeader: true),
+        ),
+      );
+}
+
+/// Nothing has been thrown yet, in the space the board will take.
+class _NothingOnTheBoard extends StatelessWidget {
+  const _NothingOnTheBoard({required this.event});
+
+  final ThrowEvent event;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final accent = eventColor(flight.competition.event);
-    final inTheCircle = flight.inTheCircle;
-    final onDeck = flight.onDeck;
-    // Nobody leads a competition of one; and the leader of a real one is
-    // worth a line of their own only when they are not already on one.
-    final front = !flight.hasOrder || standings.places.isEmpty
-        ? null
-        : standings.places.first;
-    final leader = front == null ||
-            front.entry.id == inTheCircle?.id ||
-            front.entry.id == onDeck?.id
-        ? null
-        : front;
-    return Card(
-      color: scheme.surfaceContainerHighest.withOpacity(0.45),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    flight.label.toUpperCase(),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                        color: accent,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1),
-                  ),
-                ),
-                Text(
-                  flight.finished
-                      ? 'all in'
-                      : '${flight.thrown} of ${flight.fieldSize} thrown',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: flight.fieldSize == 0
-                    ? 0
-                    : flight.thrown / flight.fieldSize,
-                minHeight: 5,
-                color: accent,
-                backgroundColor: scheme.outlineVariant.withOpacity(0.5),
-              ),
-            ),
-            if (inTheCircle != null) ...[
-              const SizedBox(height: 10),
-              _WhoRow(
-                label: 'up now',
-                entry: inTheCircle,
-                place: standings.placeOf(inTheCircle.id),
-                color: accent,
-                lead: true,
-              ),
-            ],
-            if (onDeck != null) ...[
-              const SizedBox(height: 4),
-              _WhoRow(
-                label: 'on deck',
-                entry: onDeck,
-                place: standings.placeOf(onDeck.id),
-                color: scheme.onSurfaceVariant,
-                lead: false,
-              ),
-            ],
-            if (leader != null && leader.best != null) ...[
-              const SizedBox(height: 8),
-              Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
-              const SizedBox(height: 8),
-              _WhoRow(
-                // A competition that is over has a winner; one still being
-                // thrown has somebody in front, which is not the same thing
-                // and shouldn't be written as though it were.
-                label: flight.finished ? 'won by' : 'leading',
-                entry: leader.entry,
-                place: leader,
-                color: scheme.onSurfaceVariant,
-                lead: false,
-                icon: Icons.emoji_events_outlined,
-              ),
-            ],
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
+      child: Column(
+        children: [
+          EventGlyph(event, size: 26, color: eventColor(event)),
+          const SizedBox(height: 12),
+          Text(
+            'Nothing on the board yet.\n'
+            'The first mark of the competition draws the first line.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// The mark for whoever is in the circle, entered from under the board.
+///
+/// The one thing a coach does on this screen, at the moment they do it: the
+/// distance is called out a few seconds after the throw, and by then they
+/// are already looking at the board to see where it landed.
+class _EnterUp extends StatelessWidget {
+  const _EnterUp({
+    required this.entry,
+    required this.round,
+    required this.rounds,
+    required this.onEnter,
+    required this.onFilm,
+  });
+
+  final MeetEntry entry;
+
+  /// The round they are about to throw, from 0.
+  final int round;
+  final int rounds;
+
+  final VoidCallback onEnter;
+  final VoidCallback onFilm;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = entry.athlete.isEmpty ? 'Unassigned' : entry.athlete;
+    if (round >= rounds) return const SizedBox.shrink();
+    return Row(
+      children: [
+        // Nothing is filmed for the rest of the field: a clip has to land
+        // in the library under somebody's name, and these are not the
+        // coach's athletes to keep.
+        if (entry.tracked) ...[
+          OutlinedButton.icon(
+            icon: const Icon(Icons.videocam_outlined, size: 20),
+            label: const Text('Film'),
+            style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: onFilm,
+          ),
+          const SizedBox(width: 10),
+        ],
+        Expanded(
+          child: FilledButton.tonalIcon(
+            icon: const Icon(Icons.straighten, size: 20),
+            label: Text(
+              'Mark $name · ${round + 1}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: onEnter,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -922,7 +1078,8 @@ class _WhoRow extends StatelessWidget {
     return Row(
       children: [
         SizedBox(
-          width: 62,
+          // Wide enough for 'in the hole', so the three names line up.
+          width: 74,
           child: Row(
             children: [
               if (icon != null) ...[
@@ -1184,14 +1341,15 @@ class _EntryCard extends StatelessWidget {
         ],
       );
 
-  /// 'up now' / 'on deck'. Only the two: past that a coach counts down the
-  /// flight numbers, which is what they are there for.
+  /// 'up', 'on deck', 'in the hole' — the three an infield calls out, and
+  /// no further: past that a coach counts down the flight numbers, which is
+  /// what the numbers are there for.
   Widget _upLabel(ThemeData theme, Color accent) {
-    if (upIn == null || upIn! > 1) return const SizedBox.shrink();
+    if (upIn == null || upIn! > 2) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(left: 6, right: 2),
       child: Text(
-        upIn == 0 ? 'up now' : 'on deck',
+        switch (upIn!) { 0 => 'up', 1 => 'on deck', _ => 'in the hole' },
         style: theme.textTheme.labelSmall?.copyWith(
             color: upIn == 0 ? accent : theme.colorScheme.onSurfaceVariant,
             fontWeight: upIn == 0 ? FontWeight.w700 : FontWeight.w500),

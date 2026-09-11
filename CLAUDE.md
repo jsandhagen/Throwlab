@@ -57,8 +57,8 @@ the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
 the same competition at the density a whole heat sheet is tracked at, the
-sector board (twice — a podium, and a field with the cut falling below
-it), and the sheet a round is entered in — and the schedule import: the page a
+live card (twice — a podium, and a field with the cut falling below it),
+and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field, and the meet it leaves
@@ -269,32 +269,50 @@ like the app rather than a bare Material default.
   frame. Only for HD, and only when nobody has said: standard definition
   really is Rec. 601.
 - A meet is tracked live, not written up afterwards. `MeetFlight` works
-  out where a competition has got to — the round being thrown, who is in
-  the circle, who follows them, how far through the field it is — from the
-  throwing order and the series already entered, because nobody standing at
-  a sector has a hand free to tell an app whose turn it is. Both the meet's
-  event card and the event screen's own header read their wording off it,
-  so the two can't drift. A competition of one has no flight worth naming
-  (`hasOrder`): the athlete is always up, and saying so over the only card
-  on the screen tells a coach what they are looking at.
+  out where a competition has got to — the round being thrown, and the
+  three an infield calls out (`inTheCircle`, `onDeck`, `inTheHole`) — from
+  the throwing order and the series already entered, because nobody
+  standing at a sector has a hand free to tell an app whose turn it is.
+  Both the meet's event card and the event screen's own header read their
+  wording off it, so the two can't drift. A competition of one has no
+  flight worth naming (`hasOrder`): the athlete is always up, and saying so
+  over the only card on the screen tells a coach what they are looking at —
+  but `next` still answers who is about to throw, because a mark still has
+  to be written down for them.
 - The field comes at two densities, remembered in `throwlab.meetCompact`.
   Full cards for the three athletes a coach brought; two-line rows, with
   the row itself standing in for the buttons, for a whole heat sheet's
   worth. Both carry the live place — a place that only exists on another
   tab is one a coach has to leave the competition to read.
-- The competition is also drawn where it happened. `MeetBoard` turns the
-  standings into lines across the sector — the podium, the cut, the athlete
-  in the circle and the coach's own wherever they are standing — and
-  `SectorBoard` paints them, the way a televised final paints them on the
-  grass. Two things about it are deliberate and neither is a shortcut: the
-  sector is drawn to the event's own angle (the javelin's is narrower,
+- The event opens on **Live**, and it is one card: the round and the three
+  calls, the competition drawn on the sector under them, what the next
+  throw has to do, and the mark for whoever is up — entered without leaving
+  it. Between attempts a coach looks down once, and everything they look
+  down for is the same thing. Which view they last left an event on is
+  remembered (`throwlab.meetView`), so somebody who works out of the series
+  list all afternoon is not put back on the board at every ring.
+  Alone among the app's cards this one is opaque — `Color.alphaBlend` of
+  the usual translucent card onto the surface, so it is the same tone as
+  the others while letting nothing through. The screen's own sector art
+  runs behind it, and two sectors drawn over each other at different angles
+  is a picture of nothing.
+- `MeetBoard` turns the standings into lines across the sector — the
+  podium, the cut, the athlete in the circle and the coach's own wherever
+  they are standing — and `SectorBoard` paints them, the way a televised
+  final paints them on the grass. The podium lines are struck out of the
+  same ramps as the medal (`goldShader`, `silverShader`, `bronzeShader` in
+  `gold.dart`), lit from the same corner, so three lines read as three
+  medals rather than three colors somebody picked. Names sit on a chip in
+  the card's own color, over the lines rather than under them.
+  Two things are deliberate and neither is a shortcut: the sector is drawn
+  to the event's own angle (the javelin's is narrower,
   `ThrowEvent.sectorHalfAngleDeg`), while the *distances* are not to scale.
   A sector drawn honestly from the circle stacks a whole competition into
   the last few percent of its length, so the board holds only the stretch
   the competition is being decided in, no two lines are drawn closer than a
-  label apart, and every line carries its own number. The band is set by the
-  lines and not by the field: one straggler must not squeeze the three marks
-  that decide it into an inch.
+  label plus the arc's own rise, and every line carries its own number. The
+  band is set by the lines and not by the field: one straggler must not
+  squeeze the three marks that decide it into an inch.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as

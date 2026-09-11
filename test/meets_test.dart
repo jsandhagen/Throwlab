@@ -674,6 +674,36 @@ void main() {
       expect(flight.inTheCircle?.athlete, 'M. Okoye');
     });
 
+    test('calls three deep: up, on deck, in the hole', () {
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': <double?>[],
+          'M. Okoye': <double?>[],
+          'J. Smith': <double?>[],
+          'K. Fox': <double?>[],
+        }),
+        rounds: 6,
+      );
+      expect(flight.inTheCircle?.athlete, 'Ana Diaz');
+      expect(flight.onDeck?.athlete, 'M. Okoye');
+      expect(flight.inTheHole?.athlete, 'J. Smith');
+      // No further: past that a coach counts down the flight numbers.
+      expect(flight.throwsUntil('e4'), 3);
+    });
+
+    test('a competition of one still has a next throw to record', () {
+      final flight = MeetFlight(
+        field({'Ana Diaz': <double?>[]}),
+        rounds: 6,
+      );
+      // Nobody to call — but somebody is about to throw, and a screen that
+      // writes their mark down has to know who.
+      expect(flight.inTheCircle, isNull);
+      expect(flight.onDeck, isNull);
+      expect(flight.inTheHole, isNull);
+      expect(flight.next?.athlete, 'Ana Diaz');
+    });
+
     test('says nothing about who is next on the last throw of a round', () {
       final flight = MeetFlight(
         field({

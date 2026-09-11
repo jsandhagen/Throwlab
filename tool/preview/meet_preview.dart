@@ -219,15 +219,22 @@ void main() {
     await _shoot(
         tester, library, meets, const MeetScreen(meetId: 'k1'), 'meet_events');
 
-    // The discus itself, part-way through: the round in progress across the
-    // top, then the field in the order it throws.
+    // The discus, as it opens: the live card — the round, the three an
+    // infield calls, the podium drawn on the sector, and the mark for
+    // whoever is up.
     await _shoot(
         tester,
         library,
         meets,
         const MeetEventScreen(
             meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
-        'meet_tracker');
+        'meet_board');
+
+    // Behind it, the field in the order it throws.
+    await tester.tap(find.text('Series'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_tracker.png'));
 
     // The same competition at the density a whole heat sheet is tracked at.
     await tester.tap(find.byTooltip('Compact the field'));
@@ -237,14 +244,19 @@ void main() {
     await tester.tap(find.byTooltip('Full cards'));
     await settle(tester);
 
-    // The competition drawn on the sector: the podium, the cut, and the
-    // athlete in the circle.
-    await tester.tap(find.text('Sector'));
+    // Where the competition stands, with the cut and what it takes to
+    // get past it.
+    await tester.tap(find.text('Standings'));
     await settle(tester);
     await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/meet_board.png'));
+        matchesGoldenFile('$_out/meet_standings.png'));
 
-    // A field with the cut below the podium: the shaded band is where a
+    // Back onto the live card, which is also what the next screen to be
+    // mounted will open on — the view is remembered.
+    await tester.tap(find.text('Live'));
+    await settle(tester);
+
+    // A field with the cut below the podium: the shaded ground is where a
     // throw has to land, and the javelin's sector is drawn to its own
     // narrower angle.
     await _shoot(
@@ -253,33 +265,20 @@ void main() {
         meets,
         const MeetEventScreen(
             meetId: 'k0', event: ThrowEvent.javelin, implementKg: 0.8),
-        'meet_board_cut_series');
-    await tester.tap(find.text('Sector'));
-    await settle(tester);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/meet_board_cut.png'));
+        'meet_board_cut');
 
-    // Back to the champs for the rest of it.
+    // The sheet a round is entered in, opened on a mark already recorded —
+    // Anna's third throw. Her last three are closed (she missed the cut),
+    // and a closed round has no sheet to open.
     await _shoot(
         tester,
         library,
         meets,
         const MeetEventScreen(
             meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
-        'meet_tracker');
-
-    // Where the competition stands, with the cut and what it takes to
-    // get past it.
-    await tester.tap(find.text('Standings'));
-    await settle(tester);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/meet_standings.png'));
+        'meet_live_again');
     await tester.tap(find.text('Series'));
     await settle(tester);
-
-    // The sheet a round is entered in, opened on a mark already recorded —
-    // Anna's third throw. Her last three are closed (she missed the cut),
-    // and a closed round has no sheet to open.
     await tester.tap(find.byKey(const ValueKey('round-2')).first);
     await settle(tester);
     await expectLater(

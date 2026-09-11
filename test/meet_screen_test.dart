@@ -78,15 +78,25 @@ void main() {
 
   /// The discus, which is where the throwing happens: a meet is a day, and
   /// its events are what a coach actually stands at.
-  Future<void> mountEvent(WidgetTester tester) => mount(
-        tester,
-        MeetEventScreen(
-          meetId: 'k1',
-          event: ThrowEvent.discus,
-          implementKg: 1,
-          filmAttempt: fakeFilm,
-        ),
-      );
+  ///
+  /// The screen opens on the live card; most of what is tested here is the
+  /// series behind it, so this lands there unless asked otherwise.
+  Future<void> mountEvent(WidgetTester tester, {bool live = false}) async {
+    await mount(
+      tester,
+      MeetEventScreen(
+        meetId: 'k1',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        filmAttempt: fakeFilm,
+      ),
+    );
+    // An event nobody is in has no views to switch between.
+    if (!live && find.text('Series').evaluate().isNotEmpty) {
+      await tester.tap(find.text('Series'));
+      await tester.pumpAndSettle();
+    }
+  }
 
   /// The meet itself: the events in it, and the settings.
   Future<void> mountMeet(WidgetTester tester) =>
@@ -154,6 +164,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(MeetEventScreen), findsOneWidget);
+      // On the live card, with the mark for whoever is up under it.
+      expect(find.textContaining('Mark Ana Diaz'), findsOneWidget);
+      await tester.tap(find.text('Series'));
+      await tester.pumpAndSettle();
       expect(find.text('Ana Diaz'), findsOneWidget);
       expect(find.text('Mark'), findsOneWidget);
     });
@@ -667,8 +681,9 @@ void main() {
       // Ana throws first, Okoye follows her — said once on the bar and
       // again on the card, so the answer is still there once the bar has
       // scrolled off the top of a long field.
-      expect(find.text('up now'), findsNWidgets(2));
+      expect(find.text('up'), findsNWidgets(2));
       expect(find.text('on deck'), findsNWidgets(2));
+      expect(find.text('in the hole'), findsNWidgets(2));
       expect(find.text('Ana Diaz'), findsNWidgets(2));
       expect(find.text('M. Okoye'), findsNWidgets(2));
     });
@@ -683,7 +698,7 @@ void main() {
       expect(find.text('1 of 3 thrown'), findsOneWidget);
       // Okoye is in the circle now. Ana is off the flight for this round —
       // she is only on the bar at all because her 41.20 leads it.
-      expect(find.text('up now'), findsNWidgets(2));
+      expect(find.text('up'), findsNWidgets(2));
       expect(find.text('leading'), findsOneWidget);
       expect(find.text('M. Okoye'), findsNWidgets(2));
     });
@@ -693,7 +708,7 @@ void main() {
       // The whole flight is the one card underneath; naming the athlete
       // over it would be telling the coach what they are looking at.
       expect(find.text('ROUND 1 OF 6'), findsOneWidget);
-      expect(find.text('up now'), findsNothing);
+      expect(find.text('up'), findsNothing);
       expect(find.text('Ana Diaz'), findsOneWidget);
     });
 
@@ -878,6 +893,78 @@ void main() {
     });
   });
 
+  group('the live card', () {
+    Future<void> addRival(String id, String name, int order,
+        {double? best}) async {
+      final entry = MeetEntry(
+        id: id,
+        athlete: name,
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: false,
+        order: order,
+      );
+      if (best != null) entry.setAttempt(0, MeetAttempt.untracked(best));
+      await meets.addEntry('k1', entry: entry);
+    }
+
+    testWidgets('is what an event opens on', (tester) async {
+      await mountEvent(tester, live: true);
+      expect(find.textContaining('Mark Ana Diaz'), findsOneWidget);
+    });
+
+    testWidgets('calls the flight three deep', (tester) async {
+      await addRival('r1', 'M. Okoye', 1);
+      await addRival('r2', 'J. Smith', 2);
+      await addRival('r3', 'K. Fox', 3);
+      await mountEvent(tester, live: true);
+
+      expect(find.text('up'), findsOneWidget);
+      expect(find.text('on deck'), findsOneWidget);
+      expect(find.text('in the hole'), findsOneWidget);
+      // The fourth is a number in the order, not a call.
+      expect(find.text('K. Fox'), findsNothing);
+    });
+
+    testWidgets('writes the mark for whoever is up', (tester) async {
+      await mountEvent(tester, live: true);
+      await tester.tap(find.textContaining('Mark Ana Diaz'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ana Diaz · round 1'), findsOneWidget);
+      await enterDistance(tester, '41.20');
+      expect(entry().attemptAt(0)?.resultId, library.marks.single.id);
+      // And it moves on to the round after it.
+      expect(find.textContaining('Mark Ana Diaz · 2'), findsOneWidget);
+    });
+
+    testWidgets('films from here too, for an athlete the coach keeps',
+        (tester) async {
+      await mountEvent(tester, live: true);
+      await tester.tap(find.text('Film'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ana Diaz · round 1'), findsOneWidget);
+      expect(find.text('Filmed'), findsOneWidget);
+    });
+
+    testWidgets('points no camera at the rest of the field', (tester) async {
+      await meets.removeEntry('k1', 'e1');
+      await addRival('r1', 'M. Okoye', 0);
+      await mountEvent(tester, live: true);
+      expect(find.textContaining('Mark M. Okoye'), findsOneWidget);
+      expect(find.text('Film'), findsNothing);
+    });
+
+    testWidgets('is where the event opens next time', (tester) async {
+      await mountEvent(tester, live: true);
+      await tester.tap(find.text('Series'));
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('throwlab.meetView'), 'series');
+    });
+  });
+
   group('the sector board', () {
     Future<void> addRival(String id, String name, int order,
         {double? best}) async {
@@ -894,7 +981,7 @@ void main() {
     }
 
     Future<void> openBoard(WidgetTester tester) async {
-      await tester.tap(find.text('Sector'));
+      await tester.tap(find.text('Live'));
       await tester.pumpAndSettle();
     }
 

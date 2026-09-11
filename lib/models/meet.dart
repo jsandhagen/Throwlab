@@ -750,15 +750,25 @@ class MeetFlight {
   /// what the only card on it already shows.
   bool get hasOrder => fieldSize > 1;
 
-  /// Who is in the circle: the next athlete owed a throw.
-  MeetEntry? get inTheCircle =>
-      !hasOrder || waiting.isEmpty ? null : waiting.first;
+  /// Whose throw is next, order or no order. A competition of one still
+  /// has somebody about to throw, and a screen that offers to write their
+  /// mark down has to know who it belongs to.
+  MeetEntry? get next => waiting.isEmpty ? null : waiting.first;
 
-  /// Who follows them. Null on the last throw of a round — the next one up
-  /// is at the top of the order again, and saying so would be guessing at
-  /// a round that hasn't started.
-  MeetEntry? get onDeck =>
-      hasOrder && waiting.length > 1 ? waiting[1] : null;
+  /// Who is in the circle, for anything that names them: the same athlete,
+  /// unless there is no order worth calling — see [hasOrder].
+  MeetEntry? get inTheCircle => hasOrder ? next : null;
+
+  /// Who follows them, and who follows that — the three an infield calls
+  /// out, and the reason a coach knows whether they have time to walk round
+  /// to the other side of the cage.
+  ///
+  /// Null once the round runs out of athletes: the next one up is at the
+  /// top of the order again, and naming them would be guessing at a round
+  /// that hasn't started.
+  MeetEntry? get onDeck => hasOrder && waiting.length > 1 ? waiting[1] : null;
+  MeetEntry? get inTheHole =>
+      hasOrder && waiting.length > 2 ? waiting[2] : null;
 
   /// How many of this round have been thrown, and out of how many. The pair
   /// a progress bar is drawn from.

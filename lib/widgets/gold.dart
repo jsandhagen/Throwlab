@@ -27,10 +27,41 @@ const _metal = <Color>[
 const _metalStops = <double>[0, 0.26, 0.52, 0.78, 1];
 
 /// The ramp across [bounds], lit from the top left.
-Shader goldShader(Rect bounds) => const LinearGradient(
+Shader goldShader(Rect bounds) => _ramp(_metal, bounds);
+
+/// The other two of a podium, struck the same way.
+///
+/// Same five stops, same narrow spread, same light from the same corner —
+/// so three lines drawn across a sector read as three medals rather than as
+/// three arbitrary colors. Silver is the cool one and bronze the warm one;
+/// neither is allowed to go dark, for the reason the gold isn't.
+const _silverMetal = <Color>[
+  Color(0xFFA9B4BE),
+  Color(0xFFE4EAEF),
+  Color(0xFFC6CED6),
+  Color(0xFFF2F6F9),
+  Color(0xFFADB8C2),
+];
+const _bronzeMetal = <Color>[
+  Color(0xFFB0724A),
+  Color(0xFFE2A379),
+  Color(0xFFCB8A5B),
+  Color(0xFFF0BE96),
+  Color(0xFFB4764D),
+];
+
+/// The flat mid tone of each, for text beside the line it belongs to —
+/// the same reason [personalBestGold] exists.
+const secondPlaceSilver = Color(0xFFC6CED6);
+const thirdPlaceBronze = Color(0xFFCB8A5B);
+
+Shader silverShader(Rect bounds) => _ramp(_silverMetal, bounds);
+Shader bronzeShader(Rect bounds) => _ramp(_bronzeMetal, bounds);
+
+Shader _ramp(List<Color> metal, Rect bounds) => LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
-      colors: _metal,
+      colors: metal,
       stops: _metalStops,
     ).createShader(bounds);
 

@@ -26,6 +26,7 @@ class SectorBoard extends StatelessWidget {
     required this.board,
     required this.event,
     required this.accent,
+    this.backdrop,
   });
 
   final MeetBoard board;
@@ -33,6 +34,10 @@ class SectorBoard extends StatelessWidget {
 
   /// The event's color, which the athlete in the circle is drawn in.
   final Color accent;
+
+  /// What the board is sitting on, used behind the names. The surface when
+  /// nobody says.
+  final Color? backdrop;
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +54,10 @@ class SectorBoard extends StatelessWidget {
         grass: theme.colorScheme.primary,
         line: theme.colorScheme.outlineVariant,
         faint: theme.colorScheme.onSurfaceVariant,
+        // What a name is set on. The card behind the board is opaque, so a
+        // label can be lifted off the lines it crosses without the screen's
+        // own sector art showing through the middle of it.
+        backdrop: backdrop ?? theme.colorScheme.surface,
         // Off the theme rather than built here: the app names its type
         // once, and a bare TextStyle paints in the platform default.
         text: theme.textTheme.labelSmall ?? const TextStyle(),
@@ -56,11 +65,6 @@ class SectorBoard extends StatelessWidget {
     );
   }
 }
-
-/// Silver and bronze to go with the medal's gold. Duller than the gold on
-/// purpose — a podium reads by which one is brightest.
-const _silver = Color(0xFFC6CED6);
-const _bronze = Color(0xFFCB8A5B);
 
 class _SectorBoardPainter extends CustomPainter {
   const _SectorBoardPainter({
@@ -70,6 +74,7 @@ class _SectorBoardPainter extends CustomPainter {
     required this.grass,
     required this.line,
     required this.faint,
+    required this.backdrop,
     required this.text,
   });
 
@@ -84,6 +89,10 @@ class _SectorBoardPainter extends CustomPainter {
   final Color grass;
   final Color line;
   final Color faint;
+
+  /// What a name is set on, so it reads over whatever it crosses.
+  final Color backdrop;
+
   final TextStyle text;
 
   /// Room above the furthest line for its label, and below the nearest one
@@ -96,8 +105,8 @@ class _SectorBoardPainter extends CustomPainter {
   static const _reach = 0.46;
 
   /// Air between a label and the line above it, on top of the label's own
-  /// height and the arc's rise.
-  static const _clearance = 6.0;
+  /// height and the arc's rise. Enough for the two chips not to touch.
+  static const _clearance = 10.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -224,10 +233,20 @@ class _SectorBoardPainter extends CustomPainter {
       final color = _colorOf(mark.line);
       final leading =
           mark.line == BoardLine.first || mark.line == BoardLine.upNow;
+      // A podium line is struck out of the same metal as the medal, lit
+      // from the same corner, so three lines across a sector read as three
+      // medals rather than as three colors somebody picked.
+      final metal = _metalOf(
+        mark.line,
+        Rect.fromLTRB(apex.dx - halfWidthAt(radius), rows[i],
+            apex.dx + halfWidthAt(radius), rows[i] + rise + 2),
+      );
       if (mark.line == BoardLine.cut) {
         _dashedArc(canvas, apex, radius, stroke(color, 1.4, 0.9));
       } else {
-        arc(radius, stroke(color, leading ? 2.4 : 1.8));
+        final paint = stroke(color, leading ? 2.6 : 2.0);
+        if (metal != null) paint.shader = metal;
+        arc(radius, paint);
       }
       // The athlete in the circle gets a marker as well as a line: it is
       // the one line on the board that moves in the next thirty seconds.
@@ -260,12 +279,21 @@ class _SectorBoardPainter extends CustomPainter {
       )..layout())
           .height;
 
+  /// The ramp a podium line is drawn with, or null for a line that is a
+  /// color rather than a metal.
+  Shader? _metalOf(BoardLine line, Rect bounds) => switch (line) {
+        BoardLine.first => goldShader(bounds),
+        BoardLine.second => silverShader(bounds),
+        BoardLine.third => bronzeShader(bounds),
+        _ => null,
+      };
+
   Color _colorOf(BoardLine line) => switch (line) {
-        // The same metal as the medal: a podium is read by which line is
-        // the brightest, and the app already owns one gold.
+        // The mid tone of each ramp, for the text beside the line — the
+        // same reason the app keeps a flat gold next to its gradient one.
         BoardLine.first => personalBestGold,
-        BoardLine.second => _silver,
-        BoardLine.third => _bronze,
+        BoardLine.second => secondPlaceSilver,
+        BoardLine.third => thirdPlaceBronze,
         // Not the app's own accent: an event whose color is close to it —
         // the javelin's is — would draw the cut and the coach's athlete in
         // the same blue, which are the two lines that must not be confused.
@@ -317,7 +345,18 @@ class _SectorBoardPainter extends CustomPainter {
       ellipsis: '…',
     )..layout(maxWidth: math.max(right - left - distance.width - 10, 24));
 
-    final top = y - distance.height - 3;
+    // Set on a chip rather than straight onto the grass: a name has arcs
+    // and sector lines running under it, and the one thing that must stay
+    // readable on a board glanced at between attempts is whose mark it is.
+    final top = y - distance.height - 4;
+    final chip = RRect.fromLTRBR(
+      left - 6,
+      top - 2,
+      right + 6,
+      top + distance.height + 2,
+      const Radius.circular(4),
+    );
+    canvas.drawRRect(chip, Paint()..color = backdrop.withOpacity(0.88));
     name.paint(canvas, Offset(left, top));
     distance.paint(canvas, Offset(right - distance.width, top));
   }
@@ -344,5 +383,6 @@ class _SectorBoardPainter extends CustomPainter {
       old.board != board ||
       old.accent != accent ||
       old.halfAngle != halfAngle ||
+      old.backdrop != backdrop ||
       old.text != text;
 }

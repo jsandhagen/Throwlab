@@ -36,7 +36,7 @@ No computer, no Play Store, no account.
 | **Athlete profiles** | Personal bests per implement weight, season progression, meet history |
 | **Training notes** | Per athlete, with pictures and checklists |
 | **Meet tracking** | Full field, rounds, cuts, standings, countback, live flight order |
-| **Sector board** | The podium, the cut and your athlete drawn across the sector |
+| **Live card** | Up / on deck / in the hole, the sector board, and the mark entered under it |
 | **Results sheets** | A meet or one event, written out as a PDF to hand around |
 | **Schedule import** | Paste text or open a PDF, builds your season |
 | **Heat sheet import** | Pulls the throws out and finds your athletes |
@@ -111,9 +111,9 @@ Build a season and read it forward. Today's meet first, then what's coming, then
 - Standings calculate per event and implement
 - Ties break by countback down the series, same as a real competition
 
-**Live, while it happens.** A bar over the field says which round is being thrown, how far through it you are, who is in the circle and who is on deck — worked out from the order and the series, so it stays right without anybody telling it whose turn it is. Every card carries the athlete's live place.
+**Live, while it happens.** An event opens on one card: which round is being thrown and how far through it you are, who is **up, on deck and in the hole**, the competition drawn on the sector under them, what the next throw has to do — and the mark for whoever is up, entered right there. All of it worked out from the order and the series, so it stays right without anybody telling it whose turn it is.
 
-**The sector board.** A third view draws the competition where it actually happens: the podium as lines across the sector, the cut as a dashed line with the qualifying ground shaded above it, and your athlete's mark in the event's color wherever they are standing — with what the next throw has to do written underneath. The sector is drawn at the event's real angle (the javelin's is narrower); the distances are spread out so a competition decided by a centimeter is still readable, and every line carries its own number.
+**The sector board.** The heart of the live card: the podium as lines struck in the same gold, silver and bronze as the medal, the cut as a dashed line with the qualifying ground shaded above it, and your athlete's mark in the event's color wherever they are standing. The sector is drawn at the event's real angle (the javelin's is narrower); the distances are spread out so a competition decided by a centimeter is still readable, and every line carries its own number on a chip you can read across a field.
 
 **Two densities.** Full cards when you brought three athletes. Two-line rows when you are tracking the whole heat sheet — tap the row to enter the next round. Your choice is remembered.
 
