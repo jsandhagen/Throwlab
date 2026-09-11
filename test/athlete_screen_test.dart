@@ -347,6 +347,12 @@ void main() {
       expect(find.text('43.06'), findsOneWidget);
     });
 
+    testWidgets('count the wins in the heading', (tester) async {
+      await mountProfile(tester, meets: await season());
+      // One meet, won off a field of two.
+      expect(find.text('1 · 1 win'), findsOneWidget);
+    });
+
     testWidgets('carry what the day was like', (tester) async {
       await mountProfile(
         tester,

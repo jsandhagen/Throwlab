@@ -279,7 +279,7 @@ class AthleteScreen extends StatelessWidget {
     if (outings.isEmpty) return const [];
     return [
       SliverToBoxAdapter(
-        child: _SectionHeading('Meets', '${outings.length}'),
+        child: _SectionHeading('Meets', _tally(outings)),
       ),
       SliverList.separated(
         itemCount: outings.length,
@@ -293,6 +293,16 @@ class AthleteScreen extends StatelessWidget {
         ),
       ),
     ];
+  }
+
+  /// '4' on its own, or '4 · 2 wins' for an athlete who has been winning
+  /// them. The one number a coach says out loud about a season, and the
+  /// only one worth putting in a heading.
+  String _tally(List<MeetOuting> outings) {
+    final record = MeetRecord(outings);
+    if (record.wins == 0) return '${record.outings}';
+    return '${record.outings} · ${record.wins} '
+        'win${record.wins == 1 ? '' : 's'}';
   }
 
   /// Opens the competition this series was thrown in — the rest of the
