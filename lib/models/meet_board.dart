@@ -53,6 +53,17 @@ class MeetBoardMark {
   /// Whether they are one of the coach's own athletes.
   final bool tracked;
 
+  /// The name as a board says it: the surname, and the school if the entry
+  /// carries one.
+  ///
+  /// A program prints 'N. Achebe (Croydon)' because a program is a list of
+  /// strangers. A board is read at a glance by somebody who is watching the
+  /// competition, and the initial is the part they already know — it is
+  /// also the part that makes every label on the sector a third wider than
+  /// it needs to be. The school stays: it is how two throwers with the same
+  /// surname are told apart, and it is what a coach shouts.
+  String get boardName => boardNameOf(name);
+
   /// '1st', '2nd', '3rd', 'the cut', '5th'.
   ///
   /// A line further down the field says which place it is rather than
@@ -478,6 +489,29 @@ double? _over(List<double> at, double of) {
     if (mark > of) return mark;
   }
   return null;
+}
+
+/// A name cut to what a board has room for: the surname, keeping whatever a
+/// heat sheet put in brackets after it.
+///
+/// The last word of the name, which is the surname for every way a meet
+/// writes one — 'N. Achebe', 'Achebe, N', 'Nnamdi Achebe'. A name that is
+/// one word is already as short as it goes.
+String boardNameOf(String name) {
+  final trimmed = name.trim();
+  if (trimmed.isEmpty) return trimmed;
+  // What a program puts after the name — the school, the club, the country.
+  final bracket = RegExp(r'\s*(\(.*\))$').firstMatch(trimmed);
+  final who =
+      bracket == null ? trimmed : trimmed.substring(0, bracket.start).trim();
+  final words = who.split(RegExp(r'\s+'))..removeWhere((w) => w.isEmpty);
+  if (words.isEmpty) return trimmed;
+  // 'Achebe, N' — a sheet that leads with the surname has already said it.
+  final surname = words.first.endsWith(',') ? words.first : words.last;
+  return [
+    surname.replaceAll(',', ''),
+    if (bracket != null) bracket.group(1)!,
+  ].join(' ');
 }
 
 /// A band or a ring as a distance: '5 m', '0.5 m'. Round numbers, written

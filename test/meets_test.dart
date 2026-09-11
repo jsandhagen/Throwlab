@@ -965,6 +965,19 @@ void main() {
         MeetStandings(competition, const [],
             advancing: advancing, prelimRounds: 3);
 
+    test('says a name the way a board has room for', () {
+      // The initial is the part somebody watching the competition already
+      // knows, and the part that makes every label a third wider.
+      expect(boardNameOf('N. Achebe (Croydon)'), 'Achebe (Croydon)');
+      expect(boardNameOf('Nnamdi Achebe (Croydon)'), 'Achebe (Croydon)');
+      // A sheet that leads with the surname has already said it.
+      expect(boardNameOf('Achebe, N (Croydon)'), 'Achebe (Croydon)');
+      // Nothing in brackets, and nothing to cut.
+      expect(boardNameOf('Anna Sofia'), 'Sofia');
+      expect(boardNameOf('Jakob'), 'Jakob');
+      expect(boardNameOf(''), '');
+    });
+
     test('draws the podium, furthest first', () {
       final board = MeetBoard(table(field([
         ('Ana Diaz', 41.20, false),

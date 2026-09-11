@@ -29,6 +29,24 @@ import 'throw_card.dart';
 /// sensible zoom. A crowded label slides clear of its neighbour and grows a
 /// leader down to the line it belongs to, rather than the lines being
 /// spread out to make room for the type.
+/// Where a mark's name and distance go. Three of them, being tried against
+/// each other on a real field before one is kept.
+enum BoardLabels {
+  /// Two pills, pushed out to the edges of the box whatever the sector is
+  /// doing at that depth — so they overflow the sector lines rather than
+  /// being squeezed between them, and the middle of every arc is clear.
+  overflow,
+
+  /// Names down one side, distances written off the other side of the
+  /// sector line, the way a sector is marked at a meet. The wedge is drawn
+  /// narrower to leave them the room.
+  aside,
+
+  /// What is there now, smaller: two pills inside the sector lines, tighter
+  /// and in smaller type.
+  small,
+}
+
 class SectorBoard extends StatelessWidget {
   const SectorBoard({
     super.key,
@@ -36,6 +54,7 @@ class SectorBoard extends StatelessWidget {
     required this.event,
     required this.accent,
     this.backdrop,
+    this.labels = BoardLabels.overflow,
   });
 
   final MeetBoard board;
@@ -48,6 +67,9 @@ class SectorBoard extends StatelessWidget {
   /// nobody says.
   final Color? backdrop;
 
+  /// Which way the labels are laid out.
+  final BoardLabels labels;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -59,6 +81,7 @@ class SectorBoard extends StatelessWidget {
       painter: _SectorBoardPainter(
         board: board,
         halfAngle: event.sectorHalfAngleDeg * math.pi / 180,
+        labels: labels,
         accent: accent,
         grass: theme.colorScheme.primary,
         line: theme.colorScheme.outlineVariant,
@@ -79,6 +102,7 @@ class _SectorBoardPainter extends CustomPainter {
   const _SectorBoardPainter({
     required this.board,
     required this.halfAngle,
+    required this.labels,
     required this.accent,
     required this.grass,
     required this.line,
@@ -91,6 +115,8 @@ class _SectorBoardPainter extends CustomPainter {
 
   /// Half the sector, in radians.
   final double halfAngle;
+
+  final BoardLabels labels;
 
   final Color accent;
 
@@ -110,8 +136,10 @@ class _SectorBoardPainter extends CustomPainter {
   static const _bottomPad = 14.0;
 
   /// How much of the box the sector spans at its far edge. Short of the
-  /// full width so a label never runs to the very edge of the card.
-  static const _reach = 0.46;
+  /// full width so a label never runs to the very edge of the card, and
+  /// shorter again when the distances are written outside the sector, which
+  /// needs a gutter to be written in.
+  double get _reach => labels == BoardLabels.aside ? 0.34 : 0.46;
 
   /// Air between one label and the next, on top of the label's own height.
   /// Enough for two chips not to touch.
@@ -312,6 +340,7 @@ class _SectorBoardPainter extends CustomPainter {
             : math.max(mark.distance - board.far, board.near - mark.distance),
         center: apex.dx,
         half: halfWidthAt(apex.dy - rows[i]),
+        width: size.width,
         // Two thirds of the box, whatever the sector is doing at that
         // depth. The near end of a tall board is a narrow wedge, and the
         // names down there are the ones a coach is reading.
@@ -381,11 +410,10 @@ class _SectorBoardPainter extends CustomPainter {
         BoardLine.upNow || BoardLine.mine => accent,
       };
 
-  /// The name to the left, the distance to the right, both inside the
-  /// sector lines and both just above the line they belong to.
+  /// A mark's name and its distance, laid out whichever way [labels] says.
   ///
-  /// The distance is laid out first and keeps its room: a name is worth
-  /// cutting short, and a mark never is.
+  /// The distance is laid out first and keeps its room in every one of
+  /// them: a name is worth cutting short, and a mark never is.
   ///
   /// [lineY] is where the mark's own line is, when it has one: a label that
   /// had to slide clear of its neighbour is joined back to its line, so a
@@ -402,23 +430,21 @@ class _SectorBoardPainter extends CustomPainter {
     required double center,
     required double half,
     required double minHalf,
+    required double width,
     double? lineY,
     int? beyond,
     double? gap,
   }) {
-    // Inside the sector lines where there is room, and out past them where
-    // there isn't: a chip is type, not a mark, and a name cut to 'L. Fis…'
-    // to stay between two lines has lost the only thing it was there for.
-    final inset = math.max(half - 6, minHalf);
-    final left = center - inset;
-    final right = center + inset;
+    final small = labels == BoardLabels.small;
     final style = text.copyWith(
-      fontSize: 11,
+      fontSize: small ? 10 : 11,
       color: color,
       fontWeight: mark.line == BoardLine.first || mark.line == BoardLine.upNow
           ? FontWeight.w700
           : FontWeight.w600,
     );
+    final pad = small ? 5.0 : 7.0;
+    final edge = small ? 4.0 : 6.0;
 
     final distance = TextPainter(
       text: TextSpan(
@@ -426,42 +452,62 @@ class _SectorBoardPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
 
+    // Where the two halves of the label are allowed to sit. Inside the
+    // sector lines only where the sector is being kept clear for them;
+    // otherwise hard against the edges of the box, which is the point of
+    // letting them overflow — a label is type, and type squeezed into a
+    // wedge is a name cut to 'L. Fis…'.
+    final (double left, double right) = switch (labels) {
+      BoardLabels.small => (
+          center - math.max(half - 6, minHalf),
+          center + math.max(half - 6, minHalf),
+        ),
+      BoardLabels.overflow => (edge + pad, width - edge - pad),
+      // The name inside the box's edge, the distance out past the sector
+      // line — and never off the box, however wide the sector is up there.
+      BoardLabels.aside => (
+          edge + pad,
+          math.min(center + half + pad + distance.width, width - edge),
+        ),
+    };
+
     final who = [
       mark.label,
-      if (mark.name.isNotEmpty) mark.name,
+      if (mark.boardName.isNotEmpty) mark.boardName,
     ].join('  ');
     final name = TextPainter(
       text: TextSpan(text: who, style: style),
       textDirection: TextDirection.ltr,
       maxLines: 1,
       ellipsis: '…',
-    )..layout(maxWidth: math.max(right - left - distance.width - 10, 24));
+    )..layout(maxWidth: math.max(right - left - distance.width - 12, 24));
 
-    // Two pills rather than one bar across the sector: who, and how far.
-    // A bar the width of the wedge blanks out the ground between the name
-    // and the mark, which is the ground the line itself is drawn on — the
-    // arc runs through the gap between them instead, and the board reads as
-    // a sector with names on it rather than as a stack of rows.
-    //
-    // Set on something rather than straight onto the grass, because a name
-    // has arcs and sector lines running under it and the one thing that
-    // must stay readable on a board glanced at between attempts is whose
-    // mark it is.
     final top = y - distance.height - 4;
     final bottom = top + distance.height + 2;
     // Fully round, so two of them read as two things and not as one bar
     // somebody cut a hole in.
     final radius = Radius.circular((bottom - top + 2) / 2);
     final pill = Paint()..color = backdrop.withOpacity(0.88);
-    canvas.drawRRect(
-      RRect.fromLTRBR(left - 7, top - 2, left + name.width + 7, bottom, radius),
-      pill,
-    );
+
+    // Two pills rather than one bar across the sector: who, and how far. A
+    // bar the width of the wedge blanks out the ground between the name and
+    // the mark, which is the ground the line itself is drawn on.
     canvas.drawRRect(
       RRect.fromLTRBR(
-          right - distance.width - 7, top - 2, right + 7, bottom, radius),
+          left - pad, top - 2, left + name.width + pad, bottom, radius),
       pill,
     );
+    // The distance sits on the grass rather than on a pill when it is
+    // written outside the sector: out there it has nothing running under it
+    // to be lifted off, and a sector at a meet is marked with numbers on
+    // the ground, not with labels.
+    if (labels != BoardLabels.aside) {
+      canvas.drawRRect(
+        RRect.fromLTRBR(
+            right - distance.width - pad, top - 2, right + pad, bottom, radius),
+        pill,
+      );
+    }
 
     // The leader, in the gap the two pills leave between them. Only when
     // the label has actually been moved — a line drawn from a label sitting
@@ -477,10 +523,10 @@ class _SectorBoardPainter extends CustomPainter {
     }
 
     // A mark the band broke off is drawn the way anything off the edge of a
-    // screen is: an arrow that way, and how far that way it is. The chip
-    // above it still carries the name and the mark itself, so all the edge
-    // is saying is 'not on this board, by this much'. Drawn rather than
-    // typed — an arrow is not in every font, and a missing glyph is a box.
+    // screen is: an arrow that way, and how far that way it is. The label
+    // still carries the name and the mark itself, so all the edge is saying
+    // is 'not on this board, by this much'. Drawn rather than typed — an
+    // arrow is not in every font, and a missing glyph is a box.
     if (beyond != null && gap != null) {
       final tip = beyond < 0 ? top - 10 : bottom + 10;
       final base = beyond < 0 ? top - 2 : bottom + 2;
@@ -501,9 +547,9 @@ class _SectorBoardPainter extends CustomPainter {
         Paint()..color = color.withOpacity(0.85),
       );
       out.paint(
-        canvas,
-        Offset(center - out.width / 2 + 4, (tip + base) / 2 - out.height / 2),
-      );
+          canvas,
+          Offset(
+              center - out.width / 2 + 4, (tip + base) / 2 - out.height / 2));
     }
 
     name.paint(canvas, Offset(left, top));
@@ -530,6 +576,7 @@ class _SectorBoardPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SectorBoardPainter old) =>
       old.board != board ||
+      old.labels != labels ||
       old.accent != accent ||
       old.halfAngle != halfAngle ||
       old.backdrop != backdrop ||
