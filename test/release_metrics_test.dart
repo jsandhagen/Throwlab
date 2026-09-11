@@ -181,4 +181,32 @@ void main() {
       expect(VideoOptimizer.parseRate('abc'), isNull);
     });
   });
+
+  group('VideoOptimizer.colorTagsFor', () {
+    String tags({String? colorSpace, int? height}) =>
+        VideoOptimizer.colorTagsFor(colorSpace: colorSpace, height: height);
+
+    test('says Rec. 709 for HD that says nothing itself', () {
+      // The case the scrub handoff shifted color on: the player reads
+      // untagged HD as 709 and ffmpeg's scaler reads it as 601, so the
+      // still and the frame it hands back to were converted two ways.
+      expect(tags(height: 1080), contains('bt709'));
+      expect(tags(colorSpace: '', height: 720), contains('bt709'));
+      expect(tags(colorSpace: 'unknown', height: 1440), contains('bt709'));
+    });
+
+    test('leaves a clip that has already said alone', () {
+      expect(tags(colorSpace: 'bt709', height: 1080), '');
+      expect(tags(colorSpace: 'smpte170m', height: 1080), '');
+    });
+
+    test('leaves standard definition alone, which really is Rec. 601', () {
+      expect(tags(height: 480), '');
+      expect(tags(height: 576), '');
+    });
+
+    test('says nothing about a clip it could not measure', () {
+      expect(tags(), '');
+    });
+  });
 }

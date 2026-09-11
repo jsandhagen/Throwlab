@@ -78,15 +78,27 @@ class VideoOptimizer {
     ValueChanged<double?>? onProgress, {
     double? totalMs,
   }) async {
-    if (totalMs == null) {
-      try {
-        final probe = await FFprobeKit.getMediaInformation(srcPath);
-        final seconds =
-            double.tryParse(probe.getMediaInformation()?.getDuration() ?? '');
+    // Probed for two things: how long the clip is, so progress has a
+    // denominator, and what color it is in — see [colorTagsFor].
+    var colorTags = '';
+    try {
+      final probe = await FFprobeKit.getMediaInformation(srcPath);
+      final info = probe.getMediaInformation();
+      if (totalMs == null) {
+        final seconds = double.tryParse(info?.getDuration() ?? '');
         if (seconds != null && seconds > 0) totalMs = seconds * 1000;
-      } catch (_) {
-        // Progress stays indeterminate.
       }
+      for (final stream in info?.getStreams() ?? []) {
+        if (stream.getType() != 'video') continue;
+        colorTags = colorTagsFor(
+          colorSpace: '${stream.getAllProperties()?['color_space'] ?? ''}',
+          height: stream.getHeight(),
+        );
+        break;
+      }
+    } catch (_) {
+      // Progress stays indeterminate, and the copy keeps whatever color
+      // metadata the source had.
     }
     final done = Completer<bool>();
     await FFmpegKit.executeAsync(
@@ -118,7 +130,7 @@ class VideoOptimizer {
       '-vf scale=iw*sar:ih,setsar=1,scale=-2:min(1440\\,ih):flags=lanczos,'
       'crop=trunc(iw/16)*16:trunc(ih/16)*16:0:0,setsar=1 '
       '-c:v libx264 -preset superfast -crf 17 -g 6 -bf 0 -sc_threshold 0 '
-      '-pix_fmt yuv420p -c:a copy "$outPath"',
+      '-pix_fmt yuv420p$colorTags -c:a copy "$outPath"',
       (session) async {
         done.complete(ReturnCode.isSuccess(await session.getReturnCode()));
       },
@@ -437,6 +449,32 @@ class VideoOptimizer {
     } catch (_) {
       return null;
     }
+  }
+
+  /// The color tags to write onto the playback copy, or empty to leave the
+  /// source's own metadata alone.
+  ///
+  /// A clip that says nothing about its color leaves everything that reads
+  /// it to guess, and the two things this app points at one throw guess
+  /// differently: a video player treats untagged HD as Rec. 709, which is
+  /// what a phone actually shoots, while ffmpeg's scaler falls back to the
+  /// older Rec. 601 whatever the size. That is one and the same picture
+  /// converted two ways — and it is visible, because the smooth-scrub
+  /// stills come from ffmpeg and the frame they hand back to at the end of
+  /// a drag comes from the player. Saying which it is stops the guessing at
+  /// the source, and the stills extracted from this copy afterwards read
+  /// the tag too.
+  ///
+  /// Only for HD, and only when nobody has said: standard-definition
+  /// footage really is Rec. 601, and a clip that declares its color is
+  /// already unambiguous to both of them.
+  @visibleForTesting
+  static String colorTagsFor({String? colorSpace, int? height}) {
+    final declared = (colorSpace ?? '').trim().toLowerCase();
+    final known =
+        declared.isNotEmpty && declared != 'unknown' && declared != 'n/a';
+    if (known || (height ?? 0) < 720) return '';
+    return ' -colorspace bt709 -color_primaries bt709 -color_trc bt709';
   }
 
   /// Parses ffprobe rate strings: "240", "240.000000", or "30000/1001".

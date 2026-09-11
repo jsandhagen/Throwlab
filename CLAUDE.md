@@ -7,11 +7,11 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series) |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `JavelinDetector`, `AppUpdater` |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — where a round has got to), `MeetConditions` (what the day was like), `MeetOuting` (a season read from the athlete's side) |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), and `pdf_text` to get the words out of either as a PDF |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -51,10 +51,12 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
-profiles, a training note (as it opens, and with the keyboard up — which
+profiles (each with the season drawn under its best, and the meets it was
+thrown at), a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
+the same competition at the density a whole heat sheet is tracked at,
 and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the program pasted in, the
@@ -257,5 +259,48 @@ like the app rather than a bare Material default.
   as it was shot and the clip is stamped `optimizePending`, which
   `AnalysisScreen` settles the first time the throw is opened. Nothing
   else should film without that flag.
+- The playback copy is tagged with the color it is in
+  (`VideoOptimizer.colorTagsFor`). A clip that says nothing leaves the two
+  things this app points at one throw guessing differently — a player reads
+  untagged HD as Rec. 709, which is what a phone shoots, and ffmpeg's
+  scaler falls back to Rec. 601 whatever the size — and that shows at the
+  scrub handoff, where an ffmpeg still is replaced by the player's own
+  frame. Only for HD, and only when nobody has said: standard definition
+  really is Rec. 601.
+- A meet is tracked live, not written up afterwards. `MeetFlight` works
+  out where a competition has got to — the round being thrown, who is in
+  the circle, who follows them, how far through the field it is — from the
+  throwing order and the series already entered, because nobody standing at
+  a sector has a hand free to tell an app whose turn it is. Both the meet's
+  event card and the event screen's own header read their wording off it,
+  so the two can't drift. A competition of one has no flight worth naming
+  (`hasOrder`): the athlete is always up, and saying so over the only card
+  on the screen tells a coach what they are looking at.
+- The field comes at two densities, remembered in `throwlab.meetCompact`.
+  Full cards for the three athletes a coach brought; two-line rows, with
+  the row itself standing in for the buttons, for a whole heat sheet's
+  worth. Both carry the live place — a place that only exists on another
+  tab is one a coach has to leave the competition to read.
+- A meet carries `MeetConditions`: the sky, the temperature as it was
+  written (in the unit it was written in — nothing computes with it, so
+  converting would only round a number somebody typed exactly), the wind as
+  it hit the sector, and a note for the rest. Asked for in one line across
+  the top of the meet, and never for a fixture that hasn't happened yet.
+- An athlete's profile reads the season two ways. Each personal best draws
+  the throws behind it — every measured mark at that event and weight,
+  against the calendar, the ones taken at a meet solid and the training
+  marks hollow — and says what the season moved, first mark to last rather
+  than best to best, since a best only ever goes up. Under the bests,
+  `MeetOuting` reads the meets from the athlete's side: the series round by
+  round, which round the big throw came in, the field, the placing and the
+  weather. The meets are looked up softly (`meetsOf`), like the athlete
+  records, so a profile still paints with nothing but the clips.
+- A meet's results go out as a PDF, written by `pdf_writer` — as narrow as
+  `pdf_text` is at the other end, and set in Courier, because a results
+  sheet is columns and a fixed-width face lines them up without a table of
+  glyph widths. `meet_report` lays it out the way a program is laid out:
+  standings order, the series with its fouls and passes still in it, and
+  the cut drawn where it falls. The tests read the generated file back with
+  the app's own `pdf_text`, which is the honest check.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it.

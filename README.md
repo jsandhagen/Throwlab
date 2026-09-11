@@ -33,9 +33,10 @@ No computer, no Play Store, no account.
 | --- | --- |
 | **Video breakdown** | Frame by frame scrubbing, slow motion, drawing tools |
 | **Throw comparison** | Two clips synced to release, side by side or overlaid |
-| **Athlete profiles** | Personal bests per implement weight, marks, nicknames |
+| **Athlete profiles** | Personal bests per implement weight, season progression, meet history |
 | **Training notes** | Per athlete, with pictures and checklists |
-| **Meet tracking** | Full field, rounds, cuts, standings, countback |
+| **Meet tracking** | Full field, rounds, cuts, standings, countback, live flight order |
+| **Results sheets** | A meet or one event, written out as a PDF to hand around |
 | **Schedule import** | Paste text or open a PDF, builds your season |
 | **Heat sheet import** | Pulls the throws out and finds your athletes |
 | **Release metrics** | Speed and angle estimates (beta) |
@@ -72,6 +73,10 @@ Every athlete gets a profile holding their whole season.
 - A written down mark can hold the record same as a filmed one
 - Distances in meters or feet, typed either way and converted as you go
 
+**Season progression.** Every best draws the throws behind it against the calendar — meet throws filled in, training throws hollow — and says what the season has moved, first mark to last. A PR tells you the ceiling; the line tells you which way it is going.
+
+**Meet by meet.** Under the bests, every meet they have thrown at: the series round by round, which round the big one came in, the field, where it placed them, and what the weather was doing. Tap one to open the competition it was thrown in.
+
 **Editable fields:**
 
 | Field | Used for |
@@ -104,6 +109,20 @@ Build a season and read it forward. Today's meet first, then what's coming, then
 - Fouls and passes get recorded as fouls and passes
 - Standings calculate per event and implement
 - Ties break by countback down the series, same as a real competition
+
+**Live, while it happens.** A bar over the field says which round is being thrown, how far through it you are, who is in the circle and who is on deck — worked out from the order and the series, so it stays right without anybody telling it whose turn it is. Every card carries the athlete's live place.
+
+**Two densities.** Full cards when you brought three athletes. Two-line rows when you are tracking the whole heat sheet — tap the row to enter the next round. Your choice is remembered.
+
+**Conditions.** One line across the top of a meet takes down the sky, the temperature and the wind. A javelin series into a headwind is a different competition from the same series with it behind, and in six months there is no other way to tell.
+
+---
+
+## Results sheets
+
+At the end of a Saturday the sheet in your pocket is the only one anybody has. Hit the PDF button on a meet — or on one event inside it — and it writes one out: place, name, the series round by round with the fouls and passes still in it, the mark each athlete was placed on, and the cut drawn where it falls. Standings order, laid out like the program it will be read next to. Conditions ride along at the top.
+
+The file lands in the app's storage and opens in whatever reads PDFs on your phone, which is where printing, mailing and sharing live. Nothing is uploaded anywhere.
 
 **Why it matters:** every measured attempt drops into that thrower's record the moment you enter it. A Saturday meet lands in their PBs with no second step. Rival throws stay on the meet and never show up as your athletes' marks.
 
