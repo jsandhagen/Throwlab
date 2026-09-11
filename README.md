@@ -115,7 +115,7 @@ Build a season and read it forward. Today's meet first, then what's coming, then
 
 **The sector board.** The heart of the live card: the podium as lines struck in the same gold, silver and bronze as the medal, the cut as a dashed line with the qualifying ground shaded above it, and your athlete's mark in the event's color wherever they are standing. The sector is drawn at the event's real angle (the javelin's is narrower); the distances are spread out so a competition decided by a centimeter is still readable, and every line carries its own number on a chip you can read across a field.
 
-**Two densities.** Full cards when you brought three athletes. One line an athlete when you are tracking the whole heat sheet — flight number, name, place, and the series read across, with a tap on the row entering the next round. Fits about four times as many throwers on a screen. Your choice is remembered.
+**Two densities.** Full cards when you brought three athletes. One line an athlete when you are tracking the whole heat sheet — flight number, name, place, the series read across, and the camera, with a tap on the row entering the next round. Fits about four times as many throwers on a screen. Your choice is remembered.
 
 **Conditions.** One line across the top of a meet takes down the sky, the temperature and the wind. A javelin series into a headwind is a different competition from the same series with it behind, and in six months there is no other way to tell.
 

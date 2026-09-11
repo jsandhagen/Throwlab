@@ -157,15 +157,16 @@ List<Map<String, dynamic>> _meets() {
     ..setAttempt(0, MeetAttempt.mark('mk-old')));
 
   // The javelin at the same meet: a full field, Jakob in it and outside the
-  // four who go through — the state the sector board is for.
+  // four who go through — the state the sector board is for. He throws
+  // first of those still owed a round, so the card at the bottom of the
+  // live view is his, camera and all.
   spring.entries.add(MeetEntry(
       id: 'j0',
       athlete: 'Jakob',
       event: ThrowEvent.javelin,
       implementKg: 0.8,
       order: 3)
-    ..setAttempt(0, MeetAttempt.mark('mk3'))
-    ..setAttempt(1, MeetAttempt.foul()));
+    ..setAttempt(0, MeetAttempt.mark('mk3')));
   const javelinField = [
     ('j1', 'T. Brandt (Kiel)', 63.40),
     ('j2', 'R. Novak (Prague)', 60.12),
@@ -266,6 +267,19 @@ void main() {
         const MeetEventScreen(
             meetId: 'k0', event: ThrowEvent.javelin, implementKg: 0.8),
         'meet_board_cut');
+
+    // The same field as one line an athlete, with the camera on the row of
+    // everybody the coach actually keeps clips of.
+    await tester.tap(find.text('Series'));
+    await settle(tester);
+    await tester.tap(find.byTooltip('Compact the field'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_compact_field.png'));
+    await tester.tap(find.byTooltip('Full cards'));
+    await settle(tester);
+    await tester.tap(find.text('Live'));
+    await settle(tester);
 
     // The sheet a round is entered in, opened on a mark already recorded —
     // Anna's third throw. Her last three are closed (she missed the cut),

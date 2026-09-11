@@ -250,11 +250,16 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                 ),
             ],
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            icon: const Icon(Icons.person_add_alt),
-            label: const Text('Add athlete'),
-            onPressed: () => _addEntry(meets, library, meet),
-          ),
+          // Not on the live card: that card ends in the button for the
+          // mark about to be called out, and a field is not what a coach is
+          // adding to between attempts. The field lives one tab across.
+          floatingActionButton: _view == _MeetView.live
+              ? null
+              : FloatingActionButton.extended(
+                  icon: const Icon(Icons.person_add_alt),
+                  label: const Text('Add athlete'),
+                  onPressed: () => _addEntry(meets, library, meet),
+                ),
         );
       },
     );
@@ -273,7 +278,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
         const SizedBox(height: 12),
         for (var i = 0; i < field.length; i++)
           Padding(
-            padding: EdgeInsets.only(bottom: _compact ? 4 : 12),
+            padding: EdgeInsets.only(bottom: _compact ? 5 : 12),
             child: _EntryCard(
               meet: meet,
               entry: field[i],
@@ -317,8 +322,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     // to call, but it still has a mark to write down.
     final up = flight.next;
     return ListView(
-      // Clear of the button that adds an athlete.
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
       children: [
         Card(
           // Opaque, unlike every other card in the app: the screen's own
@@ -1215,7 +1219,7 @@ class _EntryCard extends StatelessWidget {
   /// a tap away for everything this leaves out.
   Widget _compactBody(BuildContext context, ThemeData theme, Color accent) =>
       Padding(
-        padding: const EdgeInsets.fromLTRB(8, 3, 6, 3),
+        padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
         child: Row(
           children: [
             _position(theme, dense: true),
@@ -1226,9 +1230,29 @@ class _EntryCard extends StatelessWidget {
               // Fixed, so every athlete's rounds line up down the screen:
               // a column that shifts with the length of a name is a column
               // nobody can read across.
+              // Wide enough for a mark in feet, which is the longest thing
+              // a cell ever has to hold: '191.40' shrunk to fit a metric
+              // column is a number nobody can read at arm's length.
               width: meet.rounds * 26,
               child: _boxes(accent, compact: true),
             ),
+            // The camera stays on the row at every density. Filming is the
+            // half of this screen that can't wait — a mark can be written
+            // down after the throw, and a throw that wasn't filmed is gone.
+            if (entry.tracked && _hasRoundLeft)
+              SizedBox(
+                width: 32,
+                child: IconButton(
+                  tooltip: 'Film the next',
+                  icon: const Icon(Icons.videocam_outlined, size: 19),
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 34),
+                  onPressed: () => onFilm(entry.nextRound),
+                ),
+              ),
+            _menu(dense: true),
           ],
         ),
       );
@@ -1444,24 +1468,15 @@ class _EntryCard extends StatelessWidget {
         tooltip: 'Order and entry',
         icon: Icon(Icons.more_horiz, size: dense ? 18 : 20),
         padding: EdgeInsets.zero,
+        constraints: dense ? const BoxConstraints(minWidth: 180) : null,
+        iconSize: dense ? 18 : 20,
+        splashRadius: dense ? 18 : null,
         onSelected: (choice) => switch (choice) {
           'up' => onMove(-1),
           'down' => onMove(1),
-          'film' => onFilm(entry.nextRound),
           _ => onRemove(),
         },
         itemBuilder: (context) => [
-          // Only in the compact format, which has no room for the button
-          // the full card carries — and never for the rest of the field,
-          // whose clips are not the coach's to keep.
-          if (dense && entry.tracked && _hasRoundLeft)
-            const PopupMenuItem(
-                value: 'film',
-                child: ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(Icons.videocam_outlined, size: 18),
-                    title: Text('Film the next'))),
           const PopupMenuItem(
               value: 'up',
               child: ListTile(
@@ -1558,7 +1573,7 @@ class _AttemptBox extends StatelessWidget {
           // Grayed rather than gone, so the series still reads as six.
           opacity: closed && attempt == null ? 0.35 : 1,
           child: Container(
-            height: compact ? 28 : 46,
+            height: compact ? 32 : 46,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(compact ? 4 : 8),
               color: attempt != null
@@ -1613,7 +1628,7 @@ class _AttemptBox extends StatelessWidget {
                         child: Text(
                           text,
                           style: TextStyle(
-                            fontSize: compact ? 11 : 13,
+                            fontSize: compact ? 12 : 13,
                             fontWeight: FontWeight.w600,
                             color: color,
                           ),

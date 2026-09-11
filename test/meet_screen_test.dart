@@ -784,6 +784,45 @@ void main() {
       expect(find.text('2nd'), findsNothing);
     });
 
+    testWidgets('keeps the camera on the row', (tester) async {
+      await mountEvent(tester);
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+
+      // Filming is the half of this screen that can't wait: a mark can be
+      // written down after the throw, and a throw nobody filmed is gone.
+      await tester.tap(find.byTooltip('Film the next'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ana Diaz · round 1'), findsOneWidget);
+      expect(find.text('Filmed'), findsOneWidget);
+    });
+
+    testWidgets('points no camera at the rest of the field', (tester) async {
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'r1',
+            athlete: 'M. Okoye',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            tracked: false,
+            order: 1,
+          ));
+      await mountEvent(tester);
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+      // One camera, on the coach's own athlete.
+      expect(find.byTooltip('Film the next'), findsOneWidget);
+    });
+
+    testWidgets('keeps the order and entry menu', (tester) async {
+      await mountEvent(tester);
+      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Order and entry'));
+      await tester.pumpAndSettle();
+      expect(find.text('Throw later'), findsOneWidget);
+    });
+
     testWidgets('is how the next meet opens too', (tester) async {
       await mountEvent(tester);
       await tester.tap(find.byTooltip('Compact the field'));
@@ -966,6 +1005,17 @@ void main() {
       expect(find.text('M. Okoye'), findsOneWidget);
       expect(find.text('Mark'), findsOneWidget);
       expect(find.text('Film'), findsNothing);
+    });
+
+    testWidgets('has no button for adding to the field on it', (tester) async {
+      await mountEvent(tester, live: true);
+      // The card ends in the mark about to be called out; a field is not
+      // what a coach is adding to between attempts.
+      expect(find.text('Add athlete'), findsNothing);
+
+      await tester.tap(find.text('Series'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add athlete'), findsOneWidget);
     });
 
     testWidgets('is where the event opens next time', (tester) async {

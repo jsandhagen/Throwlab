@@ -283,10 +283,12 @@ like the app rather than a bare Material default.
   Full cards for the three athletes a coach brought; one line an athlete
   for a whole heat sheet's worth — the flight number, the name, the place,
   and the series read across in bare cells with the row itself standing in
-  for the buttons. Nothing is labelled in that format: the round numbers
-  come off the cells, the word 'Best' comes off the mark, and the flight
-  call comes off the row and onto its edge, because a coach scanning a
-  field is reading down a column rather than reading a card. The cells keep
+  for the Mark button. Nothing else is labelled in that format: the round
+  numbers come off the cells, the word 'Best' comes off the mark, and the
+  flight call comes off the row and onto its edge, because a coach scanning
+  a field is reading down a column rather than reading a card. The camera
+  is the exception and stays on the row at both densities — a mark can be
+  written down after the throw, and a throw nobody filmed is gone. The cells keep
   a fixed width so the six line up down the screen, and an untaken round is
   still drawn — faintly — for the same reason. Both densities carry the
   live place: a place that only exists on another tab is one a coach has to
@@ -299,7 +301,9 @@ like the app rather than a bare Material default.
   enters a mark one way in one view and another way in another is two
   screens. The sector sits in a panel of its own, set into the card: a
   picture of a sector and a list of names are two different things to read,
-  and the edge between them is what says so. Between attempts a coach looks down once, and everything they look
+  and the edge between them is what says so. The button that adds to the
+  field is not on this view — the card ends in the mark about to be called
+  out, and a field is not what a coach is adding to between attempts. Between attempts a coach looks down once, and everything they look
   down for is the same thing. Which view they last left an event on is
   remembered (`throwlab.meetView`), so somebody who works out of the series
   list all afternoon is not put back on the board at every ring.
