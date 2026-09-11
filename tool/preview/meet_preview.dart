@@ -146,10 +146,44 @@ List<Map<String, dynamic>> _meets() {
     id: 'k0',
     name: 'Spring Open',
     date: DateTime(2026, 5, 2),
-    rounds: 4,
+    rounds: 6,
+    prelimRounds: 3,
+    // A cut deep enough to fall below the podium, which is the only way a
+    // board draws the cut as a line of its own rather than under the
+    // second- or third-place one.
+    advancing: 4,
   )..entries.add(MeetEntry(
       id: 'e0', athlete: 'Anna Sofia', event: ThrowEvent.discus, implementKg: 1)
     ..setAttempt(0, MeetAttempt.mark('mk-old')));
+
+  // The javelin at the same meet: a full field, Jakob in it and outside the
+  // four who go through — the state the sector board is for.
+  spring.entries.add(MeetEntry(
+      id: 'j0',
+      athlete: 'Jakob',
+      event: ThrowEvent.javelin,
+      implementKg: 0.8,
+      order: 3)
+    ..setAttempt(0, MeetAttempt.mark('mk3'))
+    ..setAttempt(1, MeetAttempt.foul()));
+  const javelinField = [
+    ('j1', 'T. Brandt (Kiel)', 63.40),
+    ('j2', 'R. Novak (Prague)', 60.12),
+    ('j3', 'A. Lindqvist (Umea)', 59.55),
+    ('j4', 'P. Moreau (Lyon)', 58.90),
+    ('j5', 'D. Whitcombe (Leeds)', 56.20),
+  ];
+  for (var i = 0; i < javelinField.length; i++) {
+    final (id, name, mark) = javelinField[i];
+    spring.entries.add(MeetEntry(
+      id: id,
+      athlete: name,
+      event: ThrowEvent.javelin,
+      implementKg: 0.8,
+      tracked: false,
+      order: 4 + i,
+    )..setAttempt(0, MeetAttempt.untracked(mark)));
+  }
 
   return [champs.toJson(), spring.toJson()];
 }
@@ -202,6 +236,37 @@ void main() {
         matchesGoldenFile('$_out/meet_compact.png'));
     await tester.tap(find.byTooltip('Full cards'));
     await settle(tester);
+
+    // The competition drawn on the sector: the podium, the cut, and the
+    // athlete in the circle.
+    await tester.tap(find.text('Sector'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_board.png'));
+
+    // A field with the cut below the podium: the shaded band is where a
+    // throw has to land, and the javelin's sector is drawn to its own
+    // narrower angle.
+    await _shoot(
+        tester,
+        library,
+        meets,
+        const MeetEventScreen(
+            meetId: 'k0', event: ThrowEvent.javelin, implementKg: 0.8),
+        'meet_board_cut_series');
+    await tester.tap(find.text('Sector'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_board_cut.png'));
+
+    // Back to the champs for the rest of it.
+    await _shoot(
+        tester,
+        library,
+        meets,
+        const MeetEventScreen(
+            meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
+        'meet_tracker');
 
     // Where the competition stands, with the cut and what it takes to
     // get past it.

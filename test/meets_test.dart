@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:throwlab/models/meet.dart';
 import 'package:throwlab/models/meet_conditions.dart';
+import 'package:throwlab/models/meet_board.dart';
 import 'package:throwlab/models/meet_history.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
@@ -704,10 +705,9 @@ void main() {
         'M. Okoye': [44.90, 45.00, 46.00],
         'J. Smith': [30.00, 31.00, 32.00],
       });
-      final standings = MeetStandings(competition, const [],
-          advancing: 2, prelimRounds: 3);
-      final flight =
-          MeetFlight(competition, rounds: 6, standings: standings);
+      final standings =
+          MeetStandings(competition, const [], advancing: 2, prelimRounds: 3);
+      final flight = MeetFlight(competition, rounds: 6, standings: standings);
       // Smith is out, so the final is a competition of two — and the round
       // is not held at three waiting for rounds he will never throw.
       expect(flight.fieldSize, 2);
@@ -814,8 +814,8 @@ void main() {
     test('read back as the afternoons they were', () {
       final on = DateTime(2026, 6, 13);
       final meet = meetFor('k1', on, [41.20, 43.06], rivals: [40.00]);
-      final outings =
-          MeetOuting.forAthlete('Ana Diaz', [meet], book('k1', [41.20, 43.06], on));
+      final outings = MeetOuting.forAthlete(
+          'Ana Diaz', [meet], book('k1', [41.20, 43.06], on));
 
       expect(outings, hasLength(1));
       final outing = outings.single;
@@ -835,8 +835,14 @@ void main() {
       final may = DateTime(2026, 5, 2);
       final outings = MeetOuting.forAthlete(
         'Ana Diaz',
-        [meetFor('k1', may, [40.00]), meetFor('k2', june, [43.06])],
-        [...book('k1', [40.00], may), ...book('k2', [43.06], june)],
+        [
+          meetFor('k1', may, [40.00]),
+          meetFor('k2', june, [43.06])
+        ],
+        [
+          ...book('k1', [40.00], may),
+          ...book('k2', [43.06], june)
+        ],
       );
       expect([for (final outing in outings) outing.meet.id], ['k2', 'k1']);
     });
@@ -844,7 +850,11 @@ void main() {
     test('a competition of one is not a win', () {
       final on = DateTime(2026, 6, 13);
       final outing = MeetOuting.forAthlete(
-              'Ana Diaz', [meetFor('k1', on, [41.20])], book('k1', [41.20], on))
+              'Ana Diaz',
+              [
+                meetFor('k1', on, [41.20])
+              ],
+              book('k1', [41.20], on))
           .single;
       expect(outing.place?.place, 1);
       expect(outing.won, isFalse);
@@ -860,8 +870,7 @@ void main() {
       )
         ..setAttempt(0, MeetAttempt.foul())
         ..setAttempt(1, MeetAttempt.foul()));
-      final outing =
-          MeetOuting.forAthlete('Ana Diaz', [meet], const []).single;
+      final outing = MeetOuting.forAthlete('Ana Diaz', [meet], const []).single;
       expect(outing.best, isNull);
       expect(outing.place, isNull);
       expect(outing.taken, 2);
@@ -871,10 +880,17 @@ void main() {
       final on = DateTime(2026, 6, 13);
       expect(
         MeetOuting.forAthlete(
-            'ana diaz', [meetFor('k1', on, [41.20])], book('k1', [41.20], on)),
+            'ana diaz',
+            [
+              meetFor('k1', on, [41.20])
+            ],
+            book('k1', [41.20], on)),
         hasLength(1),
       );
-      expect(MeetOuting.forAthlete('', [meetFor('k1', on, [41.20])], const []),
+      expect(
+          MeetOuting.forAthlete('', [
+            meetFor('k1', on, [41.20])
+          ], const []),
           isEmpty);
     });
 
@@ -887,13 +903,162 @@ void main() {
           meetFor('k1', may, [40.00], rivals: [45.00]),
           meetFor('k2', june, [44.00], rivals: [42.00]),
         ],
-        [...book('k1', [40.00], may), ...book('k2', [44.00], june)],
+        [
+          ...book('k1', [40.00], may),
+          ...book('k2', [44.00], june)
+        ],
       ));
       expect(record.outings, 2);
       expect(record.wins, 1);
       expect(record.podiums, 2);
       expect(record.best, 44.00);
       expect(record.averageBest, 42.00);
+    });
+  });
+
+  group('the board', () {
+    /// A discus competition where each athlete threw once.
+    MeetCompetition field(List<(String, double, bool)> entries) =>
+        MeetCompetition(ThrowEvent.discus, 1, [
+          for (var i = 0; i < entries.length; i++)
+            MeetEntry(
+              id: 'e$i',
+              athlete: entries[i].$1,
+              event: ThrowEvent.discus,
+              implementKg: 1,
+              tracked: entries[i].$3,
+              order: i,
+            )..setAttempt(0, MeetAttempt.untracked(entries[i].$2)),
+        ]);
+
+    MeetStandings table(MeetCompetition competition, {int advancing = 99}) =>
+        MeetStandings(competition, const [],
+            advancing: advancing, prelimRounds: 3);
+
+    test('draws the podium, furthest first', () {
+      final board = MeetBoard(table(field([
+        ('Ana Diaz', 41.20, false),
+        ('M. Okoye', 44.90, false),
+        ('J. Smith', 43.06, false),
+      ])));
+      expect(
+          [for (final mark in board.marks) mark.label], ['1st', '2nd', '3rd']);
+      expect(board.marks.first.distance, 44.90);
+      expect(board.marks.first.name, 'M. Okoye');
+      expect(board.marks.last.distance, 41.20);
+    });
+
+    test('is empty until somebody has a mark', () {
+      final competition = MeetCompetition(ThrowEvent.discus, 1, [
+        MeetEntry(
+            id: 'e1',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.discus,
+            implementKg: 1)
+          ..setAttempt(0, MeetAttempt.foul()),
+      ]);
+      expect(MeetBoard(table(competition)).isEmpty, isTrue);
+    });
+
+    test('puts a band either side of a single mark', () {
+      final board = MeetBoard(table(field([('Ana Diaz', 41.20, true)])));
+      expect(board.near, closeTo(40.70, 1e-9));
+      expect(board.far, closeTo(41.70, 1e-9));
+      expect(board.fractionOf(41.20), closeTo(0.5, 1e-9));
+    });
+
+    test('runs from the near edge to the far one', () {
+      final board = MeetBoard(table(field([
+        ('Ana Diaz', 40.00, false),
+        ('M. Okoye', 44.00, false),
+      ])));
+      expect(board.fractionOf(board.near), 0);
+      expect(board.fractionOf(board.far), 1);
+    });
+
+    test('draws the cut when it is not already one of the places', () {
+      final board = MeetBoard(table(
+        field([
+          ('A', 44.90, false),
+          ('B', 43.20, false),
+          ('C', 43.06, false),
+          ('D', 42.00, false),
+          ('E', 40.00, false),
+        ]),
+        advancing: 4,
+      ));
+      final cut = board.marks.firstWhere((m) => m.line == BoardLine.cut);
+      expect(cut.distance, 42.00);
+      expect(cut.label, 'the cut');
+      expect(cut.name, isEmpty);
+    });
+
+    test('says nothing twice when the cut falls on a place already drawn', () {
+      final board = MeetBoard(table(
+        field([
+          ('A', 44.90, false),
+          ('B', 43.20, false),
+          ('C', 43.06, false),
+        ]),
+        advancing: 2,
+      ));
+      expect(board.marks.where((m) => m.line == BoardLine.cut), isEmpty);
+    });
+
+    test("draws the coach's own athlete wherever they are standing", () {
+      final board = MeetBoard(table(field([
+        ('A', 44.90, false),
+        ('B', 43.20, false),
+        ('C', 43.06, false),
+        ('Ana Diaz', 41.20, true),
+      ])));
+      final mine = board.marks.firstWhere((m) => m.line == BoardLine.mine);
+      expect(mine.name, 'Ana Diaz');
+      // Labelled with the place they have to climb, not with whose it is.
+      expect(mine.label, '4th');
+      expect(mine.tracked, isTrue);
+      // And the band opens far enough to hold them.
+      expect(board.near, lessThan(41.20));
+    });
+
+    test('draws the athlete in the circle when they are off the podium', () {
+      final competition = field([
+        ('A', 44.90, false),
+        ('B', 43.20, false),
+        ('C', 43.06, false),
+        ('D', 41.20, false),
+      ]);
+      final board =
+          MeetBoard(table(competition), inTheCircle: competition.entries.last);
+      final up = board.marks.firstWhere((m) => m.line == BoardLine.upNow);
+      expect(up.name, 'D');
+      expect(up.label, '4th');
+    });
+
+    test('leaves the athlete in the circle to their place on the podium', () {
+      final competition = field([
+        ('A', 44.90, false),
+        ('B', 43.20, false),
+      ]);
+      final board =
+          MeetBoard(table(competition), inTheCircle: competition.entries.first);
+      expect(board.marks.where((m) => m.line == BoardLine.upNow), isEmpty);
+      expect(board.marks, hasLength(2));
+    });
+
+    test('keeps the rest of the field to marks inside the band', () {
+      final board = MeetBoard(table(field([
+        ('A', 44.90, false),
+        ('B', 44.80, false),
+        ('C', 44.70, false),
+        // Inside the band the podium sets, and a long way outside it.
+        ('D', 44.65, false),
+        ('E', 30.00, false),
+      ])));
+      expect(board.others, [44.65]);
+      // The stragglers don't drag the band down over the marks that decide
+      // it — that is what the standings table is for.
+      expect(board.near, greaterThan(44.0));
     });
   });
 }

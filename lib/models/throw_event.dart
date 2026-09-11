@@ -253,6 +253,17 @@ extension ThrowEventInfo on ThrowEvent {
   /// will be.
   ImplementSpec get defaultImplement => implements.first;
 
+  /// Half the landing sector this event is thrown into, in degrees.
+  ///
+  /// Both angles fall out of the same construction — two lines through the
+  /// ends of a chord struck on an arc around the circle. The throws sector
+  /// is a 12 m chord on a 20 m radius, which is 34.92°; the javelin's is a
+  /// 4 m chord on the 8 m runway arc, which is 28.96°. Narrower, and worth
+  /// drawing narrower: a coach standing behind a javelin runway is looking
+  /// down a visibly tighter sector than the one at the discus cage.
+  double get sectorHalfAngleDeg =>
+      this == ThrowEvent.javelin ? 28.96 / 2 : 34.92 / 2;
+
   /// The spec for [weightKg], or the nearest weight this event is thrown
   /// at. Nothing in the app can produce a weight off the list, but a
   /// hand-edited store or a spec table that changes under an old import

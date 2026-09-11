@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/meet.dart';
+import '../models/meet_board.dart';
 import '../models/throw_event.dart';
 import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
@@ -16,6 +19,7 @@ import '../widgets/entry_dialog.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/gold.dart';
 import '../widgets/sector_art.dart';
+import '../widgets/sector_board.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
@@ -66,9 +70,9 @@ class MeetEventScreen extends StatefulWidget {
   State<MeetEventScreen> createState() => _MeetEventScreenState();
 }
 
-/// Which way the event is being read: the order it is thrown in, or where
-/// everyone stands in it.
-enum _MeetView { series, standings }
+/// Which way the event is being read: the order it is thrown in, the marks
+/// drawn where they landed, or the table they add up to.
+enum _MeetView { series, board, standings }
 
 class _MeetEventScreenState extends State<MeetEventScreen> {
   /// Which density the coach last left a field at. Remembered rather than
@@ -167,9 +171,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               ),
               IconButton(
                 tooltip: _compact ? 'Full cards' : 'Compact the field',
-                icon: Icon(_compact
-                    ? Icons.density_medium
-                    : Icons.density_small),
+                icon:
+                    Icon(_compact ? Icons.density_medium : Icons.density_small),
                 onPressed: () => _setCompact(!_compact),
               ),
             ],
@@ -196,12 +199,19 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                       child: AngularSegmentedBar<_MeetView>(
                         value: _view,
                         onChanged: (view) => setState(() => _view = view),
-                        segments: const [
-                          AngularSegment(
+                        segments: [
+                          const AngularSegment(
                               value: _MeetView.series,
                               icon: Icons.format_list_numbered,
                               label: 'Series'),
                           AngularSegment(
+                              value: _MeetView.board,
+                              // Drawn rather than borrowed: the Material
+                              // set has no mark for a throwing sector, and
+                              // every other sector in the app is drawn too.
+                              glyph: (color) => _SectorGlyph(color: color),
+                              label: 'Sector'),
+                          const AngularSegment(
                               value: _MeetView.standings,
                               icon: Icons.emoji_events_outlined,
                               label: 'Standings'),
@@ -209,10 +219,12 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                       ),
                     ),
                     Expanded(
-                      child: _view == _MeetView.series
-                          ? _seriesList(meet, meets, library, competition,
-                              standings, flight)
-                          : _standingsList(meet, standings),
+                      child: switch (_view) {
+                        _MeetView.series => _seriesList(meet, meets, library,
+                            competition, standings, flight),
+                        _MeetView.board => _boardView(standings, flight),
+                        _MeetView.standings => _standingsList(meet, standings),
+                      },
                     ),
                   ],
                 ),
@@ -231,13 +243,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// The field in the order it throws, which is the order a coach's eye
   /// goes down the list in as the round works through, under a bar saying
   /// where the round has got to.
-  Widget _seriesList(
-      Meet meet,
-      MeetLibrary meets,
-      VideoLibrary library,
-      MeetCompetition competition,
-      MeetStandings standings,
-      MeetFlight flight) {
+  Widget _seriesList(Meet meet, MeetLibrary meets, VideoLibrary library,
+      MeetCompetition competition, MeetStandings standings, MeetFlight flight) {
     final field = competition.entries;
     return ListView(
       padding: EdgeInsets.fromLTRB(12, 12, 12, _compact ? 88 : 96),
@@ -269,6 +276,54 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               onMove: (by) => _move(meet, field, i, by),
             ),
           ),
+      ],
+    );
+  }
+
+  /// The competition drawn on the sector, with the round it is in above it
+  /// and what the next throw has to do under it.
+  Widget _boardView(MeetStandings standings, MeetFlight flight) {
+    final board = MeetBoard(standings, inTheCircle: flight.inTheCircle);
+    final theme = Theme.of(context);
+    if (board.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'Nothing on the board yet.\n'
+            'The first mark of the competition draws the first line.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ),
+      );
+    }
+    return ListView(
+      // Clear of the button that adds an athlete: the caption is the point
+      // of the screen and can't sit behind it.
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+      children: [
+        _FlightBar(flight: flight, standings: standings),
+        const SizedBox(height: 12),
+        // Wider than it is tall, and that is geometry rather than taste:
+        // the sector opens at 34.92°, so a tall box would run the two lines
+        // together into a point inside the card — drawing a circle at the
+        // near edge of a band that starts forty meters out from one.
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Card(
+            color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+            clipBehavior: Clip.antiAlias,
+            child: SectorBoard(
+              board: board,
+              event: widget.event,
+              accent: eventColor(widget.event),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _BoardCaption(standings: standings, flight: flight),
       ],
     );
   }
@@ -583,6 +638,139 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     );
     if (confirmed == true) await meets.removeEntry(meet.id, entry.id);
   }
+}
+
+/// The sector, small enough to sit in a segment: two lines opening from a
+/// circle, with one distance arc across them.
+class _SectorGlyph extends StatelessWidget {
+  const _SectorGlyph({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+      size: const Size(15, 15), painter: _SectorGlyphPainter(color));
+}
+
+class _SectorGlyphPainter extends CustomPainter {
+  const _SectorGlyphPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Wider than the real 34.92° — at fifteen pixels an honest sector is a
+    // pair of parallel lines, and the mark has to read as a wedge.
+    const half = 0.52;
+    final apex = Offset(size.width / 2, size.height * 0.94);
+    final reach = size.height * 0.88;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    for (final sign in [-1, 1]) {
+      final angle = -math.pi / 2 + sign * half;
+      canvas.drawLine(
+          apex, apex + Offset(math.cos(angle), math.sin(angle)) * reach, paint);
+    }
+    canvas.drawArc(
+      Rect.fromCircle(center: apex, radius: reach * 0.72),
+      -math.pi / 2 - half,
+      2 * half,
+      false,
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SectorGlyphPainter old) => old.color != color;
+}
+
+/// What the board adds up to for the athlete about to throw.
+///
+/// The lines say where the marks are; this says what to do about them — the
+/// sentence a coach would shout across the infield if they could.
+class _BoardCaption extends StatelessWidget {
+  const _BoardCaption({required this.standings, required this.flight});
+
+  final MeetStandings standings;
+  final MeetFlight flight;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = eventColor(standings.competition.event);
+    final leader = standings.places.isEmpty ? null : standings.places.first;
+    final up = flight.inTheCircle;
+    final mine = up == null ? null : standings.placeOf(up.id);
+
+    final lines = <(String, Color)>[];
+    if (up == null || mine == null) {
+      // Nobody in the circle: the round is over, or the competition is.
+      if (leader != null && leader.best != null) {
+        lines.add((
+          '${_named(leader.entry)} '
+              '${flight.finished ? 'won it on' : 'leads on'} '
+              '${formatDistance(leader.best!, _unitOf(leader))}',
+          scheme.onSurface,
+        ));
+      }
+    } else {
+      // The bar above has already said who is up. This says what the throw
+      // has to do, which is the only thing the lines don't say themselves.
+      final toLead = standings.neededFor(up.id, place: 1);
+      lines.add((
+        toLead == null
+            ? '${_named(up)} is up, and leads it'
+            : '${formatDistance(toLead, _unitOf(mine))} takes the lead',
+        accent,
+      ));
+    }
+
+    // And what the coach's own best-placed athlete is short of, which is
+    // usually why the board was opened — said with their name on it, since
+    // the athlete in the circle is as often as not somebody else's.
+    if (!standings.cutMade) {
+      for (final place in standings.places) {
+        if (!place.entry.tracked) continue;
+        final needed = standings.neededToQualify(place.entry.id);
+        if (needed == null) continue;
+        lines.add((
+          '${_named(place.entry)} needs '
+              '${formatDistance(needed, _unitOf(place))} to make the final',
+          scheme.primary,
+        ));
+        break;
+      }
+    }
+    if (lines.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final (text, color) in lines)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+      ],
+    );
+  }
+
+  static String _named(MeetEntry entry) =>
+      entry.athlete.isEmpty ? 'Unassigned' : entry.athlete;
+
+  /// The unit this athlete's competition is being measured in — theirs when
+  /// they have a mark, meters until they do.
+  static DistanceUnit _unitOf(MeetPlace place) => place.series.bestRound == null
+      ? DistanceUnit.meters
+      : place.series.unitAt(place.series.bestRound!);
 }
 
 /// Where the round has got to: how far through it the field is, who is in

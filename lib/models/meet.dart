@@ -494,6 +494,20 @@ class MeetCompetition {
   }
 }
 
+/// '1st', '2nd', '3rd', '11th' — a place, written the way it is read out.
+String ordinalPlace(int place) {
+  // The teens are the exception every naive version of this gets wrong:
+  // eleventh, not eleven-first.
+  final tens = place % 100;
+  if (tens >= 11 && tens <= 13) return '${place}th';
+  return switch (place % 10) {
+    1 => '${place}st',
+    2 => '${place}nd',
+    3 => '${place}rd',
+    _ => '${place}th',
+  };
+}
+
 /// One athlete's position in a competition.
 class MeetPlace {
   const MeetPlace({

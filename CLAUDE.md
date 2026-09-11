@@ -7,10 +7,10 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — where a round has got to), `MeetConditions` (what the day was like), `MeetOuting` (a season read from the athlete's side) |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — where a round has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -56,8 +56,9 @@ thrown at), a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
-the same competition at the density a whole heat sheet is tracked at,
-and the sheet a round is entered in — and the schedule import: the page a
+the same competition at the density a whole heat sheet is tracked at, the
+sector board (twice — a podium, and a field with the cut falling below
+it), and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field, and the meet it leaves
@@ -281,6 +282,19 @@ like the app rather than a bare Material default.
   the row itself standing in for the buttons, for a whole heat sheet's
   worth. Both carry the live place — a place that only exists on another
   tab is one a coach has to leave the competition to read.
+- The competition is also drawn where it happened. `MeetBoard` turns the
+  standings into lines across the sector — the podium, the cut, the athlete
+  in the circle and the coach's own wherever they are standing — and
+  `SectorBoard` paints them, the way a televised final paints them on the
+  grass. Two things about it are deliberate and neither is a shortcut: the
+  sector is drawn to the event's own angle (the javelin's is narrower,
+  `ThrowEvent.sectorHalfAngleDeg`), while the *distances* are not to scale.
+  A sector drawn honestly from the circle stacks a whole competition into
+  the last few percent of its length, so the board holds only the stretch
+  the competition is being decided in, no two lines are drawn closer than a
+  label apart, and every line carries its own number. The band is set by the
+  lines and not by the field: one straggler must not squeeze the three marks
+  that decide it into an inch.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as

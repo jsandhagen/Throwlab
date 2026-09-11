@@ -15,6 +15,7 @@ import 'package:throwlab/screens/meet_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/widgets/gold.dart';
+import 'package:throwlab/widgets/sector_board.dart';
 
 /// Recording a competition from the infield: film the throw, write the mark
 /// down, and get both into the athlete's record book without leaving the
@@ -874,6 +875,82 @@ void main() {
       expect(text, contains('COUNTY CHAMPS'));
       expect(text, contains('Ana Diaz'));
       expect(text, contains('41.20'));
+    });
+  });
+
+  group('the sector board', () {
+    Future<void> addRival(String id, String name, int order,
+        {double? best}) async {
+      final entry = MeetEntry(
+        id: id,
+        athlete: name,
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: false,
+        order: order,
+      );
+      if (best != null) entry.setAttempt(0, MeetAttempt.untracked(best));
+      await meets.addEntry('k1', entry: entry);
+    }
+
+    Future<void> openBoard(WidgetTester tester) async {
+      await tester.tap(find.text('Sector'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('has nothing to draw until the first mark', (tester) async {
+      await mountEvent(tester);
+      await openBoard(tester);
+      expect(find.byType(SectorBoard), findsNothing);
+      expect(find.textContaining('Nothing on the board yet'), findsOneWidget);
+    });
+
+    testWidgets('draws the competition once somebody has thrown',
+        (tester) async {
+      await addRival('r1', 'M. Okoye', 1, best: 44.90);
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openBoard(tester);
+
+      expect(find.byType(SectorBoard), findsOneWidget);
+    });
+
+    testWidgets('says what the next throw has to do', (tester) async {
+      await addRival('r1', 'M. Okoye', 1, best: 44.90);
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openBoard(tester);
+
+      // Ana is up again, a centimeter past the leader takes it.
+      expect(find.text('44.91 m takes the lead'), findsOneWidget);
+    });
+
+    testWidgets('says what my athlete needs to make the final', (tester) async {
+      final meet = meets.byId('k1')!..advancing = 1;
+      await meets.save(meet);
+      await addRival('r1', 'M. Okoye', 1, best: 44.90);
+      await addRival('r2', 'J. Smith', 2, best: 30.00);
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openBoard(tester);
+
+      expect(find.text('Ana Diaz needs 44.91 m to make the final'),
+          findsOneWidget);
+    });
+
+    testWidgets('says who won once the competition is over', (tester) async {
+      final meet = meets.byId('k1')!..rounds = 1;
+      await meets.save(meet);
+      await addRival('r1', 'M. Okoye', 1, best: 44.90);
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      await openBoard(tester);
+
+      expect(find.text('M. Okoye won it on 44.90 m'), findsOneWidget);
     });
   });
 }
