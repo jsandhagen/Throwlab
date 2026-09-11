@@ -273,7 +273,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
         const SizedBox(height: 12),
         for (var i = 0; i < field.length; i++)
           Padding(
-            padding: EdgeInsets.only(bottom: _compact ? 6 : 12),
+            padding: EdgeInsets.only(bottom: _compact ? 4 : 12),
             child: _EntryCard(
               meet: meet,
               entry: field[i],
@@ -310,6 +310,9 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   Widget _liveView(Meet meet, MeetStandings standings, MeetFlight flight) {
     final board = MeetBoard(standings, inTheCircle: flight.inTheCircle);
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final library = context.read<VideoLibrary>();
+    final meets = context.read<MeetLibrary>();
     // Whoever throws next, named or not: a competition of one has no flight
     // to call, but it still has a mark to write down.
     final up = flight.next;
@@ -324,38 +327,77 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
           color: _opaque(theme),
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _FlightBody(flight: flight, standings: standings),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _FlightBody(flight: flight, standings: standings),
+                ),
                 const SizedBox(height: 12),
-                if (board.isEmpty)
-                  _NothingOnTheBoard(event: widget.event)
-                else
-                  AspectRatio(
-                    // Wider than it is tall, and that is geometry rather
-                    // than taste: the sector opens at 34.92°, so a tall box
-                    // runs the two lines together into a point inside the
-                    // card — drawing a circle at the near edge of a band
-                    // that starts forty meters out from one.
-                    aspectRatio: 4 / 3,
-                    child: SectorBoard(
-                      board: board,
-                      event: widget.event,
-                      accent: eventColor(widget.event),
-                      backdrop: _opaque(theme),
-                    ),
+                // The field itself, set into the card rather than run on
+                // from the header: a picture of a sector and a list of
+                // names are two different things to read, and the edge
+                // between them is what says so.
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: scheme.outlineVariant.withOpacity(0.4)),
                   ),
-                _BoardCaption(standings: standings, flight: flight),
+                  child: board.isEmpty
+                      ? _NothingOnTheBoard(event: widget.event)
+                      : AspectRatio(
+                          // Wider than it is tall, and that is geometry
+                          // rather than taste: the sector opens at 34.92°,
+                          // so a tall box runs the two lines together into
+                          // a point inside the card — drawing a circle at
+                          // the near edge of a band that starts forty
+                          // meters out from one.
+                          aspectRatio: 4 / 3,
+                          child: SectorBoard(
+                            board: board,
+                            event: widget.event,
+                            accent: eventColor(widget.event),
+                            backdrop: scheme.surface,
+                          ),
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _BoardCaption(standings: standings, flight: flight),
+                ),
                 if (up != null) ...[
-                  const SizedBox(height: 12),
-                  _EnterUp(
+                  const SizedBox(height: 8),
+                  Divider(
+                      height: 1, color: scheme.outlineVariant.withOpacity(0.5)),
+                  // The athlete in the circle, on their own card from the
+                  // series — same rounds, same two buttons, same place to
+                  // put a thumb. A screen that enters a mark one way in one
+                  // view and another way in another is two screens.
+                  _EntryCard(
+                    meet: meet,
                     entry: up,
-                    round: up.nextRound,
-                    rounds: meet.rounds,
-                    onEnter: () => _enter(meet, up, up.nextRound),
-                    onFilm: () => _film(meet, up, up.nextRound),
+                    position: standings.competition.entries.indexOf(up) + 1,
+                    place: standings.placeOf(up.id),
+                    // Not marked 'up': the row above the board has just
+                    // said so, and this card is under it because of it.
+                    upIn: null,
+                    compact: false,
+                    embedded: true,
+                    closedFrom: !meet.hasFinal || standings.throwsInFinal(up.id)
+                        ? null
+                        : meet.prelimRounds,
+                    series: MeetSeries(up, library.results),
+                    library: library,
+                    onEnter: (round) => _enter(meet, up, round),
+                    onFilm: (round) => _film(meet, up, round),
+                    onOpen: _openThrow,
+                    onRemove: () => _removeEntry(meets, meet, up),
+                    onMove: (by) => _move(meet, standings.competition.entries,
+                        standings.competition.entries.indexOf(up), by),
                   ),
                 ],
               ],
@@ -986,66 +1028,6 @@ class _NothingOnTheBoard extends StatelessWidget {
   }
 }
 
-/// The mark for whoever is in the circle, entered from under the board.
-///
-/// The one thing a coach does on this screen, at the moment they do it: the
-/// distance is called out a few seconds after the throw, and by then they
-/// are already looking at the board to see where it landed.
-class _EnterUp extends StatelessWidget {
-  const _EnterUp({
-    required this.entry,
-    required this.round,
-    required this.rounds,
-    required this.onEnter,
-    required this.onFilm,
-  });
-
-  final MeetEntry entry;
-
-  /// The round they are about to throw, from 0.
-  final int round;
-  final int rounds;
-
-  final VoidCallback onEnter;
-  final VoidCallback onFilm;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = entry.athlete.isEmpty ? 'Unassigned' : entry.athlete;
-    if (round >= rounds) return const SizedBox.shrink();
-    return Row(
-      children: [
-        // Nothing is filmed for the rest of the field: a clip has to land
-        // in the library under somebody's name, and these are not the
-        // coach's athletes to keep.
-        if (entry.tracked) ...[
-          OutlinedButton.icon(
-            icon: const Icon(Icons.videocam_outlined, size: 20),
-            label: const Text('Film'),
-            style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-            onPressed: onFilm,
-          ),
-          const SizedBox(width: 10),
-        ],
-        Expanded(
-          child: FilledButton.tonalIcon(
-            icon: const Icon(Icons.straighten, size: 20),
-            label: Text(
-              'Mark $name · ${round + 1}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14)),
-            onPressed: onEnter,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// One named athlete in the bar: what they are to this round, who they are,
 /// and what they are standing on.
 class _WhoRow extends StatelessWidget {
@@ -1138,6 +1120,7 @@ class _EntryCard extends StatelessWidget {
     required this.place,
     required this.upIn,
     required this.compact,
+    this.embedded = false,
     required this.closedFrom,
     required this.series,
     required this.library,
@@ -1162,8 +1145,13 @@ class _EntryCard extends StatelessWidget {
   /// with nothing coming this round.
   final int? upIn;
 
-  /// The two-line format, for a field too big to scroll through.
+  /// The one-line format, for a field too big to scroll through.
   final bool compact;
+
+  /// Drawn without its card, for somewhere that is already one — the live
+  /// card puts the athlete in the circle at the bottom of itself, and a
+  /// card inside a card reads as a mistake.
+  final bool embedded;
 
   /// The first round they no longer have — the cut, for an athlete who
   /// missed it. Null while everyone still has throws coming.
@@ -1188,7 +1176,8 @@ class _EntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accent = eventColor(entry.event);
-    final card = Card(
+    if (embedded) return _fullBody(context, theme, accent);
+    return Card(
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
       // The compact rows space themselves off the list rather than off the
       // card's own margin: two gaps stacked is a row's worth of screen
@@ -1213,35 +1202,45 @@ class _EntryCard extends StatelessWidget {
             )
           : _fullBody(context, theme, accent),
     );
-    return card;
   }
 
   /// Two lines: who they are and where they stand, then the series.
+  /// One line an athlete: the flight number, who they are, where they
+  /// stand, and the series read across.
+  ///
+  /// Nothing is labelled here — the round numbers come off the cells, the
+  /// word 'Best' comes off the mark, and the flight call comes off the row
+  /// and onto its edge — because a coach scanning a heat sheet's worth of
+  /// field is reading down a column, not reading a card. The full format is
+  /// a tap away for everything this leaves out.
   Widget _compactBody(BuildContext context, ThemeData theme, Color accent) =>
       Padding(
-        padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        padding: const EdgeInsets.fromLTRB(8, 3, 6, 3),
+        child: Row(
           children: [
-            Row(
-              children: [
-                _position(theme),
-                Expanded(child: _name(theme, dense: true)),
-                _upLabel(theme, accent),
-                _placeChip(theme),
-                _placeAndBest(theme, accent, dense: true),
-                _menu(dense: true),
-              ],
+            _position(theme, dense: true),
+            Expanded(child: _name(theme, dense: true)),
+            _placeChip(theme),
+            const SizedBox(width: 4),
+            SizedBox(
+              // Fixed, so every athlete's rounds line up down the screen:
+              // a column that shifts with the length of a name is a column
+              // nobody can read across.
+              width: meet.rounds * 26,
+              child: _boxes(accent, compact: true),
             ),
-            const SizedBox(height: 6),
-            _boxes(accent, compact: true),
           ],
         ),
       );
 
   Widget _fullBody(BuildContext context, ThemeData theme, Color accent) =>
       Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
+        // Embedded, the card around it has already paid for the margin —
+        // so it lines its name up with the header above rather than
+        // stepping in from it.
+        padding: embedded
+            ? const EdgeInsets.fromLTRB(4, 8, 0, 0)
+            : const EdgeInsets.fromLTRB(12, 10, 8, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1269,7 +1268,7 @@ class _EntryCard extends StatelessWidget {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: _placeAndBest(theme, accent, dense: false),
+                    child: _placeAndBest(theme, accent),
                   ),
                 ),
                 // Cut, with nothing left to fill in behind them: there is
@@ -1306,12 +1305,13 @@ class _EntryCard extends StatelessWidget {
 
   /// Where they are in the flight: the number a coach counts down to work
   /// out how long they have before their athlete is in the circle.
-  Widget _position(ThemeData theme) => SizedBox(
-        width: 22,
+  Widget _position(ThemeData theme, {bool dense = false}) => SizedBox(
+        width: dense ? 16 : 22,
         child: Text(
           '$position',
-          style: theme.textTheme.labelMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style:
+              (dense ? theme.textTheme.labelSmall : theme.textTheme.labelMedium)
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       );
 
@@ -1333,7 +1333,10 @@ class _EntryCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (!entry.tracked) ...[
+          // No badge in the one-line row: the name is already set back a
+          // shade for the rest of the field, and at this width every pixel
+          // it would take comes off somebody's surname.
+          if (!entry.tracked && !dense) ...[
             const SizedBox(width: 6),
             Icon(Icons.groups_outlined,
                 size: 15, color: theme.colorScheme.onSurfaceVariant),
@@ -1377,18 +1380,12 @@ class _EntryCard extends StatelessWidget {
   /// What they are standing on: the furthest of the series, and whether it
   /// is the furthest they have ever thrown.
   ///
-  /// The compact format drops the word for it — a row two lines tall has no
-  /// space for a label, and the medal already says which kind of best this
-  /// is when it matters.
-  Widget _placeAndBest(ThemeData theme, Color accent, {required bool dense}) {
+  /// Only the full card says it in words. The one-line row leaves the mark
+  /// to the cell it was thrown in, picked out in the event's color, which
+  /// is the same answer in none of the space.
+  Widget _placeAndBest(ThemeData theme, Color accent) {
     final best = series.best;
-    if (best == null) {
-      return dense
-          ? Text('—',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant))
-          : const SizedBox.shrink();
-    }
+    if (best == null) return const SizedBox.shrink();
     final bestRound = series.bestRound!;
     // Null for the rest of the field, whose distances live on the attempt
     // and never reach the record book — so they hold no bests either.
@@ -1401,14 +1398,12 @@ class _EntryCard extends StatelessWidget {
           const FirstPlaceMedal(size: 13),
           const SizedBox(width: 6),
         ],
-        if (!dense) ...[
-          Text(
-            isPb ? 'PB' : 'Best',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(width: 6),
-        ],
+        Text(
+          isPb ? 'PB' : 'Best',
+          style: theme.textTheme.labelSmall
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+        const SizedBox(width: 6),
         Text(
           formatDistance(best, series.unitAt(bestRound)),
           style: theme.textTheme.titleSmall
@@ -1421,7 +1416,7 @@ class _EntryCard extends StatelessWidget {
   Widget _boxes(Color accent, {required bool compact}) => Row(
         children: [
           for (var round = 0; round < meet.rounds; round++) ...[
-            if (round > 0) SizedBox(width: compact ? 3 : 4),
+            if (round > 0) SizedBox(width: compact ? 2 : 4),
             Expanded(
               child: _AttemptBox(
                 key: ValueKey('round-$round'),
@@ -1517,8 +1512,9 @@ class _AttemptBox extends StatelessWidget {
   /// rather than as the app's own accent landing on it.
   final Color accent;
 
-  /// The shorter box the two-line card uses. Still tall enough to hit with
-  /// a thumb — a series a coach can read but not tap is half a screen.
+  /// The bare cell the one-line row uses: no border, no round number, and
+  /// no more height than the mark in it needs. The round is said by where
+  /// the cell sits in the row, which is how a results sheet says it.
   final bool compact;
 
   /// A round this athlete doesn't get: they were cut before it. Shown, not
@@ -1562,37 +1558,53 @@ class _AttemptBox extends StatelessWidget {
           // Grayed rather than gone, so the series still reads as six.
           opacity: closed && attempt == null ? 0.35 : 1,
           child: Container(
-            height: compact ? 34 : 46,
+            height: compact ? 28 : 46,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              color: attempt == null
-                  ? null
-                  : scheme.surfaceContainerHighest.withOpacity(0.6),
-              border: Border.all(
-                color: isBest ? accent : scheme.outlineVariant,
-                width: isBest ? 1.5 : 1,
-              ),
+              borderRadius: BorderRadius.circular(compact ? 4 : 8),
+              color: attempt != null
+                  ? scheme.surfaceContainerHighest
+                      .withOpacity(compact ? 0.5 : 0.6)
+                  // A round nobody has thrown is still a round: in the
+                  // one-line row, where there is no border to hold the
+                  // column, it is the faint cell that keeps six of them
+                  // lined up down the screen.
+                  : compact
+                      ? scheme.surfaceContainerHighest.withOpacity(0.16)
+                      : null,
+              border: compact
+                  // The leading mark is the only one worth an outline at
+                  // this size; a border round all six draws a grid.
+                  ? (isBest
+                      ? Border.all(color: accent.withOpacity(0.8), width: 1)
+                      : null)
+                  : Border.all(
+                      color: isBest ? accent : scheme.outlineVariant,
+                      width: isBest ? 1.5 : 1,
+                    ),
             ),
             child: Stack(
               children: [
-                Positioned(
-                  top: 2,
-                  left: 4,
-                  child: Text(
-                    '${round + 1}',
-                    style: TextStyle(
-                        fontSize: 9, height: 1, color: scheme.onSurfaceVariant),
-                  ),
-                ),
-                if (filmed)
+                if (!compact)
                   Positioned(
                     top: 2,
-                    right: 3,
-                    child:
-                        Icon(Icons.videocam, size: 10, color: scheme.primary),
+                    left: 4,
+                    child: Text(
+                      '${round + 1}',
+                      style: TextStyle(
+                          fontSize: 9,
+                          height: 1,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                  ),
+                if (filmed)
+                  Positioned(
+                    top: compact ? 1 : 2,
+                    right: compact ? 1 : 3,
+                    child: Icon(Icons.videocam,
+                        size: compact ? 8 : 10, color: scheme.primary),
                   ),
                 Positioned.fill(
-                  top: compact ? 7 : 8,
+                  top: compact ? 0 : 8,
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1601,7 +1613,7 @@ class _AttemptBox extends StatelessWidget {
                         child: Text(
                           text,
                           style: TextStyle(
-                            fontSize: compact ? 12 : 13,
+                            fontSize: compact ? 11 : 13,
                             fontWeight: FontWeight.w600,
                             color: color,
                           ),

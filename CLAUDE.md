@@ -280,14 +280,26 @@ like the app rather than a bare Material default.
   but `next` still answers who is about to throw, because a mark still has
   to be written down for them.
 - The field comes at two densities, remembered in `throwlab.meetCompact`.
-  Full cards for the three athletes a coach brought; two-line rows, with
-  the row itself standing in for the buttons, for a whole heat sheet's
-  worth. Both carry the live place — a place that only exists on another
-  tab is one a coach has to leave the competition to read.
+  Full cards for the three athletes a coach brought; one line an athlete
+  for a whole heat sheet's worth — the flight number, the name, the place,
+  and the series read across in bare cells with the row itself standing in
+  for the buttons. Nothing is labelled in that format: the round numbers
+  come off the cells, the word 'Best' comes off the mark, and the flight
+  call comes off the row and onto its edge, because a coach scanning a
+  field is reading down a column rather than reading a card. The cells keep
+  a fixed width so the six line up down the screen, and an untaken round is
+  still drawn — faintly — for the same reason. Both densities carry the
+  live place: a place that only exists on another tab is one a coach has to
+  leave the competition to read.
 - The event opens on **Live**, and it is one card: the round and the three
   calls, the competition drawn on the sector under them, what the next
-  throw has to do, and the mark for whoever is up — entered without leaving
-  it. Between attempts a coach looks down once, and everything they look
+  throw has to do, and the athlete in the circle on their own card from the
+  series — same rounds, same two buttons, same place to put a thumb, drawn
+  without its card chrome (`_EntryCard(embedded: true)`). A screen that
+  enters a mark one way in one view and another way in another is two
+  screens. The sector sits in a panel of its own, set into the card: a
+  picture of a sector and a list of names are two different things to read,
+  and the edge between them is what says so. Between attempts a coach looks down once, and everything they look
   down for is the same thing. Which view they last left an event on is
   remembered (`throwlab.meetView`), so somebody who works out of the series
   list all afternoon is not put back on the board at every ring.

@@ -164,8 +164,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(MeetEventScreen), findsOneWidget);
-      // On the live card, with the mark for whoever is up under it.
-      expect(find.textContaining('Mark Ana Diaz'), findsOneWidget);
+      // On the live card, with the athlete in the circle under the board.
+      expect(find.text('Ana Diaz'), findsOneWidget);
+      expect(find.text('Mark'), findsOneWidget);
       await tester.tap(find.text('Series'));
       await tester.pumpAndSettle();
       expect(find.text('Ana Diaz'), findsOneWidget);
@@ -910,7 +911,10 @@ void main() {
 
     testWidgets('is what an event opens on', (tester) async {
       await mountEvent(tester, live: true);
-      expect(find.textContaining('Mark Ana Diaz'), findsOneWidget);
+      // The athlete in the circle, on the same card the series uses.
+      expect(find.text('Ana Diaz'), findsOneWidget);
+      expect(find.text('Mark'), findsOneWidget);
+      expect(find.byKey(const ValueKey('round-0')), findsOneWidget);
     });
 
     testWidgets('calls the flight three deep', (tester) async {
@@ -924,18 +928,26 @@ void main() {
       expect(find.text('in the hole'), findsOneWidget);
       // The fourth is a number in the order, not a call.
       expect(find.text('K. Fox'), findsNothing);
+      // Ana is named once on the bar and once on the card under the board.
+      expect(find.text('Ana Diaz'), findsNWidgets(2));
     });
 
     testWidgets('writes the mark for whoever is up', (tester) async {
       await mountEvent(tester, live: true);
-      await tester.tap(find.textContaining('Mark Ana Diaz'));
+      await tester.tap(find.text('Mark'));
       await tester.pumpAndSettle();
 
       expect(find.text('Ana Diaz · round 1'), findsOneWidget);
       await enterDistance(tester, '41.20');
       expect(entry().attemptAt(0)?.resultId, library.marks.single.id);
-      // And it moves on to the round after it.
-      expect(find.textContaining('Mark Ana Diaz · 2'), findsOneWidget);
+      // The mark is on the board and in the series under it.
+      expect(find.text('41.20'), findsOneWidget);
+      expect(find.textContaining('41.20 m'), findsWidgets);
+
+      // And the next tap is the round after it.
+      await tester.tap(find.text('Mark'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ana Diaz · round 2'), findsOneWidget);
     });
 
     testWidgets('films from here too, for an athlete the coach keeps',
@@ -951,7 +963,8 @@ void main() {
       await meets.removeEntry('k1', 'e1');
       await addRival('r1', 'M. Okoye', 0);
       await mountEvent(tester, live: true);
-      expect(find.textContaining('Mark M. Okoye'), findsOneWidget);
+      expect(find.text('M. Okoye'), findsOneWidget);
+      expect(find.text('Mark'), findsOneWidget);
       expect(find.text('Film'), findsNothing);
     });
 

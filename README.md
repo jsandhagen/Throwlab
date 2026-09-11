@@ -111,11 +111,11 @@ Build a season and read it forward. Today's meet first, then what's coming, then
 - Standings calculate per event and implement
 - Ties break by countback down the series, same as a real competition
 
-**Live, while it happens.** An event opens on one card: which round is being thrown and how far through it you are, who is **up, on deck and in the hole**, the competition drawn on the sector under them, what the next throw has to do — and the mark for whoever is up, entered right there. All of it worked out from the order and the series, so it stays right without anybody telling it whose turn it is.
+**Live, while it happens.** An event opens on one card: which round is being thrown and how far through it you are, who is **up, on deck and in the hole**, the competition drawn on the sector under them, what the next throw has to do — and the athlete in the circle on their own card from the series list — same rounds, same buttons — so a mark goes in the same way wherever you are standing. All of it worked out from the order and the series, so it stays right without anybody telling it whose turn it is.
 
 **The sector board.** The heart of the live card: the podium as lines struck in the same gold, silver and bronze as the medal, the cut as a dashed line with the qualifying ground shaded above it, and your athlete's mark in the event's color wherever they are standing. The sector is drawn at the event's real angle (the javelin's is narrower); the distances are spread out so a competition decided by a centimeter is still readable, and every line carries its own number on a chip you can read across a field.
 
-**Two densities.** Full cards when you brought three athletes. Two-line rows when you are tracking the whole heat sheet — tap the row to enter the next round. Your choice is remembered.
+**Two densities.** Full cards when you brought three athletes. One line an athlete when you are tracking the whole heat sheet — flight number, name, place, and the series read across, with a tap on the row entering the next round. Fits about four times as many throwers on a screen. Your choice is remembered.
 
 **Conditions.** One line across the top of a meet takes down the sky, the temperature and the wind. A javelin series into a headwind is a different competition from the same series with it behind, and in six months there is no other way to tell.
 
