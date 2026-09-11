@@ -80,7 +80,15 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// time they walk to the next ring.
   static const _viewKey = 'throwlab.meetView';
 
+  /// The zoom the board was left on, so a coach who has picked a scale
+  /// keeps it from ring to ring and meet to meet. Absent — and 0 — mean the
+  /// board fits itself to the competition, which is what it opens at.
+  static const _spanKey = 'throwlab.boardSpan';
+
   _MeetView _view = _MeetView.live;
+
+  /// How deep the board's band is, in meters; null to fit the marks.
+  double? _span;
 
   @override
   void initState() {
@@ -93,7 +101,11 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       final prefs = await SharedPreferences.getInstance();
       if (!mounted) return;
       final view = _MeetView.values.asNameMap()[prefs.getString(_viewKey)];
-      if (view != null) setState(() => _view = view);
+      final span = prefs.getDouble(_spanKey);
+      setState(() {
+        if (view != null) _view = view;
+        if (span != null && boardSpans.contains(span)) _span = span;
+      });
     } catch (_) {
       // Storage is allowed to fail; the live card is a fine place to land.
     }
@@ -106,6 +118,40 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       await prefs.setString(_viewKey, view.name);
     } catch (_) {
       // Not worth telling anyone about: the view still changed.
+    }
+  }
+
+  /// How tall to draw the board in a view [room] high.
+  ///
+  /// As tall as the screen can spare, because every pixel of it is depth of
+  /// sector and depth of sector is the whole of what the board is read for
+  /// — a phone that has the room should not be drawing a competition in a
+  /// letterbox. Two bounds on that: never so short that the labels crowd on
+  /// a screen that has no room to give, and never so tall that the sector
+  /// lines meet inside the box. They converge on a circle a box and a third
+  /// below the top edge, and past that a board draws a room rather than a
+  /// sector.
+  static double _boardHeight(BoxConstraints room) {
+    // The board's own width: the view, less the list's padding and the
+    // card's.
+    final width = room.maxWidth - 44;
+    // Half the view: enough that the card underneath — the athlete in the
+    // circle and the six boxes their mark goes in — is still under a thumb
+    // without scrolling, on the tallest board the rest of the screen can
+    // pay for.
+    return (room.maxHeight * 0.5).clamp(width * 0.75, width * 1.15);
+  }
+
+  /// Puts the board on a scale a coach picked, or back on fitting itself.
+  Future<void> _zoom(double? to) async {
+    setState(() => _span = to);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      // Zero rather than a remove, so 'fit' is a choice that sticks the
+      // same way a span does.
+      await prefs.setDouble(_spanKey, to ?? 0);
+    } catch (_) {
+      // Storage is allowed to fail; the board still zoomed.
     }
   }
 
@@ -285,7 +331,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// and everything they look down for is the same thing — who is up, what
   /// it will take, and the number they are about to write.
   Widget _liveView(Meet meet, MeetStandings standings, MeetFlight flight) {
-    final board = MeetBoard(standings, inTheCircle: flight.inTheCircle);
+    final board =
+        MeetBoard(standings, inTheCircle: flight.inTheCircle, span: _span);
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final library = context.read<VideoLibrary>();
@@ -293,94 +340,101 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     // Whoever throws next, named or not: a competition of one has no flight
     // to call, but it still has a mark to write down.
     final up = flight.next;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-      children: [
-        Card(
-          // Opaque, unlike every other card in the app: the screen's own
-          // sector art runs behind this one, and two sectors drawn over
-          // each other at different angles is a picture of nothing.
-          color: _opaque(theme),
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+    return LayoutBuilder(
+        builder: (context, room) => ListView(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _FlightBody(flight: flight, standings: standings),
-                ),
-                const SizedBox(height: 12),
-                // The field itself, set into the card rather than run on
-                // from the header: a picture of a sector and a list of
-                // names are two different things to read, and the edge
-                // between them is what says so.
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: scheme.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: scheme.outlineVariant.withOpacity(0.4)),
-                  ),
-                  child: board.isEmpty
-                      ? _NothingOnTheBoard(event: widget.event)
-                      : AspectRatio(
-                          // Wider than it is tall, and that is geometry
-                          // rather than taste: the sector opens at 34.92°,
-                          // so a tall box runs the two lines together into
-                          // a point inside the card — drawing a circle at
-                          // the near edge of a band that starts forty
-                          // meters out from one.
-                          aspectRatio: 4 / 3,
-                          child: SectorBoard(
-                            board: board,
-                            event: widget.event,
-                            accent: eventColor(widget.event),
-                            backdrop: scheme.surface,
-                          ),
+                Card(
+                  // Opaque, unlike every other card in the app: the screen's own
+                  // sector art runs behind this one, and two sectors drawn over
+                  // each other at different angles is a picture of nothing.
+                  color: _opaque(theme),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child:
+                              _FlightBody(flight: flight, standings: standings),
                         ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _BoardCaption(standings: standings, flight: flight),
-                ),
-                if (up != null) ...[
-                  const SizedBox(height: 8),
-                  Divider(
-                      height: 1, color: scheme.outlineVariant.withOpacity(0.5)),
-                  // The athlete in the circle, on their own card from the
-                  // series — same rounds, same two buttons, same place to
-                  // put a thumb. A screen that enters a mark one way in one
-                  // view and another way in another is two screens.
-                  _EntryCard(
-                    meet: meet,
-                    entry: up,
-                    position: standings.competition.entries.indexOf(up) + 1,
-                    place: standings.placeOf(up.id),
-                    // Not marked 'up': the row above the board has just
-                    // said so, and this card is under it because of it.
-                    upIn: null,
-                    embedded: true,
-                    closedFrom: !meet.hasFinal || standings.throwsInFinal(up.id)
-                        ? null
-                        : meet.prelimRounds,
-                    series: MeetSeries(up, library.results),
-                    library: library,
-                    onEnter: (round) => _enter(meet, up, round),
-                    onFilm: (round) => _film(meet, up, round),
-                    onOpen: _openThrow,
-                    onRemove: () => _removeEntry(meets, meet, up),
-                    onMove: (by) => _move(meet, standings.competition.entries,
-                        standings.competition.entries.indexOf(up), by),
+                        const SizedBox(height: 12),
+                        // The field itself, set into the card rather than run on
+                        // from the header: a picture of a sector and a list of
+                        // names are two different things to read, and the edge
+                        // between them is what says so.
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: scheme.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: scheme.outlineVariant.withOpacity(0.4)),
+                          ),
+                          child: board.isEmpty
+                              ? _NothingOnTheBoard(event: widget.event)
+                              : SizedBox(
+                                  height: _boardHeight(room),
+                                  child: _PinchToZoom(
+                                    board: board,
+                                    onZoom: _zoom,
+                                    child: SectorBoard(
+                                      board: board,
+                                      event: widget.event,
+                                      accent: eventColor(widget.event),
+                                      backdrop: scheme.surface,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _BoardCaption(
+                              standings: standings, flight: flight),
+                        ),
+                        if (up != null) ...[
+                          const SizedBox(height: 8),
+                          Divider(
+                              height: 1,
+                              color: scheme.outlineVariant.withOpacity(0.5)),
+                          // The athlete in the circle, on their own card from the
+                          // series — same rounds, same two buttons, same place to
+                          // put a thumb. A screen that enters a mark one way in one
+                          // view and another way in another is two screens.
+                          _EntryCard(
+                            meet: meet,
+                            entry: up,
+                            position:
+                                standings.competition.entries.indexOf(up) + 1,
+                            place: standings.placeOf(up.id),
+                            // Not marked 'up': the row above the board has just
+                            // said so, and this card is under it because of it.
+                            upIn: null,
+                            embedded: true,
+                            closedFrom:
+                                !meet.hasFinal || standings.throwsInFinal(up.id)
+                                    ? null
+                                    : meet.prelimRounds,
+                            series: MeetSeries(up, library.results),
+                            library: library,
+                            onEnter: (round) => _enter(meet, up, round),
+                            onFilm: (round) => _film(meet, up, round),
+                            onOpen: _openThrow,
+                            onRemove: () => _removeEntry(meets, meet, up),
+                            onMove: (by) => _move(
+                                meet,
+                                standings.competition.entries,
+                                standings.competition.entries.indexOf(up),
+                                by),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ],
+                ),
               ],
-            ),
-          ),
-        ),
-      ],
-    );
+            ));
   }
 
   /// The card color the rest of the app uses, flattened onto the surface.
@@ -838,6 +892,57 @@ class _BoardCaption extends StatelessWidget {
   static DistanceUnit _unitOf(MeetPlace place) => place.series.bestRound == null
       ? DistanceUnit.meters
       : place.series.unitAt(place.series.bestRound!);
+}
+
+/// Pinching the board to a scale, and double-tapping it back to the one it
+/// picks for itself.
+///
+/// No buttons: a board is worth every pixel of the screen it is on, and a
+/// row of controls over it costs a meter of sector to answer a question a
+/// coach mostly doesn't have — the board already picks the scale the
+/// competition asks for. Pinching is there for when they do, and it snaps
+/// to the rungs of [boardSpans] rather than going anywhere in between,
+/// because a scale is only worth having if it is a round number.
+class _PinchToZoom extends StatefulWidget {
+  const _PinchToZoom({
+    required this.board,
+    required this.onZoom,
+    required this.child,
+  });
+
+  final MeetBoard board;
+  final ValueChanged<double?> onZoom;
+  final Widget child;
+
+  @override
+  State<_PinchToZoom> createState() => _PinchToZoomState();
+}
+
+class _PinchToZoomState extends State<_PinchToZoom> {
+  /// What the board was drawn at when the fingers went down. The pinch is
+  /// measured against that rather than against the rung it has snapped to,
+  /// so a slow pinch doesn't stick on a rung it has already left.
+  double _from = defaultBoardSpan;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        // The board lives in a list that scrolls: only a second finger is
+        // a zoom, and one finger dragging still scrolls the screen.
+        onScaleStart: (_) => _from = widget.board.span,
+        onScaleUpdate: (details) {
+          if (details.pointerCount < 2) return;
+          final wanted = _from / details.scale;
+          var nearest = boardSpans.first;
+          for (final span in boardSpans) {
+            if ((span - wanted).abs() < (nearest - wanted).abs()) {
+              nearest = span;
+            }
+          }
+          if (nearest != widget.board.span) widget.onZoom(nearest);
+        },
+        onDoubleTap: () => widget.onZoom(null),
+        child: widget.child,
+      );
 }
 
 /// Where the round has got to: how far through it the field is, and the

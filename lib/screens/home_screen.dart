@@ -81,30 +81,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final build = await AppUpdater.checkForUpdate();
     if (!mounted || build == null) return;
     setState(() => _availableBuild = build);
+    // Whatever was already coming down for this build carries on from
+    // where it stopped — a download interrupted by leaving the app, or by
+    // Android reclaiming it, costs nothing but the time it was stopped.
+    await AppUpdater.resume(build);
+    if (mounted && AppUpdater.status.value.stage == UpdateStage.ready) {
+      await AppUpdater.install();
+    }
   }
 
+  /// Starts the download, or picks it back up, and hands the APK to the
+  /// installer once it is down.
+  ///
+  /// Nothing is blocked while it runs: it used to happen behind a modal
+  /// dialog, which made a fifty-megabyte download something you had to sit
+  /// and watch, and closing the app part-way threw away every byte of it.
+  /// The banner carries the progress instead, and the download itself
+  /// belongs to [AppUpdater] rather than to this screen, so walking away
+  /// from the library — or from the app — doesn't stop it.
   Future<void> _installUpdate() async {
-    final progress = ValueNotifier<double?>(null);
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Downloading update'),
-        content: ValueListenableBuilder<double?>(
-          valueListenable: progress,
-          builder: (context, value, _) => LinearProgressIndicator(value: value),
-        ),
-      ),
-    );
-    try {
-      await AppUpdater.downloadAndInstall((p) => progress.value = p);
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Update failed: $e')));
-      }
-    } finally {
-      if (mounted) Navigator.pop(context);
+    final build = _availableBuild;
+    if (build == null) return;
+    await AppUpdater.download(build);
+    if (!mounted) return;
+    final status = AppUpdater.status.value;
+    if (status.stage == UpdateStage.ready) {
+      // Straight into the installer when the app is still in front of
+      // somebody. When it isn't, Android won't put the installer up
+      // anyway, so it waits on the banner until they come back.
+      await AppUpdater.install();
+    } else if (status.stage == UpdateStage.held) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Update paused — ${status.error ?? 'no connection'}')));
     }
   }
 
@@ -441,20 +449,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: Column(
           children: [
             if (_availableBuild != null && _availableBuild != _dismissedBuild)
-              MaterialBanner(
-                leading: const Icon(Icons.system_update),
-                content: const Text('A new version of ThrowLab is ready.'),
-                actions: [
-                  TextButton(
-                    onPressed: () =>
-                        setState(() => _dismissedBuild = _availableBuild),
-                    child: const Text('Later'),
-                  ),
-                  FilledButton(
-                    onPressed: _installUpdate,
-                    child: const Text('Update'),
-                  ),
-                ],
+              ValueListenableBuilder<UpdateStatus>(
+                valueListenable: AppUpdater.status,
+                builder: (context, status, _) => _UpdateBanner(
+                  status: status,
+                  onUpdate: _installUpdate,
+                  onInstall: AppUpdater.install,
+                  onLater: () =>
+                      setState(() => _dismissedBuild = _availableBuild),
+                ),
               ),
             Expanded(
               child: Consumer<VideoLibrary>(
@@ -1114,5 +1117,82 @@ class _ComparePickerDialogState extends State<_ComparePickerDialog> {
         ),
       ],
     );
+  }
+}
+
+/// The update, wherever it has got to.
+///
+/// One banner for the whole business rather than a dialog: an update is
+/// something to start and then forget about, and the only two moments that
+/// need a thumb are starting it and installing it.
+class _UpdateBanner extends StatelessWidget {
+  const _UpdateBanner({
+    required this.status,
+    required this.onUpdate,
+    required this.onInstall,
+    required this.onLater,
+  });
+
+  final UpdateStatus status;
+  final VoidCallback onUpdate;
+  final VoidCallback onInstall;
+  final VoidCallback onLater;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent =
+        status.progress == null ? null : '${(status.progress! * 100).round()}%';
+    return switch (status.stage) {
+      UpdateStage.downloading => MaterialBanner(
+          leading: const Icon(Icons.downloading),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(percent == null
+                  ? 'Downloading the update…'
+                  : 'Downloading the update — $percent'),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(value: status.progress),
+            ],
+          ),
+          // Nothing to press: it carries on wherever they go, and there is
+          // nothing to decide until it lands.
+          actions: const [SizedBox.shrink()],
+        ),
+      // Stopped part-way — the phone lost the track's wifi, or Android took
+      // the app back while it was in a pocket. What came down is kept.
+      UpdateStage.held => MaterialBanner(
+          leading: const Icon(Icons.pause_circle_outline),
+          content: Text(percent == null
+              ? 'The update stopped part-way.'
+              : 'The update stopped at $percent.'),
+          actions: [
+            TextButton(onPressed: onLater, child: const Text('Later')),
+            FilledButton(onPressed: onUpdate, child: const Text('Resume')),
+          ],
+        ),
+      UpdateStage.ready => MaterialBanner(
+          leading: const Icon(Icons.system_update),
+          content: const Text('The update is downloaded and ready.'),
+          actions: [
+            TextButton(onPressed: onLater, child: const Text('Later')),
+            FilledButton(onPressed: onInstall, child: const Text('Install')),
+          ],
+        ),
+      UpdateStage.idle || UpdateStage.failed => MaterialBanner(
+          leading: const Icon(Icons.system_update),
+          content: Text(status.stage == UpdateStage.failed
+              ? 'The update could not be installed: ${status.error}'
+              : 'A new version of ThrowLab is ready.'),
+          actions: [
+            TextButton(onPressed: onLater, child: const Text('Later')),
+            FilledButton(
+              onPressed: onUpdate,
+              child: Text(
+                  status.stage == UpdateStage.failed ? 'Try again' : 'Update'),
+            ),
+          ],
+        ),
+    };
   }
 }

@@ -142,6 +142,28 @@ List<Map<String, dynamic>> _meets() {
     rival('r3', 'S. Patel (Ealing)', 5, [39.80, null, 40.12]),
   ]);
 
+  // The shot at the same meet, with one thrower a long way clear of the
+  // rest: the board Priya is in breaks rather than drawing her fight for
+  // third at an inch of sector, and the leader goes off the top as an
+  // arrow with what she is chasing on it.
+  const shotField = [
+    ('s1', 'B. Kowalski (Poznan)', 18.60),
+    ('s2', 'N. Achebe (Croydon)', 14.05),
+    ('s3', 'E. Haugen (Bergen)', 13.60),
+    ('s4', 'C. Barros (Porto)', 12.90),
+  ];
+  for (var i = 0; i < shotField.length; i++) {
+    final (id, name, mark) = shotField[i];
+    champs.entries.add(MeetEntry(
+      id: id,
+      athlete: name,
+      event: ThrowEvent.shotPut,
+      implementKg: 4,
+      tracked: false,
+      order: 6 + i,
+    )..setAttempt(0, MeetAttempt.untracked(mark)));
+  }
+
   final spring = Meet(
     id: 'k0',
     name: 'Spring Open',
@@ -248,6 +270,17 @@ void main() {
     // mounted will open on — the view is remembered.
     await tester.tap(find.text('Live'));
     await settle(tester);
+
+    // A board that has broken: the shot, where the leader is five meters
+    // clear of the fight Priya is actually in, so he is an arrow off the
+    // top and the fight is drawn at a scale it can be read at.
+    await _shoot(
+        tester,
+        library,
+        meets,
+        const MeetEventScreen(
+            meetId: 'k1', event: ThrowEvent.shotPut, implementKg: 4),
+        'meet_board_broken');
 
     // A field with the cut below the podium: the shaded ground is where a
     // throw has to land, and the javelin's sector is drawn to its own

@@ -11,10 +11,71 @@ const _releaseBase =
 const _versionUrl = '$_releaseBase/version.txt';
 const _apkUrl = '$_releaseBase/ThrowLab.apk';
 
+/// Where an update has got to.
+enum UpdateStage {
+  /// Nothing going on, or nothing offered.
+  idle,
+
+  /// Coming down now.
+  downloading,
+
+  /// Part of it is on the phone and nothing is moving it: the network went,
+  /// or the app was killed mid-download. Whatever came down is kept, and
+  /// picking it up again starts from there.
+  held,
+
+  /// The whole APK is on the phone, waiting to be handed to the installer.
+  ready,
+
+  /// It went wrong, and [UpdateStatus.error] says how.
+  failed,
+}
+
+/// An update as it stands: what is happening, to which build, and how far
+/// through it is.
+@immutable
+class UpdateStatus {
+  const UpdateStatus({
+    required this.stage,
+    this.build,
+    this.progress,
+    this.error,
+  });
+
+  static const idle = UpdateStatus(stage: UpdateStage.idle);
+
+  final UpdateStage stage;
+
+  /// The build being fetched.
+  final int? build;
+
+  /// 0..1, or null while the size is unknown.
+  final double? progress;
+
+  final String? error;
+
+  bool get isBusy => stage == UpdateStage.downloading;
+}
+
 /// Checks the rolling GitHub "latest" release for a newer build and installs
 /// it in-app. CI stamps every APK with the workflow run number as its build
 /// number and publishes the same number as version.txt next to the APK.
+///
+/// The download outlives whatever started it. It is held here rather than in
+/// a screen's state, and it writes into a part file it can resume from, so
+/// walking away from the app — to the camera, to the meet, to a locked
+/// phone — doesn't cost the bytes already fetched. Android will keep a
+/// backgrounded app running until it needs the memory; when it does take
+/// it, the next launch picks the download up where the axe fell instead of
+/// starting the APK again.
 class AppUpdater {
+  /// What the download is doing, for anything that wants to show it. A
+  /// notifier rather than a callback: the progress has to reach whichever
+  /// screen happens to be up when it finishes, which is not necessarily the
+  /// one that started it.
+  static final ValueNotifier<UpdateStatus> status =
+      ValueNotifier<UpdateStatus>(UpdateStatus.idle);
+
   /// A rolling release re-uploads the same asset URLs, so GitHub's CDN/edge
   /// happily serves a stale copy — the reason a freshly published build often
   /// isn't seen. Ask every layer not to cache, and vary the URL per request
@@ -23,6 +84,15 @@ class AppUpdater {
     'Cache-Control': 'no-cache, no-store, max-age=0',
     'Pragma': 'no-cache',
   };
+
+  /// How the download talks to the network and to the disk. Both are here
+  /// so a test can hand over a fake of each; nothing else should touch
+  /// them.
+  @visibleForTesting
+  static http.Client Function() openClient = http.Client.new;
+
+  @visibleForTesting
+  static Future<Directory> Function() stagingDirectory = getTemporaryDirectory;
 
   static Uri _fresh(String url) =>
       Uri.parse('$url?t=${DateTime.now().microsecondsSinceEpoch}');
@@ -47,7 +117,7 @@ class AppUpdater {
   static Future<int?> _fetchLatestBuild() async {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final response = await http
+        final response = await openClient()
             .get(_fresh(_versionUrl), headers: _noCacheHeaders)
             .timeout(const Duration(seconds: 8));
         if (response.statusCode == 200) {
@@ -64,37 +134,155 @@ class AppUpdater {
     return null;
   }
 
-  /// Downloads the latest APK and hands it to the system installer.
-  /// [onProgress] gets 0..1, or null while the size is unknown.
-  static Future<void> downloadAndInstall(
-      ValueChanged<double?> onProgress) async {
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/ThrowLab.apk');
-    final client = http.Client();
+  /// Starts, or picks back up, the download of [build].
+  ///
+  /// Safe to call again at any point: a download already running is left
+  /// alone, and one that stopped resumes from the bytes already on the
+  /// phone. Returns when the APK is down, not when it is installed —
+  /// handing it to the installer is [install], which has to happen with the
+  /// app in front of somebody.
+  static Future<void> download(int build) async {
+    if (status.value.isBusy) return;
+    final dir = await stagingDirectory();
+    final apk = File('${dir.path}/ThrowLab.apk');
+    final part = File('${dir.path}/ThrowLab.apk.part');
+    final stamp = File('${dir.path}/ThrowLab.apk.build');
+
+    // A part file from an older build is a different APK: keep nothing.
+    if (await _stampedBuild(stamp) != build) {
+      if (await part.exists()) await part.delete();
+      if (await apk.exists()) await apk.delete();
+      await stamp.writeAsString('$build');
+    }
+    if (await apk.exists()) {
+      status.value =
+          UpdateStatus(stage: UpdateStage.ready, build: build, progress: 1);
+      return;
+    }
+
+    status.value = UpdateStatus(
+      stage: UpdateStage.downloading,
+      build: build,
+      progress: await _fraction(part),
+    );
+
+    final client = openClient();
     try {
-      // Same rolling-asset caching risk as the version check: bust it so the
-      // installer never receives a stale APK for the new build number.
+      var have = await part.exists() ? await part.length() : 0;
       final request = http.Request('GET', _fresh(_apkUrl))
-        ..headers.addAll(_noCacheHeaders);
+        ..headers.addAll({
+          ..._noCacheHeaders,
+          // What makes leaving the app cheap rather than free: the server
+          // is asked for the rest of the file, not the whole of it again.
+          if (have > 0) 'range': 'bytes=$have-',
+        });
       final response = await client.send(request);
-      if (response.statusCode != 200) {
+      if (response.statusCode != 206 && response.statusCode != 200) {
         throw HttpException('download failed (HTTP ${response.statusCode})');
       }
-      final total = response.contentLength;
-      final sink = file.openWrite();
-      var received = 0;
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        onProgress(total == null ? null : received / total);
+      // 200 to a range request means the server sent the lot anyway, so
+      // what is on disk is no use — GitHub's asset storage does honor
+      // ranges, but nothing here depends on it.
+      final resuming = response.statusCode == 206 && have > 0;
+      if (!resuming) have = 0;
+
+      final total = response.contentLength == null
+          ? null
+          : have + response.contentLength!;
+      final sink =
+          part.openWrite(mode: resuming ? FileMode.append : FileMode.writeOnly);
+      var received = have;
+      try {
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          received += chunk.length;
+          status.value = UpdateStatus(
+            stage: UpdateStage.downloading,
+            build: build,
+            progress: total == null ? null : received / total,
+          );
+        }
+      } finally {
+        await sink.close();
       }
-      await sink.close();
+      if (total != null && received < total) {
+        throw const HttpException('download ended early');
+      }
+      await part.rename(apk.path);
+      status.value =
+          UpdateStatus(stage: UpdateStage.ready, build: build, progress: 1);
+    } catch (e) {
+      // Held, not lost: the part file stays where it is and the next call
+      // asks for the rest of it.
+      status.value = UpdateStatus(
+        stage: UpdateStage.held,
+        build: build,
+        progress: await _fraction(part),
+        error: '$e',
+      );
     } finally {
       client.close();
     }
-    final result = await OpenFilex.open(file.path);
-    if (result.type != ResultType.done) {
-      throw Exception(result.message);
+  }
+
+  /// Hands the downloaded APK to the system installer. Android will not put
+  /// the installer up for an app that isn't in front of somebody, so this is
+  /// called when the app is resumed rather than the moment the bytes land.
+  static Future<void> install() async {
+    if (status.value.stage != UpdateStage.ready) return;
+    final dir = await stagingDirectory();
+    final apk = File('${dir.path}/ThrowLab.apk');
+    if (!await apk.exists()) {
+      status.value = UpdateStatus.idle;
+      return;
     }
+    final result = await OpenFilex.open(apk.path);
+    if (result.type != ResultType.done) {
+      status.value = UpdateStatus(
+        stage: UpdateStage.failed,
+        build: status.value.build,
+        error: result.message,
+      );
+    }
+  }
+
+  /// Picks up whatever was going on before the app was last put down: a
+  /// part file for [build] means a download to finish, a whole APK means an
+  /// installer to open. Called on every return to the foreground, so a
+  /// download that died with the process quietly carries on.
+  static Future<void> resume(int build) async {
+    if (status.value.isBusy) return;
+    final dir = await stagingDirectory();
+    if (await File('${dir.path}/ThrowLab.apk').exists() &&
+        await _stampedBuild(File('${dir.path}/ThrowLab.apk.build')) == build) {
+      status.value =
+          UpdateStatus(stage: UpdateStage.ready, build: build, progress: 1);
+      return;
+    }
+    if (status.value.stage == UpdateStage.failed) return;
+    final part = File('${dir.path}/ThrowLab.apk.part');
+    if (!await part.exists()) return;
+    if (await _stampedBuild(File('${dir.path}/ThrowLab.apk.build')) != build) {
+      return;
+    }
+    await download(build);
+  }
+
+  /// Which build the files in the staging directory belong to, if any.
+  static Future<int?> _stampedBuild(File stamp) async {
+    try {
+      if (!await stamp.exists()) return null;
+      return int.tryParse((await stamp.readAsString()).trim());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// How far through the part file is, as far as anyone can tell without
+  /// the server: nothing, until the download says what the total is.
+  static Future<double?> _fraction(File part) async {
+    final done = status.value.progress;
+    if (done != null) return done;
+    return await part.exists() ? null : 0;
   }
 }

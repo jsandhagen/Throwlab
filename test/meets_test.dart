@@ -992,9 +992,138 @@ void main() {
 
     test('puts a band either side of a single mark', () {
       final board = MeetBoard(table(field([('Ana Diaz', 41.20, true)])));
-      expect(board.near, closeTo(40.70, 1e-9));
-      expect(board.far, closeTo(41.70, 1e-9));
-      expect(board.fractionOf(41.20), closeTo(0.5, 1e-9));
+      // The shallowest band it will fit by itself, hung on the one mark and
+      // snapped onto the rings.
+      expect(board.span, minFittedSpan);
+      expect(board.near, closeTo(40.0, 1e-9));
+      expect(board.far, closeTo(42.0, 1e-9));
+      expect(board.fractionOf(41.20), closeTo(0.6, 1e-9));
+    });
+
+    test('is drawn at a round scale, not at whatever the field spans', () {
+      final board = MeetBoard(table(field([
+        ('Ana Diaz', 41.20, false),
+        ('M. Okoye', 44.90, false),
+      ])));
+      expect(boardSpans, contains(board.span));
+      expect(board.grid, gridFor(board.span));
+      // Every line inside it, and both edges on a ring.
+      expect(board.near % board.grid, closeTo(0, 1e-9));
+      expect(board.holdsEveryMark, isTrue);
+      expect(board.fitted, isTrue);
+    });
+
+    test('keeps the scale when the next throw lands', () {
+      final before = MeetBoard(table(field([
+        ('Ana Diaz', 41.20, false),
+        ('M. Okoye', 44.90, false),
+      ])));
+      // Somebody improves by a few centimeters, which is what a round is
+      // mostly made of: the scale a coach has just learned to read holds.
+      final after = MeetBoard(table(field([
+        ('Ana Diaz', 41.44, false),
+        ('M. Okoye', 44.90, false),
+      ])));
+      expect(after.span, before.span);
+      expect(after.near, before.near);
+    });
+
+    test('opens the band a rung when a throw lands outside it', () {
+      final tight = MeetBoard(table(field([
+        ('Ana Diaz', 41.20, false),
+        ('M. Okoye', 41.90, false),
+      ])));
+      final wide = MeetBoard(table(field([
+        ('Ana Diaz', 41.20, false),
+        ('M. Okoye', 44.90, false),
+      ])));
+      expect(wide.span, greaterThan(tight.span));
+      expect(wide.holdsEveryMark, isTrue);
+    });
+
+    test('draws a ring every grid step across the band', () {
+      final board = MeetBoard(table(field([('Ana Diaz', 41.20, true)])));
+      expect(board.rings, [40.0, 40.5, 41.0, 41.5, 42.0]);
+    });
+
+    test('breaks to the contest rather than zooming out to a runaway', () {
+      final board = MeetBoard(table(field([
+        ('Runaway', 21.50, false),
+        ('B', 13.40, false),
+        ('C', 13.15, true),
+        ('D', 12.90, false),
+      ])));
+      // The three being contested are drawn at a scale they can be read
+      // at, not squashed into an inch by a leader eight meters clear.
+      expect(board.span, lessThanOrEqualTo(maxFittedSpan));
+      expect(board.holdsEveryMark, isFalse);
+      expect(board.fractionOf(13.40), inInclusiveRange(0, 1));
+      expect(board.fractionOf(12.90), inInclusiveRange(0, 1));
+      // And the runaway is off the far edge, for the board to draw at it.
+      expect(board.fractionOf(21.50), greaterThan(1));
+    });
+
+    test('keeps the band on the athlete it belongs to when it breaks', () {
+      final competition = field([
+        ('A', 44.90, false),
+        ('B', 44.70, false),
+        ('C', 44.50, false),
+        ('Ana Diaz', 31.20, true),
+      ]);
+      final board = MeetBoard(table(competition));
+      // A coach's own athlete a long way off the podium is the reason the
+      // board was opened: she is on it, and the podium is an arrow.
+      expect(board.fractionOf(31.20), inInclusiveRange(0, 1));
+      expect(board.fractionOf(44.90), greaterThan(1));
+      expect(board.span, lessThanOrEqualTo(maxFittedSpan));
+    });
+
+    test('zooms out as far as the ladder goes when it is asked to', () {
+      final board = MeetBoard(
+        table(field([
+          ('Runaway', 21.50, false),
+          ('B', 13.40, false),
+          ('C', 13.15, true),
+        ])),
+        span: 20,
+      );
+      // A coach who wants the whole thing on one board can have it; what
+      // the board won't do is decide that for them.
+      expect(board.holdsEveryMark, isTrue);
+      expect(board.span, 20);
+    });
+
+    test('holds the span it is asked for, whatever the field does', () {
+      final board = MeetBoard(
+        table(field([
+          ('Ana Diaz', 41.20, true),
+          ('M. Okoye', 44.90, false),
+        ])),
+        span: 1,
+      );
+      expect(board.span, 1);
+      expect(board.fitted, isFalse);
+      // Hung on the coach's own athlete, so zooming in reads the athlete
+      // the board was opened for — and the leader is off the board, which
+      // it knows rather than hides.
+      expect(board.near, closeTo(40.8, 1e-9));
+      expect(board.holdsEveryMark, isFalse);
+      expect(board.fractionOf(44.90), greaterThan(1));
+    });
+
+    test('hangs a zoomed band on the athlete in the circle', () {
+      final competition = field([
+        ('A', 44.90, false),
+        ('B', 43.20, false),
+        ('C', 43.06, false),
+        ('D', 41.20, false),
+      ]);
+      final board = MeetBoard(
+        table(competition),
+        inTheCircle: competition.entries.last,
+        span: 1,
+      );
+      expect(board.fractionOf(41.20), closeTo(0.4, 1e-9));
     });
 
     test('runs from the near edge to the far one', () {
@@ -1088,7 +1217,7 @@ void main() {
       expect(board.others, [44.65]);
       // The stragglers don't drag the band down over the marks that decide
       // it — that is what the standings table is for.
-      expect(board.near, greaterThan(44.0));
+      expect(board.near, greaterThan(43.0));
     });
   });
 }

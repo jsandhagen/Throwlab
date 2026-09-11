@@ -56,8 +56,9 @@ thrown at), a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
-the field as a list, the live card (twice — a podium, and a field with the
-cut falling below it), and the sheet a round is entered in — and the schedule import: the page a
+the field as a list, the live card (three times — a podium, a field with the
+cut falling below it, and a board that has broken, where the leader is off
+the top of it as an arrow), and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field, and the meet it leaves
@@ -292,6 +293,24 @@ like the app rather than a bare Material default.
   calls are on the bar above the field. The place is on every card: one
   that only exists on another tab is one a coach has to leave the
   competition to read.
+- The live board is drawn to a scale, and the scale is a round number of
+  meters (`boardSpans`) rather than whatever the field happens to span: a
+  gap across the board is the same number of meters after a throw as it was
+  before it, and rings every `MeetBoard.grid` say how many. `fitBand` picks
+  it — the shallowest rung that holds every line, going deeper only while
+  going deeper picks up another mark. When one doesn't, the board *breaks*
+  rather than zooming out: it keeps the run of the competition around the
+  athlete it belongs to (whoever is in the circle, else the coach's own) and
+  draws whatever is outside as an arrow off the edge carrying its mark and
+  how far out it landed — a leader five meters clear is worth an arrow, not
+  worth squashing the fight for second into an inch of sector. The band's
+  edges snap to the rings so it moves a ring at a time instead of sliding
+  under every throw. Pinching picks a rung by hand and a double-tap goes
+  back to fitting; there are no zoom buttons, because a control over the
+  board costs a meter of sector to answer a question the board has usually
+  already answered. Only the labels move to avoid each other — the lines
+  stay where the throws put them, and a label that had to slide grows a
+  leader back to its own line.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as
@@ -314,4 +333,10 @@ like the app rather than a bare Material default.
   the cut drawn where it falls. The tests read the generated file back with
   the app's own `pdf_text`, which is the honest check.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
-  the in-app updater compares build numbers against it.
+  the in-app updater compares build numbers against it. The download belongs
+  to `AppUpdater`, not to the screen that started it, and writes into a part
+  file it resumes from with a range request — so leaving the app mid-update
+  costs the time it was away and none of the bytes, and Android reclaiming
+  the app costs the same. The banner carries the progress; nothing is
+  blocked while it runs. The installer is opened when the app is in front of
+  somebody, which is the one part that cannot happen in the background.
