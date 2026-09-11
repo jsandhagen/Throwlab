@@ -56,9 +56,8 @@ thrown at), a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
-the same competition at the density a whole heat sheet is tracked at, the
-live card (twice — a podium, and a field with the cut falling below it),
-and the sheet a round is entered in — and the schedule import: the page a
+the field as a list, the live card (twice — a podium, and a field with the
+cut falling below it), and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field, and the meet it leaves
@@ -279,56 +278,20 @@ like the app rather than a bare Material default.
   over the only card on the screen tells a coach what they are looking at —
   but `next` still answers who is about to throw, because a mark still has
   to be written down for them.
-- The field comes at two densities, remembered in `throwlab.meetCompact`.
-  Full cards for the three athletes a coach brought; one line an athlete
-  for a whole heat sheet's worth — the flight number, the name, the place,
-  and the series read across in bare cells with the row itself standing in
-  for the Mark button. Nothing else is labelled in that format: the round
-  numbers come off the cells, the word 'Best' comes off the mark, and the
-  flight call comes off the row and onto its edge, because a coach scanning
-  a field is reading down a column rather than reading a card. The camera
-  is the exception and stays on the row at both densities — a mark can be
-  written down after the throw, and a throw nobody filmed is gone. The cells keep
-  a fixed width so the six line up down the screen, and an untaken round is
-  still drawn — faintly — for the same reason. Both densities carry the
-  live place: a place that only exists on another tab is one a coach has to
-  leave the competition to read.
-- The event opens on **Live**, and it is one card: the round and the three
-  calls, the competition drawn on the sector under them, what the next
-  throw has to do, and the athlete in the circle on their own card from the
-  series — same rounds, same two buttons, same place to put a thumb, drawn
-  without its card chrome (`_EntryCard(embedded: true)`). A screen that
-  enters a mark one way in one view and another way in another is two
-  screens. The sector sits in a panel of its own, set into the card: a
-  picture of a sector and a list of names are two different things to read,
-  and the edge between them is what says so. The button that adds to the
-  field is not on this view — the card ends in the mark about to be called
-  out, and a field is not what a coach is adding to between attempts. Between attempts a coach looks down once, and everything they look
-  down for is the same thing. Which view they last left an event on is
-  remembered (`throwlab.meetView`), so somebody who works out of the series
-  list all afternoon is not put back on the board at every ring.
-  Alone among the app's cards this one is opaque — `Color.alphaBlend` of
-  the usual translucent card onto the surface, so it is the same tone as
-  the others while letting nothing through. The screen's own sector art
-  runs behind it, and two sectors drawn over each other at different angles
-  is a picture of nothing.
-- `MeetBoard` turns the standings into lines across the sector — the
-  podium, the cut, the athlete in the circle and the coach's own wherever
-  they are standing — and `SectorBoard` paints them, the way a televised
-  final paints them on the grass. The podium lines are struck out of the
-  same ramps as the medal (`goldShader`, `silverShader`, `bronzeShader` in
-  `gold.dart`), lit from the same corner, so three lines read as three
-  medals rather than three colors somebody picked. Names sit on a chip in
-  the card's own color, over the lines rather than under them.
-  Two things are deliberate and neither is a shortcut: the sector is drawn
-  to the event's own angle (the javelin's is narrower,
-  `ThrowEvent.sectorHalfAngleDeg`), while the *distances* are not to scale.
-  A sector drawn honestly from the circle stacks a whole competition into
-  the last few percent of its length, so the board holds only the stretch
-  the competition is being decided in, no two lines are drawn closer than a
-  label plus the arc's own rise, and every line carries its own number. The
-  band is set by the lines and not by the field: one straggler must not
-  squeeze the three marks that decide it into an inch.
+- An athlete's card in the field is two rows, and the split is what each
+  row is for. The top one answers *who, and how are they doing* — the
+  flight number, the name, the place, the mark they are standing on — and
+  carries the camera and the ruler, because those are the only two things
+  a coach does here. The bottom one is the series: six boxes across the
+  full width, big enough to read at arm's length and to hit without looking
+  down. It was three rows once, with the buttons on a line of their own,
+  and one row after that with no room for them; two is where a field fits
+  on a screen with nothing a coach reaches for taken away. The card marks
+  only the athlete in the circle, and marks them by coloring the name
+  rather than by spending a name's worth of width on the word — the three
+  calls are on the bar above the field. The place is on every card: one
+  that only exists on another tab is one a coach has to leave the
+  competition to read.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as

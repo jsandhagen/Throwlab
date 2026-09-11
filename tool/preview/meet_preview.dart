@@ -237,14 +237,6 @@ void main() {
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('$_out/meet_tracker.png'));
 
-    // The same competition at the density a whole heat sheet is tracked at.
-    await tester.tap(find.byTooltip('Compact the field'));
-    await settle(tester);
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/meet_compact.png'));
-    await tester.tap(find.byTooltip('Full cards'));
-    await settle(tester);
-
     // Where the competition stands, with the cut and what it takes to
     // get past it.
     await tester.tap(find.text('Standings'));
@@ -268,16 +260,12 @@ void main() {
             meetId: 'k0', event: ThrowEvent.javelin, implementKg: 0.8),
         'meet_board_cut');
 
-    // The same field as one line an athlete, with the camera on the row of
-    // everybody the coach actually keeps clips of.
+    // The same field as a list, with the camera on the row of everybody
+    // the coach actually keeps clips of.
     await tester.tap(find.text('Series'));
     await settle(tester);
-    await tester.tap(find.byTooltip('Compact the field'));
-    await settle(tester);
     await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('$_out/meet_compact_field.png'));
-    await tester.tap(find.byTooltip('Full cards'));
-    await settle(tester);
+        matchesGoldenFile('$_out/meet_field.png'));
     await tester.tap(find.text('Live'));
     await settle(tester);
 

@@ -105,7 +105,12 @@ void main() {
   /// Opens the sheet on the round the athlete is about to throw. Ana leads
   /// the flight in these tests, so hers is the first card.
   Future<void> tapMark(WidgetTester tester) async {
-    await tester.tap(find.text('Mark').first);
+    await tester.tap(find.byTooltip('Write the next mark down').first);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> tapFilm(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Film the next').first);
     await tester.pumpAndSettle();
   }
 
@@ -155,7 +160,7 @@ void main() {
       expect(find.text('Javelin · 600 g'), findsOneWidget);
       expect(find.textContaining('2 events'), findsOneWidget);
       // The throwing is a screen down, not on the meet itself.
-      expect(find.text('Mark'), findsNothing);
+      expect(find.byTooltip('Write the next mark down'), findsNothing);
     });
 
     testWidgets('an event opens the competition it stands for', (tester) async {
@@ -166,11 +171,11 @@ void main() {
       expect(find.byType(MeetEventScreen), findsOneWidget);
       // On the live card, with the athlete in the circle under the board.
       expect(find.text('Ana Diaz'), findsOneWidget);
-      expect(find.text('Mark'), findsOneWidget);
+      expect(find.byTooltip('Write the next mark down'), findsOneWidget);
       await tester.tap(find.text('Series'));
       await tester.pumpAndSettle();
       expect(find.text('Ana Diaz'), findsOneWidget);
-      expect(find.text('Mark'), findsOneWidget);
+      expect(find.byTooltip('Write the next mark down'), findsOneWidget);
     });
 
     testWidgets('says how far through each event is', (tester) async {
@@ -230,8 +235,8 @@ void main() {
       await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
+      // The medal says it; the row has no room for the word.
       expect(find.byType(FirstPlaceMedal), findsOneWidget);
-      expect(find.text('PB'), findsOneWidget);
     });
 
     testWidgets('a mark short of an older one is not a best', (tester) async {
@@ -247,7 +252,7 @@ void main() {
       await tapMark(tester);
       await enterDistance(tester, '41.20');
       expect(find.byType(FirstPlaceMedal), findsNothing);
-      expect(find.text('Best'), findsOneWidget);
+      expect(find.textContaining('41.20 m'), findsOneWidget);
     });
   });
 
@@ -300,8 +305,7 @@ void main() {
     testWidgets('hangs the clip on the round and asks for the distance',
         (tester) async {
       await mountEvent(tester);
-      await tester.tap(find.text('Film'));
-      await tester.pumpAndSettle();
+      await tapFilm(tester);
 
       // The sheet opens on the round just filmed, already knowing it was.
       expect(find.text('Ana Diaz · round 1'), findsOneWidget);
@@ -321,8 +325,7 @@ void main() {
     testWidgets('a clip stays in the library when the round is cleared',
         (tester) async {
       await mountEvent(tester);
-      await tester.tap(find.text('Film'));
-      await tester.pumpAndSettle();
+      await tapFilm(tester);
       await enterDistance(tester, '44.11');
 
       await tester.tap(find.byKey(const ValueKey('round-0')));
@@ -339,8 +342,7 @@ void main() {
     testWidgets('a filmed throw called a foul keeps the clip, loses the mark',
         (tester) async {
       await mountEvent(tester);
-      await tester.tap(find.text('Film'));
-      await tester.pumpAndSettle();
+      await tapFilm(tester);
       await enterDistance(tester, '44.11');
 
       await tester.tap(find.byKey(const ValueKey('round-0')));
@@ -375,8 +377,8 @@ void main() {
       await addRival('M. Okoye');
       await mountEvent(tester);
 
-      // Their card is the second one; the Mark button next to their name.
-      await tester.tap(find.text('Mark').last);
+      // Their card is the second one; the ruler next to their name.
+      await tester.tap(find.byTooltip('Write the next mark down').last);
       await tester.pumpAndSettle();
       await enterDistance(tester, '44.90');
 
@@ -392,9 +394,9 @@ void main() {
     testWidgets('there is no camera pointed at them', (tester) async {
       await addRival('M. Okoye');
       await mountEvent(tester);
-      // One Film button, on the coach's own athlete.
-      expect(find.text('Film'), findsOneWidget);
-      expect(find.text('Mark'), findsNWidgets(2));
+      // One camera, on the coach's own athlete; a ruler on both.
+      expect(find.byTooltip('Film the next'), findsOneWidget);
+      expect(find.byTooltip('Write the next mark down'), findsNWidgets(2));
     });
   });
 
@@ -562,7 +564,7 @@ void main() {
 
       // And the card says so where its buttons were: there is no round
       // left for them to open.
-      expect(find.text('out of the final'), findsOneWidget);
+      expect(find.text('out'), findsOneWidget);
     });
 
     testWidgets('leaves them open while anyone still has a prelim to throw',
@@ -679,12 +681,12 @@ void main() {
 
       expect(find.text('ROUND 1 OF 6'), findsOneWidget);
       expect(find.text('0 of 3 thrown'), findsOneWidget);
-      // Ana throws first, Okoye follows her — said once on the bar and
-      // again on the card, so the answer is still there once the bar has
-      // scrolled off the top of a long field.
-      expect(find.text('up'), findsNWidgets(2));
-      expect(find.text('on deck'), findsNWidgets(2));
-      expect(find.text('in the hole'), findsNWidgets(2));
+      // Ana throws first, Okoye follows her. The three calls are said on
+      // the bar; the cards mark only the athlete in the circle, and they
+      // mark them by color rather than by taking a name's worth of width.
+      expect(find.text('up'), findsOneWidget);
+      expect(find.text('on deck'), findsOneWidget);
+      expect(find.text('in the hole'), findsOneWidget);
       expect(find.text('Ana Diaz'), findsNWidgets(2));
       expect(find.text('M. Okoye'), findsNWidgets(2));
     });
@@ -699,7 +701,7 @@ void main() {
       expect(find.text('1 of 3 thrown'), findsOneWidget);
       // Okoye is in the circle now. Ana is off the flight for this round —
       // she is only on the bar at all because her 41.20 leads it.
-      expect(find.text('up'), findsNWidgets(2));
+      expect(find.text('up'), findsOneWidget);
       expect(find.text('leading'), findsOneWidget);
       expect(find.text('M. Okoye'), findsNWidgets(2));
     });
@@ -738,34 +740,8 @@ void main() {
     });
   });
 
-  group('the compact format', () {
-    testWidgets('drops the buttons and keeps the series', (tester) async {
-      await mountEvent(tester);
-      expect(find.text('Mark'), findsOneWidget);
-
-      await tester.tap(find.byTooltip('Compact the field'));
-      await tester.pumpAndSettle();
-
-      // The row itself is the button now.
-      expect(find.text('Mark'), findsNothing);
-      expect(find.text('Film'), findsNothing);
-      expect(find.text('Ana Diaz'), findsOneWidget);
-      expect(find.byKey(const ValueKey('round-5')), findsOneWidget);
-    });
-
-    testWidgets('enters the next round from a tap on the row', (tester) async {
-      await mountEvent(tester);
-      await tester.tap(find.byTooltip('Compact the field'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Ana Diaz'));
-      await tester.pumpAndSettle();
-      expect(find.text('Ana Diaz · round 1'), findsOneWidget);
-      await enterDistance(tester, '41.20');
-      expect(entry().attemptAt(0)?.resultId, library.marks.single.id);
-    });
-
-    testWidgets('shows where the athlete stands', (tester) async {
+  group('the card', () {
+    testWidgets('carries the camera, the ruler and the place', (tester) async {
       await meets.addEntry('k1',
           entry: MeetEntry(
             id: 'r1',
@@ -776,28 +752,34 @@ void main() {
             order: 1,
           )..setAttempt(0, MeetAttempt.untracked(44.90)));
       await mountEvent(tester);
-      await tester.tap(find.byTooltip('Compact the field'));
-      await tester.pumpAndSettle();
 
+      // Filming is the half of this screen that can't wait: a mark can be
+      // written down after the throw, and a throw nobody filmed is gone.
+      expect(find.byTooltip('Film the next'), findsOneWidget);
+      expect(find.byTooltip('Write the next mark down'), findsNWidgets(2));
       expect(find.text('1st'), findsOneWidget);
       // Ana has not thrown, so she has no place to be in yet.
       expect(find.text('2nd'), findsNothing);
     });
 
-    testWidgets('keeps the camera on the row', (tester) async {
+    testWidgets('keeps the order and entry menu', (tester) async {
       await mountEvent(tester);
-      await tester.tap(find.byTooltip('Compact the field'));
+      await tester.tap(find.byTooltip('Order and entry'));
       await tester.pumpAndSettle();
-
-      // Filming is the half of this screen that can't wait: a mark can be
-      // written down after the throw, and a throw nobody filmed is gone.
-      await tester.tap(find.byTooltip('Film the next'));
-      await tester.pumpAndSettle();
-      expect(find.text('Ana Diaz · round 1'), findsOneWidget);
-      expect(find.text('Filmed'), findsOneWidget);
+      expect(find.text('Throw later'), findsOneWidget);
     });
 
-    testWidgets('points no camera at the rest of the field', (tester) async {
+    testWidgets('has no buttons for an athlete the cut left behind',
+        (tester) async {
+      final meet = meets.byId('k1')!
+        ..rounds = 6
+        ..prelimRounds = 3
+        ..advancing = 1;
+      meet.entries.single
+        ..setAttempt(0, MeetAttempt.untracked(30))
+        ..setAttempt(1, MeetAttempt.foul())
+        ..setAttempt(2, MeetAttempt.foul());
+      await meets.save(meet);
       await meets.addEntry('k1',
           entry: MeetEntry(
             id: 'r1',
@@ -806,30 +788,15 @@ void main() {
             implementKg: 1,
             tracked: false,
             order: 1,
-          ));
+          )
+            ..setAttempt(0, MeetAttempt.untracked(44.90))
+            ..setAttempt(1, MeetAttempt.untracked(44.00))
+            ..setAttempt(2, MeetAttempt.untracked(43.00)));
       await mountEvent(tester);
-      await tester.tap(find.byTooltip('Compact the field'));
-      await tester.pumpAndSettle();
-      // One camera, on the coach's own athlete.
-      expect(find.byTooltip('Film the next'), findsOneWidget);
-    });
 
-    testWidgets('keeps the order and entry menu', (tester) async {
-      await mountEvent(tester);
-      await tester.tap(find.byTooltip('Compact the field'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Order and entry'));
-      await tester.pumpAndSettle();
-      expect(find.text('Throw later'), findsOneWidget);
-    });
-
-    testWidgets('is how the next meet opens too', (tester) async {
-      await mountEvent(tester);
-      await tester.tap(find.byTooltip('Compact the field'));
-      await tester.pumpAndSettle();
-
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getBool('throwlab.meetCompact'), isTrue);
+      // There is no round left for a button to open, and the card says so
+      // where the buttons were.
+      expect(find.text('out'), findsOneWidget);
     });
   });
 
@@ -952,7 +919,7 @@ void main() {
       await mountEvent(tester, live: true);
       // The athlete in the circle, on the same card the series uses.
       expect(find.text('Ana Diaz'), findsOneWidget);
-      expect(find.text('Mark'), findsOneWidget);
+      expect(find.byTooltip('Write the next mark down'), findsOneWidget);
       expect(find.byKey(const ValueKey('round-0')), findsOneWidget);
     });
 
@@ -973,8 +940,7 @@ void main() {
 
     testWidgets('writes the mark for whoever is up', (tester) async {
       await mountEvent(tester, live: true);
-      await tester.tap(find.text('Mark'));
-      await tester.pumpAndSettle();
+      await tapMark(tester);
 
       expect(find.text('Ana Diaz · round 1'), findsOneWidget);
       await enterDistance(tester, '41.20');
@@ -984,16 +950,14 @@ void main() {
       expect(find.textContaining('41.20 m'), findsWidgets);
 
       // And the next tap is the round after it.
-      await tester.tap(find.text('Mark'));
-      await tester.pumpAndSettle();
+      await tapMark(tester);
       expect(find.text('Ana Diaz · round 2'), findsOneWidget);
     });
 
     testWidgets('films from here too, for an athlete the coach keeps',
         (tester) async {
       await mountEvent(tester, live: true);
-      await tester.tap(find.text('Film'));
-      await tester.pumpAndSettle();
+      await tapFilm(tester);
       expect(find.text('Ana Diaz · round 1'), findsOneWidget);
       expect(find.text('Filmed'), findsOneWidget);
     });
@@ -1003,8 +967,8 @@ void main() {
       await addRival('r1', 'M. Okoye', 0);
       await mountEvent(tester, live: true);
       expect(find.text('M. Okoye'), findsOneWidget);
-      expect(find.text('Mark'), findsOneWidget);
-      expect(find.text('Film'), findsNothing);
+      expect(find.byTooltip('Write the next mark down'), findsOneWidget);
+      expect(find.byTooltip('Film the next'), findsNothing);
     });
 
     testWidgets('has no button for adding to the field on it', (tester) async {
