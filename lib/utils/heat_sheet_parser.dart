@@ -43,6 +43,16 @@ class HeatSheetEvent {
   /// unless the meet redraws it.
   final List<HeatSheetAthlete> athletes;
 
+  /// How many flights the field is split into.
+  ///
+  /// One for a competition thrown in a single order, which is most of them.
+  /// A big field is broken up on the sheet — 'Flight 1 of 3' over a dozen
+  /// names, then the next dozen — and each flight throws its prelims right
+  /// through before the next one starts, which is the whole reason this is
+  /// read off the program rather than left to be worked out at the ring.
+  int get flightCount =>
+      athletes.map((athlete) => athlete.flight).toSet().length;
+
   HeatSheetEvent withWeight(double kg) => HeatSheetEvent(
         event: event,
         implementKg: kg,
@@ -59,6 +69,7 @@ class HeatSheetAthlete {
     required this.name,
     this.team = '',
     this.seed = '',
+    this.flight = 1,
     required this.source,
   });
 
@@ -72,6 +83,11 @@ class HeatSheetAthlete {
   /// Kept to tell two people of the same name apart, never stored: a seed
   /// is a claim about last season, not something thrown here.
   final String seed;
+
+  /// Which flight of the event they are in, from 1 — read off the
+  /// 'Flight 2 of 3' the sheet prints over their part of the field, and 1
+  /// for a field it never split.
+  final int flight;
 
   /// The line they were read off.
   final String source;
@@ -91,6 +107,11 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
 
   _Heading? open;
   var athletes = <HeatSheetAthlete>[];
+
+  // Which flight the names being read are in. One until the sheet says
+  // otherwise, and back to one under every new event heading — the
+  // numbering starts again at each.
+  var flight = 1;
 
   // Whether this field's rows carry a place or lane number in front of the
   // name. Once one has, a line without one is the page turning under the
@@ -112,6 +133,7 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
     open = null;
     athletes = <HeatSheetAthlete>[];
     numbered = null;
+    flight = 1;
   }
 
   for (final line in lines) {
@@ -127,9 +149,20 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
       continue;
     }
 
-    if (open == null || _isFurniture(line)) continue;
+    if (open == null) continue;
+
+    // 'Flight 2 of 3' over the next dozen names. Read rather than skipped
+    // over, because which flight an athlete is in decides when they throw
+    // — and a coach whose thrower is in the last one has an hour to wait.
+    final called = _flightNumber(line);
+    if (called != null) {
+      flight = called;
+      continue;
+    }
+
+    if (_isFurniture(line)) continue;
     if (numbered == true && !_leadingPlace.hasMatch(line)) continue;
-    final athlete = _athlete(line);
+    final athlete = _athlete(line, flight);
     if (athlete != null && athletes.length < _maxField) {
       numbered ??= _leadingPlace.hasMatch(line);
       athletes.add(athlete);
@@ -143,6 +176,29 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
 /// Bigger than any throws field, and small enough that a page of prose read
 /// as one competitor a line can't run away with the import.
 const _maxField = 200;
+
+/// The heading over one flight's part of the field. A sheet calls it a
+/// flight, a section or — borrowing the word the running gets — a heat, and
+/// they all mean the same thing here: the group that walks in and throws
+/// its prelims before the next one does.
+///
+/// The number has to follow the word for this to bite, so 'Flight Academy'
+/// down a school column is a school and not a flight.
+final _flightHeading = RegExp(
+    r'^\s*(?:flight|section|heat|group|pool)\s*(?:no\.?|#)?\s*(\d{1,2})\b',
+    caseSensitive: false);
+
+/// Bigger than any meet splits a field into, and small enough that a stray
+/// number read as a flight can't run the import up into the hundreds.
+const _maxFlights = 30;
+
+/// The flight [line] calls, or null for a line that calls none.
+int? _flightNumber(String line) {
+  final match = _flightHeading.firstMatch(line);
+  if (match == null) return null;
+  final number = int.parse(match.group(1)!);
+  return number >= 1 && number <= _maxFlights ? number : null;
+}
 
 /// A heading, before it is known whether anybody is under it. A null
 /// [event] is an event this app doesn't do — it still closes the last one.
@@ -325,7 +381,7 @@ String? _seed(String line) {
 }
 
 /// One competitor, or null for a line that isn't one.
-HeatSheetAthlete? _athlete(String line) {
+HeatSheetAthlete? _athlete(String line, int flight) {
   final stripped = line.replaceFirst(_leadingPlace, '').trim();
   if (stripped.isEmpty) return null;
 
@@ -362,7 +418,11 @@ HeatSheetAthlete? _athlete(String line) {
   name = _naturalOrder(name);
   return _isName(name)
       ? HeatSheetAthlete(
-          name: name, team: team, seed: seed, source: line.trim())
+          name: name,
+          team: team,
+          seed: seed,
+          flight: flight,
+          source: line.trim())
       : null;
 }
 
@@ -432,7 +492,8 @@ String? matchKnown(String sheet, List<String> known) {
 /// sheet: the library spelling to file them under, and the full name and
 /// school a coach may have filled in on their record.
 class KnownAthlete {
-  const KnownAthlete({required this.name, this.fullName = '', this.school = ''});
+  const KnownAthlete(
+      {required this.name, this.fullName = '', this.school = ''});
 
   /// The library's own spelling — what a match is filed under, whichever
   /// field it was found on.

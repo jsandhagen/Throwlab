@@ -747,6 +747,155 @@ void main() {
     });
   });
 
+  group('a flighted competition', () {
+    /// A shot put thrown in [flights] flights: a name a row, each carrying
+    /// the rounds already thrown.
+    MeetCompetition field(Map<int, Map<String, List<double?>>> flights) {
+      final entries = <MeetEntry>[];
+      var order = 0;
+      for (final flight in flights.keys) {
+        for (final name in flights[flight]!.keys) {
+          final entry = MeetEntry(
+            id: 'e${order + 1}',
+            athlete: name,
+            event: ThrowEvent.shotPut,
+            implementKg: 7.26,
+            tracked: false,
+            order: order++,
+            flight: flight,
+          );
+          final thrown = flights[flight]![name]!;
+          for (var round = 0; round < thrown.length; round++) {
+            entry.setAttempt(
+                round,
+                thrown[round] == null
+                    ? MeetAttempt.foul()
+                    : MeetAttempt.untracked(thrown[round]!));
+          }
+          entries.add(entry);
+        }
+      }
+      return MeetCompetition(ThrowEvent.shotPut, 7.26, entries);
+    }
+
+    MeetCompetition twoFlights({
+      List<double?> ana = const [],
+      List<double?> mo = const [],
+      List<double?> sam = const [],
+      List<double?> kit = const [],
+    }) =>
+        field({
+          1: {'Ana Diaz': ana, 'M. Okoye': mo},
+          2: {'Sam Heath': sam, 'Kit Barros': kit},
+        });
+
+    test('is known by its entries and nothing else', () {
+      final competition = twoFlights();
+      expect(competition.flights, [1, 2]);
+      expect(competition.isFlighted, isTrue);
+      expect(competition.entriesIn(2).map((e) => e.athlete),
+          ['Sam Heath', 'Kit Barros']);
+      // One flight is no flights: a field small enough to throw in one
+      // order is the ordinary case, and nothing should say otherwise.
+      expect(
+          MeetCompetition(ThrowEvent.shotPut, 7.26, [competition.entries.first])
+              .isFlighted,
+          isFalse);
+    });
+
+    test('calls nobody out of the flight being thrown', () {
+      final flight = MeetFlight(
+        twoFlights(ana: [16.20], mo: <double?>[]),
+        rounds: 6,
+      );
+      // Flight 2 is standing on the grass with nothing entered. Reading the
+      // round off the whole field would hold it at one forever and put Sam
+      // in the circle over Okoye, who is actually about to throw.
+      expect(flight.flight, 1);
+      expect(flight.flightCount, 2);
+      expect(flight.round, 0);
+      expect(flight.fieldSize, 2);
+      expect(flight.inTheCircle?.athlete, 'M. Okoye');
+      expect(flight.onDeck, isNull);
+      expect(flight.label, 'Flight 1 · round 1');
+      expect(flight.flightLabel, 'Flight 1 of 2');
+    });
+
+    test('hands the ring over once the flight has had its prelims', () {
+      final competition = twoFlights(
+        ana: [16.20, 16.55, 17.01],
+        mo: [15.10, null, 15.80],
+      );
+      final standings =
+          MeetStandings(competition, const [], advancing: 3, prelimRounds: 3);
+      final flight =
+          MeetFlight(competition, rounds: 6, standings: standings, flight: 1);
+      expect(flight.flightDone, isTrue);
+      expect(flight.label, 'Flight 1 · done');
+      expect(flight.inTheCircle, isNull);
+
+      // And the competition has moved on to flight 2, at its first round.
+      final now = MeetFlight(competition, rounds: 6, standings: standings);
+      expect(now.flight, 2);
+      expect(now.round, 0);
+      expect(now.inTheCircle?.athlete, 'Sam Heath');
+      expect(now.label, 'Flight 2 · round 1');
+      // Nobody has been cut yet: two of the four have not thrown at all.
+      expect(standings.cutMade, isFalse);
+    });
+
+    test('dissolves the flights at the cut', () {
+      final competition = twoFlights(
+        ana: [16.20, 16.55, 17.01],
+        mo: [15.10, 15.40, 15.80],
+        sam: [18.00, 18.20, 18.44],
+        kit: [14.00, 14.20, 14.30],
+      );
+      final standings =
+          MeetStandings(competition, const [], advancing: 3, prelimRounds: 3);
+      expect(standings.cutMade, isTrue);
+      final flight = MeetFlight(competition, rounds: 6, standings: standings);
+      // The final is thrown by the qualifiers as one group, whichever
+      // flight they came through — so there is no flight left to name.
+      expect(flight.flight, isNull);
+      expect(flight.flightLabel, '');
+      expect(flight.isFinal, isTrue);
+      expect(flight.label, 'Final · round 4');
+      expect(flight.field.map((e) => e.athlete),
+          ['Ana Diaz', 'M. Okoye', 'Sam Heath']);
+    });
+
+    test('throws the lot a flight at a time where nobody is being cut', () {
+      final competition = twoFlights(ana: [16.20], mo: [15.10]);
+      // A field of four with a cut at eight is a field nobody is cut from,
+      // so a flight has no prelims to stop at — it throws all six.
+      final standings =
+          MeetStandings(competition, const [], advancing: 8, prelimRounds: 3);
+      final flight = MeetFlight(competition, rounds: 6, standings: standings);
+      expect(standings.hasCut, isFalse);
+      expect(flight.flight, 1);
+      expect(flight.limit, 6);
+      expect(flight.round, 1);
+    });
+
+    test('is done when the last flight has thrown its last round', () {
+      final flight = MeetFlight(
+        field({
+          1: {
+            'Ana Diaz': [16.20]
+          },
+          2: {
+            'Sam Heath': [18.00]
+          },
+        }),
+        rounds: 1,
+      );
+      expect(flight.finished, isTrue);
+      expect(flight.label, 'Done');
+      expect(flight.flight, isNull);
+    });
+  });
+
   group('the conditions', () {
     test('are nothing until somebody writes something down', () {
       expect(const MeetConditions().isEmpty, isTrue);

@@ -121,6 +121,37 @@ Event 16  Girls Discus
         entries.firstWhere((e) => e.athlete == 'John Smith').tracked, isFalse);
   });
 
+  testWidgets('brings the flights in with the field', (tester) async {
+    const flighted = '''
+Event 15  Boys Shot Put 12lb
+=======================================================================
+Flight 1 of 2
+  1 Smith, John                 12 Central HS            44-06.00
+Flight 2 of 2
+  1 SANDHAGEN, J                12 Central HS            48-02.50
+  2 Okonkwo, David              12 Eastside              50-01.00
+''';
+    await open(tester);
+    await paste(tester, flighted);
+    // The sheet said how the field is split, so the review says so too —
+    // a coach reading down it is looking for which flight their name is in.
+    expect(find.textContaining('3 entered · 2 flights'), findsOneWidget);
+    await tester.tap(find.textContaining('Shot Put'));
+    await tester.pumpAndSettle();
+    expect(find.text('FLIGHT 1 OF 2'), findsOneWidget);
+    expect(find.text('FLIGHT 2 OF 2'), findsOneWidget);
+
+    await tester.tap(find.text('Enter 3 athletes'));
+    await tester.pumpAndSettle();
+    final entries = meets.byId('k1')!.entries;
+    expect(entries.firstWhere((e) => e.athlete == 'John Smith').flight, 1);
+    expect(
+        entries.firstWhere((e) => e.athlete == 'Jakob Sandhagen').flight, 2);
+    // And the order still runs down the sheet, so the flights are runs of
+    // it rather than names scattered through one order.
+    expect(entries.map((e) => e.flight).toList(), [1, 2, 2]);
+  });
+
   testWidgets('takes an event the coach ticks on as well', (tester) async {
     await open(tester);
     await paste(tester, sheet);

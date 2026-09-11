@@ -27,7 +27,8 @@ import 'harness.dart';
 const _out = '../../build/preview';
 
 /// A program as a meet manager prints one: two throws events among the
-/// running, in columns, with a flight break and a rule under each heading.
+/// running, in columns, with the shot put's field split into the two
+/// flights it is actually thrown in and a rule under each heading.
 const _sheet = '''
                     Central Invitational - 13 June 2026
                           Meet Program
@@ -42,6 +43,8 @@ Flight  1 of  2
   3 Fischer, Liam               11 Brighton              41-09.25
 Flight  2 of  2
   4 Okonkwo, David              12 Eastside              50-01.00
+  5 Brandt, Tomas               12 Kiel Gym              47-03.50
+  6 Novak, Radek                11 Prague Int            45-10.00
 
 Event 16  Girls Discus
 =======================================================================
@@ -138,7 +141,8 @@ void main() {
         matchesGoldenFile('$_out/heat_sheet_review.png'));
 
     // The shot put opened on its field: who is in it, who is one of yours,
-    // and the weight the sheet's '12lb' was read as.
+    // the weight the sheet's '12lb' was read as, and where the sheet split
+    // the field into flights.
     await tester.tap(find.textContaining('Shot Put'));
     await settle(tester);
     await expectLater(find.byType(MaterialApp),

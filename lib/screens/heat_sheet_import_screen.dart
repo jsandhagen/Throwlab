@@ -160,6 +160,10 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
           // field is here to be placed against, not to be kept.
           tracked: athlete.known != null,
           order: order++,
+          // Which flight they were printed under. A big field throws a
+          // flight at a time, and an app that lost that would call an
+          // athlete into the circle an hour before they are up.
+          flight: athlete.athlete.flight,
         ));
       }
     }
@@ -314,6 +318,76 @@ class _EventCard extends StatelessWidget {
   final ValueChanged<double> onWeight;
   final void Function(_AthleteRow, bool) onAthlete;
 
+  /// One competitor, and whether they are coming in.
+  ///
+  /// One of the coach's own is tinted and struck down its leading edge, so
+  /// a long field can be skimmed for them without reading every name —
+  /// which is the whole reason a heat sheet is imported.
+  ///
+  /// The tint and the edge are the tile's own `tileColor` and `shape`
+  /// rather than a box wrapped around it: a ListTile paints its background
+  /// on the nearest Material ancestor, so a decorated box in between would
+  /// cover both that and the ink splash — which Flutter asserts on.
+  Widget _athleteTile(BuildContext context, _AthleteRow athlete) {
+    final theme = Theme.of(context);
+    return CheckboxListTile(
+      dense: true,
+      tileColor: athlete.known == null
+          ? null
+          : theme.colorScheme.primary.withOpacity(0.12),
+      shape: athlete.known == null
+          ? null
+          : Border(
+              left: BorderSide(color: theme.colorScheme.primary, width: 3),
+            ),
+      value: athlete.chosen,
+      onChanged: (value) => onAthlete(athlete, value ?? false),
+      controlAffinity: ListTileControlAffinity.leading,
+      title: Text(athlete.known ?? athlete.athlete.name,
+          style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight:
+                  athlete.known != null ? FontWeight.w600 : FontWeight.w400)),
+      subtitle: Text(
+        [
+          if (athlete.known != null) 'Your athlete',
+          if (athlete.athlete.team.isNotEmpty) athlete.athlete.team,
+          if (athlete.athlete.seed.isNotEmpty) 'seed ${athlete.athlete.seed}',
+        ].join(' · '),
+        style: theme.textTheme.bodySmall?.copyWith(
+            color: athlete.known != null
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurfaceVariant),
+      ),
+      secondary: athlete.known == null
+          ? null
+          : Tooltip(
+              message: 'One of your athletes',
+              child: Icon(Icons.person,
+                  size: 18, color: theme.colorScheme.primary),
+            ),
+    );
+  }
+
+  /// The field under the heading, split where the sheet split it.
+  ///
+  /// A flight is a run of the order an hour long, so a coach reading down a
+  /// long field for their own name is really asking which flight it is in.
+  /// A program that never split the field gets no headings at all, because
+  /// there is nothing to say.
+  List<Widget> _field(BuildContext context) {
+    final flighted = row.event.flightCount > 1;
+    final tiles = <Widget>[];
+    var shown = 0;
+    for (final athlete in row.athletes) {
+      if (flighted && athlete.athlete.flight != shown) {
+        shown = athlete.athlete.flight;
+        tiles.add(_FlightDivider(flight: shown, of: row.event.flightCount));
+      }
+      tiles.add(_athleteTile(context, athlete));
+    }
+    return tiles;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -347,6 +421,7 @@ class _EventCard extends StatelessWidget {
         subtitle: Text(
           [
             '${row.athletes.length} entered',
+            if (row.event.flightCount > 1) '${row.event.flightCount} flights',
             if (row.mine > 0) '${row.mine} of mine',
             if (event.weightGuessed) 'weight guessed',
           ].join(' · '),
@@ -383,56 +458,44 @@ class _EventCard extends StatelessWidget {
               ],
             ),
           ),
-          for (final athlete in row.athletes)
-            // One of the coach's own is tinted and struck down its leading
-            // edge, so a long field can be skimmed for them without reading
-            // every name — which is the whole reason a heat sheet is imported.
-            //
-            // The tint and the edge are the tile's own `tileColor` and
-            // `shape` rather than a box wrapped around it: a ListTile paints
-            // its background on the nearest Material ancestor, so a
-            // decorated box in between would cover both that and the ink
-            // splash — which Flutter asserts on.
-            CheckboxListTile(
-              dense: true,
-              tileColor: athlete.known == null
-                  ? null
-                  : theme.colorScheme.primary.withOpacity(0.12),
-              shape: athlete.known == null
-                  ? null
-                  : Border(
-                      left: BorderSide(
-                          color: theme.colorScheme.primary, width: 3),
-                    ),
-              value: athlete.chosen,
-              onChanged: (value) => onAthlete(athlete, value ?? false),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(athlete.known ?? athlete.athlete.name,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                      fontWeight: athlete.known != null
-                          ? FontWeight.w600
-                          : FontWeight.w400)),
-              subtitle: Text(
-                [
-                  if (athlete.known != null) 'Your athlete',
-                  if (athlete.athlete.team.isNotEmpty) athlete.athlete.team,
-                  if (athlete.athlete.seed.isNotEmpty)
-                    'seed ${athlete.athlete.seed}',
-                ].join(' · '),
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: athlete.known != null
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant),
-              ),
-              secondary: athlete.known == null
-                  ? null
-                  : Tooltip(
-                      message: 'One of your athletes',
-                      child: Icon(Icons.person,
-                          size: 18, color: theme.colorScheme.primary),
-                    ),
-            ),
+          ..._field(context),
           const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+/// Where one flight of a field ends and the next begins.
+///
+/// A rule with the flight written into it, rather than a heading of its
+/// own: the names are what is being read down here, and a flight is the
+/// break between two runs of them, not a section of its own.
+class _FlightDivider extends StatelessWidget {
+  const _FlightDivider({required this.flight, required this.of});
+
+  final int flight;
+  final int of;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Row(
+        children: [
+          Text(
+            'FLIGHT $flight OF $of',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Divider(
+                  height: 1, color: scheme.outlineVariant.withOpacity(0.6))),
         ],
       ),
     );

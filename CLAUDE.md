@@ -7,7 +7,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — where a round has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side) |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
@@ -56,13 +56,16 @@ thrown at), a training note (as it opens, and with the keyboard up — which
 the note preview fakes, insets and all — toolbar above it, and pinned to
 the top), and the meet tracker: the meets as a list and as a calendar, a
 meet's events, one of them part-way through, the standings with the cut,
-the field as a list, the live card (three times — a podium, a field with the
-cut falling below it, and a board that has broken, where the leader is off
-the top of it as an arrow), and the sheet a round is entered in — and the schedule import: the page a
+the field as a list, the live card (four times — a podium, a field with the
+cut falling below it, a board that has broken, where the leader is off
+the top of it as an arrow, and a field thrown in flights, where the coach's
+own athlete is in the one that hasn't been called), the flighted field as a
+list — ruled off at the flights, and scrolled down to the one still to come
+— and the sheet a round is entered in — and the schedule import: the page a
 fixture list is pasted into, what the parser made of one, and the season it
 leaves behind — and the heat sheet import: the program pasted in, the
-events found in it, one opened on its field, and the meet it leaves
-entered — and the season list: the next fixture at full size over the rest
+events found in it, one opened on its field with the flights ruled off in
+it, and the meet it leaves entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
 thrown folded away. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
@@ -279,6 +282,25 @@ like the app rather than a bare Material default.
   over the only card on the screen tells a coach what they are looking at —
   but `next` still answers who is about to throw, because a mark still has
   to be written down for them.
+- A big field is not thrown in one order, and `MeetEntry.flight` is which
+  part of it somebody throws in. Thirty shot putters are split into flights
+  of a dozen, each throwing its prelims right through before the next walks
+  in, so `MeetFlight` is worked out over *one* flight — the first still owed
+  a round (`flight`, `flightCount`, `flightDone`) — rather than over the
+  whole field: flight 2 standing on the grass with nothing entered would
+  otherwise hold the round at one forever and call its first thrower into a
+  circle an hour early. The cut dissolves them, because a final is thrown by
+  the qualifiers as one group whichever flight they came through, and so
+  everything flighted stops at `MeetStandings.cutMade`. Standings never
+  split: an athlete is placed against the whole competition, not against the
+  dozen they happened to throw with. A competition small enough to be thrown
+  in one order has one flight, which is no flights — nothing says a word
+  about them, and that is the case every screen was written for first.
+  `heat_sheet_parser` reads the 'Flight 2 of 3' a program prints over each
+  run of names (a sheet may call it a section, or borrow the running's word
+  and say heat); the flights come in as runs of the order, the field is
+  ruled off at them in the list, and the live card says when the coach's own
+  athlete is up where the flight in the ring is somebody else's.
 - An athlete's card in the field is two rows, and the split is what each
   row is for. The top one answers *who, and how are they doing* — the
   flight number, the name, the place, the mark they are standing on — and

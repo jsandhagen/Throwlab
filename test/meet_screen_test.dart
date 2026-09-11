@@ -740,6 +740,168 @@ void main() {
     });
   });
 
+  group('a field thrown in flights', () {
+    /// Somebody in the discus, in [flight], with whatever they have thrown.
+    Future<void> add(String id, String name, int flight, int order,
+        {bool tracked = false, List<double?> marks = const []}) async {
+      final entry = MeetEntry(
+        id: id,
+        athlete: name,
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: tracked,
+        order: order,
+        flight: flight,
+      );
+      for (var round = 0; round < marks.length; round++) {
+        entry.setAttempt(
+            round,
+            marks[round] == null
+                ? MeetAttempt.foul()
+                : MeetAttempt.untracked(marks[round]!));
+      }
+      await meets.addEntry('k1', entry: entry);
+    }
+
+    /// Ana in flight 1, two rivals behind her in flight 2.
+    Future<void> twoFlights() async {
+      await add('r1', 'M. Okoye', 1, 1);
+      await add('r2', 'J. Smith', 2, 2);
+      await add('r3', 'K. Fox', 2, 3);
+    }
+
+    testWidgets('calls nobody out of the flight that is throwing',
+        (tester) async {
+      await twoFlights();
+      await mountEvent(tester, live: true);
+
+      // Flight 2 is standing on the grass. Reading the round off the whole
+      // field would put Smith in the circle behind Ana, an hour early.
+      expect(find.text('FLIGHT 1 · ROUND 1'), findsOneWidget);
+      expect(find.text('0 of 2 thrown'), findsOneWidget);
+      expect(find.text('up'), findsOneWidget);
+      expect(find.text('on deck'), findsOneWidget);
+      expect(find.text('in the hole'), findsNothing);
+    });
+
+    testWidgets('hands the ring to the next flight when the first is through',
+        (tester) async {
+      final meet = meets.byId('k1')!..rounds = 1;
+      await meets.save(meet);
+      await twoFlights();
+      // Ana and Okoye have had the only round their flight gets.
+      final ana = meets.byId('k1')!.entries.first;
+      ana.setAttempt(0, MeetAttempt.mark('nothing'));
+      await meets.save(meets.byId('k1')!);
+      await meets.setAttempt('k1', 'r1', 0, MeetAttempt.untracked(38.10));
+      await mountEvent(tester, live: true);
+
+      expect(find.text('FLIGHT 2 · ROUND 1'), findsOneWidget);
+      expect(find.text('0 of 2 thrown'), findsOneWidget);
+      expect(find.text('J. Smith'), findsNWidgets(2));
+    });
+
+    testWidgets('says when the coach\'s own athlete is up, in a flight that '
+        'is not theirs', (tester) async {
+      // Ana out of flight 1 and into the last one, so the ring in front of
+      // the coach is somebody else's competition.
+      final meet = meets.byId('k1')!;
+      meet.entries.single.flight = 3;
+      meet.entries.single.order = 9;
+      await meets.save(meet);
+      await twoFlights();
+      await mountEvent(tester, live: true);
+
+      expect(find.text('FLIGHT 1 · ROUND 1'), findsOneWidget);
+      expect(find.text('Ana Diaz throws in flight 3'), findsOneWidget);
+    });
+
+    testWidgets('rules the field off where the flights are', (tester) async {
+      await twoFlights();
+      await mountEvent(tester);
+
+      expect(find.text('FLIGHT 1 OF 2'), findsOneWidget);
+      expect(find.text('FLIGHT 2 OF 2'), findsOneWidget);
+      expect(find.text('to come'), findsOneWidget);
+      expect(find.text('round 1 · 0 of 2 thrown'), findsOneWidget);
+    });
+
+    testWidgets('will not shuffle an athlete out of their own flight',
+        (tester) async {
+      await twoFlights();
+      await mountEvent(tester);
+      // Okoye throws last in flight 1. 'Throw later' would put him in
+      // flight 2, which threw after him — so it does nothing.
+      await tester.tap(find.byTooltip('Order and entry').at(1));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Throw later'));
+      await tester.pumpAndSettle();
+
+      final field = meets.byId('k1')!.entries;
+      expect(field.firstWhere((e) => e.id == 'r1').flight, 1);
+      expect(field.map((e) => e.athlete).toList(),
+          ['Ana Diaz', 'M. Okoye', 'J. Smith', 'K. Fox']);
+    });
+
+    testWidgets('puts a late entry at the end of its own flight',
+        (tester) async {
+      await twoFlights();
+      await mountEvent(tester);
+      await tester.tap(find.text('Add athlete'));
+      await tester.pumpAndSettle();
+
+      // Asked for, and started on the flight in the ring — a late entry is
+      // somebody the coach has just spotted, usually in the one being
+      // called.
+      expect(find.text('Flight 1'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, 'L. Fischer');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      // Behind Okoye and in front of flight 2, so the flights stay runs of
+      // the order rather than names scattered through one.
+      final field = meets.byId('k1')!.inOrder;
+      expect(field.map((e) => e.athlete).toList(),
+          ['Ana Diaz', 'M. Okoye', 'L. Fischer', 'J. Smith', 'K. Fox']);
+      expect(field.map((e) => e.flight).toList(), [1, 1, 1, 2, 2]);
+    });
+
+    testWidgets('asks nothing about flights in a field thrown in one order',
+        (tester) async {
+      await add('r1', 'M. Okoye', 1, 1);
+      await mountEvent(tester);
+      await tester.tap(find.text('Add athlete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Flight 1'), findsNothing);
+    });
+
+    testWidgets('reads them off the meet card as well', (tester) async {
+      await twoFlights();
+      await mountMeet(tester);
+      expect(find.textContaining('4 in 2 flights'), findsOneWidget);
+      expect(find.textContaining('flight 1 · round 1'), findsOneWidget);
+    });
+
+    testWidgets('drops the flights once the cut is made', (tester) async {
+      final meet = meets.byId('k1')!
+        ..rounds = 6
+        ..prelimRounds = 1
+        ..advancing = 2;
+      meet.entries.single.setAttempt(0, MeetAttempt.foul());
+      await meets.save(meet);
+      await add('r1', 'M. Okoye', 1, 1, marks: [44.90]);
+      await add('r2', 'J. Smith', 2, 2, marks: [38.10]);
+      await add('r3', 'K. Fox', 2, 3, marks: [30.00]);
+      await mountEvent(tester);
+
+      // Everyone has had their prelim, so the qualifiers come back as one
+      // group in one order — there is no flight left to rule off.
+      expect(find.textContaining('FLIGHT'), findsNothing);
+      expect(find.text('FINAL · ROUND 2'), findsOneWidget);
+    });
+  });
+
   group('the card', () {
     testWidgets('carries the camera, the ruler and the place', (tester) async {
       await meets.addEntry('k1',

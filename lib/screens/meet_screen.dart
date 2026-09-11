@@ -343,6 +343,13 @@ class _EventCard extends StatelessWidget {
     final accent = eventColor(competition.event);
     final field = competition.entries.length;
     final mine = competition.entries.where((entry) => entry.tracked).length;
+    // How big the field is, and — where it was too big to throw in one
+    // order — how many flights it was cut into. That is the number a coach
+    // reads this card for: which of them is up says nothing about how long
+    // the event has left to run.
+    final flights = competition.flights.length;
+    final size =
+        flights > 1 ? '$field in $flights flights' : '$field in the field';
     final leader = standings.places.isEmpty ? null : standings.places.first;
     return Card(
       color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
@@ -366,9 +373,11 @@ class _EventCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '$field in the field'
+                      '$size'
                       '${mine == field ? '' : ' · $mine of mine'} · '
                       '$_progress',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),

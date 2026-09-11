@@ -277,7 +277,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               : FloatingActionButton.extended(
                   icon: const Icon(Icons.person_add_alt),
                   label: const Text('Add athlete'),
-                  onPressed: () => _addEntry(meets, library, meet),
+                  onPressed: () =>
+                      _addEntry(meets, library, meet, competition, flight),
                 ),
         );
       },
@@ -287,38 +288,68 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// The field in the order it throws, which is the order a coach's eye
   /// goes down the list in as the round works through, under a bar saying
   /// where the round has got to.
+  ///
+  /// A flighted competition is ruled off where the flights are: a coach
+  /// scrolling a field of thirty is looking for the run of a dozen their
+  /// athlete throws in, and the heading over each says where that flight
+  /// has got to — done, up now, or still waiting its turn. The cut
+  /// dissolves them, and so do the headings: from there the qualifiers are
+  /// one group in one order.
   Widget _seriesList(Meet meet, MeetLibrary meets, VideoLibrary library,
       MeetCompetition competition, MeetStandings standings, MeetFlight flight) {
     final field = competition.entries;
+    final flighted = competition.isFlighted && !standings.cutMade;
+    final cards = <Widget>[];
+    // The flight numbers are the sheet's, and the position inside one is
+    // what the announcer calls — so both are counted off the run rather
+    // than off the whole field.
+    var heading = 0;
+    var position = 0;
+    for (var i = 0; i < field.length; i++) {
+      final entry = field[i];
+      if (flighted && entry.flight != heading) {
+        heading = entry.flight;
+        position = 0;
+        cards.add(Padding(
+          padding: EdgeInsets.only(top: cards.isEmpty ? 0 : 6, bottom: 8),
+          child: _FlightHeading(
+            flight: MeetFlight(competition,
+                rounds: meet.rounds, standings: standings, flight: heading),
+            current: flight.flight == heading,
+          ),
+        ));
+      }
+      position++;
+      cards.add(Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: _EntryCard(
+          meet: meet,
+          entry: entry,
+          position: flighted ? position : i + 1,
+          place: standings.placeOf(entry.id),
+          upIn: flight.throwsUntil(entry.id),
+          // Null when nothing is closed: no final, or they made it. A
+          // 3 + 3 only closes the last rounds once the whole field has
+          // had its three, which is what throwsInFinal waits for.
+          closedFrom: !meet.hasFinal || standings.throwsInFinal(entry.id)
+              ? null
+              : meet.prelimRounds,
+          series: MeetSeries(entry, library.results),
+          library: library,
+          onEnter: (round) => _enter(meet, entry, round),
+          onFilm: (round) => _film(meet, entry, round),
+          onOpen: _openThrow,
+          onRemove: () => _removeEntry(meets, meet, entry),
+          onMove: (by) => _move(meet, field, i, by),
+        ),
+      ));
+    }
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
       children: [
         _FlightBar(flight: flight, standings: standings),
         const SizedBox(height: 12),
-        for (var i = 0; i < field.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: _EntryCard(
-              meet: meet,
-              entry: field[i],
-              position: i + 1,
-              place: standings.placeOf(field[i].id),
-              upIn: flight.throwsUntil(field[i].id),
-              // Null when nothing is closed: no final, or they made it. A
-              // 3 + 3 only closes the last rounds once the whole field has
-              // had its three, which is what throwsInFinal waits for.
-              closedFrom: !meet.hasFinal || standings.throwsInFinal(field[i].id)
-                  ? null
-                  : meet.prelimRounds,
-              series: MeetSeries(field[i], library.results),
-              library: library,
-              onEnter: (round) => _enter(meet, field[i], round),
-              onFilm: (round) => _film(meet, field[i], round),
-              onOpen: _openThrow,
-              onRemove: () => _removeEntry(meets, meet, field[i]),
-              onMove: (by) => _move(meet, field, i, by),
-            ),
-          ),
+        ...cards,
       ],
     );
   }
@@ -405,8 +436,15 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                           _EntryCard(
                             meet: meet,
                             entry: up,
-                            position:
-                                standings.competition.entries.indexOf(up) + 1,
+                            // Their number in their own flight, which is the
+                            // one the sheet printed and the infield calls.
+                            position: (flight.isFlighted
+                                    ? standings.competition
+                                        .entriesIn(up.flight)
+                                        .indexOf(up)
+                                    : standings.competition.entries
+                                        .indexOf(up)) +
+                                1,
                             place: standings.placeOf(up.id),
                             // Not marked 'up': the row above the board has just
                             // said so, and this card is under it because of it.
@@ -463,11 +501,14 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   ///
   /// Only within this event: the meet's order runs across every competition
   /// in it, and the javelin has no business shuffling because the discus
-  /// did.
+  /// did. And only within their own flight, for the same reason — moving
+  /// somebody past the end of flight 1 would put them in a flight that
+  /// threw an hour ago.
   Future<void> _move(
       Meet meet, List<MeetEntry> field, int index, int by) async {
     final target = index + by;
     if (target < 0 || target >= field.length) return;
+    if (field[target].flight != field[index].flight) return;
     _number(meet);
     final was = field[index].order;
     field[index].order = field[target].order;
@@ -720,19 +761,51 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
 
   /// Adds somebody to this event — already in it, since that is the one
   /// the coach is standing at.
-  Future<void> _addEntry(
-      MeetLibrary meets, VideoLibrary library, Meet meet) async {
+  Future<void> _addEntry(MeetLibrary meets, VideoLibrary library, Meet meet,
+      MeetCompetition competition, MeetFlight flight) async {
+    final flights = competition.flights;
     final entry = await showMeetEntryDialog(
       context,
       known: library.knownAthletes,
       event: widget.event,
       implementKg: widget.implementKg,
+      // Only worth asking where the field has been split: an athlete
+      // noticed mid-competition throws in a flight, and putting them in
+      // the wrong one calls them into the circle an hour early or late.
+      flights: flights.length > 1 ? flights : const [],
+      flight: flight.flight ?? (flights.isEmpty ? 1 : flights.last),
     );
     if (entry != null) {
-      // Onto the end of the flight: an athlete added mid-competition is
-      // one the coach has just noticed, not one who throws first.
-      entry.order = meet.entries.length;
+      _placeInFlight(meet, entry);
       await meets.addEntry(meet.id, entry: entry);
+    }
+  }
+
+  /// Puts a late entry at the end of its own flight.
+  ///
+  /// Onto the end of the order for a competition thrown in one — an
+  /// athlete added mid-competition is one the coach has just noticed, not
+  /// one who throws first. Where there are flights, the end of theirs:
+  /// the flights are runs of the order, and one that isn't a run is a
+  /// field listed in an order nobody throws in.
+  void _placeInFlight(Meet meet, MeetEntry entry) {
+    _number(meet);
+    var at = -1;
+    for (final other in meet.entries) {
+      if (other.event == entry.event &&
+          other.implementKg == entry.implementKg &&
+          other.flight == entry.flight &&
+          other.order > at) {
+        at = other.order;
+      }
+    }
+    if (at < 0) {
+      entry.order = meet.entries.length;
+      return;
+    }
+    entry.order = at + 1;
+    for (final other in meet.entries) {
+      if (other.order > at) other.order++;
     }
   }
 
@@ -968,6 +1041,36 @@ class _FlightBody extends StatelessWidget {
   /// is saying it once too often.
   final bool showLeader;
 
+  /// When the coach's own athletes throw, for a flight that isn't theirs.
+  ///
+  /// A big field is thrown a flight at a time, so a coach can be standing
+  /// at a ring watching a competition none of their throwers is in yet.
+  /// The calls above name whoever is up, which is no use to them — this is
+  /// the line that is. Null while one of theirs is in the flight being
+  /// thrown, because then the cards below say it better.
+  static String? _yoursLater(MeetFlight flight) {
+    final current = flight.flight;
+    if (current == null) return null;
+    final field = flight.competition.entries;
+    if (field.any((entry) => entry.tracked && entry.flight == current)) {
+      return null;
+    }
+    var soonest = 0;
+    for (final entry in field) {
+      if (!entry.tracked || entry.flight <= current) continue;
+      if (soonest == 0 || entry.flight < soonest) soonest = entry.flight;
+    }
+    if (soonest == 0) return null;
+    final waiting = [
+      for (final entry in field)
+        if (entry.tracked && entry.flight == soonest) entry,
+    ];
+    final only = waiting.length == 1 ? waiting.single.athlete : '';
+    return only.isEmpty
+        ? 'Yours throw in flight $soonest'
+        : '$only throws in flight $soonest';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -982,6 +1085,7 @@ class _FlightBody extends StatelessWidget {
     final front = !flight.hasOrder || standings.places.isEmpty
         ? null
         : standings.places.first;
+    final elsewhere = _yoursLater(flight);
     // The leader is worth a line of their own only when they are not
     // already on one.
     final leader = !showLeader ||
@@ -1034,6 +1138,24 @@ class _FlightBody extends StatelessWidget {
               lead: i == 0,
             ),
           ),
+        if (elsewhere != null)
+          Padding(
+            padding: EdgeInsets.only(top: calling.isEmpty ? 10 : 6),
+            child: Row(
+              children: [
+                Icon(Icons.schedule, size: 13, color: scheme.primary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    elsewhere,
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (leader != null) ...[
           const SizedBox(height: 8),
           Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.4)),
@@ -1078,6 +1200,74 @@ class _FlightBar extends StatelessWidget {
               flight: flight, standings: standings, showLeader: true),
         ),
       );
+}
+
+/// Where one flight ends and the next begins, in a field long enough to
+/// have been split.
+///
+/// It says what a coach scrolling past it wants to know about a run of
+/// names they are not watching: whether that flight has thrown, is
+/// throwing, or is still on the grass waiting its turn.
+class _FlightHeading extends StatelessWidget {
+  const _FlightHeading({required this.flight, required this.current});
+
+  /// That flight's own state, not the competition's.
+  final MeetFlight flight;
+
+  /// Whether it is the one in the ring.
+  final bool current;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = eventColor(flight.competition.event);
+    final color = current ? accent : scheme.onSurfaceVariant;
+    // Three states, and a coach scrolling past only has to tell them
+    // apart: the flight in the ring, the one that has finished, and the
+    // one still on the grass.
+    final status = current
+        ? 'round ${flight.round + 1} · '
+            '${flight.thrown} of ${flight.fieldSize} thrown'
+        : flight.flightDone
+            ? 'thrown'
+            : 'to come';
+    return Container(
+      padding: const EdgeInsets.only(bottom: 6),
+      // The rule under the heading rather than through it: the status on
+      // the right is the long half, and a rule between them is the first
+      // thing to go when it runs out of room.
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+              color: current
+                  ? accent.withOpacity(0.6)
+                  : scheme.outlineVariant.withOpacity(0.5)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'FLIGHT ${flight.flight} OF ${flight.flightCount}',
+            style: theme.textTheme.labelMedium?.copyWith(
+                color: color,
+                fontWeight: current ? FontWeight.w700 : FontWeight.w600,
+                letterSpacing: 1.1),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              status,
+              textAlign: TextAlign.end,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Nothing has been thrown yet, in the space the board will take.

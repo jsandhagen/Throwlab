@@ -17,18 +17,31 @@ Future<MeetEntry?> showMeetEntryDialog(
   required List<String> known,
   ThrowEvent? event,
   double? implementKg,
+  List<int> flights = const [],
+  int flight = 1,
 }) =>
     showDialog<MeetEntry>(
       context: context,
-      builder: (context) =>
-          _EntryDialog(known: known, event: event, implementKg: implementKg),
+      builder: (context) => _EntryDialog(
+        known: known,
+        event: event,
+        implementKg: implementKg,
+        flights: flights,
+        flight: flight,
+      ),
     );
 
 /// The weight is asked for here rather than per attempt because it does not
 /// change through a competition — and a best is per weight, so guessing it
 /// would put the mark in the wrong book.
 class _EntryDialog extends StatefulWidget {
-  const _EntryDialog({required this.known, this.event, this.implementKg});
+  const _EntryDialog({
+    required this.known,
+    this.event,
+    this.implementKg,
+    this.flights = const [],
+    this.flight = 1,
+  });
 
   final List<String> known;
 
@@ -37,6 +50,14 @@ class _EntryDialog extends StatefulWidget {
   /// enter them in the wrong one.
   final ThrowEvent? event;
   final double? implementKg;
+
+  /// The flights this competition is thrown in, where it has more than
+  /// one. Empty for a field thrown in a single order — which is most of
+  /// them, and the case where asking would be asking about nothing.
+  final List<int> flights;
+
+  /// Which of them to start on: the one in the ring.
+  final int flight;
 
   @override
   State<_EntryDialog> createState() => _EntryDialogState();
@@ -49,6 +70,9 @@ class _EntryDialogState extends State<_EntryDialog> {
       ? _event.defaultImplement
       : _event.specFor(widget.implementKg!);
   bool _tracked = true;
+  late int _flight = widget.flights.contains(widget.flight)
+      ? widget.flight
+      : (widget.flights.isEmpty ? 1 : widget.flights.first);
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +140,23 @@ class _EntryDialogState extends State<_EntryDialog> {
                     _implement = _event.specFor(weight ?? _implement.weightKg)),
               ),
             ],
+            if (widget.flights.length > 1) ...[
+              const SizedBox(height: 12),
+              // Which flight they throw in decides when they throw, and a
+              // late entry is nearly always somebody the coach has just
+              // spotted in a flight that hasn't been called yet.
+              DropdownButtonFormField<int>(
+                value: _flight,
+                decoration: const InputDecoration(labelText: 'Flight'),
+                items: [
+                  for (final flight in widget.flights)
+                    DropdownMenuItem(
+                        value: flight, child: Text('Flight $flight')),
+                ],
+                onChanged: (flight) =>
+                    setState(() => _flight = flight ?? _flight),
+              ),
+            ],
             const SizedBox(height: 4),
             SwitchListTile(
               value: _tracked,
@@ -149,6 +190,7 @@ class _EntryDialogState extends State<_EntryDialog> {
                       event: _event,
                       implementKg: _implement.weightKg,
                       tracked: _tracked,
+                      flight: _flight,
                     ),
                   ),
           child: const Text('Add'),

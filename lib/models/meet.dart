@@ -107,8 +107,10 @@ class MeetEntry {
     required this.implementKg,
     this.tracked = true,
     this.order = 0,
+    int flight = 1,
     List<MeetAttempt?>? attempts,
-  }) : attempts = attempts ?? [];
+  })  : flight = flight < 1 ? 1 : flight,
+        attempts = attempts ?? [];
 
   final String id;
   String athlete;
@@ -129,6 +131,20 @@ class MeetEntry {
   /// competition and drawn again for the final, so it is stored rather
   /// than inferred from the order they were entered in.
   int order;
+
+  /// Which flight they throw in, from 1.
+  ///
+  /// A big field is not thrown in one order. Thirty shot putters are split
+  /// into flights of a dozen, and each flight throws its prelims right
+  /// through before the next one walks in — so a coach whose athlete is in
+  /// flight 3 has an hour to wait, and the app has no business calling
+  /// them into the circle.
+  ///
+  /// One flight is the ordinary case, and a competition where nobody says
+  /// otherwise is simply not flighted. The cut dissolves them: a final is
+  /// thrown by the qualifiers as one group, whichever flight they came
+  /// through, which is why nothing here survives into it.
+  int flight;
 
   /// One slot per round, oldest first, with a null for a round nobody has
   /// entered anything for yet. Shorter than the meet's round count until
@@ -173,6 +189,9 @@ class MeetEntry {
         'implementKg': implementKg,
         'tracked': tracked,
         'order': order,
+        // Left off a competition thrown in one order, which is most of
+        // them — and read back as flight 1 either way.
+        if (flight > 1) 'flight': flight,
         'attempts': [
           for (final attempt in attempts) attempt?.toJson(),
         ],
@@ -185,6 +204,7 @@ class MeetEntry {
         implementKg: (json['implementKg'] as num).toDouble(),
         tracked: json['tracked'] as bool? ?? true,
         order: (json['order'] as num?)?.toInt() ?? 0,
+        flight: (json['flight'] as num?)?.toInt() ?? 1,
         attempts: [
           for (final raw in (json['attempts'] as List<dynamic>? ?? []))
             raw == null
@@ -478,6 +498,24 @@ class MeetCompetition {
 
   String get label => '${event.label} · ${implementSpec.weightLabel}';
 
+  /// The flights this is thrown in, in the order they throw.
+  ///
+  /// One of them for the competition small enough to be thrown in a single
+  /// order, which is most of them — [isFlighted] is the question worth
+  /// asking, and the answer is no until a sheet says otherwise.
+  List<int> get flights {
+    final seen = <int>{for (final entry in entries) entry.flight};
+    return seen.toList()..sort();
+  }
+
+  bool get isFlighted => flights.length > 1;
+
+  /// Everybody in one flight, in the order they throw it.
+  List<MeetEntry> entriesIn(int flight) => [
+        for (final entry in entries)
+          if (entry.flight == flight) entry,
+      ];
+
   /// The competitions in a meet, in the order they were first entered.
   static List<MeetCompetition> of(Meet meet) {
     final grouped = <String, List<MeetEntry>>{};
@@ -666,7 +704,7 @@ class MeetStandings {
   }
 }
 
-/// Where a competition has got to right now: which round is being thrown,
+/// The flight being thrown, and where it has got to: which round is up,
 /// who is in the circle, and who follows them.
 ///
 /// Between attempts a coach asks two questions — how far through this round
@@ -674,23 +712,67 @@ class MeetStandings {
 /// over the throwing order and the series already entered. Working them out
 /// here rather than inside a screen keeps them testable, and keeps the
 /// meet's card and the event's own header saying the same thing.
+///
+/// A big competition is thrown a flight at a time, so this is worked out
+/// over one flight rather than over the whole field: flight 2 standing on
+/// the grass with nothing entered must not hold the round at one while
+/// flight 1 throws its third. The flight being thrown is the first that is
+/// still owed a round, and [flight] names it. The cut dissolves them — the
+/// qualifiers come back as one group — and a competition small enough to
+/// be thrown in a single order never had them, which is the case every
+/// caller that says nothing about flights is in.
 class MeetFlight {
   factory MeetFlight(
     MeetCompetition competition, {
     required int rounds,
     MeetStandings? standings,
+    int? flight,
   }) {
     // Anybody who missed the cut is out of the count. Leaving them in would
     // hold the round at the cut for the rest of the competition, because
     // rounds they will never throw stay empty forever.
-    final field = [
+    final live = [
       for (final entry in competition.entries)
         if (standings == null || standings.throwsInFinal(entry.id)) entry,
     ];
-    // The round being thrown is the earliest one anybody still in the
-    // competition is owed — a round is not over until the last of them has
-    // had it.
-    var round = rounds;
+
+    // How far a flight throws before it stands down for the next one: its
+    // prelims, where there is a cut coming. A competition nobody is being
+    // cut from has no prelims to stop at, so its flights throw the lot.
+    final prelims = standings != null &&
+            standings.hasCut &&
+            standings.prelimRounds > 0 &&
+            standings.prelimRounds < rounds
+        ? standings.prelimRounds
+        : rounds;
+
+    final flights = competition.flights;
+    // Which flight is up: the first still owed a round. Null for a field
+    // thrown in one order, and once the cut has dissolved the flights.
+    int? current;
+    if (flights.length > 1 && !(standings?.cutMade ?? false)) {
+      for (final number in flights) {
+        if (flight != null ? number == flight : _owed(live, number, prelims)) {
+          current = number;
+          break;
+        }
+      }
+    }
+
+    final field = current == null
+        ? live
+        : [
+            for (final entry in live)
+              if (entry.flight == current) entry,
+          ];
+
+    // The last round this group of throws runs to: the competition's, when
+    // the field is throwing as one, and the prelims for a flight.
+    final limit = current == null ? rounds : prelims;
+
+    // The round being thrown is the earliest one anybody still in it is
+    // owed — a round is not over until the last of them has had it.
+    var round = limit;
     for (final entry in field) {
       if (entry.nextRound < round) round = entry.nextRound;
     }
@@ -698,8 +780,11 @@ class MeetFlight {
       competition: competition,
       rounds: rounds,
       round: round,
+      flight: current,
+      flightCount: flights.length,
+      limit: limit,
       field: field,
-      waiting: round >= rounds
+      waiting: round >= limit
           ? const []
           : [
               for (final entry in field)
@@ -713,10 +798,21 @@ class MeetFlight {
     );
   }
 
+  /// Whether anybody in [flight] is still owed one of its [prelims].
+  static bool _owed(List<MeetEntry> live, int flight, int prelims) {
+    for (final entry in live) {
+      if (entry.flight == flight && entry.nextRound < prelims) return true;
+    }
+    return false;
+  }
+
   const MeetFlight._({
     required this.competition,
     required this.rounds,
     required this.round,
+    required this.flight,
+    required this.flightCount,
+    required this.limit,
     required this.field,
     required this.waiting,
     required this.isFinal,
@@ -727,12 +823,25 @@ class MeetFlight {
   /// How many attempts the meet gives.
   final int rounds;
 
-  /// The round being thrown, from 0. Equal to [rounds] once the last
-  /// attempt of the competition is in.
+  /// The round being thrown, from 0. Equal to [limit] once the last attempt
+  /// this group of throws is owed is in.
   final int round;
 
-  /// Everyone who still has throws coming — the whole field before the cut,
-  /// the qualifiers after it.
+  /// Which flight this is, from 1 — null for a competition thrown in one
+  /// order, and for a final, which the qualifiers throw as one group.
+  final int? flight;
+
+  /// How many flights the competition is split into; 1 when it isn't.
+  final int flightCount;
+
+  /// The round this group of throws runs to: the competition's [rounds]
+  /// when the whole field is throwing together, and the prelims for a
+  /// flight that stands down after them.
+  final int limit;
+
+  /// Everyone who still has throws coming — the flight being thrown, the
+  /// whole field before the cut where there are no flights, and the
+  /// qualifiers after it.
   final List<MeetEntry> field;
 
   /// Who has yet to throw this round, in the order they throw.
@@ -742,6 +851,20 @@ class MeetFlight {
   final bool isFinal;
 
   bool get finished => round >= rounds;
+
+  /// Whether this flight has thrown everything it is here for. The same as
+  /// [finished] where the field throws as one, and true of a flight that
+  /// has had its prelims and handed the ring over.
+  bool get flightDone => round >= limit;
+
+  /// Whether the competition is split into flights at all.
+  bool get isFlighted => flightCount > 1;
+
+  /// 'Flight 2 of 3' — which flight is up, for a screen with room to say
+  /// how many are coming. Empty where there is only one, and once the cut
+  /// has dissolved them.
+  String get flightLabel =>
+      flight == null ? '' : 'Flight $flight of $flightCount';
 
   /// Whether there is an order worth naming anybody in.
   ///
@@ -785,11 +908,22 @@ class MeetFlight {
     return null;
   }
 
-  /// 'Round 3 of 6', 'Final · round 5', 'Done' — the one phrase for how far
-  /// through a competition is, wherever it is being shown.
+  /// 'Round 3 of 6', 'Flight 2 · round 1', 'Final · round 5', 'Done' — the
+  /// one phrase for how far through a competition is, wherever it is being
+  /// shown.
+  ///
+  /// A flighted competition says which flight instead of counting the
+  /// rounds out of six: the flight is the part that changes what a coach
+  /// does next, and 'of 3' is on [flightLabel] for the screens with the
+  /// width for it.
   String get label {
     if (finished) return 'Done';
     if (isFinal) return 'Final · round ${round + 1}';
+    if (flight != null) {
+      return flightDone
+          ? 'Flight $flight · done'
+          : 'Flight $flight · round ${round + 1}';
+    }
     return 'Round ${round + 1} of $rounds';
   }
 }

@@ -164,6 +164,59 @@ List<Map<String, dynamic>> _meets() {
     )..setAttempt(0, MeetAttempt.untracked(mark)));
   }
 
+  // The men's shot at the same meet: a field of twelve, which is a field
+  // no meet throws in one order. It is split into two flights, flight 1 is
+  // part-way through its second round, and Jakob is in flight 2 with an
+  // hour to wait — so the live card names who is up in a competition he is
+  // not in yet, and says when his own is.
+  const firstFlight = [
+    ('f1', 'B. Kowalski (Poznan)', [17.90, 18.22]),
+    ('f2', 'N. Achebe (Croydon)', [17.44, null]),
+    ('f3', 'E. Haugen (Bergen)', [16.80, 17.02]),
+    ('f4', 'C. Barros (Porto)', [16.55]),
+    ('f5', 'D. Whitcombe (Leeds)', [16.10]),
+  ];
+  const secondFlight = [
+    ('g1', 'T. Brandt (Kiel)', <double?>[]),
+    ('g2', 'R. Novak (Prague)', <double?>[]),
+    ('g3', 'A. Lindqvist (Umea)', <double?>[]),
+    ('g4', 'P. Moreau (Lyon)', <double?>[]),
+    ('g5', 'S. Patel (Ealing)', <double?>[]),
+  ];
+  var shotOrder = 20;
+  for (final (flight, field) in [(1, firstFlight), (2, secondFlight)]) {
+    for (final (id, name, marks) in field) {
+      final entry = MeetEntry(
+        id: id,
+        athlete: name,
+        event: ThrowEvent.shotPut,
+        implementKg: 7.26,
+        tracked: false,
+        order: shotOrder++,
+        flight: flight,
+      );
+      for (var round = 0; round < marks.length; round++) {
+        entry.setAttempt(
+            round,
+            marks[round] == null
+                ? MeetAttempt.foul()
+                : MeetAttempt.untracked(marks[round]!));
+      }
+      champs.entries.add(entry);
+    }
+    if (flight == 1) continue;
+    // The coach's own thrower, at the top of the flight that hasn't been
+    // called — the one card on the screen the camera belongs on.
+    champs.entries.add(MeetEntry(
+      id: 'g0',
+      athlete: 'Jakob',
+      event: ThrowEvent.shotPut,
+      implementKg: 7.26,
+      order: shotOrder++,
+      flight: 2,
+    ));
+  }
+
   final spring = Meet(
     id: 'k0',
     name: 'Spring Open',
@@ -281,6 +334,32 @@ void main() {
         const MeetEventScreen(
             meetId: 'k1', event: ThrowEvent.shotPut, implementKg: 4),
         'meet_board_broken');
+
+    // A field thrown in flights: the live card of a competition the coach's
+    // own athlete is not in yet — flight 1 is in the ring, and the line
+    // under the calls says when Jakob's flight is up.
+    await _shoot(
+        tester,
+        library,
+        meets,
+        const MeetEventScreen(
+            meetId: 'k1', event: ThrowEvent.shotPut, implementKg: 7.26),
+        'meet_flight_live');
+
+    // And the same field as a list, ruled off where the flights are.
+    await tester.tap(find.text('Series'));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_flight_field.png'));
+
+    // And scrolled down to the flight that has not been called: the
+    // heading over it says so, and the cards under it are empty.
+    await tester.drag(find.byType(ListView), const Offset(0, -620));
+    await settle(tester);
+    await expectLater(find.byType(MaterialApp),
+        matchesGoldenFile('$_out/meet_flight_waiting.png'));
+    await tester.tap(find.text('Live'));
+    await settle(tester);
 
     // A field with the cut below the podium: the shaded ground is where a
     // throw has to land, and the javelin's sector is drawn to its own

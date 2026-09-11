@@ -57,11 +57,65 @@ void main() {
       expect(john.seed, '44-06.00');
     });
 
-    test('skips the rules, the flights and the column headers', () {
+    test('skips the rules and the column headers', () {
       final names = found.expand((e) => e.athletes).map((a) => a.name);
       expect(names.any((n) => n.toLowerCase().contains('flight')), isFalse);
       expect(names, isNot(contains('Name')));
       expect(names.length, 5);
+    });
+
+    test('puts each name in the flight it was printed under', () {
+      // A big field is thrown a flight at a time, so which one somebody is
+      // in is the difference between throwing now and throwing in an hour.
+      final shot = found.first;
+      expect(shot.flightCount, 2);
+      expect(shot.athletes.map((a) => a.flight), [1, 1, 2]);
+      // Nothing split the discus, so it is one flight of three.
+      expect(found.last.flightCount, 1);
+      expect(found.last.athletes.every((a) => a.flight == 1), isTrue);
+    });
+  });
+
+  group('a flight heading', () {
+    List<int> flightsIn(String heading) => parseHeatSheet('Event 1 Shot Put\n'
+            '$heading\n'
+            ' 1 Diaz, Ana  Central  13.55m')
+        .single
+        .athletes
+        .map((a) => a.flight)
+        .toList();
+
+    test('is read however the sheet words it', () {
+      // Three words for one thing: a throws sheet says flight, a track one
+      // says heat, and plenty of both say section.
+      expect(flightsIn('Flight 2 of 3'), [2]);
+      expect(flightsIn('FLIGHT  2'), [2]);
+      expect(flightsIn('Section 3'), [3]);
+      expect(flightsIn('Heat 2 of 4'), [2]);
+      expect(flightsIn('Flight #2'), [2]);
+    });
+
+    test('needs its number, so a school is not a flight', () {
+      // 'Flight Academy' down a school column names nobody's flight, and
+      // neither does a thrower called Heath.
+      expect(
+          parseHeatSheet('Event 1 Shot Put\n'
+                  ' 1 Heath, Sam   Flight Academy   13.55m')
+              .single
+              .athletes
+              .single
+              .flight,
+          1);
+    });
+
+    test('starts again at one under the next event', () {
+      final found = parseHeatSheet('Event 1 Shot Put\n'
+          'Flight 2 of 2\n'
+          ' 1 Diaz, Ana  Central  13.55m\n'
+          'Event 2 Discus\n'
+          ' 1 Okoye, M  Barnet  41.20m');
+      expect(found.first.athletes.single.flight, 2);
+      expect(found.last.athletes.single.flight, 1);
     });
   });
 
