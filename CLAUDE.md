@@ -311,6 +311,16 @@ like the app rather than a bare Material default.
   already answered. Only the labels move to avoid each other — the lines
   stay where the throws put them, and a label that had to slide grows a
   leader back to its own line.
+- A label on the board is two pills at the edges of the box — place and name
+  at one, the mark at the other — with the line running between them, and
+  they sit level with the ends of their own arc rather than with its middle,
+  which is what makes a label read as belonging to a line. A mark the band
+  broke off has no line to leave room for, so it gets one solid pill and the
+  arrow. The name is `MeetBoardMark.boardName`: the surname and whatever the
+  sheet put in brackets after it, never the initial — 'Achebe (Croydon)'.
+  A program spells a name for somebody who knows nobody; a board is read by
+  somebody watching the competition, and the initial is a third of the width
+  of every label on the sector.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as
