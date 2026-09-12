@@ -12,6 +12,10 @@ import 'analysis_harness.dart';
 const _landscapePhone = Size(740, 360);
 const _portraitPhone = Size(400, 800);
 
+/// A narrow phone held upright — 360 logical pixels across, which is the
+/// common Android width and is too little for the tools in one row.
+const _narrowPhone = Size(360, 760);
+
 void main() {
   late Directory temp;
   late ThrowVideo video;
@@ -159,6 +163,54 @@ void main() {
       expect(pen.top, greaterThan(video.bottom),
           reason: 'the tools are over the frame');
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the frame carries no caption under it', (tester) async {
+      await mount(tester, _portraitPhone);
+      // The calibration reference is stated on the measure sheet and on the
+      // card in the library; under the frame it only cost the band the
+      // tools sit in.
+      expect(find.textContaining('drag video to scrub'), findsNothing);
+      expect(find.textContaining('Ref:'), findsNothing);
+    });
+  });
+
+  group('a narrow phone', () {
+    testWidgets('grows the tools a second row rather than shrinking them',
+        (tester) async {
+      await mount(tester, _narrowPhone);
+      final rects = [for (final c in railControls) tester.getRect(c)];
+      final rows = rects.map((r) => r.center.dy).toSet();
+      expect(rows, hasLength(2), reason: 'the tools should be on two rows');
+
+      // Split where the bar is already grouped: what a tool is picked with
+      // above, what is done to the drawing below.
+      final top = rects.first.center.dy;
+      expect(rects.take(5).every((r) => r.center.dy == top), isTrue);
+      expect(rects.skip(5).every((r) => r.center.dy != top), isTrue);
+
+      // Full-size buttons, not a squeezed row: what the second row is for.
+      for (final key in ['rail-undo', 'rail-redo', 'rail-clear']) {
+        expect(tester.getSize(find.byKey(ValueKey(key))),
+            const Size(40, 36), reason: key);
+      }
+      // The chevron is still last, and so still in the corner.
+      final collapse = tester.getRect(railControls.last);
+      expect(collapse.center.dy, greaterThan(top));
+      expect(collapse.right, greaterThan(_narrowPhone.width - 12));
+      for (final control in railControls) {
+        expectOnScreen(tester, control, _narrowPhone, what: '$control');
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the two rows still clear the frame', (tester) async {
+      await mount(tester, _narrowPhone);
+      final video = tester.getRect(find.byType(DrawingCanvas));
+      for (final control in railControls) {
+        expect(tester.getRect(control).top, greaterThan(video.bottom),
+            reason: '$control is over the frame');
+      }
     });
   });
 }

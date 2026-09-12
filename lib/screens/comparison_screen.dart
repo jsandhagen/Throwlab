@@ -582,13 +582,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                           bottom: 4,
                           child: Align(
                             alignment: Alignment.bottomRight,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.bottomRight,
-                              child: DrawingRail(
-                                controller: _activeDrawing,
-                                initiallyOpen: false,
-                              ),
+                            child: DrawingRail(
+                              controller: _activeDrawing,
+                              initiallyOpen: false,
                             ),
                           ),
                         ),

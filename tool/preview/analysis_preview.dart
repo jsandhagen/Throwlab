@@ -29,10 +29,15 @@ import 'harness.dart';
 /// Where the generated PNGs go, relative to this file.
 const _out = '../../build/preview';
 
-/// A landscape phone in logical pixels — how a throw is filmed, and so how
+/// A landscape phone in physical pixels — how a throw is filmed, and so how
 /// this screen is nearly always read.
 const _landscape = Size(2280, 1080);
-const _portrait = Size(1080, 2280);
+
+/// Upright, at the two widths that lay the tools out differently: 393
+/// logical pixels across holds them in one row, 360 — the common Android
+/// width — grows them a second.
+const _portrait = Size(1179, 2280);
+const _narrowPortrait = Size(1080, 2280);
 
 void main() {
   late Directory temp;
@@ -110,6 +115,11 @@ void main() {
   testWidgets('portrait', (tester) async {
     await mount(tester, _portrait);
     await _shoot(tester, 'analysis_portrait');
+  });
+
+  testWidgets('narrow portrait', (tester) async {
+    await mount(tester, _narrowPortrait);
+    await _shoot(tester, 'analysis_portrait_narrow');
   });
 }
 

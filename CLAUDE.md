@@ -83,8 +83,9 @@ it, and the meet it leaves entered — and the season list: the next fixture at 
 of it, both on a day with a meet on and on a day without, and with what has been
 thrown folded away — and the analysis screen: the drawing tools as a bar
 along the bottom (on their own, with a ring and an arrow drawn, with the
-shape menu open, and folded away to the one chevron), and the same bar
-sitting in the letterbox under an upright frame. Open the PNGs to see
+shape menu open, and folded away to the one chevron), and the same bar in
+the letterbox under an upright frame — in one row on a 393-wide phone, and
+grown to two on a 360-wide one. Open the PNGs to see
 exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
@@ -315,9 +316,17 @@ like the app rather than a bare Material default.
   the release and the flight out of it. Held upright the bar is better
   still — a widescreen clip letterboxed into a portrait screen leaves a band
   of black under it, and the bar sits in the band without covering any of
-  the frame. It scales down rather than scrolling on a screen too narrow to
-  hold it: a tool scrolled out of reach is one nobody finds, and the scroll
-  view that offered it swallowed every drag over the strip it covered. The
+  the frame. On a screen too narrow to hold it — 360 logical pixels across,
+  the common Android width, is 25 short — it grows a second row rather than
+  shrinking its buttons or scrolling: a 34 px target is one a thumb misses
+  at a track, a tool scrolled out of reach is one nobody finds, and the
+  scroll view that offered that swallowed every drag over the strip it
+  covered. The second row's seam is where the bar is already grouped — what
+  a tool is picked with above, what is done to the drawing below, and the
+  chevron still last and so still in the corner. The frame carries no
+  caption under it to make room: the calibration reference a coach needs is
+  stated where it is used, on the measure sheet and on the card in the
+  library, and the two gestures were learned on the first drag. The
   shapes a drag builds share one menu button wearing whichever is selected,
   and the pen weight and color are menus too, which is what keeps the bar to
   ten controls; undo, redo and clear are never among them, because they are

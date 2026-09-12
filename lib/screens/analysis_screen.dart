@@ -1323,10 +1323,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  /// Bottom scrim: calibration hint, scrubber, and transport controls.
-  /// Landscape drops the hint and lays the controls on one line to give
-  /// the short screen back to the video.
-  Widget _bottomOverlay(ImplementSpec spec) {
+  /// Bottom scrim: scrubber and transport controls, plus whatever the
+  /// screen is busy preparing. Landscape lays the controls on one line to
+  /// give the short screen back to the video.
+  ///
+  /// It used to carry a line naming the calibration reference and the two
+  /// gestures. The reference is already stated where it is used — on the
+  /// measure sheet, and on the card in the library — and the gestures are
+  /// learned on the first drag; what the line actually cost was a strip of
+  /// the black band the drawing tools now sit in.
+  Widget _bottomOverlay() {
     final landscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
@@ -1361,18 +1367,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                           .bodySmall
                           ?.copyWith(color: Colors.white70)),
                 ],
-              )
-            else if (!landscape)
-              Text(
-                'Ref: ${spec.weightLabel} '
-                '${spec.referenceLabel.toLowerCase()} '
-                '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
-                '· drag video to scrub · pinch to zoom',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Colors.white70),
               ),
             if (!landscape && _set.length > 1) _filmstrip(),
             PlaybackControls(
@@ -1440,18 +1434,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     bottom: landscape
                         ? 60
                         : (_set.length > 1 ? 150 + _stripHeight : 150)),
+                // Handed the width it has to fit into, since that is what
+                // decides whether the tools lie in one row or two.
                 child: Align(
                   alignment: Alignment.bottomRight,
-                  // Scales the bar down rather than overflowing or
-                  // scrolling on a screen too narrow to hold it: a tool
-                  // scrolled out of reach is one nobody finds, and the
-                  // scroll view it took to offer that swallowed every drag
-                  // over the strip it covered.
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.bottomRight,
-                    child: DrawingRail(controller: _drawing),
-                  ),
+                  child: DrawingRail(controller: _drawing),
                 ),
               ),
             ),
@@ -1460,7 +1447,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             left: 0,
             right: 0,
             bottom: 0,
-            child: _bottomOverlay(widget.video.implementSpec),
+            child: _bottomOverlay(),
           ),
         ],
       ),
