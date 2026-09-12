@@ -304,7 +304,7 @@ String _named(MeetEntry entry) =>
 ///
 /// Drawn to a round number of meters off [boardSpans], exactly as the live
 /// board is, so a gap on the page is a number of meters a reader can count
-/// off the scale under it rather than a shape to be taken on trust.
+/// off the marker lines under it rather than a shape to be taken on trust.
 void _spread(PdfSheet sheet, MeetStandings standings, double toWidth) {
   final shown = [
     for (final place in standings.places)
@@ -346,16 +346,17 @@ void _spread(PdfSheet sheet, MeetStandings standings, double toWidth) {
     // Enough margin for the last ring's label to sit under its own line,
     // and the unit after it.
     final right = math.min(into.width, toWidth) - 26;
-    double at(double value) =>
+    double across(double value) =>
         left + (right - left) * ((value - band.near) / (band.far - band.near));
 
-    // The rings of the scale, run the whole height of the chart so a gap
-    // between two throws can be counted in meters rather than guessed at.
-    for (var ring = band.near; ring <= band.far + 1e-9; ring += band.grid) {
-      into.line(at(ring), axis - 3, at(ring), into.height - head,
+    // The marker lines of the scale, run the whole height of the chart so
+    // a gap between two throws can be counted in meters rather than
+    // guessed at.
+    for (var at = band.near; at <= band.far + 1e-9; at += band.grid) {
+      into.line(across(at), axis - 3, across(at), into.height - head,
           thickness: 0.4, gray: 0.86);
-      into.text(_ring(ring, unit),
-          x: at(ring), y: 3, size: 6, gray: 0.45, align: PdfAlign.center);
+      into.text(_marker(at, unit),
+          x: across(at), y: 3, size: 6, gray: 0.45, align: PdfAlign.center);
     }
     into.text(unit == DistanceUnit.feet ? 'ft' : 'm',
         x: right + 10, y: 3, size: 6, gray: 0.45);
@@ -381,10 +382,10 @@ void _spread(PdfSheet sheet, MeetStandings standings, double toWidth) {
       // along it: a series that arrived in one go and a series that was
       // there all day are the same number in the table and two different
       // afternoons.
-      into.fill(left, y - 1, at(best) - left, 4.5,
+      into.fill(left, y - 1, across(best) - left, 4.5,
           gray: place.place == 1 ? 0.62 : 0.82);
       for (final mark in series.legalMarks) {
-        final x = at(show(mark));
+        final x = across(show(mark));
         into.line(x, y - 2, x, y + 5.5, thickness: 0.7, gray: 0.25);
       }
     }
@@ -392,7 +393,7 @@ void _spread(PdfSheet sheet, MeetStandings standings, double toWidth) {
     // Where the cut falls, across everybody — the one line on the page
     // that says what a throw had to beat rather than what it was.
     if (cut != null && cut >= band.near && cut <= band.far) {
-      final x = at(show(cut));
+      final x = across(show(cut));
       into.line(x, axis - 3, x, into.height - head + 2,
           thickness: 0.7, dash: [2, 2]);
       into.text('cut',
@@ -413,13 +414,14 @@ DistanceUnit _unitOf(List<MeetPlace> places) {
   return feet > places.length / 2 ? DistanceUnit.feet : DistanceUnit.meters;
 }
 
-/// A ring's label, without the trailing zeros a round number doesn't need.
+/// A marker line's label, without the trailing zeros a round number
+/// doesn't need.
 ///
-/// [value] is already in the unit the chart is drawn in. A ring that falls
+/// [value] is already in the unit the chart is drawn in. A line that falls
 /// between two feet is written as a mark is — a scale a reader counts a
 /// competition off should not be the one place on the sheet still in
 /// decimal feet.
-String _ring(double value, DistanceUnit unit) {
+String _marker(double value, DistanceUnit unit) {
   if (value == value.roundToDouble()) return value.toStringAsFixed(0);
   return unit == DistanceUnit.feet
       ? formatFeet(value * metersPerFoot)
@@ -432,7 +434,7 @@ String _ring(double value, DistanceUnit unit) {
 /// Deliberately not [fitBand], which is allowed to leave a mark off the
 /// board and draw it as an arrow instead — a screen can be pinched, and
 /// paper cannot. So every throw is inside this one, and the rung only
-/// decides how far apart the rings are.
+/// decides how far apart the marker lines are.
 ({double near, double far, double grid}) _band(List<double> marks) {
   final low = marks.first;
   final high = marks.last;

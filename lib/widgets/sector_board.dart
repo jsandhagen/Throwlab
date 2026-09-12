@@ -16,8 +16,8 @@ import 'throw_card.dart';
 ///
 /// The sector is drawn to its real angle for the event, and inside the band
 /// the marks are to scale — a fixed, round number of meters deep
-/// ([MeetBoard.span]), with rings under them at [MeetBoard.grid]. What is
-/// not to scale is where the band starts: a sector drawn honestly from the
+/// ([MeetBoard.span]), with marker lines under them at [MeetBoard.grid].
+/// What is not to scale is where the band starts: a sector drawn honestly from the
 /// circle stacks the whole competition into the last few percent of its
 /// length, where three marks a meter apart are three marks on top of each
 /// other. So the board is a window on the stretch being thrown in, and a
@@ -178,30 +178,42 @@ class _SectorBoardPainter extends CustomPainter {
         ).createShader(Offset.zero & size),
     );
 
-    // The scale, drawn: a ring every [MeetBoard.grid] meters. They are what
-    // makes a gap on the board a distance rather than a picture — three
-    // rings between two marks is three of whatever the legend says, at any
-    // zoom, and the eye does that without being asked to.
+    // The scale, drawn: a marker line every [MeetBoard.grid] meters, the
+    // way a sector is painted. They are what makes a gap on the board a
+    // distance rather than a picture — three lines between two marks is
+    // three of whatever the legend says, at any zoom, and the eye does
+    // that without being asked to.
     canvas.save();
     canvas.clipPath(wedge);
-    for (final ring in board.rings) {
-      arc(apex.dy - yOf(ring), stroke(line, 1, 0.32));
+    for (final at in board.markerLines) {
+      arc(apex.dy - yOf(at), stroke(line, 1, 0.32));
     }
     canvas.restore();
 
     // Past the cut is where a throw has to land, so it is drawn as a place
     // rather than as a line: everything beyond the last qualifying mark is
     // shaded, and an athlete can see whether they are in it.
+    //
+    // Bounded by the cut's own arc rather than by a horizontal edge. A
+    // throw lands the same distance out whether it goes down the middle or
+    // close to a sector line, so the ground past the cut is an arc — and a
+    // straight edge across it shades ground that is short of the cut at
+    // the sides of the sector, which is exactly where a place is lost.
     final cut = board.marks.indexWhere((mark) => mark.line == BoardLine.cut);
     // Zoomed in past it, the cut can be off the board. Below the near edge
     // everything drawn is past it and the whole wedge shades; above the far
     // edge none of it is, and nothing does.
     if (cut != -1 && board.fractionOf(board.marks[cut].distance) <= 1) {
+      final radius = apex.dy - math.min(yOf(board.marks[cut].distance), floorY);
       canvas.save();
       canvas.clipPath(wedge);
-      canvas.drawRect(
-        Rect.fromLTRB(0, -2, size.width,
-            math.min(yOf(board.marks[cut].distance), floorY)),
+      canvas.drawPath(
+        // The box with the cut's circle taken out of it: what is left
+        // inside the wedge is the ground beyond the arc.
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Rect.fromLTRB(0, -2, size.width, size.height + 2))
+          ..addOval(Rect.fromCircle(center: apex, radius: math.max(radius, 0))),
         Paint()..color = grass.withOpacity(0.07),
       );
       canvas.restore();
@@ -289,9 +301,9 @@ class _SectorBoardPainter extends CustomPainter {
       }
     }
 
-    // What a ring is worth, in the corner the wedge never reaches. Without
-    // it the rings are decoration; with it the gap between two marks can be
-    // read off the board without reading either label.
+    // What a marker line is worth, in the corner the wedge never reaches.
+    // Without it the lines are decoration; with it the gap between two
+    // marks can be read off the board without reading either label.
     _legend(canvas, size);
 
     for (var i = 0; i < board.marks.length; i++) {
@@ -325,7 +337,7 @@ class _SectorBoardPainter extends CustomPainter {
       text: TextSpan(
         // And, on a board somebody has pinched, the way back to the one it
         // picks for itself — which is otherwise a gesture nothing mentions.
-        text: '${formatBand(board.grid)} rings'
+        text: '${formatBand(board.grid)} lines'
             '${board.fitted ? '' : '  ·  double-tap to fit'}',
         style: text.copyWith(
           fontSize: 10,

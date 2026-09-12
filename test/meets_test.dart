@@ -1155,7 +1155,7 @@ void main() {
     test('puts a band either side of a single mark', () {
       final board = MeetBoard(table(field([('Ana Diaz', 41.20, true)])));
       // The shallowest band it will fit by itself, hung on the one mark and
-      // snapped onto the rings.
+      // snapped onto the marker lines.
       expect(board.span, minFittedSpan);
       expect(board.near, closeTo(40.0, 1e-9));
       expect(board.far, closeTo(42.0, 1e-9));
@@ -1169,7 +1169,7 @@ void main() {
       ])));
       expect(boardSpans, contains(board.span));
       expect(board.grid, gridFor(board.span));
-      // Every line inside it, and both edges on a ring.
+      // Every line inside it, and both edges on a marker line.
       expect(board.near % board.grid, closeTo(0, 1e-9));
       expect(board.holdsEveryMark, isTrue);
       expect(board.fitted, isTrue);
@@ -1203,9 +1203,9 @@ void main() {
       expect(wide.holdsEveryMark, isTrue);
     });
 
-    test('draws a ring every grid step across the band', () {
+    test('draws a marker line every grid step across the band', () {
       final board = MeetBoard(table(field([('Ana Diaz', 41.20, true)])));
-      expect(board.rings, [40.0, 40.5, 41.0, 41.5, 42.0]);
+      expect(board.markerLines, [40.0, 40.5, 41.0, 41.5, 42.0]);
     });
 
     test('breaks to the contest rather than zooming out to a runaway', () {

@@ -256,9 +256,9 @@ class MeetBoard {
   final double near;
   final double far;
 
-  /// How far apart the rings under the marks are, in meters — the scale,
-  /// drawn, so a gap on the board can be read as a distance without doing
-  /// arithmetic off the labels.
+  /// How far apart the marker lines under the marks are, in meters — the
+  /// scale, drawn, so a gap on the board can be read as a distance without
+  /// doing arithmetic off the labels.
   final double grid;
 
   /// Whether the band was picked to hold the marks rather than asked for.
@@ -288,13 +288,19 @@ class MeetBoard {
   double fractionOf(double distance) =>
       far == near ? 0.5 : (distance - near) / (far - near);
 
-  /// Every ring inside the band, near edge first — the scale made visible.
-  List<double> get rings {
+  /// Every marker line inside the band, near edge first — the scale made
+  /// visible.
+  ///
+  /// The lines painted across a sector at a round number of meters, which
+  /// a field is measured against and a coach counts a gap off. Never
+  /// 'rings': in throwing, the ring is the circle the throw is made from,
+  /// and there is one of those on the board already.
+  List<double> get markerLines {
     final out = <double>[];
-    for (var ring = (near / grid).ceilToDouble() * grid;
-        ring <= far + 1e-9;
-        ring += grid) {
-      out.add(_round(ring));
+    for (var at = (near / grid).ceilToDouble() * grid;
+        at <= far + 1e-9;
+        at += grid) {
+      out.add(_round(at));
     }
     return out;
   }
@@ -327,8 +333,8 @@ const double minFittedSpan = 2;
 /// is a coach asking for the smear, which is different.
 const double maxFittedSpan = 10;
 
-/// How far apart the rings are at [span]: four or five of them across the
-/// band, on a number worth reading.
+/// How far apart the marker lines are at [span]: four or five of them
+/// across the band, on a number worth reading.
 double gridFor(double span) => switch (span) {
       <= 0.5 => 0.1,
       <= 1 => 0.2,
@@ -340,15 +346,15 @@ double gridFor(double span) => switch (span) {
     };
 
 /// The near edge of a band [span] deep hung on [center], snapped down onto
-/// the rings.
+/// the marker lines.
 ///
 /// Snapped, because a band that centered itself exactly would slide by a
 /// few centimeters every time anybody threw, and every line on it would
-/// creep even though the mark under it hadn't moved. On the ring grid it
-/// only ever moves a ring at a time, so most throws leave the board where
-/// it was and the one that moves it is obvious. To the nearest ring rather
+/// creep even though the mark under it hadn't moved. On the marker grid it
+/// only ever moves a line at a time, so most throws leave the board where
+/// it was and the one that moves it is obvious. To the nearest line rather
 /// than down onto one: it is a band either side of the marks, and rounding
-/// one way would hang half a ring of empty sector under every board.
+/// one way would hang half a step of empty sector under every board.
 double nearEdge(double center, double span, double grid) {
   final near = (center - span / 2) / grid;
   return _round(math.max(0, near.roundToDouble() * grid));
@@ -396,7 +402,7 @@ double nearEdge(double center, double span, double grid) {
 /// competition around the athlete it belongs to rather than whatever
 /// happens to be within half a span. With no focus it takes the run holding
 /// the most marks, furthest out on a tie: a competition is decided at the
-/// top of it. Both edges land on rings, which is what keeps the board from
+/// top of it. Both edges land on marker lines, which keeps the board from
 /// sliding a few centimeters under every throw.
 ({double near, int held}) placeBand(
     List<double> at, double? focus, double span) {
@@ -453,11 +459,11 @@ double nearEdge(double center, double span, double grid) {
 }
 
 /// Where a band [span] deep starts if it is to hold everything from [low] to
-/// [high] with both edges on a ring — null when no such band exists, which
+/// [high] with both edges on a marker line — null when none exists, which
 /// is how far a band is allowed to grow.
 ///
 /// The snap is the whole of the difficulty: a run a hair under a span wide
-/// can still be unholdable once both edges have to land on rings, and a run
+/// can still be unholdable once both edges have to land on lines, and a run
 /// that looked like it fit is worth nothing if drawing it drops a mark off
 /// the bottom.
 double? _edgeFor(double low, double high, double span, double grid) {
@@ -514,7 +520,7 @@ String boardNameOf(String name) {
   ].join(' ');
 }
 
-/// A band or a ring as a distance: '5 m', '0.5 m'. Round numbers, written
+/// A band or a marker line as a distance: '5 m', '0.5 m'. Round numbers,
 /// round — the scale is only useful if it reads as one number.
 String formatBand(double meters) {
   final whole = meters == meters.roundToDouble();
@@ -522,5 +528,5 @@ String formatBand(double meters) {
 }
 
 /// Meters, to the millimeter. Stepping along a grid in floating point
-/// otherwise leaves a ring at 41.699999999999996, which prints.
+/// otherwise leaves a line at 41.699999999999996, which prints.
 double _round(double meters) => (meters * 1000).roundToDouble() / 1000;

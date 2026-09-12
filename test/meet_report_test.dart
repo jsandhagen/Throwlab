@@ -255,14 +255,14 @@ void main() {
 
     test('draws the competition to a scale the reader can count', () {
       final text = read(field(advancing: 2), marks());
-      // The rings of the scale are labeled, and the cut is drawn across
-      // them — a gap on the chart is a number of meters, not a shape to be
-      // taken on trust.
+      // The marker lines of the scale are labeled, and the cut is drawn
+      // across them — a gap on the chart is a number of meters, not a
+      // shape to be taken on trust.
       expect(text, contains('cut'));
       expect(text, contains(' m'));
       // Every ring between the shortest throw and the longest.
-      for (final ring in ['38', '40', '42', '44']) {
-        expect(text, contains(ring), reason: 'ring $ring is on the scale');
+      for (final at in ['38', '40', '42', '44']) {
+        expect(text, contains(at), reason: 'the $at line is on the scale');
       }
     });
 
