@@ -25,6 +25,7 @@ import 'throw_video.dart';
 /// implement changed.
 class SeasonAverages {
   const SeasonAverages._({
+    required this.season,
     required this.event,
     required this.implementKg,
     required this.meets,
@@ -38,6 +39,9 @@ class SeasonAverages {
     required this.attempts,
     required this.unit,
   });
+
+  /// The year this is over, or null for every season on record.
+  final int? season;
 
   final ThrowEvent event;
   final double implementKg;
@@ -124,6 +128,30 @@ class SeasonAverages {
           if (meet.average != null) meet,
       ];
 
+  /// The seasons there is anything on record for, most recent first.
+  ///
+  /// A season is a calendar year here, which is a simplification and an
+  /// honest one for an outdoor season: it starts in the spring and is over
+  /// by the autumn, so a year holds exactly one of them. The indoor winter
+  /// is the case it does not fit — December and February are one season and
+  /// two years — and when that is worth splitting properly this is the one
+  /// place that has to learn about it.
+  ///
+  /// Fewer than two and there is nothing to split: an athlete with one
+  /// season on record has no second one to be told apart from, and should
+  /// not be asked to choose between a year and itself.
+  static List<int> seasonsOf(
+    Iterable<MeetOuting> outings,
+    Iterable<ThrowResult> results,
+  ) {
+    final years = <int>{
+      for (final outing in outings) outing.date.toLocal().year,
+      for (final result in results)
+        if (result.distance != null) result.displayDate.toLocal().year,
+    };
+    return years.toList()..sort((a, b) => b.compareTo(a));
+  }
+
   /// One reading per event and weight the athlete has thrown, in the order
   /// their bests are listed in — event order, heaviest implement first — so
   /// the averages line up with the marks above them.
@@ -132,22 +160,32 @@ class SeasonAverages {
   /// can have either without the other. Somebody who came in off a heat
   /// sheet untracked has competitions and no marks, and somebody who has
   /// only ever thrown on a Tuesday has marks and no competitions.
+  ///
+  /// [season] narrows it to one year, and null is every season there has
+  /// ever been. An average over a career says what an athlete has been
+  /// rather than what they are — two seasons ago pulls this spring's number
+  /// down, and a coach reading it in June is asking about this spring.
   static List<SeasonAverages> forSeason(
     Iterable<MeetOuting> outings,
-    Iterable<ThrowResult> results,
-  ) {
+    Iterable<ThrowResult> results, {
+    int? season,
+  }) {
     String keyOf(ThrowEvent event, double implementKg) =>
         '${event.name}:$implementKg';
     final kinds = <String, (ThrowEvent, double)>{};
     final byMeet = <String, List<MeetOuting>>{};
     final byMark = <String, List<ThrowResult>>{};
     for (final outing in outings) {
+      if (season != null && outing.date.toLocal().year != season) continue;
       final key = keyOf(outing.event, outing.implementKg);
       kinds[key] = (outing.event, outing.implementKg);
       byMeet.putIfAbsent(key, () => []).add(outing);
     }
     for (final result in results) {
       if (result.distance == null) continue;
+      if (season != null && result.displayDate.toLocal().year != season) {
+        continue;
+      }
       final key = keyOf(result.event, result.implementKg);
       kinds[key] = (result.event, result.implementKg);
       byMark.putIfAbsent(key, () => []).add(result);
@@ -155,6 +193,7 @@ class SeasonAverages {
     final all = [
       for (final kind in kinds.entries)
         SeasonAverages._read(
+          season,
           kind.value.$1,
           kind.value.$2,
           byMeet[kind.key] ?? const [],
@@ -169,6 +208,7 @@ class SeasonAverages {
   }
 
   static SeasonAverages _read(
+    int? season,
     ThrowEvent event,
     double implementKg,
     List<MeetOuting> outings,
@@ -203,6 +243,7 @@ class SeasonAverages {
     }
 
     return SeasonAverages._(
+      season: season,
       event: event,
       implementKg: implementKg,
       meets: meets,

@@ -508,6 +508,62 @@ void main() {
       expect(find.text('AVERAGES'), findsNothing);
     });
 
+    testWidgets('open on the most recent season, and split by the picker',
+        (tester) async {
+      // Last season and this one, at the same event and weight.
+      final meets = await competed([50, 54],
+          id: 'k0', on: DateTime(2025, 6, 14));
+      for (final meet
+          in (await competed([60, 64], on: DateTime(2026, 6, 13))).meets) {
+        await meets.save(meet);
+      }
+      await mountProfile(tester, meets: meets);
+
+      // A career average would answer a question about this spring with
+      // last year's throwing in it.
+      expect(find.text('2026'), findsOneWidget);
+      expect(find.text('62.00 m'), findsOneWidget);
+      expect(find.text('57.00 m'), findsNothing);
+
+      await tester.tap(find.text('2026'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2025').last);
+      await tester.pumpAndSettle();
+      expect(find.text('52.00 m'), findsOneWidget);
+
+      // And all of it together, for the coach who wants the career.
+      await tester.tap(find.text('2025'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Every season').last);
+      await tester.pumpAndSettle();
+      expect(find.text('57.00 m'), findsOneWidget);
+    });
+
+    testWidgets('one season on record is not a choice', (tester) async {
+      await mountProfile(tester, meets: await competed([60, 64]));
+      expect(find.text('AVERAGES'), findsOneWidget);
+      expect(find.byTooltip('Season'), findsNothing);
+    });
+
+    testWidgets('a season with nothing in it says so', (tester) async {
+      // Two seasons on record, but last year holds a single throw — which
+      // is a measurement rather than an average.
+      final meets = await competed([50], id: 'k0', on: DateTime(2025, 6, 14));
+      for (final meet
+          in (await competed([60, 64], on: DateTime(2026, 6, 13))).meets) {
+        await meets.save(meet);
+      }
+      await mountProfile(tester, meets: meets);
+      await tester.tap(find.text('2026'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2025').last);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Nothing to average in 2025'), findsOneWidget);
+      // The picker is still there to get back out of it.
+      expect(find.byTooltip('Season'), findsOneWidget);
+    });
+
     testWidgets('the meet average is drawn across the season', (tester) async {
       final meets = await competed([60, 62]);
       final june = await competed([64, 68],

@@ -66,6 +66,11 @@ List<Map<String, dynamic>> sampleMarks() {
   final now = DateTime.now();
   String daysAgo(int days) =>
       DateTime(now.year, now.month, now.day - days, 14).toIso8601String();
+  // Last season, pinned to the calendar rather than counted back in days,
+  // so the preview has two seasons to be split between whatever day of the
+  // year it is run on.
+  String lastSeason(int month, int day) =>
+      DateTime(now.year - 1, month, day, 14).toIso8601String();
 
   Map<String, dynamic> mark(
     String id,
@@ -101,6 +106,12 @@ List<Map<String, dynamic>> sampleMarks() {
         note: 'League match'),
     mark('m2a', 'Anna Sofia', 'discus', 1, 49.88, daysAgo(44),
         note: 'League match'),
+    // Last September, which is a season of its own: the averages are read
+    // over one season at a time, and a card with nothing to compare itself
+    // to would never show the picker.
+    mark('m5', 'Anna Sofia', 'discus', 1, 49.10, lastSeason(9, 20),
+        note: 'End of last season'),
+    mark('m6', 'Anna Sofia', 'discus', 1, 47.66, lastSeason(8, 30)),
     // Nothing of hers was ever filmed: the whole season is a results sheet.
     mark('m3', 'Priya Raman', 'hammer', 4, 58.44, daysAgo(11),
         note: 'Regional final'),

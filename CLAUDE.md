@@ -65,7 +65,8 @@ to push the last event onto a second page.
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
 profiles (each with the season drawn under its best, what it averages and
-what it fouled away, and the meets it was thrown at), a training note (as
+what it fouled away, and the meets it was thrown at — and one of them read
+over last season instead, through the picker), a training note (as
 it opens, and with the keyboard up — which the note preview fakes, insets
 and all — toolbar above it, and pinned to the top), and the meet tracker:
 the meets as a list and as a calendar, a meet's events, one of them
@@ -422,6 +423,19 @@ like the app rather than a bare Material default.
   thrown, too: under each meet on a profile, and under the coach's own
   athletes in the standings — a coach at the ring is asking what the
   afternoon is averaging, not only what the best of it was.
+- The averages are read one season at a time, and a season is a calendar
+  year (`SeasonAverages.seasonsOf`, `forSeason(season:)`). A career average
+  answers a question about this spring with the throwing of two years ago
+  in it, so the section opens on the most recent season there is anything
+  in and the picker in its heading reaches the others, 'Every season'
+  included. An athlete with one season on record is never shown it — there
+  is nothing to tell apart — and the choice is not remembered between
+  athletes, since the default is already the season being coached. A year
+  is exactly right for an outdoor season and wrong for an indoor winter,
+  which is one season across two years; `seasonsOf` is the one place that
+  would have to learn the difference. The picker governs the section it
+  sits in and nothing else: a personal best is a personal best whatever
+  season it was thrown in.
 - A meet's results go out as a PDF, written by `pdf_writer` — as narrow as
   `pdf_text` is at the other end, and set in Courier, because a results
   sheet is columns and a fixed-width face lines them up without a table of

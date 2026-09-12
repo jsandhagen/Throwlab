@@ -61,9 +61,14 @@ void main() {
         fullName: 'Adam Okafor',
         school: 'Central HS'));
 
-    // Sessions on one implement, meet marks, and written-up notes.
+    // Sessions on one implement, meet marks, and written-up notes. Two
+    // seasons on record, so the averages open on the most recent.
     await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
         'athlete_bests');
+    // The same profile read over last season instead — the card a season
+    // with nothing but training marks in it comes to.
+    await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
+        'athlete_last_season', season: '${DateTime.now().year - 1}');
     // Two weights at once — each keeps its own mark, under an edited nickname.
     await _shoot(tester, library, notes, athletes, meets, 'Adam',
         'athlete_two_implements');
@@ -83,7 +88,8 @@ Future<void> _shoot(
     AthleteLibrary athletes,
     MeetLibrary meets,
     String name,
-    String file) async {
+    String file,
+    {String? season}) async {
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -103,6 +109,14 @@ Future<void> _shoot(
     ),
   );
   await settle(tester);
+  if (season != null) {
+    // Through the picker rather than by seeding it, so the shot is the
+    // screen a coach is actually looking at after choosing a season.
+    await tester.tap(find.byTooltip('Season'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(season).last);
+    await settle(tester);
+  }
   await expectLater(
       find.byType(MaterialApp), matchesGoldenFile('$_out/$file.png'));
 }

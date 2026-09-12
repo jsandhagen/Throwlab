@@ -211,4 +211,88 @@ void main() {
       expect(SeasonAverages.forSeason(const [], const []), isEmpty);
     });
   });
+
+  group('split by season', () {
+    final lastYear = DateTime(2025, 6, 14);
+    final thisYear = DateTime(2026, 6, 13);
+
+    List<Meet> bothYears() => [
+          _meetFor('k1', lastYear, [50, 54]),
+          _meetFor('k2', thisYear, [60, 64]),
+        ];
+    List<ThrowMark> bothBooks() => [
+          ..._book('k1', lastYear, [50, 54]),
+          ..._book('k2', thisYear, [60, 64]),
+        ];
+
+    test('lists the seasons on record, most recent first', () {
+      expect(
+        SeasonAverages.seasonsOf(
+            _outings(bothYears(), bothBooks()), bothBooks()),
+        [2026, 2025],
+      );
+    });
+
+    test('a season is only named once, however much was thrown in it', () {
+      final series = <double?>[60, 64];
+      expect(
+        SeasonAverages.seasonsOf(
+          _outings([
+            _meetFor('k1', thisYear, series),
+            _meetFor('k2', DateTime(2026, 8, 1), series),
+          ], _book('k1', thisYear, series)),
+          [
+            ..._book('k1', thisYear, series),
+            _training('t1', DateTime(2026, 3, 2), 58),
+          ],
+        ),
+        [2026],
+      );
+    });
+
+    test('averages only what was thrown in the season asked for', () {
+      final outings = _outings(bothYears(), bothBooks());
+      final book = bothBooks();
+
+      final now = SeasonAverages.forSeason(outings, book, season: 2026).single;
+      expect(now.season, 2026);
+      expect(now.averageMeetMark, closeTo(62.00, 0.001));
+      expect(now.meetMarks, 2);
+      expect(now.meets, hasLength(1));
+
+      final then = SeasonAverages.forSeason(outings, book, season: 2025).single;
+      expect(then.averageMeetMark, closeTo(52.00, 0.001));
+      expect(then.everyMarks, 2);
+
+      // And every season is the two of them together, which is the number
+      // a season on its own is worth telling apart from.
+      final ever = SeasonAverages.forSeason(outings, book).single;
+      expect(ever.season, isNull);
+      expect(ever.averageMeetMark, closeTo(57.00, 0.001));
+      expect(ever.meets, hasLength(2));
+    });
+
+    test('a season nothing was thrown in averages nothing', () {
+      final outings = _outings(bothYears(), bothBooks());
+      expect(
+        SeasonAverages.forSeason(outings, bothBooks(), season: 2024),
+        isEmpty,
+      );
+    });
+
+    test('the season a training mark falls in is the season it counts to',
+        () {
+      final averages = SeasonAverages.forSeason(
+        const [],
+        [
+          _training('t1', lastYear, 50),
+          _training('t2', lastYear, 54),
+          _training('t3', thisYear, 60),
+        ],
+        season: 2025,
+      ).single;
+      expect(averages.averageEveryMark, closeTo(52.00, 0.001));
+      expect(averages.everyMarks, 2);
+    });
+  });
 }

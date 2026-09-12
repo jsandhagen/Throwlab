@@ -285,19 +285,16 @@ class AthleteScreen extends StatelessWidget {
   /// left out is asking a different question than this answers.
   List<Widget> _averagesSection(BuildContext context, AthleteProfile profile,
       List<MeetOuting> outings) {
-    final averages = [
-      for (final reading in SeasonAverages.forSeason(outings, profile.results))
-        if (!reading.isEmpty) reading,
-    ];
-    if (averages.isEmpty) return const [];
+    // Nothing worth averaging anywhere in their history means no section at
+    // all — rather than a heading and a season picker over an empty space.
+    final ever = SeasonAverages.forSeason(outings, profile.results);
+    if (ever.every((reading) => reading.isEmpty)) return const [];
     return [
-      const SliverToBoxAdapter(child: _SectionHeading('Averages')),
-      SliverList.separated(
-        itemCount: averages.length,
-        separatorBuilder: (context, _) => const SizedBox(height: 8),
-        itemBuilder: (context, index) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: _AveragesTile(averages: averages[index]),
+      SliverToBoxAdapter(
+        child: _AveragesSection(
+          outings: outings,
+          results: profile.results,
+          seasons: SeasonAverages.seasonsOf(outings, profile.results),
         ),
       ),
     ];
@@ -482,10 +479,15 @@ class AthleteScreen extends StatelessWidget {
 }
 
 class _SectionHeading extends StatelessWidget {
-  const _SectionHeading(this.label, [this.trailing]);
+  const _SectionHeading(this.label, [this.trailing, this.action]);
 
   final String label;
   final String? trailing;
+
+  /// A control belonging to the section, sat at the end of its heading —
+  /// where it reads as governing everything under it rather than as part
+  /// of the first card.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -508,7 +510,175 @@ class _SectionHeading extends StatelessWidget {
             Text(trailing!,
                 style: theme.textTheme.labelLarge
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          if (action != null) action!,
         ],
+      ),
+    );
+  }
+}
+
+/// The averages, and the season they are taken over.
+///
+/// A career average is not what anybody means by an average: two seasons
+/// ago pulls this spring's number down, and a coach reading it in June is
+/// asking about this spring. So the section opens on the most recent season
+/// there is anything in, and the picker in its heading is how the others
+/// are reached — an athlete with only one season on record is not asked to
+/// choose between a year and itself, and never sees it.
+///
+/// The choice is not remembered between athletes on purpose: the default
+/// is already the season being coached, and a picker left on 2025 from the
+/// last profile would quietly answer a question about this one with last
+/// year's numbers.
+class _AveragesSection extends StatefulWidget {
+  const _AveragesSection({
+    required this.outings,
+    required this.results,
+    required this.seasons,
+  });
+
+  final List<MeetOuting> outings;
+  final List<ThrowResult> results;
+
+  /// Every season there is anything on record for, most recent first.
+  final List<int> seasons;
+
+  @override
+  State<_AveragesSection> createState() => _AveragesSectionState();
+}
+
+class _AveragesSectionState extends State<_AveragesSection> {
+  /// The season being shown, or null for every one of them.
+  int? _season;
+
+  @override
+  void initState() {
+    super.initState();
+    _season = widget.seasons.length > 1 ? widget.seasons.first : null;
+  }
+
+  @override
+  void didUpdateWidget(_AveragesSection old) {
+    super.didUpdateWidget(old);
+    // A mark recorded while this is open can add a season, or take the last
+    // throw out of the one being shown. Fall back to the newest rather than
+    // leave the picker naming a season with nothing in it.
+    if (_season != null && !widget.seasons.contains(_season)) {
+      _season = widget.seasons.isEmpty ? null : widget.seasons.first;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final averages = [
+      for (final reading in SeasonAverages.forSeason(
+          widget.outings, widget.results,
+          season: _season))
+        if (!reading.isEmpty) reading,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionHeading(
+          'Averages',
+          null,
+          widget.seasons.length < 2
+              ? null
+              : _SeasonPicker(
+                  seasons: widget.seasons,
+                  season: _season,
+                  onChanged: (season) => setState(() => _season = season),
+                ),
+        ),
+        if (averages.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            child: Text(
+              // Said rather than shown as an empty card: the season has an
+              // answer, and the answer is that there is not enough in it.
+              'Nothing to average in $_season — an average wants two '
+              'measured throws behind it.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
+          )
+        else
+          for (final reading in averages)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: _AveragesTile(averages: reading),
+            ),
+      ],
+    );
+  }
+}
+
+/// Which season the averages are over: a year, or all of them.
+///
+/// A year rather than a season proper, which is the simplification
+/// [SeasonAverages.seasonsOf] explains — it is exactly right for an outdoor
+/// season and wrong for an indoor winter, and this is where it would be put
+/// right.
+class _SeasonPicker extends StatelessWidget {
+  const _SeasonPicker({
+    required this.seasons,
+    required this.season,
+    required this.onChanged,
+  });
+
+  final List<int> seasons;
+  final int? season;
+  final ValueChanged<int?> onChanged;
+
+  /// Stands in for 'every season' in the menu. A popup menu cannot carry a
+  /// null value — it is what a dismissed menu returns — and no throw was
+  /// ever taken in year nought.
+  static const _every = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return PopupMenuButton<int>(
+      tooltip: 'Season',
+      position: PopupMenuPosition.under,
+      padding: EdgeInsets.zero,
+      onSelected: (picked) => onChanged(picked == _every ? null : picked),
+      itemBuilder: (context) => [
+        for (final year in seasons)
+          PopupMenuItem(
+            value: year,
+            child: Text('$year',
+                style: TextStyle(
+                    color: year == season ? scheme.primary : null,
+                    fontWeight: year == season ? FontWeight.w700 : null)),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem(
+          value: _every,
+          child: Text('Every season',
+              style: TextStyle(
+                  color: season == null ? scheme.primary : null,
+                  fontWeight: season == null ? FontWeight.w700 : null)),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 3, 2, 3),
+        decoration: ShapeDecoration(
+          shape: angularShape(8),
+          color: scheme.surfaceContainerHighest.withOpacity(0.6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              season == null ? 'Every season' : '$season',
+              style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.primary, fontWeight: FontWeight.w600),
+            ),
+            Icon(Icons.arrow_drop_down, size: 18, color: scheme.primary),
+          ],
+        ),
       ),
     );
   }
