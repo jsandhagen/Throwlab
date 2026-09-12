@@ -97,20 +97,27 @@ class GoldEdgePainter extends CustomPainter {
       old.radius != radius || old.width != width;
 }
 
-/// A first-place medal: two straps of ribbon meeting at a disc, with a star
-/// cut clean out of it.
+/// A first-place medal: a struck disc with a star cut clean out of it,
+/// hanging from two straps of ribbon.
 ///
 /// Drawn like the event glyphs and the sector are, so it scales to whatever
 /// corner it is pinned in, needs no icon font, and takes the same gold as
 /// the frame around the card it sits on. The star is a real hole rather
-/// than a lighter shape, which is what keeps it reading as a medal at 20
+/// than a lighter shape, which is what keeps it reading as a medal at 13
 /// pixels instead of as a yellow blob with a smudge in it.
+///
+/// The disc is the subject. The straps were as wide as it and half again as
+/// tall once, and at the size a personal best is actually marked at —
+/// beside a mark, or a placing — that read as a gold V with something under
+/// it. They are shorter now, and they hang clear of the disc rather than
+/// running under it: ribbon and disc are the same metal, so with nothing
+/// between them the straps melted into the top of the coin.
 class FirstPlaceMedal extends StatelessWidget {
   const FirstPlaceMedal({super.key, this.size = 20});
 
-  /// Width — which is the disc's diameter. The ribbon makes the medal a
-  /// good deal taller than it is wide, so a badge is sized by how big its
-  /// disc should be and the straps follow.
+  /// Width — which is the disc's diameter. The ribbon puts a little more
+  /// height on top, so a badge is sized by how big its disc should be and
+  /// the straps follow.
   final double size;
 
   @override
@@ -129,10 +136,14 @@ class FirstPlaceMedal extends StatelessWidget {
 class _MedalPainter extends CustomPainter {
   const _MedalPainter();
 
-  /// Height as a multiple of width. The disc is the full width and the
-  /// ribbon stands about two thirds of that again above it — long straps
-  /// and a big disc, the proportions a medal hanging on a wall has.
-  static const aspect = 1.62;
+  /// The ribbon's height, and the air under it, as fractions of the disc's
+  /// diameter.
+  static const _ribbon = 0.40;
+  static const _gap = 0.06;
+
+  /// Height as a multiple of width: the disc, plus the ribbon and the gap
+  /// above it.
+  static const aspect = 1 + _ribbon + _gap;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -142,47 +153,55 @@ class _MedalPainter extends CustomPainter {
     final center = Offset(w / 2, h - radius);
     final bounds = Offset.zero & size;
 
-    final metal = Paint()..shader = goldShader(bounds);
-
-    // One layer for the whole medal, so the star can be punched through
-    // the ribbon and the disc alike rather than out of one of them.
+    // One layer for the medal, so the star is punched out of the disc.
     canvas.saveLayer(bounds, Paint());
 
-    // Two broad straps, each running from its own top corner down across
-    // the middle, ending under the disc. Wide, long, and crossing is what
-    // makes them read as ribbon; the narrowing gap between them is the
-    // fold. Drawn first so the disc covers where they cross.
-    final ribbonBottom = center.dy;
+    // Two broad straps, each running from its own top corner down and
+    // inward, crossing on the way and cut off square above the disc. Wide
+    // and crossing is what makes them read as ribbon rather than as two
+    // sticks; the narrowing slot between them is the fold.
+    final ribbon = Paint()..shader = goldShader(bounds);
+    final strapBottom = w * _ribbon;
     canvas
       ..drawPath(
         Path()
-          ..moveTo(0, 0)
-          ..lineTo(w * 0.38, 0)
-          ..lineTo(w * 0.66, ribbonBottom)
-          ..lineTo(w * 0.28, ribbonBottom)
+          ..moveTo(w * 0.10, 0)
+          ..lineTo(w * 0.42, 0)
+          ..lineTo(w * 0.568, strapBottom)
+          ..lineTo(w * 0.248, strapBottom)
           ..close(),
-        metal,
+        ribbon,
       )
       ..drawPath(
         Path()
-          ..moveTo(w * 0.62, 0)
-          ..lineTo(w, 0)
-          ..lineTo(w * 0.72, ribbonBottom)
-          ..lineTo(w * 0.34, ribbonBottom)
+          ..moveTo(w * 0.58, 0)
+          ..lineTo(w * 0.90, 0)
+          ..lineTo(w * 0.752, strapBottom)
+          ..lineTo(w * 0.432, strapBottom)
           ..close(),
-        metal,
+        ribbon,
       )
-      ..drawCircle(center, radius, metal)
+      // The disc takes the ramp across its own square rather than across the
+      // whole badge: a coin is lit corner to corner, and over the taller
+      // bounds it only ever caught the pale end of the sheen.
+      ..drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader =
+              goldShader(Rect.fromCircle(center: center, radius: radius)),
+      )
       ..drawPath(
-        _star(center, radius * 0.62),
+        _star(center, radius * 0.58),
         Paint()..blendMode = BlendMode.clear,
       )
       ..restore();
   }
 
-  /// A five-pointed star, one point straight up.
+  /// A five-pointed star, one point straight up. Chunky rather than
+  /// spindly: the points have to survive being a couple of pixels long.
   Path _star(Offset center, double outer) {
-    final inner = outer * 0.46;
+    final inner = outer * 0.5;
     final path = Path();
     for (var i = 0; i < 10; i++) {
       final radius = i.isEven ? outer : inner;
