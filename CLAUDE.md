@@ -47,7 +47,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/schedule_preview.dart \
                               tool/preview/heat_sheet_preview.dart \
                               tool/preview/season_preview.dart \
-                              tool/preview/compare_preview.dart
+                              tool/preview/compare_preview.dart \
+                              tool/preview/gold_preview.dart
 ```
 
 The results sheet is reviewed the same way, except that the artifact is the
@@ -84,8 +85,11 @@ of it, both on a day with a meet on and on a day without, and with what has been
 thrown folded away — and the compare picker: both slots still empty, one
 filled, both filled and ready to open, the sheet as it opens off a throw,
 the same sheet off the event filter, and a search that found something and
-one that found nothing. Open the PNGs to see exactly what the screen paints. **Re-run it
-after touching a screen's layout and actually look at the output.** Run the
+one that found nothing — and the gold itself: the medal at every size the
+app pins it at, on a line of type and on a card's corner beside the frame,
+and then one big enough to see what was drawn. Open the PNGs to see exactly
+what the screen paints. **Re-run it after touching a screen's layout and
+actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
 
@@ -197,6 +201,16 @@ like the app rather than a bare Material default.
   shared by `GoldEdgePainter` (the card's frame) and `FirstPlaceMedal` (the
   star-cutout medal), so the two read as the same metal. Keep the ramp
   narrow — a wide one makes a convincing coin and a blotchy frame.
+  The medal is a badge before it is a picture: it is pinned at 13 px beside
+  a placing and at 34 px on a shelf, and the size that has to work is the
+  small one. So the disc is the subject and carries the whole width, the
+  ribbon is a little over a third of it, and the straps hang clear of the
+  disc rather than running under it — ribbon and disc are the same metal,
+  and with nothing between them the straps melt into the top of the coin.
+  It was the other way round once, straps as wide as the disc and half
+  again as tall, and beside a mark that read as a gold V with something
+  under it. The star is a hole rather than a lighter shape, which is what
+  keeps it a medal at 13 px instead of a yellow blob with a smudge in it.
 - A training note is a list of typed blocks (`NoteBlockKind`), not a
   document: heading, paragraph, bullet, numbered, checklist, picture with a
   caption. Emphasis is markers in the text (`**bold**`, `*italic*`,
