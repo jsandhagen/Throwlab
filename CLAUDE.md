@@ -203,14 +203,19 @@ like the app rather than a bare Material default.
   narrow — a wide one makes a convincing coin and a blotchy frame.
   The medal is a badge before it is a picture: it is pinned at 13 px beside
   a placing and at 34 px on a shelf, and the size that has to work is the
-  small one. So the disc is the subject and carries the whole width, the
-  ribbon is a little over a third of it, and the straps hang clear of the
-  disc rather than running under it — ribbon and disc are the same metal,
-  and with nothing between them the straps melt into the top of the coin.
-  It was the other way round once, straps as wide as the disc and half
-  again as tall, and beside a mark that read as a gold V with something
-  under it. The star is a hole rather than a lighter shape, which is what
-  keeps it a medal at 13 px instead of a yellow blob with a smudge in it.
+  small one. The disc is the subject, it carries the whole width, and it
+  hangs clear of the ribbon — the two are the same metal, so with nothing
+  between them the straps melt into the top of the coin. The ribbon is one
+  band, tapering as it comes down, with a slot cut across it that leans
+  harder than the band's edges draw in: the right-hand piece runs out to a
+  point and the left carries on to a square end. That lopsidedness is the
+  read. A ribbon has a front and a back and is folded through itself, and
+  two straps leaning symmetrically into each other are a V, which is a
+  letter — which is what the first one looked like beside a mark. Every
+  number in `_MedalPainter` is measured off a reference rather than
+  invented, so change them together or not at all. The star is a hole
+  rather than a lighter shape, which is what keeps it a medal at 13 px
+  instead of a yellow blob with a smudge in it.
 - A training note is a list of typed blocks (`NoteBlockKind`), not a
   document: heading, paragraph, bullet, numbered, checklist, picture with a
   caption. Emphasis is markers in the text (`**bold**`, `*italic*`,

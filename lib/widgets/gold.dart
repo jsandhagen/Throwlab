@@ -106,12 +106,19 @@ class GoldEdgePainter extends CustomPainter {
 /// than a lighter shape, which is what keeps it reading as a medal at 13
 /// pixels instead of as a yellow blob with a smudge in it.
 ///
-/// The disc is the subject. The straps were as wide as it and half again as
+/// The disc is the subject. The ribbon was as wide as it and half again as
 /// tall once, and at the size a personal best is actually marked at —
 /// beside a mark, or a placing — that read as a gold V with something under
-/// it. They are shorter now, and they hang clear of the disc rather than
+/// it. It is shorter now, and it hangs clear of the disc rather than
 /// running under it: ribbon and disc are the same metal, so with nothing
 /// between them the straps melted into the top of the coin.
+///
+/// The ribbon is not two mirrored straps. It is one band, tapering as it
+/// comes down, with a slot cut across it at 45° — so the right-hand piece
+/// runs out to a point while the left carries on to a square end. That
+/// asymmetry is the whole read: a ribbon has a front and a back and is
+/// folded through itself, and two straps leaning symmetrically into each
+/// other are a V, which is a letter.
 class FirstPlaceMedal extends StatelessWidget {
   const FirstPlaceMedal({super.key, this.size = 20});
 
@@ -136,10 +143,22 @@ class FirstPlaceMedal extends StatelessWidget {
 class _MedalPainter extends CustomPainter {
   const _MedalPainter();
 
-  /// The ribbon's height, and the air under it, as fractions of the disc's
-  /// diameter.
-  static const _ribbon = 0.40;
-  static const _gap = 0.06;
+  /// The ribbon, as fractions of the disc's diameter: how tall it stands,
+  /// how much air is under it, how wide it is across the top, and how far
+  /// each edge draws in per unit of height as it comes down.
+  static const _ribbon = 0.585;
+  static const _gap = 0.079;
+  static const _left = 0.030;
+  static const _right = 0.954;
+  static const _taper = 0.37;
+
+  /// The slot through it: where its left edge crosses the top, how wide it
+  /// is measured across, and how far it leans per unit of height. It leans
+  /// harder than the band's edges draw in, which is what runs the
+  /// right-hand piece out to a point while the left one carries on.
+  static const _slot = 0.396;
+  static const _slotWidth = 0.169;
+  static const _slotLean = 0.55;
 
   /// Height as a multiple of width: the disc, plus the ribbon and the gap
   /// above it.
@@ -156,29 +175,38 @@ class _MedalPainter extends CustomPainter {
     // One layer for the medal, so the star is punched out of the disc.
     canvas.saveLayer(bounds, Paint());
 
-    // Two broad straps, each running from its own top corner down and
-    // inward, crossing on the way and cut off square above the disc. Wide
-    // and crossing is what makes them read as ribbon rather than as two
-    // sticks; the narrowing slot between them is the fold.
+    // One band rather than two straps: it tapers as it comes down, and a
+    // leaning slot splits it into a long piece cut off square and a short
+    // one running out to a point. See the class comment for why it is
+    // lopsided; the numbers are measured, not invented.
     final ribbon = Paint()..shader = goldShader(bounds);
-    final strapBottom = w * _ribbon;
+    final foot = w * _ribbon;
+    final band = Path()
+      ..addPolygon([
+        Offset(w * _left, 0),
+        Offset(w * _right, 0),
+        Offset(w * (_right - _taper * _ribbon), foot),
+        Offset(w * (_left + _taper * _ribbon), foot),
+      ], true);
+
+    /// Everything to the right of the slot's edge through [x] — a
+    /// half-plane, as a box big enough to reach past the badge.
+    Path beyond(double x) => Path()
+      ..addPolygon([
+        Offset(w * (x - _slotLean), -w),
+        Offset(w * (x + 2 * _slotLean), 2 * w),
+        Offset(w * (x + 2 * _slotLean + 4), 2 * w),
+        Offset(w * (x - _slotLean + 4), -w),
+      ], true);
+
     canvas
       ..drawPath(
-        Path()
-          ..moveTo(w * 0.10, 0)
-          ..lineTo(w * 0.42, 0)
-          ..lineTo(w * 0.568, strapBottom)
-          ..lineTo(w * 0.248, strapBottom)
-          ..close(),
+        Path.combine(PathOperation.difference, band, beyond(_slot)),
         ribbon,
       )
       ..drawPath(
-        Path()
-          ..moveTo(w * 0.58, 0)
-          ..lineTo(w * 0.90, 0)
-          ..lineTo(w * 0.752, strapBottom)
-          ..lineTo(w * 0.432, strapBottom)
-          ..close(),
+        Path.combine(
+            PathOperation.intersect, band, beyond(_slot + _slotWidth)),
         ribbon,
       )
       // The disc takes the ramp across its own square rather than across the

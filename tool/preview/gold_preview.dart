@@ -27,7 +27,7 @@ const _sizes = [13.0, 14.0, 16.0, 20.0, 28.0, 34.0];
 void main() {
   testWidgets('the gold', (tester) async {
     await loadPreviewFonts();
-    tester.view.physicalSize = const Size(1080, 1500);
+    tester.view.physicalSize = const Size(1080, 1640);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
