@@ -60,7 +60,16 @@ void main() {
 
   tearDown(() => temp.deleteSync(recursive: true));
 
-  Future<void> mount(WidgetTester tester, Size screen) async {
+  /// A handful of other throws from the same session, so the header has a
+  /// set to pull down.
+  List<ThrowVideo> session(Directory directory) => [
+        for (var i = 1; i <= 4; i++)
+          testVideo(directory,
+              id: 'set$i', importedAt: DateTime(2026, 1, i)),
+      ];
+
+  Future<void> mount(WidgetTester tester, Size screen,
+      {List<ThrowVideo> siblings = const []}) async {
     await loadPreviewFonts();
     tester.view.physicalSize = screen;
     tester.view.devicePixelRatio = 3;
@@ -72,7 +81,7 @@ void main() {
         value: VideoLibrary(),
         child: MaterialApp(
           theme: ThrowLabApp.theme,
-          home: AnalysisScreen(video: video),
+          home: AnalysisScreen(video: video, siblings: siblings),
         ),
       ),
     );
@@ -124,8 +133,14 @@ void main() {
   });
 
   testWidgets('portrait', (tester) async {
-    await mount(tester, _portrait);
+    await mount(tester, _portrait, siblings: session(temp));
     await _shoot(tester, 'analysis_portrait');
+
+    // The set, pulled down from under the header — where it is out of the
+    // way of the scrubber, the transport and the drawing tools.
+    await tester.tap(find.byKey(const ValueKey('throw-picker')));
+    await _pump(tester, 20);
+    await _shoot(tester, 'analysis_portrait_picker');
   });
 
   testWidgets('narrow portrait', (tester) async {

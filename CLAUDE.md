@@ -87,7 +87,8 @@ on the frame, with the marks menu open, with the pen panel open, and folded
 away to the one chevron), and the same tools lying along the bottom of an
 upright screen, hard against the scrubber with the pen's weight and color
 split onto a button each — at the width that holds them and at the one that
-shrinks them. Open the PNGs to see
+shrinks them, and with the session pulled down from under the header as a
+strip of stills. Open the PNGs to see
 exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
@@ -311,6 +312,23 @@ like the app rather than a bare Material default.
   event carrying on, flight and all, rather than as a second one of the same
   name: the fields it happens to are the long ones, which are exactly the
   flighted ones.
+- The set a throw was opened with is pulled down from under the header, not
+  laid along the bottom. A strip of stills is the right way to pick a throw
+  out — a coach picks one by looking at it, which a list of 'Shot Put · Men
+  · 2026-09-02' rows never allowed — but it is looked at once and then in
+  the way, and the bottom of the screen is where the scrubber, the transport
+  and the drawing tools all already are. The handle is the title, which
+  already says which throw of how many, so the chevron only has to say
+  there is more behind it; the count leads the label there, because the
+  portrait header is back, a title and five actions on a 390px screen and
+  what the title can least afford to ellipsize away is the half saying
+  there is a session at all. The panel carries its own surface rather than
+  the header's scrim — over a frame that fills the top of the screen, stills
+  on a fading gradient read as floating over the throw instead of as a
+  drawer in front of it — and it stays down across a change of throw
+  (`AnalysisScreen.pickerOpen`), since picking one throw out of a session
+  usually means picking another a moment later. Landscape has no strip at
+  all: the pager chevrons live in the left rail there.
 - The drawing tools run along an edge of the frame and are anchored in its
   bottom-right corner. Which edge follows the shape of the *picture*, not
   the shape of the screen. A clip is filmed on its side, so held that way

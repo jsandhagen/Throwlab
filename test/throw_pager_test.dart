@@ -77,13 +77,46 @@ void main() {
   });
 
   group('portrait', () {
-    testWidgets('the filmstrip shows a still per throw', (tester) async {
+    /// Pulls the set down from under the header.
+    Future<void> openPicker(WidgetTester tester) async {
+      await tester.tap(find.byKey(const ValueKey('throw-picker')));
+      await pumpFrames(tester, 20);
+    }
+
+    testWidgets('the set is behind the title until it is pulled down',
+        (tester) async {
       await mount(tester, video: throwNumber(2));
+      // Nothing across the bottom and nothing over the frame: the strip is
+      // looked at once and then in the way.
+      expect(find.byType(ThrowThumbnail), findsNothing);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
+
+      await openPicker(tester);
       expect(find.byType(ThrowThumbnail), findsNWidgets(3));
+
+      await openPicker(tester);
+      expect(find.byType(ThrowThumbnail), findsNothing);
+    });
+
+    testWidgets('a throw on its own has no handle to pull', (tester) async {
+      await mount(tester, video: throwNumber(2), siblings: const []);
+      expect(find.byKey(const ValueKey('throw-picker')), findsNothing);
+      expect(find.byType(ThrowThumbnail), findsNothing);
+    });
+
+    testWidgets('the panel hangs under the header, over the frame',
+        (tester) async {
+      await mount(tester, video: throwNumber(2));
+      await openPicker(tester);
+      final back = tester.getRect(find.byIcon(Icons.arrow_back));
+      final still = tester.getRect(find.byType(ThrowThumbnail).first);
+      expect(still.top, greaterThan(back.bottom));
+      expect(still.bottom, lessThan(_portraitPhone.height / 2));
     });
 
     testWidgets('tapping next moves on to the following throw', (tester) async {
       await mount(tester, video: throwNumber(2));
+      await openPicker(tester);
       await tester.tap(find.byIcon(Icons.chevron_right));
       await pumpFrames(tester, 12);
       expect(find.textContaining('3 of 3'), findsOneWidget);
@@ -92,13 +125,25 @@ void main() {
     testWidgets('tapping a still in the strip opens that throw',
         (tester) async {
       await mount(tester, video: throwNumber(1));
+      await openPicker(tester);
       await tester.tap(find.byType(ThrowThumbnail).last);
       await pumpFrames(tester, 12);
       expect(find.textContaining('3 of 3'), findsOneWidget);
     });
 
+    testWidgets('the panel stays down across a change of throw',
+        (tester) async {
+      await mount(tester, video: throwNumber(1));
+      await openPicker(tester);
+      await tester.tap(find.byType(ThrowThumbnail).last);
+      await pumpFrames(tester, 20);
+      // Picking one throw out of a session usually means picking another.
+      expect(find.byType(ThrowThumbnail), findsNWidgets(3));
+    });
+
     testWidgets('the first throw has nowhere earlier to go', (tester) async {
       await mount(tester, video: throwNumber(1));
+      await openPicker(tester);
       expect(pager(tester, Icons.chevron_left).onPressed, isNull);
       expect(pager(tester, Icons.chevron_right).onPressed, isNotNull);
     });
@@ -106,6 +151,7 @@ void main() {
     testWidgets('the last throw does not wrap back to the first',
         (tester) async {
       await mount(tester, video: throwNumber(3));
+      await openPicker(tester);
       expect(pager(tester, Icons.chevron_left).onPressed, isNotNull);
       expect(pager(tester, Icons.chevron_right).onPressed, isNull);
     });

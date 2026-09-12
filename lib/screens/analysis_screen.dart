@@ -44,9 +44,17 @@ class AnalysisScreen extends StatefulWidget {
     super.key,
     required this.video,
     this.siblings = const [],
+    this.pickerOpen = false,
   });
 
   final ThrowVideo video;
+
+  /// Whether the throw picker is already pulled down. Paging through a
+  /// session replaces this screen with the next throw's, and a coach
+  /// picking one throw out of the set usually picks another a moment
+  /// later — so the panel is carried across rather than snapping shut
+  /// under the finger that just used it.
+  final bool pickerOpen;
 
   /// The throws [video] was opened alongside — one athlete's, or one
   /// event's. Given them, the screen pages through the set instead of
@@ -99,6 +107,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   /// How much height the filmstrip costs the bottom overlay.
   static const double _stripHeight = 52;
+
+  /// Whether the throw picker is pulled down from under the header.
+  late bool _pickerOpen = widget.pickerOpen && _set.length > 1;
 
   _MeasureStep? _measureStep;
   Offset? _refA, _refB, _pointA, _pointB;
@@ -1045,13 +1056,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  String get _throwLabel {
-    final throwName = '${widget.video.event.label} · '
-        '${widget.video.implementSpec.weightLabel}';
-    return _set.length > 1
-        ? '$throwName · ${_index + 1} of ${_set.length}'
-        : throwName;
-  }
+  String get _throwName => '${widget.video.event.label} · '
+      '${widget.video.implementSpec.weightLabel}';
+
+  String get _throwLabel => _set.length > 1
+      ? '$_throwName · ${_index + 1} of ${_set.length}'
+      : _throwName;
+
+  /// The same label with the count in front of it, for the handle the set
+  /// is pulled down on. The portrait header is back, a title and five
+  /// actions on a 390px screen, so the title ellipsizes — and what it can
+  /// least afford to lose is the half saying there is a session behind it.
+  String get _pickerLabel =>
+      '${_index + 1} of ${_set.length} · $_throwName';
 
   /// Back, then the per-throw actions. [vertical] lays them out for the
   /// left rail, where the title is carried by the implement glyph's tooltip
@@ -1083,8 +1100,40 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 color: eventColor(widget.video.event)),
           ),
         )
+      else if (_set.length <= 1)
+        Expanded(child: title)
       else
-        Expanded(child: title),
+        // With a session behind it the title is the handle the set is
+        // pulled down on: it already says which throw of how many, so the
+        // chevron only has to say that there is more behind it.
+        Expanded(
+          child: InkWell(
+            key: const ValueKey('throw-picker'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: _togglePicker,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      _pickerLabel,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Icon(
+                    _pickerOpen
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       IconButton(
         tooltip: widget.video.athlete.isEmpty
             ? 'Tag athlete'
@@ -1219,8 +1268,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     Navigator.pushReplacement(
       context,
       PageRouteBuilder<void>(
-        pageBuilder: (_, __, ___) =>
-            AnalysisScreen(video: video, siblings: _set),
+        pageBuilder: (_, __, ___) => AnalysisScreen(
+            video: video, siblings: _set, pickerOpen: _pickerOpen),
         // The frame should change like a channel, not like a page arriving.
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
@@ -1229,6 +1278,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Scrolls the strip so the open throw sits in the middle of it.
+  void _togglePicker() {
+    setState(() => _pickerOpen = !_pickerOpen);
+    // The strip is only in the tree once the panel is down, so it is
+    // centered on the open rather than at init.
+    if (_pickerOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
+    }
+  }
+
   void _centerStrip() {
     if (!mounted || !_strip.hasClients) return;
     final target = _index * _stripExtent +
@@ -1255,8 +1313,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// never allowed.
   Widget _filmstrip() {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
+    return Container(
       height: _stripHeight,
+      // Its own surface rather than the header's scrim: pulled down over a
+      // frame that fills the top of the screen, stills on a fading gradient
+      // read as floating over the throw instead of as a drawer in front of
+      // it.
+      decoration: BoxDecoration(
+        color: scheme.surface.withOpacity(0.92),
+        borderRadius:
+            const BorderRadius.vertical(bottom: Radius.circular(16)),
+      ),
       child: Row(
         children: [
           _pagerButton(forward: false),
@@ -1318,6 +1385,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: _headerActions(vertical: false)),
+            // Pulled down from under the header rather than laid along the
+            // bottom. A strip of stills is how a throw is picked out — by
+            // looking at it — but it is looked at once and then in the way,
+            // and the bottom of the screen is where the scrubber, the
+            // transport and the drawing tools all already are.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              alignment: Alignment.topCenter,
+              child: _pickerOpen
+                  ? _filmstrip()
+                  : const SizedBox(width: double.infinity),
+            ),
             if (banner != null) banner,
           ],
         ),
@@ -1396,7 +1476,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                           ?.copyWith(color: Colors.white70)),
                 ],
               ),
-            if (!landscape && _set.length > 1) _filmstrip(),
             // Upright the tools belong with the rest of the chrome rather
             // than floating over the frame at a guessed inset: laid out
             // here they sit hard against the scrubber whatever else the
