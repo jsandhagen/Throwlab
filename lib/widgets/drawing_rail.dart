@@ -4,34 +4,42 @@ import 'package:flutter/material.dart';
 
 import 'drawing_canvas.dart';
 
-/// The drawing tools, as a bar along the bottom of the frame.
+/// The drawing tools, run along an edge of the frame and anchored in its
+/// bottom-right corner.
 ///
-/// It was a column down the right edge, which is where the throw is. A clip
-/// is filmed on its side, so a phone reading one has ~360 logical pixels of
-/// height and plenty of width: a column of ten controls is taller than the
-/// screen and crosses the right-center and upper-right of the picture — the
-/// release, and the flight out of it — while a bar of the same ten costs
-/// one button's worth of height. Held upright the bar is better still: a
-/// widescreen clip letterboxed into a portrait screen leaves a band of
-/// black under it, and the bar sits in that band without covering any of
-/// the frame at all.
+/// Which edge is [axis], and it follows the shape of the picture rather than
+/// the shape of the screen. A clip is filmed on its side, so held that way
+/// the frame fills the screen and the tools have to sit on it somewhere:
+/// they go up the right edge, out past the release and the flight, which is
+/// the least of the picture to stand in front of. Held upright the same
+/// clip is letterboxed into a band of black above and below, so the tools
+/// lie along the bottom instead and cover none of the frame at all.
+///
+/// Either way they run out of room before they run out of controls — a
+/// phone gives about 300 logical pixels of height on its side and 360 of
+/// width upright, and the tools want 341. So the rail grows a second run
+/// rather than shrinking its buttons: a 34 px target is one a thumb misses
+/// at a track. The seam is where the tools are already grouped — what a
+/// tool is picked with in the first run, what is done to the drawing in the
+/// second — and the chevron is still last, so it is still in the corner.
 ///
 /// The shapes that build on a drag (line, arrow, curved arrow, circle,
 /// angle) share one menu button that wears whichever is selected, and the
-/// pen weight and color are menus too, so the bar stays ten controls wide
+/// pen weight and color are menus too, so the rail stays nine controls long
 /// rather than the 18 it offers. Undo, redo and clear are not among them —
 /// they are what a drawing hand reaches for most, and a tool that has to be
 /// hunted for in a menu is one nobody uses. Clear is safe to leave in the
 /// open because undo brings the whole frame back.
 ///
 /// A dedicated chevron on the end — always there, open or closed, and never
-/// also a tool — collapses the bar down to just that button, so there is
+/// also a tool — collapses the rail down to just that button, so there is
 /// one fixed target for getting the tools out of the way and back.
 class DrawingRail extends StatefulWidget {
   const DrawingRail({
     super.key,
     required this.controller,
     this.initiallyOpen = true,
+    this.axis = Axis.vertical,
   });
 
   final DrawingController controller;
@@ -40,6 +48,10 @@ class DrawingRail extends StatefulWidget {
   /// starts collapsed: its video area is already split between two clips,
   /// and drawing is the occasional job there rather than the main one.
   final bool initiallyOpen;
+
+  /// Which way the tools run: a column up an edge of the frame, or a bar
+  /// along one.
+  final Axis axis;
 
   @override
   State<DrawingRail> createState() => _DrawingRailState();
@@ -50,6 +62,8 @@ class _DrawingRailState extends State<DrawingRail> {
 
   DrawingController get controller => widget.controller;
 
+  bool get _upright => widget.axis == Axis.vertical;
+
   /// The two modes worth a button of their own: scrubbing without drawing,
   /// and the freehand pen.
   static const _directTools = [
@@ -58,8 +72,8 @@ class _DrawingRailState extends State<DrawingRail> {
   ];
 
   /// The shapes a drag builds, sharing one menu button that shows whichever
-  /// is selected — five more icons is more than a bar has room for on a
-  /// phone.
+  /// is selected — five more icons is more than an edge of a phone has room
+  /// for.
   static const _shapeTools = [
     (DrawTool.line, Icons.timeline, 'Straight line'),
     (DrawTool.arrow, Icons.arrow_right_alt, 'Arrow (drag tail to head)'),
@@ -86,8 +100,8 @@ class _DrawingRailState extends State<DrawingRail> {
       );
 
   /// Rail buttons are drawn 40x36 and sized to match: Material's default
-  /// 48px tap padding around each one is invisible width the bar cannot
-  /// spare on a phone, where all ten controls have to fit across it.
+  /// 48px tap padding around each one is invisible room the rail cannot
+  /// spare on a phone, where all nine controls have to fit along an edge.
   ButtonStyle _styleFor(bool selected, ColorScheme scheme) =>
       IconButton.styleFrom(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -188,35 +202,57 @@ class _DrawingRailState extends State<DrawingRail> {
         ),
       );
 
-  /// The breath between groups of buttons.
-  static const _gapWidth = 2.0;
-  static const _gap = SizedBox(width: _gapWidth);
-
-  /// The rule that cuts the collapse chevron off from the tools. Given a
-  /// height of its own because a two-row bar lays it out in a Row whose
-  /// other children are the ones setting the height.
-  static const _ruleWidth = 5.0;
-  Widget _rule(ColorScheme scheme) => SizedBox(
-        height: _slotHeight,
-        child: VerticalDivider(
-          width: _ruleWidth,
-          thickness: 1,
-          indent: 6,
-          endIndent: 6,
-          color: scheme.onSurface.withOpacity(0.2),
-        ),
+  /// The breath between groups of buttons, along the rail's own axis.
+  static const _gapExtent = 2.0;
+  Widget get _gap => SizedBox(
+        width: _upright ? 0 : _gapExtent,
+        height: _upright ? _gapExtent : 0,
       );
 
-  /// What the bar measures laid out as one row — five controls for the pen,
-  /// four for the drawing, two gaps, the rule and the padding around it all.
-  static const _oneRowWidth =
-      _slotWidth * 9 + _gapWidth * 2 + _ruleWidth + _sidePadding * 2;
+  /// The rule that cuts the collapse chevron off from the tools, drawn
+  /// across the rail. It is given a size of its own on the other axis
+  /// because a second run lays it out beside children that are no longer
+  /// the ones setting the measurement it would inherit.
+  static const _ruleExtent = 5.0;
+  Widget _rule(ColorScheme scheme) {
+    final color = scheme.onSurface.withOpacity(0.2);
+    return _upright
+        ? SizedBox(
+            width: _slotWidth,
+            child: Divider(
+                height: _ruleExtent,
+                thickness: 1,
+                indent: 8,
+                endIndent: 8,
+                color: color),
+          )
+        : SizedBox(
+            height: _slotHeight,
+            child: VerticalDivider(
+                width: _ruleExtent,
+                thickness: 1,
+                indent: 6,
+                endIndent: 6,
+                color: color),
+          );
+  }
+
+  /// What the rail measures as a single run — five controls for the pen,
+  /// four for the drawing, two gaps, the rule, and the padding around the
+  /// lot. It comes out within a few pixels of 340 either way up.
+  double get _oneRunExtent =>
+      (_upright ? _slotHeight : _slotWidth) * 9 +
+      _gapExtent * 2 +
+      _ruleExtent +
+      _sidePadding * 2;
 
   /// Which way the chevron points: away from the tools when they are
-  /// showing, back toward them when they are not. The bar is anchored at
-  /// the chevron's end, against the right edge, so 'away' is to the right.
-  IconData get _chevron =>
-      _open ? Icons.keyboard_arrow_right : Icons.keyboard_arrow_left;
+  /// showing, back toward them when they are not. The rail is anchored at
+  /// the chevron's end, in the bottom-right corner, so 'away' is down a
+  /// column and to the right along a bar.
+  IconData get _chevron => _upright
+      ? (_open ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up)
+      : (_open ? Icons.keyboard_arrow_right : Icons.keyboard_arrow_left);
 
   /// What is armed and what it draws with — the half of the bar a tool is
   /// picked out of.
@@ -360,8 +396,23 @@ class _DrawingRailState extends State<DrawingRail> {
         onPressed: () => setState(() => _open = !_open),
       );
 
-  Widget _row(List<Widget> children) =>
-      Row(mainAxisSize: MainAxisSize.min, children: children);
+  /// One run of controls, along the rail's own axis.
+  Widget _run(List<Widget> children) => Flex(
+        direction: widget.axis,
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      );
+
+  /// The two runs side by side, across the rail: a column each way up a
+  /// vertical rail, a row each way along a horizontal one. Both are aligned
+  /// to the far end, so the second run finishes in the same corner the
+  /// first one does.
+  Widget _runs(List<Widget> first, List<Widget> second) => Flex(
+        direction: _upright ? Axis.horizontal : Axis.vertical,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [_run(first), _run(second)],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -370,14 +421,15 @@ class _DrawingRailState extends State<DrawingRail> {
       animation: controller,
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
-          // Too narrow for one row and the bar grows a second one rather
-          // than shrinking its buttons: a 34px target is one a thumb misses
-          // at a track, and there is height going spare under a letterboxed
-          // frame where a phone is narrow. The seam is where the bar is
-          // already grouped — what a tool is picked with above, what is
-          // done to the drawing below, the chevron still last and so still
-          // in the corner.
-          final oneRow = constraints.maxWidth >= _oneRowWidth;
+          // Out of room along the edge and the rail grows a second run
+          // rather than shrinking its buttons: a 34 px target is one a
+          // thumb misses at a track, and there is room going spare across
+          // the rail in both orientations. The seam is where the tools are
+          // already grouped — what a tool is picked with in the first run,
+          // what is done to the drawing in the second, the chevron still
+          // last and so still in the corner.
+          final room = _upright ? constraints.maxHeight : constraints.maxWidth;
+          final oneRun = room >= _oneRunExtent;
           final pen = _penControls(scheme);
           final actions = [..._actionControls(scheme), _rule(scheme)];
           return Material(
@@ -385,20 +437,15 @@ class _DrawingRailState extends State<DrawingRail> {
             borderRadius: BorderRadius.circular(24),
             clipBehavior: Clip.antiAlias,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: _sidePadding),
+              padding: _upright
+                  ? const EdgeInsets.symmetric(vertical: _sidePadding)
+                  : const EdgeInsets.symmetric(horizontal: _sidePadding),
               child: !_open
-                  ? _row([_collapseButton(scheme)])
-                  : oneRow
-                      ? _row(
+                  ? _run([_collapseButton(scheme)])
+                  : oneRun
+                      ? _run(
                           [...pen, _gap, ...actions, _collapseButton(scheme)])
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            _row(pen),
-                            _row([...actions, _collapseButton(scheme)]),
-                          ],
-                        ),
+                      : _runs(pen, [...actions, _collapseButton(scheme)]),
             ),
           );
         },
@@ -408,5 +455,5 @@ class _DrawingRailState extends State<DrawingRail> {
 }
 
 /// Names for the annotation colors, in [kAnnotationColors] order, for the
-/// bar's color menu.
+/// rail's color menu.
 const _colorNames = ['Orange', 'Green', 'Cyan', 'Pink', 'White'];

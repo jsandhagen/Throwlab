@@ -10,7 +10,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `drawing_canvas` and `drawing_rail` (the tools, as a bar along the bottom of the frame), playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -81,11 +81,12 @@ leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field with the flights ruled off in
 it, and the meet it leaves entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
-thrown folded away — and the analysis screen: the drawing tools as a bar
-along the bottom (on their own, with a ring and an arrow drawn, with the
-shape menu open, and folded away to the one chevron), and the same bar in
-the letterbox under an upright frame — in one row on a 393-wide phone, and
-grown to two on a 360-wide one. Open the PNGs to see
+thrown folded away — and the analysis screen: the drawing tools up the right
+edge of a frame on its side, in two short columns in the corner (on their
+own, with a ring and an arrow drawn, with the shape menu open, and folded
+away to the one chevron), and the same tools lying along the bottom in the
+letterbox under an upright frame — one row on a 393-wide phone, two on a
+360-wide one. Open the PNGs to see
 exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
@@ -309,31 +310,36 @@ like the app rather than a bare Material default.
   event carrying on, flight and all, rather than as a second one of the same
   name: the fields it happens to are the long ones, which are exactly the
   flighted ones.
-- The drawing tools are a bar along the bottom of the frame, never a column
-  down its side. A clip is filmed on its side, so the screen reading one has
-  ~360 logical pixels of height: a column of ten controls is taller than
-  that and crosses the right-center and upper-right of the picture, which is
-  the release and the flight out of it. Held upright the bar is better
-  still — a widescreen clip letterboxed into a portrait screen leaves a band
-  of black under it, and the bar sits in the band without covering any of
-  the frame. On a screen too narrow to hold it — 360 logical pixels across,
-  the common Android width, is 25 short — it grows a second row rather than
+- The drawing tools run along an edge of the frame and are anchored in its
+  bottom-right corner. Which edge follows the shape of the *picture*, not
+  the shape of the screen. A clip is filmed on its side, so held that way
+  the frame fills the screen and the tools have to sit on it somewhere: they
+  go up the right edge, out past the release and the flight, which is the
+  least of the picture to stand in front of. Held upright the same clip is
+  letterboxed into a band of black above and below, so the tools lie along
+  the bottom and cover none of the frame at all — which is what the line
+  under the frame naming the calibration reference was costing, so it is
+  gone: the reference is stated where it is used, on the measure sheet and
+  on the card in the library, and the two gestures were learned on the first
+  drag.
+  Either way they run out of room before they run out of controls — a phone
+  gives ~300 logical pixels of height on its side and 360 of width upright,
+  and the tools want 341 — so the rail grows a second run rather than
   shrinking its buttons or scrolling: a 34 px target is one a thumb misses
   at a track, a tool scrolled out of reach is one nobody finds, and the
   scroll view that offered that swallowed every drag over the strip it
-  covered. The second row's seam is where the bar is already grouped — what
-  a tool is picked with above, what is done to the drawing below, and the
-  chevron still last and so still in the corner. The frame carries no
-  caption under it to make room: the calibration reference a coach needs is
-  stated where it is used, on the measure sheet and on the card in the
-  library, and the two gestures were learned on the first drag. The
-  shapes a drag builds share one menu button wearing whichever is selected,
-  and the pen weight and color are menus too, which is what keeps the bar to
-  ten controls; undo, redo and clear are never among them, because they are
-  what a drawing hand reaches for most. Clear can sit in the open because
-  undo brings the whole frame back — `DrawingController` keeps the edits
-  rather than snapshots of the frame, since an annotation goes on mutating
-  while the finger is down.
+  covered. The seam is where the tools are already grouped — what a tool is
+  picked with in the first run, what is done to the drawing in the second —
+  and the chevron is still last, so it is still in the corner. Two short
+  columns in the corner are also less of the frame than one long one down
+  the whole edge.
+  The shapes a drag builds share one menu button wearing whichever is
+  selected, and the pen weight and color are menus too, which is what keeps
+  the rail to nine controls; undo, redo and clear are never among them,
+  because they are what a drawing hand reaches for most. Clear can sit in
+  the open because undo brings the whole frame back — `DrawingController`
+  keeps the edits rather than snapshots of the frame, since an annotation
+  goes on mutating while the finger is down.
 - A shape is drawn the way it is measured. An arrow is dragged tail to head,
   a curved arrow traces the path it wants and takes its head where the
   finger lifts, and a circle is dragged out from the middle: what is being

@@ -89,31 +89,46 @@ void main() {
       }
     });
 
-    testWidgets('the tools are a bar along the bottom, not a column',
+    testWidgets('the tools run up the right edge, not across the bottom',
         (tester) async {
       await mount(tester, _landscapePhone);
-      final first = tester.getRect(railControls.first);
-      final last = tester.getRect(railControls.last);
-      // One row, reading left to right, with the chevron on the end of it.
-      // Centers, since a finder on an icon measures the glyph and one on a
-      // button measures the slot around it.
-      expect(last.center.dx, greaterThan(first.center.dx));
-      expect(last.center.dy, closeTo(first.center.dy, 1));
-      // Anchored to the bottom-right: the chevron is the fixed target.
-      expect(last.right, greaterThan(_landscapePhone.width * 0.9));
-      // Clear of the header rail down the left edge.
-      expect(first.left, greaterThanOrEqualTo(64));
+      final rects = [for (final c in railControls) tester.getRect(c)];
+      // Two columns — 341 of tools into 300 of usable height — so the pen
+      // reads down the first and the drawing's own controls down the
+      // second. Centers, since a finder on an icon measures the glyph and
+      // one on a button measures the slot around it.
+      final columns = rects.map((r) => r.center.dx).toSet();
+      expect(columns, hasLength(2));
+      final pen = rects.take(5).toList();
+      for (var i = 1; i < pen.length; i++) {
+        expect(pen[i].center.dx, closeTo(pen.first.center.dx, 1));
+        expect(pen[i].center.dy, greaterThan(pen[i - 1].center.dy));
+      }
+      // Full-size buttons: growing a second column is what that is for.
+      expect(tester.getSize(find.byKey(const ValueKey('rail-clear'))),
+          const Size(40, 36));
+      // Hard against the right edge, with the chevron last and so in the
+      // corner.
+      final collapse = rects.last;
+      expect(collapse.right, greaterThan(_landscapePhone.width * 0.9));
+      expect(collapse.center.dx, greaterThan(pen.first.center.dx));
+      expect(collapse.bottom, greaterThan(_landscapePhone.height * 0.75));
+      for (final control in railControls) {
+        expectOnScreen(tester, control, _landscapePhone, what: '$control');
+      }
     });
 
-    testWidgets('the tools leave the right and upper frame to the throw',
+    testWidgets('the tools keep to the corner, not the length of the edge',
         (tester) async {
       await mount(tester, _landscapePhone);
-      // The whole bar sits in the bottom band, so the right-center and
-      // upper-right — where the throw is — are the video's.
+      // Two short columns rather than one long one: the top half of the
+      // frame — and everything left of the last 12% of it — is the video's.
       for (final control in railControls) {
-        expect(tester.getRect(control).top,
-            greaterThan(_landscapePhone.height * 0.6),
+        final rect = tester.getRect(control);
+        expect(rect.top, greaterThan(_landscapePhone.height * 0.25),
             reason: '$control is up in the frame');
+        expect(rect.left, greaterThan(_landscapePhone.width * 0.85),
+            reason: '$control is out in the frame');
       }
     });
 

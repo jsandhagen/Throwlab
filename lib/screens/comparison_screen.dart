@@ -577,6 +577,10 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                         // bottom the same way: they act on the pane last
                         // drawn in, and the tool they set arms both.
                         Positioned(
+                          // Anchored top as well as bottom so the rail is
+                          // handed a height: that is what tells it whether
+                          // the tools take one run up the edge or two.
+                          top: 4,
                           left: 4,
                           right: 4,
                           bottom: 4,
@@ -585,6 +589,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                             child: DrawingRail(
                               controller: _activeDrawing,
                               initiallyOpen: false,
+                              axis: landscape
+                                  ? Axis.vertical
+                                  : Axis.horizontal,
                             ),
                           ),
                         ),

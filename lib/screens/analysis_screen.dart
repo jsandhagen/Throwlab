@@ -1424,7 +1424,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             bottom: 0,
             child: SafeArea(
               child: Padding(
-                // The tools lie along the bottom, clear of the
+                // The tools hug the bottom-right corner, clear of the
                 // scrubber/transport overlay (a single shorter row in
                 // landscape) and of the filmstrip where there is one.
                 // Landscape starts them clear of the header rail down the
@@ -1434,11 +1434,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     bottom: landscape
                         ? 60
                         : (_set.length > 1 ? 150 + _stripHeight : 150)),
-                // Handed the width it has to fit into, since that is what
-                // decides whether the tools lie in one row or two.
+                // Handed the whole box it has to fit into, since that is
+                // what decides whether the tools take one run or two.
                 child: Align(
                   alignment: Alignment.bottomRight,
-                  child: DrawingRail(controller: _drawing),
+                  child: DrawingRail(
+                    controller: _drawing,
+                    // On its side the frame fills the screen, so the tools
+                    // go up the right edge — past the release and the
+                    // flight, which is the least of the picture to stand in
+                    // front of. Upright the same clip is letterboxed, and
+                    // the band of black under it takes the tools for free.
+                    axis: landscape ? Axis.vertical : Axis.horizontal,
+                  ),
                 ),
               ),
             ),
