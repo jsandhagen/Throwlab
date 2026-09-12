@@ -508,16 +508,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// think of while watching.
   Future<void> _compareWithAnother() async {
     _controller.pause();
-    final other = await pickThrowToCompare(
+    final pair = await pickThrowsToCompare(
       context,
-      videos: context.read<VideoLibrary>().videos,
+      library: context.read<VideoLibrary>(),
       against: widget.video,
     );
-    if (other == null || !mounted) return;
+    if (pair == null || !mounted) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ComparisonScreen(videoA: widget.video, videoB: other),
+        builder: (_) => ComparisonScreen(videoA: pair.$1, videoB: pair.$2),
       ),
     );
   }

@@ -267,22 +267,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _startComparison() async {
     final library = context.read<VideoLibrary>();
-    final videos = library.videos;
-    if (videos.length < 2) {
+    if (library.videos.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Import at least two throws to compare.')));
       return;
     }
-    final selection = await showDialog<List<ThrowVideo>>(
-      context: context,
-      builder: (context) => _ComparePickerDialog(videos: videos),
-    );
-    if (selection != null && selection.length == 2 && mounted) {
+    // The same sheet the analysis screen opens, with neither half chosen
+    // yet: one picker for the one job, rather than a dialog here that
+    // answered the same questions differently.
+    final pair = await pickThrowsToCompare(context, library: library);
+    if (pair != null && mounted) {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-              ComparisonScreen(videoA: selection[0], videoB: selection[1]),
+          builder: (_) => ComparisonScreen(videoA: pair.$1, videoB: pair.$2),
         ),
       );
     }
@@ -1049,71 +1047,6 @@ class _ImportDialogState extends State<_ImportDialog> {
             distanceUnit: _distanceUnit,
           )),
           child: const Text('Import'),
-        ),
-      ],
-    );
-  }
-}
-
-class _ComparePickerDialog extends StatefulWidget {
-  const _ComparePickerDialog({required this.videos});
-
-  final List<ThrowVideo> videos;
-
-  @override
-  State<_ComparePickerDialog> createState() => _ComparePickerDialogState();
-}
-
-class _ComparePickerDialogState extends State<_ComparePickerDialog> {
-  final List<ThrowVideo> _selected = [];
-
-  /// Once one throw is picked the list narrows to its event: comparing a
-  /// javelin release against a shot put says nothing, and the narrowing is
-  /// what makes a long library usable on the second pick.
-  ThrowEvent? get _event => _selected.isEmpty ? null : _selected.first.event;
-
-  @override
-  Widget build(BuildContext context) {
-    final event = _event;
-    final shown = event == null
-        ? widget.videos
-        : widget.videos.where((video) => video.event == event).toList();
-    return AlertDialog(
-      title: Text(event == null
-          ? 'Pick two throws'
-          : 'Pick another ${event.label.toLowerCase()} throw'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            for (final video in shown)
-              CheckboxListTile(
-                value: _selected.contains(video),
-                secondary: ThrowThumbnail(video),
-                title: Text(throwTitle(video)),
-                subtitle: Text(throwSubtitle(video),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                onChanged: (checked) => setState(() {
-                  if (checked == true) {
-                    if (_selected.length < 2) _selected.add(video);
-                  } else {
-                    _selected.remove(video);
-                  }
-                }),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        TextButton(
-          onPressed: _selected.length == 2
-              ? () => Navigator.pop(context, _selected)
-              : null,
-          child: const Text('Compare'),
         ),
       ],
     );

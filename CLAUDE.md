@@ -46,7 +46,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/meet_preview.dart \
                               tool/preview/schedule_preview.dart \
                               tool/preview/heat_sheet_preview.dart \
-                              tool/preview/season_preview.dart
+                              tool/preview/season_preview.dart \
+                              tool/preview/compare_preview.dart
 ```
 
 The results sheet is reviewed the same way, except that the artifact is the
@@ -80,7 +81,10 @@ leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field with the flights ruled off in
 it, and the meet it leaves entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
-thrown folded away. Open the PNGs to see exactly what the screen paints. **Re-run it
+thrown folded away — and the compare picker: both slots still empty, one
+filled, both filled and ready to open, the sheet as it opens off a throw,
+the same sheet off the event filter, and a search that found something and
+one that found nothing. Open the PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -432,6 +436,23 @@ like the app rather than a bare Material default.
   the sheet, and named at the foot of it with what it beat. Only a tracked
   athlete can hold one, which falls out for free, because the rest of the
   field's distances never reach the library to be ranked.
+- Comparing two throws is one picker, opened two ways. `pickThrowsToCompare`
+  returns the pair in the order the comparison lays them out — A is the left
+  pane in landscape, the top one in portrait, and the clip the linked scrub
+  is driven from — so the sheet says which is which rather than leaving it
+  to the order things were tapped in. Opened from a throw, that throw is A
+  and one tap on a candidate opens the pair: it is the clip being watched,
+  and confirming it would be a tap spent on something already on screen.
+  Opened from the library, both halves go into slots that show what is
+  chosen and what is still missing, and a tap with both full lands in B —
+  the checkbox list this replaced swallowed the third tap, which is a
+  control that looks broken. The narrowing is chips named after the
+  reference throw's own event and athlete, on by default for the event
+  because a javelin release against a shot put says nothing, and droppable
+  because sometimes that is the comparison. Never onto an empty list,
+  though: with nothing else of that event the sheet opens wide. A filter or
+  a search that empties the list says which one did it and offers the one
+  tap that undoes it.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs
   to `AppUpdater`, not to the screen that started it, and writes into a part
