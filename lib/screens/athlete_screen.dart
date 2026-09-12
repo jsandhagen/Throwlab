@@ -5,6 +5,7 @@ import '../models/athlete_profile.dart';
 import '../models/athlete_record.dart';
 import '../models/meet.dart';
 import '../models/meet_history.dart';
+import '../models/season_averages.dart';
 import '../models/throw_event.dart';
 import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
@@ -147,6 +148,13 @@ class AthleteScreen extends StatelessWidget {
       BuildContext context, VideoLibrary library, AthleteProfile profile) {
     final record = athleteRecordsOf(context)?.recordFor(profile.name);
     final atMeet = _meetResultIds(context);
+    // Read once and handed to both sections below: the averages are a
+    // reading of the same meets the list underneath spells out.
+    final outings = MeetOuting.forAthlete(
+      profile.name,
+      meetsOf(context)?.meets ?? const <Meet>[],
+      library.results,
+    );
     return CustomScrollView(
       slivers: [
         if (record != null && !record.isEmpty)
@@ -179,7 +187,8 @@ class AthleteScreen extends StatelessWidget {
               );
             },
           ),
-        ..._meetsSection(context, profile),
+        ..._averagesSection(context, profile, outings),
+        ..._meetsSection(context, outings),
         _notesSection(context, profile.name),
         if (profile.marks.isNotEmpty) ...[
           SliverToBoxAdapter(
@@ -263,6 +272,37 @@ class AthleteScreen extends StatelessWidget {
               if (attempt?.resultId != null) attempt!.resultId!,
       };
 
+  /// What the season averages, one card per thing they throw.
+  ///
+  /// A best says how far an athlete has thrown once. These say where the
+  /// middle of their throwing sits and how much of it counts, which is the
+  /// half of a season a coach can actually work on — and the half that
+  /// moves first, in both directions.
+  ///
+  /// Read over everything on record rather than over a date range: the app
+  /// has no season boundary anywhere else either, and the progression
+  /// drawn under each best is the same span. A coach who wants last year
+  /// left out is asking a different question than this answers.
+  List<Widget> _averagesSection(BuildContext context, AthleteProfile profile,
+      List<MeetOuting> outings) {
+    final averages = [
+      for (final reading in SeasonAverages.forSeason(outings, profile.results))
+        if (!reading.isEmpty) reading,
+    ];
+    if (averages.isEmpty) return const [];
+    return [
+      const SliverToBoxAdapter(child: _SectionHeading('Averages')),
+      SliverList.separated(
+        itemCount: averages.length,
+        separatorBuilder: (context, _) => const SizedBox(height: 8),
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _AveragesTile(averages: averages[index]),
+        ),
+      ),
+    ];
+  }
+
   /// Their meets, most recent first: the series, where it placed, and what
   /// the day was like.
   ///
@@ -270,12 +310,7 @@ class AthleteScreen extends StatelessWidget {
   /// afternoon they came out of — whether the big throw was the opener or
   /// the last one, what the field was, and whether it was into a headwind.
   /// A coach going into a championship is asking about that half of it.
-  List<Widget> _meetsSection(BuildContext context, AthleteProfile profile) {
-    final outings = MeetOuting.forAthlete(
-      profile.name,
-      meetsOf(context)?.meets ?? const <Meet>[],
-      Provider.of<VideoLibrary>(context, listen: false).results,
-    );
+  List<Widget> _meetsSection(BuildContext context, List<MeetOuting> outings) {
     if (outings.isEmpty) return const [];
     return [
       SliverToBoxAdapter(
@@ -479,6 +514,188 @@ class _SectionHeading extends StatelessWidget {
   }
 }
 
+/// What a season averages at one event and weight: the level competed at,
+/// how reliably it is reached, and what it cost in fouls.
+///
+/// Laid out as figures rather than as a table, because that is how they are
+/// asked for — a coach wants the number they would say out loud, and the
+/// thing it was taken over written under it small so the number can't lie
+/// about what is behind it. The meet average is drawn as a line for the
+/// same reason the best is: an average is only interesting next to the one
+/// before it.
+class _AveragesTile extends StatelessWidget {
+  const _AveragesTile({required this.averages});
+
+  final SeasonAverages averages;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final accent = eventColor(averages.event);
+    final season = averages.scoredMeets;
+    final moved = averages.moved;
+    return Material(
+      color: scheme.surfaceContainerHighest.withOpacity(0.45),
+      clipBehavior: Clip.antiAlias,
+      shape: angularShape(12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                EventGlyph(averages.event, size: 16, color: accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(averages.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 22,
+              runSpacing: 12,
+              children: _figures(accent, scheme),
+            ),
+            if (season.length > 1) ...[
+              const SizedBox(height: 8),
+              ProgressionChart(
+                points: [
+                  for (final meet in season)
+                    ProgressionPoint(
+                        on: meet.date, meters: meet.average!, atMeet: true),
+                ],
+                color: accent,
+                unit: averages.unit,
+                height: 70,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, top: 2),
+                child: Text(
+                  // The meet average, first meet to last. Signed both ways:
+                  // an average that has come down is the thing this card
+                  // exists to show, and hiding it would be flattery.
+                  '${moved! >= 0 ? '+' : '−'}'
+                  '${formatDistance(moved.abs(), averages.unit)} '
+                  'since ${shortThrowDate(season.first.date)} · '
+                  '${season.length} meets averaged',
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The numbers themselves, in the order a coach reads them: what they
+  /// compete at, what the whole series comes to, and what was thrown away.
+  List<Widget> _figures(Color accent, ColorScheme scheme) {
+    // Every figure is a mean, and a mean of one is the throw itself: a
+    // season's average best needs a second meet before it is one, and a
+    // series average a second mark.
+    final best = averages.meetsScored > 1 ? averages.averageBest : null;
+    final meetMark = averages.meetMarks > 1 ? averages.averageMeetMark : null;
+    final everyMark = averages.everyMarks > 1 &&
+            (averages.hasTraining || meetMark == null)
+        ? averages.averageEveryMark
+        : null;
+    final rate = averages.foulRate;
+    return [
+      if (best != null)
+        _Figure(
+          label: 'Meet best',
+          value: formatDistance(best, averages.unit),
+          under: '${averages.meetsScored} meets',
+          color: accent,
+        ),
+      if (meetMark != null)
+        _Figure(
+          label: 'In competition',
+          value: formatDistance(meetMark, averages.unit),
+          under: '${averages.meetMarks} marks',
+        ),
+      // The same average widened to the whole record book — worth its width
+      // only when there is training in it to widen to, since otherwise it
+      // is the competition average again under another name. It is named
+      // for what it widens: beside the competition figure it is what
+      // training does to it, and standing alone it is simply everything.
+      if (everyMark != null)
+        _Figure(
+          label: meetMark == null ? 'Every mark' : 'With training',
+          value: formatDistance(everyMark, averages.unit),
+          under: '${averages.everyMarks} marks',
+        ),
+      if (rate != null)
+        _Figure(
+          label: 'Fouls',
+          value: '${averages.fouls} of ${averages.attempts}',
+          under: '${(rate * 100).round()}% of attempts',
+          color: averages.fouls == 0 ? null : scheme.error,
+        ),
+    ];
+  }
+}
+
+/// One figure: what it is, what it comes to, and what it was taken over.
+class _Figure extends StatelessWidget {
+  const _Figure({
+    required this.label,
+    required this.value,
+    required this.under,
+    this.color,
+  });
+
+  final String label;
+  final String value;
+
+  /// How many throws are behind it. An average with nothing under it
+  /// invites being read as a season when it is one afternoon.
+  final String under;
+
+  /// The event's color for the figure a coach came for; the default ink
+  /// for the ones that put it in context.
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: theme.textTheme.labelSmall?.copyWith(
+              fontSize: 9,
+              letterSpacing: 0.8,
+              color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700, color: color ?? scheme.onSurface),
+        ),
+        Text(
+          under,
+          style: theme.textTheme.labelSmall
+              ?.copyWith(fontSize: 10, color: scheme.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+}
+
 /// One meet they threw at: the series, where it placed them, and what the
 /// day was like.
 class _OutingTile extends StatelessWidget {
@@ -486,6 +703,28 @@ class _OutingTile extends StatelessWidget {
 
   final MeetOuting outing;
   final VoidCallback onTap;
+
+  /// What the afternoon came to under the series it came out of —
+  /// 'averaged 52.44 m from 4 · 2 fouls'.
+  ///
+  /// The number above is the throw they were placed on, which is the one
+  /// the meet cared about. This is the one the next meet is worked on:
+  /// six throws around 52 is a different competition from one 54 and five
+  /// nowhere, and the series alone makes that a thing to be read off rather
+  /// than a thing that is said.
+  String? get _averaged {
+    final average = outing.average;
+    // Nothing to average until there are two of them: the series is
+    // written out directly above, so one mark and its fouls would be the
+    // same line twice.
+    if (average == null || outing.legalMarks < 2) return null;
+    final fouls = outing.fouls;
+    return [
+      'averaged ${formatDistance(average, outing.unit)} '
+          'from ${outing.legalMarks}',
+      if (fouls > 0) '$fouls foul${fouls == 1 ? '' : 's'}',
+    ].join(' · ');
+  }
 
   /// '2nd of 12', or what happened instead. A field of one is not a
   /// competition, so it is not a placing either.
@@ -564,6 +803,14 @@ class _OutingTile extends StatelessWidget {
               if (outing.taken > 0) ...[
                 const SizedBox(height: 8),
                 _SeriesLine(outing: outing, accent: accent),
+              ],
+              if (_averaged != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _averaged!,
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant),
+                ),
               ],
               if (conditions.isNotEmpty) ...[
                 const SizedBox(height: 6),

@@ -599,6 +599,54 @@ void main() {
       expect(find.textContaining('needs'), findsOneWidget);
     });
 
+    testWidgets('say how my athlete\'s series as a whole is going',
+        (tester) async {
+      // 69, foul, 67: the placing is 69, and what a coach works on next
+      // week is the other two thirds of that.
+      for (final mark in [('m1', 69.00), ('m2', 67.00)]) {
+        await library.addMark(ThrowMark(
+          id: mark.$1,
+          athlete: 'Ana Diaz',
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          distance: mark.$2,
+          achievedOn: DateTime(2026, 6, 13),
+        ));
+      }
+      final meet = meets.byId('k1')!;
+      meet.entries.single
+        ..setAttempt(0, MeetAttempt.mark('m1'))
+        ..setAttempt(1, MeetAttempt.foul())
+        ..setAttempt(2, MeetAttempt.mark('m2'));
+      await meets.save(meet);
+      await addRival('r1', 'M. Okoye', 44.90);
+      await mountEvent(tester);
+      await openStandings(tester);
+
+      expect(find.text('68.00 m'), findsNothing);
+      expect(find.text('averaging 68.00 m from 2 · 1 foul'), findsOneWidget);
+      // And nothing of the kind about the rest of the field, who are here
+      // to be placed against rather than read.
+      expect(find.textContaining('averaging'), findsOneWidget);
+    });
+
+    testWidgets('one mark and a foul is a foul, not an average',
+        (tester) async {
+      await addRival('r1', 'M. Okoye', 44.90);
+      await mountEvent(tester);
+      await tapMark(tester);
+      await enterDistance(tester, '41.20');
+      final meet = meets.byId('k1')!;
+      meet.entries.first.setAttempt(1, MeetAttempt.foul());
+      await meets.save(meet);
+      await openStandings(tester);
+
+      // The mark is already on the row; what it is worth saying twice is
+      // what was thrown away beside it.
+      expect(find.text('1 foul'), findsOneWidget);
+      expect(find.textContaining('averaging'), findsNothing);
+    });
+
     testWidgets('order the final worst-placed first', (tester) async {
       final meet = meets.byId('k1')!..advancing = 2;
       await meets.save(meet);

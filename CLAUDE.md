@@ -7,7 +7,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side) |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
@@ -64,12 +64,13 @@ to push the last event onto a second page.
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
-profiles (each with the season drawn under its best, and the meets it was
-thrown at), a training note (as it opens, and with the keyboard up — which
-the note preview fakes, insets and all — toolbar above it, and pinned to
-the top), and the meet tracker: the meets as a list and as a calendar, a
-meet's events, one of them part-way through, the standings with the cut,
-the field as a list, the live card (four times — a podium, a field with the
+profiles (each with the season drawn under its best, what it averages and
+what it fouled away, and the meets it was thrown at), a training note (as
+it opens, and with the keyboard up — which the note preview fakes, insets
+and all — toolbar above it, and pinned to the top), and the meet tracker:
+the meets as a list and as a calendar, a meet's events, one of them
+part-way through, the standings with the cut and what the coach's own
+athlete is averaging under it, the field as a list, the live card (four times — a podium, a field with the
 cut falling below it, a board that has broken, where the leader is off
 the top of it as an arrow, and a field thrown in flights, where the coach's
 own athlete is in the one that hasn't been called), the flighted field as a
@@ -402,6 +403,25 @@ like the app rather than a bare Material default.
   round, which round the big throw came in, the field, the placing and the
   weather. The meets are looked up softly (`meetsOf`), like the athlete
   records, so a profile still paints with nothing but the clips.
+- A best is the one throw that came off; the season is what the rest of
+  them average. `MeetSeries.average` is the mean of a series' legal marks
+  and `fouls` is what it cost — never rolled together, since a foul is a
+  throw that went unmeasured and averaging it in as zero would say an
+  athlete threw half as far as they did. `SeasonAverages` reads those over
+  a season, per event and weight the way a best is: the mean of each meet's
+  best (the level competed at), the mean of every attempt at those meets
+  (how reliably it is reached), and the mean of the whole record book,
+  training in. The third is only drawn when there is training in it to
+  widen to, and none of them is drawn off a single throw — a mean of one is
+  the throw again under a heading that promises a season. The averages sit
+  in their own section under the bests, headed the way a competition names
+  itself (`Discus · 1 kg`) rather than the way a record book does (`1 kg
+  Discus`), so the two lists don't read as the same rows twice; the meet
+  average is drawn across the season like a progression, because an average
+  is only interesting next to the one before it. It is said where it is
+  thrown, too: under each meet on a profile, and under the coach's own
+  athletes in the standings — a coach at the ring is asking what the
+  afternoon is averaging, not only what the best of it was.
 - A meet's results go out as a PDF, written by `pdf_writer` — as narrow as
   `pdf_text` is at the other end, and set in Courier, because a results
   sheet is columns and a fixed-width face lines them up without a table of

@@ -390,4 +390,136 @@ void main() {
           findsOneWidget);
     });
   });
+
+  group('their averages', () {
+    /// One meet, thrown as [series] — a null round is a foul, the way it
+    /// is called out. Every legal round goes into the record book, which
+    /// is what the meet itself would have done.
+    Future<MeetLibrary> competed(
+      List<double?> series, {
+      String id = 'k1',
+      DateTime? on,
+    }) async {
+      final day = on ?? DateTime(2026, 6, 13);
+      final meets = MeetLibrary();
+      await meets.load();
+      final meet =
+          Meet(id: id, name: 'County Champs', date: day, rounds: series.length);
+      final mine = MeetEntry(
+          id: '$id-e1',
+          athlete: 'Ana Diaz',
+          event: ThrowEvent.discus,
+          implementKg: 1);
+      for (var round = 0; round < series.length; round++) {
+        final mark = series[round];
+        if (mark == null) {
+          mine.setAttempt(round, MeetAttempt.foul());
+          continue;
+        }
+        await library.addMark(ThrowMark(
+          id: '$id-m$round',
+          athlete: 'Ana Diaz',
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          distance: mark,
+          achievedOn: day,
+        ));
+        mine.setAttempt(round, MeetAttempt.mark('$id-m$round'));
+      }
+      meet.entries.add(mine);
+      await meets.save(meet);
+      return meets;
+    }
+
+    testWidgets('say what the competition averaged and what it fouled away',
+        (tester) async {
+      // 69, F, 67, 80, F, 66 — an afternoon with a big one in it and two
+      // thrown away.
+      await mountProfile(tester,
+          meets: await competed([69, null, 67, 80, null, 66]));
+
+      expect(find.text('AVERAGES'), findsOneWidget);
+      // The level competed at is the best; the middle of the series is
+      // what the rest of it came to.
+      expect(find.text('80.00 m'), findsWidgets);
+      expect(find.text('70.50 m'), findsOneWidget);
+      expect(find.text('2 of 6'), findsOneWidget);
+      expect(find.text('33% of attempts'), findsOneWidget);
+      // And on the meet itself, under the series it came out of.
+      expect(find.text('averaged 70.50 m from 4 · 2 fouls'), findsOneWidget);
+    });
+
+    testWidgets('widen to the record book when there is training in it',
+        (tester) async {
+      final meets = await competed([61, 63]);
+      await library.addMark(ThrowMark(
+        id: 't1',
+        athlete: 'Ana Diaz',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        distance: 56.00,
+        achievedOn: DateTime(2026, 5, 2),
+      ));
+      await mountProfile(tester, meets: meets);
+
+      expect(find.text('IN COMPETITION'), findsOneWidget);
+      expect(find.text('62.00 m'), findsOneWidget);
+      expect(find.text('WITH TRAINING'), findsOneWidget);
+      expect(find.text('60.00 m'), findsOneWidget);
+    });
+
+    testWidgets('a meet average on its own is not a second figure',
+        (tester) async {
+      await mountProfile(tester, meets: await competed([60, 64]));
+      // Everything measured was measured at the meet, so widening to the
+      // record book would print the same number twice.
+      expect(find.text('WITH TRAINING'), findsNothing);
+      expect(find.text('EVERY MARK'), findsNothing);
+    });
+
+    testWidgets('an athlete who only trains still has an average',
+        (tester) async {
+      await fill([
+        testVideo(temp,
+            id: 'v1',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            distance: 41.20),
+        testVideo(temp,
+            id: 'v2',
+            athlete: 'Ana Diaz',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            distance: 43.20),
+      ]);
+      await mountProfile(tester);
+      expect(find.text('EVERY MARK'), findsOneWidget);
+      expect(find.text('42.20 m'), findsOneWidget);
+      expect(find.text('MEET BEST'), findsNothing);
+      expect(find.text('FOULS'), findsNothing);
+    });
+
+    testWidgets('one mark is not an average of anything', (tester) async {
+      await mountProfile(tester, meets: await competed([60, null]));
+      // The series above it already says 60.00 and X; saying it again as a
+      // mean of one would be the same line twice.
+      expect(find.textContaining('averaged'), findsNothing);
+      expect(find.text('AVERAGES'), findsNothing);
+    });
+
+    testWidgets('the meet average is drawn across the season', (tester) async {
+      final meets = await competed([60, 62]);
+      final june = await competed([64, 68],
+          id: 'k2', on: DateTime(2026, 6, 27));
+      for (final meet in june.meets) {
+        await meets.save(meet);
+      }
+      await mountProfile(tester, meets: meets);
+      // 61 in June, 66 a fortnight later.
+      expect(
+          find.textContaining('+5.00 m since 13 Jun · 2 meets averaged'),
+          findsOneWidget);
+    });
+  });
 }
