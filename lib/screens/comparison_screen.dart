@@ -573,17 +573,23 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     child: Stack(
                       children: [
                         Positioned.fill(child: _panes(landscape)),
-                        // Same rail as the analysis screen, in the same
-                        // corner: it acts on the pane last drawn in, and the
-                        // tool it sets arms both.
+                        // Same tools as the analysis screen, along the
+                        // bottom the same way: they act on the pane last
+                        // drawn in, and the tool they set arms both.
                         Positioned(
+                          left: 4,
                           right: 4,
                           bottom: 4,
-                          child: SingleChildScrollView(
-                            reverse: true,
-                            child: DrawingRail(
+                          child: Align(
+                            alignment: Alignment.bottomRight,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.bottomRight,
+                              child: DrawingRail(
                                 controller: _activeDrawing,
-                                initiallyOpen: false),
+                                initiallyOpen: false,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -767,7 +773,7 @@ class _VideoPaneState extends State<_VideoPane> {
     _zoomAtGestureStart = _zoom;
     if (details.pointerCount > 1) {
       // A pinch that began as a one-finger drag: discard the stray stroke.
-      if (_activeStroke) widget.drawing.undo();
+      if (_activeStroke) widget.drawing.discardStroke();
       _activeStroke = false;
       return;
     }

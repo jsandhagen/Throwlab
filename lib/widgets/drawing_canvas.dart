@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-enum DrawTool { none, pen, line, arrow, curvedArrow, angle }
+enum DrawTool { none, pen, line, arrow, curvedArrow, circle, angle }
 
 /// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
 /// middle one is the default.
@@ -89,6 +89,21 @@ class LineAnnotation extends Annotation {
   Offset end;
 }
 
+/// A ring drawn out from its middle: press on what is being circled and
+/// drag to the rim. Sizing a circle from the middle keeps the thing it is
+/// about — a hip, a hand, where the implement landed — under the finger
+/// that started it, which a corner-to-corner box does not.
+///
+/// [edge] is a point on the rim rather than a radius, because a radius is a
+/// length and the two axes normalize by different amounts: stored as a
+/// point, the ring is struck at the screen-space distance between the two
+/// and stays round at any size of frame.
+class CircleAnnotation extends Annotation {
+  CircleAnnotation(super.color, super.width, this.center, this.edge);
+  Offset center;
+  Offset edge;
+}
+
 /// Drawn tail → head, so the arrow points where the drag finished.
 class ArrowAnnotation extends Annotation {
   ArrowAnnotation(super.color, super.width, this.start, this.end);
@@ -122,16 +137,78 @@ class AngleAnnotation extends Annotation {
   }
 }
 
+/// One reversible edit to the drawing. The history is kept as edits rather
+/// than as snapshots of the whole frame because annotations are mutable —
+/// a line's end follows the finger, an angle grows a vertex at a time — so
+/// a snapshot would have to deep-copy every stroke on every touch move.
+sealed class _Edit {
+  /// Puts the drawing back the way it was before this edit.
+  void undo(List<Annotation> annotations);
+
+  /// Does it again.
+  void redo(List<Annotation> annotations);
+}
+
+/// An annotation was drawn. It is matched by identity, so the object the
+/// drag went on mutating is the one that comes back.
+class _Drawn extends _Edit {
+  _Drawn(this.annotation);
+  final Annotation annotation;
+
+  @override
+  void undo(List<Annotation> annotations) => annotations.remove(annotation);
+
+  @override
+  void redo(List<Annotation> annotations) => annotations.add(annotation);
+}
+
+/// A vertex joined an angle already on the frame, so tapping out an angle
+/// comes back a point at a time rather than all three at once.
+class _VertexPlaced extends _Edit {
+  _VertexPlaced(this.angle, this.point);
+  final AngleAnnotation angle;
+  final Offset point;
+
+  @override
+  void undo(List<Annotation> annotations) => angle.points.removeLast();
+
+  @override
+  void redo(List<Annotation> annotations) => angle.points.add(point);
+}
+
+/// The frame was wiped. Undoing brings the lot back, which is what makes
+/// clear worth a button of its own instead of a confirmation.
+class _Wiped extends _Edit {
+  _Wiped(this.annotations);
+  final List<Annotation> annotations;
+
+  @override
+  void undo(List<Annotation> into) => into.addAll(annotations);
+
+  @override
+  void redo(List<Annotation> into) => into.clear();
+}
+
 class DrawingController extends ChangeNotifier {
   DrawTool _tool = DrawTool.none;
   Color _color = Colors.orangeAccent;
   double _strokeWidth = kStrokeWidths[1];
   final List<Annotation> _annotations = [];
 
+  /// What has been done, oldest first, and what has been undone out of it,
+  /// newest last. A fresh edit drops the redo stack — the usual rule, and
+  /// the only one that can't leave a redo pointing at a frame that no
+  /// longer exists.
+  final List<_Edit> _done = [];
+  final List<_Edit> _undone = [];
+
   DrawTool get tool => _tool;
   Color get color => _color;
   double get strokeWidth => _strokeWidth;
   List<Annotation> get annotations => List.unmodifiable(_annotations);
+
+  bool get canUndo => _done.isNotEmpty;
+  bool get canRedo => _undone.isNotEmpty;
 
   // The pen setters are no-ops when the value is already what was asked
   // for. The comparison screen mirrors one pane's pen onto the other
@@ -157,28 +234,48 @@ class DrawingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void add(Annotation annotation) {
-    _annotations.add(annotation);
+  void _record(_Edit edit) {
+    edit.redo(_annotations);
+    _done.add(edit);
+    _undone.clear();
     notifyListeners();
   }
 
+  void add(Annotation annotation) => _record(_Drawn(annotation));
+
+  /// Adds [point] to an angle that is already on the frame.
+  void placeAngleVertex(AngleAnnotation angle, Offset point) =>
+      _record(_VertexPlaced(angle, point));
+
+  /// A drag carried the annotation it started on somewhere new. That is the
+  /// same edit going on, not another one, so it only repaints.
   void notifyChanged() => notifyListeners();
 
+  /// Throws the edit in progress away without leaving it to be redone — a
+  /// stroke a pinch turned out to be, which the user never meant to draw.
+  void discardStroke() {
+    if (_done.isEmpty) return;
+    _done.removeLast().undo(_annotations);
+    notifyListeners();
+  }
+
   void undo() {
-    if (_annotations.isEmpty) return;
-    final last = _annotations.last;
-    // Remove an in-progress angle one point at a time.
-    if (last is AngleAnnotation && last.points.length > 1) {
-      last.points.removeLast();
-    } else {
-      _annotations.removeLast();
-    }
+    if (_done.isEmpty) return;
+    final edit = _done.removeLast()..undo(_annotations);
+    _undone.add(edit);
+    notifyListeners();
+  }
+
+  void redo() {
+    if (_undone.isEmpty) return;
+    final edit = _undone.removeLast()..redo(_annotations);
+    _done.add(edit);
     notifyListeners();
   }
 
   void clear() {
-    _annotations.clear();
-    notifyListeners();
+    if (_annotations.isEmpty) return;
+    _record(_Wiped(List.of(_annotations)));
   }
 }
 
@@ -204,6 +301,11 @@ bool beginAnnotation(DrawingController controller, Offset point) {
     case DrawTool.curvedArrow:
       controller.add(CurvedArrowAnnotation(
           controller.color, controller.strokeWidth, [point]));
+      return true;
+    case DrawTool.circle:
+      // Middle where the press landed, rim where the drag gets to.
+      controller.add(CircleAnnotation(
+          controller.color, controller.strokeWidth, point, point));
       return true;
     case DrawTool.angle:
     case DrawTool.none:
@@ -235,6 +337,11 @@ void extendAnnotation(DrawingController controller, Offset point) {
         last.points.add(point);
         controller.notifyChanged();
       }
+    case DrawTool.circle:
+      if (last is CircleAnnotation) {
+        last.edge = point;
+        controller.notifyChanged();
+      }
     case DrawTool.angle:
     case DrawTool.none:
       break;
@@ -246,8 +353,7 @@ void extendAnnotation(DrawingController controller, Offset point) {
 void addAngleVertex(DrawingController controller, Offset point) {
   final last = controller.annotations.lastOrNull;
   if (last is AngleAnnotation && !last.isComplete) {
-    last.points.add(point);
-    controller.notifyChanged();
+    controller.placeAngleVertex(last, point);
   } else {
     controller.add(AngleAnnotation(controller.color, controller.strokeWidth)
       ..points.add(point));
@@ -323,6 +429,12 @@ class _AnnotationPainter extends CustomPainter {
           _paintArrow(canvas, size, annotation, paint);
         case CurvedArrowAnnotation():
           _paintCurvedArrow(canvas, size, annotation, paint);
+        case CircleAnnotation(:final center, :final edge):
+          final middle = _denormalize(center, size);
+          final radius = (_denormalize(edge, size) - middle).distance;
+          // A press that never travelled is a tap, not a ring.
+          if (radius < 1) continue;
+          canvas.drawCircle(middle, radius, paint);
         case AngleAnnotation():
           _paintAngle(canvas, size, annotation, paint);
       }

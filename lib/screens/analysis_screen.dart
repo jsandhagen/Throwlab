@@ -419,7 +419,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _nodeDrag = null;
     if (details.pointerCount > 1) {
       // A pinch that began as a one-finger drag: discard the stray stroke.
-      if (_activeStroke) _drawing.undo();
+      if (_activeStroke) _drawing.discardStroke();
       _activeStroke = false;
       return;
     }
@@ -1425,22 +1425,31 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
           Positioned(
             top: 0,
+            left: 0,
             right: 4,
             bottom: 0,
             child: SafeArea(
               child: Padding(
-                // Hugs the bottom-right corner: the throw action lives in
-                // the right-center and upper-right of the frame, and the
-                // inset keeps it clear of the scrubber/transport overlay
-                // (a single shorter row in landscape).
+                // The tools lie along the bottom, clear of the
+                // scrubber/transport overlay (a single shorter row in
+                // landscape) and of the filmstrip where there is one.
+                // Landscape starts them clear of the header rail down the
+                // left edge as well.
                 padding: EdgeInsets.only(
+                    left: landscape ? 64 : 4,
                     bottom: landscape
                         ? 60
                         : (_set.length > 1 ? 150 + _stripHeight : 150)),
                 child: Align(
                   alignment: Alignment.bottomRight,
-                  child: SingleChildScrollView(
-                    reverse: true,
+                  // Scales the bar down rather than overflowing or
+                  // scrolling on a screen too narrow to hold it: a tool
+                  // scrolled out of reach is one nobody finds, and the
+                  // scroll view it took to offer that swallowed every drag
+                  // over the strip it covered.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomRight,
                     child: DrawingRail(controller: _drawing),
                   ),
                 ),

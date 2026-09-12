@@ -4,14 +4,29 @@ import 'package:flutter/material.dart';
 
 import 'drawing_canvas.dart';
 
-/// Vertical, collapsible tool rail anchored to the bottom-right corner of
-/// the video, kept short enough for a landscape phone: the tools that build
-/// on a drag (line, arrow, curved arrow) share one menu button, and the pen
-/// weight and color are menus too, so the column stays ~7 buttons instead
-/// of the 17 controls it offers. A dedicated chevron button at the bottom —
-/// always there, open or closed, and never also a tool — collapses the rail
-/// down to just that button, keeping the right-center and upper-right of
-/// the frame — where the throw happens — unobstructed.
+/// The drawing tools, as a bar along the bottom of the frame.
+///
+/// It was a column down the right edge, which is where the throw is. A clip
+/// is filmed on its side, so a phone reading one has ~360 logical pixels of
+/// height and plenty of width: a column of ten controls is taller than the
+/// screen and crosses the right-center and upper-right of the picture — the
+/// release, and the flight out of it — while a bar of the same ten costs
+/// one button's worth of height. Held upright the bar is better still: a
+/// widescreen clip letterboxed into a portrait screen leaves a band of
+/// black under it, and the bar sits in that band without covering any of
+/// the frame at all.
+///
+/// The shapes that build on a drag (line, arrow, curved arrow, circle,
+/// angle) share one menu button that wears whichever is selected, and the
+/// pen weight and color are menus too, so the bar stays ten controls wide
+/// rather than the 18 it offers. Undo, redo and clear are not among them —
+/// they are what a drawing hand reaches for most, and a tool that has to be
+/// hunted for in a menu is one nobody uses. Clear is safe to leave in the
+/// open because undo brings the whole frame back.
+///
+/// A dedicated chevron on the end — always there, open or closed, and never
+/// also a tool — collapses the bar down to just that button, so there is
+/// one fixed target for getting the tools out of the way and back.
 class DrawingRail extends StatefulWidget {
   const DrawingRail({
     super.key,
@@ -42,9 +57,9 @@ class _DrawingRailState extends State<DrawingRail> {
     (DrawTool.pen, Icons.draw, 'Freehand pen'),
   ];
 
-  /// The measured shapes, sharing one menu button that shows whichever is
-  /// selected — four more icons on the rail is what ran it off a landscape
-  /// screen.
+  /// The shapes a drag builds, sharing one menu button that shows whichever
+  /// is selected — five more icons is more than a bar has room for on a
+  /// phone.
   static const _shapeTools = [
     (DrawTool.line, Icons.timeline, 'Straight line'),
     (DrawTool.arrow, Icons.arrow_right_alt, 'Arrow (drag tail to head)'),
@@ -52,6 +67,11 @@ class _DrawingRailState extends State<DrawingRail> {
       DrawTool.curvedArrow,
       Icons.turn_slight_right,
       'Curved arrow (trace a path, head where you lift)'
+    ),
+    (
+      DrawTool.circle,
+      Icons.circle_outlined,
+      'Circle (press the middle, drag out to the rim)'
     ),
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
   ];
@@ -66,14 +86,15 @@ class _DrawingRailState extends State<DrawingRail> {
       );
 
   /// Rail buttons are drawn 40x36 and sized to match: Material's default
-  /// 48px tap padding around each one is invisible height the rail cannot
-  /// spare on a landscape phone, where the whole column has to fit above
-  /// the transport.
+  /// 48px tap padding around each one is invisible width the bar cannot
+  /// spare on a phone, where all ten controls have to fit across it.
   ButtonStyle _styleFor(bool selected, ColorScheme scheme) =>
       IconButton.styleFrom(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         backgroundColor: selected ? scheme.primaryContainer : null,
       );
+
+  static const _slot = BoxConstraints.tightFor(width: 40, height: 36);
 
   Widget _toolButton(
       DrawTool tool, IconData icon, String tip, ColorScheme scheme) {
@@ -81,13 +102,34 @@ class _DrawingRailState extends State<DrawingRail> {
       tooltip: tip,
       iconSize: 20,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 36),
+      constraints: _slot,
       isSelected: controller.tool == tool,
       style: _styleFor(controller.tool == tool, scheme),
       icon: Icon(icon),
       onPressed: () => controller.tool = tool,
     );
   }
+
+  /// An action on the drawing itself, grayed out when there is nothing for
+  /// it to act on — an undo arrow that does nothing is worse than one that
+  /// says so.
+  Widget _actionButton({
+    required Key key,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required ColorScheme scheme,
+  }) =>
+      IconButton(
+        key: key,
+        tooltip: tooltip,
+        iconSize: 20,
+        padding: EdgeInsets.zero,
+        constraints: _slot,
+        style: _styleFor(false, scheme),
+        icon: Icon(icon),
+        onPressed: onPressed,
+      );
 
   /// A rail-sized menu button: tapping the icon picks [onTap] straight
   /// away, the small chevron opens the rest.
@@ -105,7 +147,9 @@ class _DrawingRailState extends State<DrawingRail> {
       key: key,
       tooltip: tooltip,
       padding: EdgeInsets.zero,
-      position: PopupMenuPosition.under,
+      // Nothing under the bar to hang a menu in — the transport is there —
+      // so the menus come up over the frame instead.
+      position: PopupMenuPosition.over,
       itemBuilder: (context) => items,
       onSelected: onSelected,
       child: Container(
@@ -140,6 +184,24 @@ class _DrawingRailState extends State<DrawingRail> {
         ),
       );
 
+  /// The breath between groups of buttons.
+  static const _gap = SizedBox(width: 2);
+
+  /// The rule that cuts the collapse chevron off from the tools.
+  Widget _rule(ColorScheme scheme) => VerticalDivider(
+        width: 5,
+        thickness: 1,
+        indent: 6,
+        endIndent: 6,
+        color: scheme.onSurface.withOpacity(0.2),
+      );
+
+  /// Which way the chevron points: away from the tools when they are
+  /// showing, back toward them when they are not. The bar is anchored at
+  /// the chevron's end, against the right edge, so 'away' is to the right.
+  IconData get _chevron =>
+      _open ? Icons.keyboard_arrow_right : Icons.keyboard_arrow_left;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -152,8 +214,8 @@ class _DrawingRailState extends State<DrawingRail> {
           borderRadius: BorderRadius.circular(24),
           clipBehavior: Clip.antiAlias,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Column(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_open) ...[
@@ -161,9 +223,9 @@ class _DrawingRailState extends State<DrawingRail> {
                       _directTools[0].$3, scheme),
                   _toolButton(_directTools[1].$1, _directTools[1].$2,
                       _directTools[1].$3, scheme),
-                  // Lines and arrows share a button: same gesture, and
-                  // three more icons is what ran the rail off a
-                  // landscape screen.
+                  // Lines, arrows, circles and angles share a button: all
+                  // built on one drag or a few taps, and five more icons is
+                  // what ran the rail off a landscape screen.
                   _menuButton<DrawTool>(
                     key: const ValueKey('rail-shapes'),
                     tooltip: shapeTip,
@@ -185,7 +247,7 @@ class _DrawingRailState extends State<DrawingRail> {
                     ],
                     onSelected: (tool) => controller.tool = tool,
                   ),
-                  const SizedBox(height: 2),
+                  _gap,
                   _menuButton<double>(
                     key: const ValueKey('rail-width'),
                     tooltip: 'Line width',
@@ -251,46 +313,37 @@ class _DrawingRailState extends State<DrawingRail> {
                     ],
                     onSelected: (color) => controller.color = color,
                   ),
-                  const SizedBox(height: 2),
-                  IconButton(
+                  _gap,
+                  // The three a drawing hand reaches for, in the open: a
+                  // wrong stroke is undone where it happened rather than
+                  // through a menu, and clear is only as final as one tap
+                  // of undo.
+                  _actionButton(
+                    key: const ValueKey('rail-undo'),
                     tooltip: 'Undo',
-                    iconSize: 20,
-                    padding: EdgeInsets.zero,
-                    style: _styleFor(false, scheme),
-                    constraints:
-                        const BoxConstraints.tightFor(width: 40, height: 36),
-                    icon: const Icon(Icons.undo),
-                    onPressed: controller.undo,
+                    icon: Icons.undo,
+                    onPressed: controller.canUndo ? controller.undo : null,
+                    scheme: scheme,
                   ),
-                  _menuButton<String>(
-                    key: const ValueKey('rail-more'),
-                    tooltip: 'More',
-                    icon: const Icon(Icons.more_horiz, size: 20),
-                    selected: false,
-                    items: const [
-                      PopupMenuItem(
-                        value: 'clear',
-                        child: Row(children: [
-                          Icon(Icons.layers_clear, size: 20),
-                          SizedBox(width: 12),
-                          Text('Clear drawings'),
-                        ]),
-                      ),
-                    ],
-                    onSelected: (choice) {
-                      if (choice == 'clear') controller.clear();
-                    },
+                  _actionButton(
+                    key: const ValueKey('rail-redo'),
+                    tooltip: 'Redo',
+                    icon: Icons.redo,
+                    onPressed: controller.canRedo ? controller.redo : null,
+                    scheme: scheme,
                   ),
-                  Divider(
-                    height: 5,
-                    thickness: 1,
-                    indent: 8,
-                    endIndent: 8,
-                    color: scheme.onSurface.withOpacity(0.2),
+                  _actionButton(
+                    key: const ValueKey('rail-clear'),
+                    tooltip: 'Clear drawings',
+                    icon: Icons.layers_clear,
+                    onPressed:
+                        controller.annotations.isEmpty ? null : controller.clear,
+                    scheme: scheme,
                   ),
+                  _rule(scheme),
                 ],
-                // Collapsing the rail is its own button, always in the same
-                // spot at the bottom, open or closed — never buried in a
+                // Collapsing the bar is its own button, always in the same
+                // spot on the end of it, open or closed — never buried in a
                 // menu and never doubling as a tool, so there is one fixed
                 // target for getting the tools out of the way and back.
                 IconButton(
@@ -299,11 +352,8 @@ class _DrawingRailState extends State<DrawingRail> {
                   iconSize: 20,
                   padding: EdgeInsets.zero,
                   style: _styleFor(false, scheme),
-                  constraints:
-                      const BoxConstraints.tightFor(width: 40, height: 36),
-                  icon: Icon(_open
-                      ? Icons.keyboard_arrow_down
-                      : Icons.keyboard_arrow_up),
+                  constraints: _slot,
+                  icon: Icon(_chevron),
                   onPressed: () => setState(() => _open = !_open),
                 ),
               ],
@@ -316,5 +366,5 @@ class _DrawingRailState extends State<DrawingRail> {
 }
 
 /// Names for the annotation colors, in [kAnnotationColors] order, for the
-/// rail's color menu.
+/// bar's color menu.
 const _colorNames = ['Orange', 'Green', 'Cyan', 'Pink', 'White'];

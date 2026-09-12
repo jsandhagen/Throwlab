@@ -34,6 +34,120 @@ void main() {
     });
   });
 
+  group('drawing history', () {
+    late DrawingController controller;
+
+    setUp(() => controller = DrawingController());
+
+    PenStroke stroke([Offset at = Offset.zero]) =>
+        PenStroke(controller.color, controller.strokeWidth, [at]);
+
+    test('nothing to undo or redo on a clean frame', () {
+      expect(controller.canUndo, isFalse);
+      expect(controller.canRedo, isFalse);
+      // And neither button does damage when there is nothing behind it.
+      controller.undo();
+      controller.redo();
+      expect(controller.annotations, isEmpty);
+    });
+
+    test('takes a stroke off and puts the same one back', () {
+      final drawn = stroke();
+      controller.add(drawn);
+      expect(controller.canUndo, isTrue);
+
+      controller.undo();
+      expect(controller.annotations, isEmpty);
+      expect(controller.canUndo, isFalse);
+      expect(controller.canRedo, isTrue);
+
+      controller.redo();
+      expect(controller.annotations, [same(drawn)]);
+      expect(controller.canRedo, isFalse);
+    });
+
+    test('unwinds and rewinds in the order it was drawn', () {
+      final first = stroke(const Offset(0.1, 0.1));
+      final second = stroke(const Offset(0.2, 0.2));
+      controller
+        ..add(first)
+        ..add(second)
+        ..undo()
+        ..undo();
+      expect(controller.annotations, isEmpty);
+
+      controller.redo();
+      expect(controller.annotations, [same(first)]);
+      controller.redo();
+      expect(controller.annotations, [same(first), same(second)]);
+    });
+
+    test('clearing is one undo away from the whole frame coming back', () {
+      final first = stroke(const Offset(0.1, 0.1));
+      final second = stroke(const Offset(0.2, 0.2));
+      controller
+        ..add(first)
+        ..add(second)
+        ..clear();
+      expect(controller.annotations, isEmpty);
+
+      controller.undo();
+      expect(controller.annotations, [same(first), same(second)]);
+
+      controller.redo();
+      expect(controller.annotations, isEmpty);
+    });
+
+    test('clearing an empty frame is not an edit', () {
+      controller.clear();
+      expect(controller.canUndo, isFalse);
+    });
+
+    test('an angle comes back a vertex at a time', () {
+      for (final point in const [
+        Offset(0.2, 0.8),
+        Offset(0.4, 0.6),
+        Offset(0.6, 0.8),
+      ]) {
+        addAngleVertex(controller, point);
+      }
+      final angle = controller.annotations.single as AngleAnnotation;
+      expect(angle.isComplete, isTrue);
+
+      controller.undo();
+      expect(angle.points, hasLength(2));
+      controller.undo();
+      expect(angle.points, hasLength(1));
+      controller.undo();
+      expect(controller.annotations, isEmpty);
+
+      controller.redo();
+      controller.redo();
+      controller.redo();
+      expect((controller.annotations.single as AngleAnnotation).points,
+          hasLength(3));
+    });
+
+    test('drawing again drops what was undone', () {
+      controller
+        ..add(stroke(const Offset(0.1, 0.1)))
+        ..undo();
+      expect(controller.canRedo, isTrue);
+
+      controller.add(stroke(const Offset(0.3, 0.3)));
+      expect(controller.canRedo, isFalse);
+    });
+
+    test('a stroke a pinch turned out to be leaves nothing to redo', () {
+      controller
+        ..add(stroke())
+        ..discardStroke();
+      expect(controller.annotations, isEmpty);
+      expect(controller.canUndo, isFalse);
+      expect(controller.canRedo, isFalse);
+    });
+  });
+
   group('thickness picker', () {
     late Directory temp;
     late ThrowVideo video;
@@ -197,6 +311,94 @@ void main() {
 
       await tapRail(tester, find.byIcon(Icons.undo));
       expect(annotationsOf<ArrowAnnotation>(tester), isEmpty);
+    });
+  });
+
+  group('circle tool', () {
+    late Directory temp;
+    late ThrowVideo video;
+
+    setUp(() async {
+      temp = await Directory.systemTemp.createTemp('throwlab_test');
+      video = testVideo(temp);
+    });
+
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    /// The radius the canvas actually struck, to a hair — the normalize /
+    /// denormalize round trip lands a whisker off a round number, which the
+    /// `circle` matcher compares exactly.
+    PaintPattern paintsRingOfRadius(double radius) => paints
+      ..something((symbol, arguments) =>
+          symbol == #drawCircle &&
+          ((arguments[1] as double) - radius).abs() < 0.01);
+
+    testWidgets('drags out from the middle to the rim', (tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await selectTool(tester, Icons.circle_outlined);
+
+      // Press on what is being circled, drag out to the rim.
+      await drawAlong(tester, const [
+        Offset(400, 300),
+        Offset(420, 300),
+        Offset(460, 300),
+      ]);
+
+      final ring = annotationsOf<CircleAnnotation>(tester).single;
+      expect(inkFor(tester, ring.center),
+          within(distance: 1, from: const Offset(400, 300)));
+      expect(inkFor(tester, ring.edge),
+          within(distance: 1, from: const Offset(460, 300)));
+      expect(ring.width, kStrokeWidths[1]);
+      expect(find.byType(DrawingCanvas),
+          paints..circle(strokeWidth: kStrokeWidths[1]));
+      expect(find.byType(DrawingCanvas), paintsRingOfRadius(60));
+    });
+
+    testWidgets('stays round on a frame that is not square', (tester) async {
+      // A 16:9 clip letterboxed into a 4:3 window: the canvas is wider than
+      // it is tall, so a ring stored as a normalized radius would come out
+      // an ellipse. It is stored as a rim point instead.
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await selectTool(tester, Icons.circle_outlined);
+      await drawAlong(
+          tester, const [Offset(400, 300), Offset(400, 260), Offset(400, 240)]);
+
+      final ring = annotationsOf<CircleAnnotation>(tester).single;
+      // Dragged 60 across in the test above, 60 up here — the same ring.
+      expect((inkFor(tester, ring.edge) - inkFor(tester, ring.center)).distance,
+          closeTo(60, 1));
+      expect(find.byType(DrawingCanvas), paintsRingOfRadius(60));
+    });
+
+    testWidgets('a press that never travelled is no ring at all',
+        (tester) async {
+      final controller = DrawingController()
+        ..add(CircleAnnotation(kAnnotationColors.first, kStrokeWidths[1],
+            const Offset(0.5, 0.5), const Offset(0.5, 0.5)));
+      await tester.pumpWidget(
+          MaterialApp(home: DrawingCanvas(controller: controller)));
+      expect(find.byType(DrawingCanvas), paintsNothing);
+    });
+
+    testWidgets('undo takes the whole ring', (tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await selectTool(tester, Icons.circle_outlined);
+      await drawAlong(
+          tester, const [Offset(400, 300), Offset(430, 320), Offset(460, 340)]);
+      expect(annotationsOf<CircleAnnotation>(tester), hasLength(1));
+
+      await tapRail(tester, find.byKey(const ValueKey('rail-undo')));
+      expect(annotationsOf<CircleAnnotation>(tester), isEmpty);
     });
   });
 

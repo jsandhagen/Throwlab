@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/widgets/drawing_canvas.dart';
 
 import 'analysis_harness.dart';
 
@@ -29,16 +30,17 @@ void main() {
         videoSize: const Size(1920, 1080),
       );
 
-  /// Everything the rail shows at rest, top to bottom: scrub, pen, the
-  /// shape menu, width, color, undo, more, and the collapse chevron.
+  /// Everything the rail shows at rest, in order along it: scrub, pen, the
+  /// shape menu, width, color, undo, redo, clear, and the collapse chevron.
   final railControls = <Finder>[
     find.byIcon(Icons.pan_tool_alt),
     find.byIcon(Icons.draw),
     find.byKey(const ValueKey('rail-shapes')),
     find.byKey(const ValueKey('rail-width')),
     find.byKey(const ValueKey('rail-color')),
-    find.byIcon(Icons.undo),
-    find.byKey(const ValueKey('rail-more')),
+    find.byKey(const ValueKey('rail-undo')),
+    find.byKey(const ValueKey('rail-redo')),
+    find.byKey(const ValueKey('rail-clear')),
     find.byKey(const ValueKey('rail-collapse')),
   ];
 
@@ -71,8 +73,8 @@ void main() {
       await tester.tap(collapse);
       await tester.pump();
       // Only the collapse button is left, still in the bottom-right corner.
-      expect(find.byIcon(Icons.undo), findsNothing);
-      expect(find.byKey(const ValueKey('rail-more')), findsNothing);
+      expect(find.byKey(const ValueKey('rail-undo')), findsNothing);
+      expect(find.byKey(const ValueKey('rail-clear')), findsNothing);
       expect(collapse, findsOneWidget);
       expectOnScreen(tester, collapse, _landscapePhone, what: 'collapsed rail');
 
@@ -83,13 +85,32 @@ void main() {
       }
     });
 
-    testWidgets('the rail stays a column down the right edge', (tester) async {
+    testWidgets('the tools are a bar along the bottom, not a column',
+        (tester) async {
       await mount(tester, _landscapePhone);
       final first = tester.getRect(railControls.first);
       final last = tester.getRect(railControls.last);
-      expect(last.top, greaterThan(first.top));
-      expect(first.left, greaterThan(_landscapePhone.width * 0.8));
-      expect(last.left, greaterThan(_landscapePhone.width * 0.8));
+      // One row, reading left to right, with the chevron on the end of it.
+      // Centers, since a finder on an icon measures the glyph and one on a
+      // button measures the slot around it.
+      expect(last.center.dx, greaterThan(first.center.dx));
+      expect(last.center.dy, closeTo(first.center.dy, 1));
+      // Anchored to the bottom-right: the chevron is the fixed target.
+      expect(last.right, greaterThan(_landscapePhone.width * 0.9));
+      // Clear of the header rail down the left edge.
+      expect(first.left, greaterThanOrEqualTo(64));
+    });
+
+    testWidgets('the tools leave the right and upper frame to the throw',
+        (tester) async {
+      await mount(tester, _landscapePhone);
+      // The whole bar sits in the bottom band, so the right-center and
+      // upper-right — where the throw is — are the video's.
+      for (final control in railControls) {
+        expect(tester.getRect(control).top,
+            greaterThan(_landscapePhone.height * 0.6),
+            reason: '$control is up in the frame');
+      }
     });
 
     testWidgets('the header is a rail down the left, back arrow on top',
@@ -115,8 +136,8 @@ void main() {
   });
 
   group('portrait', () {
-    testWidgets('keeps the header across the top and the rail on the right',
-        (tester) async {
+    testWidgets('keeps the header across the top and the tools along the '
+        'bottom', (tester) async {
       await mount(tester, _portraitPhone);
       final back = tester.getRect(find.byIcon(Icons.arrow_back));
       final fps = tester.getRect(find.byIcon(Icons.shutter_speed));
@@ -127,11 +148,16 @@ void main() {
       // Title has room here, unlike a 56px rail.
       expect(find.textContaining('Javelin'), findsOneWidget);
 
-      // Tools stacked down the right edge.
+      // Tools in a row along the bottom. Upright, a widescreen clip is
+      // letterboxed into a band of black under it, and the bar sits in the
+      // band rather than over any of the frame.
       final pen = tester.getRect(find.byIcon(Icons.draw));
-      final more = tester.getRect(find.byKey(const ValueKey('rail-more')));
-      expect(pen.left, greaterThan(_portraitPhone.width / 2));
-      expect(more.top, greaterThan(pen.top));
+      final clear = tester.getRect(find.byKey(const ValueKey('rail-clear')));
+      expect(clear.center.dy, closeTo(pen.center.dy, 1));
+      expect(clear.center.dx, greaterThan(pen.center.dx));
+      final video = tester.getRect(find.byType(DrawingCanvas));
+      expect(pen.top, greaterThan(video.bottom),
+          reason: 'the tools are over the frame');
       expect(tester.takeException(), isNull);
     });
   });

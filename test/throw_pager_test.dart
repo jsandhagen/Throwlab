@@ -124,11 +124,11 @@ void main() {
     testWidgets('the pager keeps clear of the drawing rail', (tester) async {
       await mount(tester, video: throwNumber(2), screen: _landscapePhone);
       final next = tester.getRect(find.byIcon(Icons.chevron_right));
-      final rail = tester.getRect(find.byIcon(Icons.undo));
+      final rail = tester.getRect(find.byKey(const ValueKey('rail-undo')));
       expect(next.left, lessThan(_landscapePhone.width / 4),
           reason: 'the pager belongs on the left, with Back');
-      expect(rail.left, greaterThan(_landscapePhone.width * 0.8),
-          reason: 'the drawing rail still owns the right edge');
+      expect(rail.left, greaterThan(_landscapePhone.width / 4),
+          reason: 'the drawing bar starts clear of the header rail');
       expect(next.overlaps(rail), isFalse);
     });
   });
