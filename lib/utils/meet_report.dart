@@ -149,13 +149,30 @@ void _competition(
       advancing: meet.advancing, prelimRounds: meet.prelimRounds);
   const size = 8.5;
   final width = sheet.columnsAt(size);
+  // How wide one attempt has to be. A meet measured in meters writes
+  // '44.90' and one measured in feet writes '191-04.75', and a column cut
+  // for the first would run the second into its neighbor — so the series
+  // is measured before it is set rather than given a number that happens
+  // to fit the metric case.
+  final round = math.max(
+    _round,
+    1 +
+        standings.places.fold<int>(
+            0,
+            (widest, place) => math.max(
+                widest,
+                [
+                  for (var i = 0; i < meet.rounds; i++)
+                    _attempt(place.entry, place.series, i).length,
+                ].fold(0, math.max))),
+  );
   // Place, the rounds and the mark are fixed; the name takes what is left
   // of the page, which is what keeps the columns lined up whether a meet
   // gives three attempts or six — but only up to a point. A name column
   // stretched the full width of a sheet leaves the eye to jump a hand's
   // breadth of nothing to reach the marks.
   final name =
-      math.min(_widestName, width - 5 - _mark - _flag - _round * meet.rounds);
+      math.min(_widestName, width - 5 - _mark - _flag - round * meet.rounds);
 
   // A heading is no use at the foot of a page with its table over the
   // leaf: keep it with the first few rows of one.
@@ -176,7 +193,7 @@ void _competition(
   // Drawn to the table's own width rather than the page's, so the picture
   // and the numbers under it read as one block instead of two.
   _spread(sheet, standings,
-      (5 + name + _mark + _flag + _round * meet.rounds) * size * 0.6);
+      (5 + name + _mark + _flag + round * meet.rounds) * size * 0.6);
 
   sheet.columns(
     _row(
@@ -188,6 +205,7 @@ void _competition(
       ],
       mark: 'BEST',
       face: PdfFace.bold,
+      round: round,
     ),
     size: size,
   );
@@ -226,6 +244,7 @@ void _competition(
         // First place in bold, because a results sheet is read from the
         // top and that is the line it is read for.
         face: place.place == 1 && best != null ? PdfFace.bold : null,
+        round: round,
       ),
       size: size,
     );
@@ -335,7 +354,7 @@ void _spread(PdfSheet sheet, MeetStandings standings, double toWidth) {
     for (var ring = band.near; ring <= band.far + 1e-9; ring += band.grid) {
       into.line(at(ring), axis - 3, at(ring), into.height - head,
           thickness: 0.4, gray: 0.86);
-      into.text(_ring(ring),
+      into.text(_ring(ring, unit),
           x: at(ring), y: 3, size: 6, gray: 0.45, align: PdfAlign.center);
     }
     into.text(unit == DistanceUnit.feet ? 'ft' : 'm',
@@ -395,9 +414,17 @@ DistanceUnit _unitOf(List<MeetPlace> places) {
 }
 
 /// A ring's label, without the trailing zeros a round number doesn't need.
-String _ring(double value) => value == value.roundToDouble()
-    ? value.toStringAsFixed(0)
-    : value.toStringAsFixed(1);
+///
+/// [value] is already in the unit the chart is drawn in. A ring that falls
+/// between two feet is written as a mark is — a scale a reader counts a
+/// competition off should not be the one place on the sheet still in
+/// decimal feet.
+String _ring(double value, DistanceUnit unit) {
+  if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+  return unit == DistanceUnit.feet
+      ? formatFeet(value * metersPerFoot)
+      : value.toStringAsFixed(1);
+}
 
 /// The scale a competition is drawn to: deep enough to hold every throw in
 /// it, on one of the board's own rungs.
@@ -430,9 +457,11 @@ String _fitPoints(String text, double points, double size) {
   return text.length <= fits ? text : '${text.substring(0, fits - 1)}.';
 }
 
-/// Room for one attempt, for the mark an athlete was placed on, and for
-/// the two letters that say it was the furthest they have thrown. In
-/// characters, which is the only unit a fixed-width sheet has.
+/// The least room one attempt gets, what the mark an athlete was placed on
+/// takes, and the two letters that say it was the furthest they have
+/// thrown. In characters, which is the only unit a fixed-width sheet has —
+/// a series measured in feet asks for more than the first of these, and
+/// says so.
 const _round = 7;
 const _mark = 10;
 const _flag = 3;
@@ -455,6 +484,7 @@ List<PdfRun> _row({
   int? emphasize,
   String flag = '',
   PdfFace? face,
+  int round = _round,
 }) {
   final plain = face ?? PdfFace.regular;
   final runs = <PdfRun>[
@@ -463,9 +493,9 @@ List<PdfRun> _row({
   ];
   var column = 3 + width + 1;
   for (var i = 0; i < rounds.length; i++) {
-    runs.add(PdfRun(rounds[i].padLeft(_round), column,
+    runs.add(PdfRun(rounds[i].padLeft(round), column,
         i == emphasize ? PdfFace.bold : plain));
-    column += _round;
+    column += round;
   }
   runs.add(PdfRun(mark.padLeft(_mark), column, plain));
   runs.add(PdfRun(flag.padLeft(_flag), column + _mark, PdfFace.bold));

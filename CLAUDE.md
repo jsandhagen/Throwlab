@@ -141,7 +141,21 @@ like the app rather than a bare Material default.
 - A throw's distance (`ThrowVideo.distance`, always meters, null until
   recorded) is the badge on its card, shown in the unit it was entered in
   (`distanceUnit`). `DistanceField` is the meters/feet pair that converts
-  as you type; `parseFeet` also takes "191-08" the way a meet writes it.
+  as you type; `parseFeet` takes "191-08" the way a meet writes it.
+- A mark in feet is written in feet and inches, never in decimal feet.
+  `formatFeet` is the other half of `parseFeet`: it spells a throw
+  '191-08', '44-06.25' — what was called across the sector, printed on the
+  program and posted afterwards — because '191.67 ft' beside a sheet
+  reading '191-08' is one throw in two notations. To the *lesser* quarter
+  inch, which is the rule the mark was recorded under: a tape reading 44
+  feet 6.4 inches is a 44-06.25, and 12.19 m is a 39-11.75 rather than a
+  40 flat. The quarter is left off when there isn't one. Everything that
+  shows a mark goes through `formatDistance`, so this is the one place it
+  is decided — including the differences (a winning margin, a season's
+  movement), which are the same unit as the marks they came from. A
+  fixed-width sheet has to make room for it: `meet_report` measures the
+  series before it sets the column, since '191-04.75' does not fit a
+  column cut for '44.90'.
 - A personal best is per athlete, per event, *per implement weight* — a
   lighter implement never erases the mark set with the heavy one. The rule
   lives in `personalBestIds` (`athlete_profile.dart`) and nowhere else;

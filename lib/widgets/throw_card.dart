@@ -30,13 +30,38 @@ String longThrowDate(DateTime when) {
   return '${local.day} ${_months[local.month - 1]} ${local.year}';
 }
 
-/// "58.42 m", or "191.67 ft" for a throw measured in feet. Centimeters are
+/// "58.42 m", or "191-08" for a throw measured in feet. Centimeters are
 /// how a throw is measured, and the trailing zeros of "58.40" carry
 /// meaning, so two decimals always.
 String formatDistance(double meters,
-    [DistanceUnit unit = DistanceUnit.meters]) {
-  final value = unit == DistanceUnit.feet ? meters / metersPerFoot : meters;
-  return '${value.toStringAsFixed(2)} ${unit == DistanceUnit.feet ? 'ft' : 'm'}';
+        [DistanceUnit unit = DistanceUnit.meters]) =>
+    unit == DistanceUnit.feet
+        ? formatFeet(meters)
+        : '${meters.toStringAsFixed(2)} m';
+
+/// A mark in feet and inches, written the way a meet writes one: "191-08",
+/// "44-06.25".
+///
+/// Not decimal feet. '191.67' is a number no throws meet has ever put on a
+/// board — it is read out as a hundred and ninety-one eight, printed
+/// '191-08' on the program, and posted '191-08' afterwards, and a phone
+/// that answered '191.67 ft' next to that sheet would be showing the same
+/// throw twice with nothing to say so. [parseFeet] has always taken the
+/// meet's spelling; this is the other half of it.
+///
+/// To the lesser quarter inch, which is the rule the mark was recorded
+/// under: a tape reading 44 feet 6.4 inches is a 44-06.25. The quarter is
+/// left off when there isn't one, because a sheet that prints '.00' after
+/// every mark is spending three characters on nothing — and the app is
+/// read at arm's length.
+String formatFeet(double meters) {
+  // A hair over before the floor: the arithmetic that got here has been
+  // through meters and back, and a mark sitting exactly on a quarter must
+  // not be dropped to the one below by the last bit of a double.
+  final quarters = (meters / metersPerFoot * 48 + 1e-6).floor();
+  final feet = quarters ~/ 48;
+  final inches = (quarters % 48) / 4;
+  return '$feet-${inches == inches.roundToDouble() ? inches.toStringAsFixed(0).padLeft(2, '0') : inches.toStringAsFixed(2).padLeft(5, '0')}';
 }
 
 /// A typed number, or null when it isn't one. Accepts a comma decimal

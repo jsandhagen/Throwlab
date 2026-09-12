@@ -3,6 +3,9 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../models/throw_video.dart';
+import 'throw_card.dart';
+
 /// One measured throw on the season's line.
 class ProgressionPoint {
   const ProgressionPoint({
@@ -35,6 +38,7 @@ class ProgressionChart extends StatelessWidget {
     super.key,
     required this.points,
     required this.color,
+    this.unit = DistanceUnit.meters,
     this.height = 92,
   });
 
@@ -45,6 +49,12 @@ class ProgressionChart extends StatelessWidget {
   /// The event's color, so the line belongs to the same event as everything
   /// else on the card.
   final Color color;
+
+  /// What to write the two numbers on the axis in. The line itself is
+  /// plotted in meters whatever this says — see [ProgressionPoint.meters] —
+  /// but a card whose best reads '200-02.25' must not label its own chart
+  /// in meters.
+  final DistanceUnit unit;
 
   final double height;
 
@@ -59,6 +69,7 @@ class ProgressionChart extends StatelessWidget {
         painter: _ProgressionPainter(
           points: points,
           color: color,
+          unit: unit,
           axis: scheme.outlineVariant,
           label: scheme.onSurfaceVariant,
           surface: scheme.surface,
@@ -76,6 +87,7 @@ class _ProgressionPainter extends CustomPainter {
   const _ProgressionPainter({
     required this.points,
     required this.color,
+    required this.unit,
     required this.axis,
     required this.label,
     required this.surface,
@@ -84,6 +96,7 @@ class _ProgressionPainter extends CustomPainter {
 
   final List<ProgressionPoint> points;
   final Color color;
+  final DistanceUnit unit;
   final Color axis;
   final Color label;
 
@@ -194,10 +207,10 @@ class _ProgressionPainter extends CustomPainter {
       }
     }
 
-    _text('${highest.toStringAsFixed(2)} m', Offset(plot.right + 6, plot.top),
+    _text(formatDistance(highest, unit), Offset(plot.right + 6, plot.top),
         canvas, color);
     if (highest != lowest) {
-      _text('${lowest.toStringAsFixed(2)} m',
+      _text(formatDistance(lowest, unit),
           Offset(plot.right + 6, plot.bottom - 4), canvas, label);
     }
   }
@@ -215,5 +228,8 @@ class _ProgressionPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ProgressionPainter old) =>
-      old.points != points || old.color != color || old.text != text;
+      old.points != points ||
+      old.color != color ||
+      old.unit != unit ||
+      old.text != text;
 }

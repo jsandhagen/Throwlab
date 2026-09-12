@@ -32,9 +32,32 @@ void main() {
 
     test('reads back in the unit it was measured in', () {
       expect(formatDistance(58.42, DistanceUnit.meters), '58.42 m');
-      // 58.42 m is 191 feet 8 inches, which is 191.67 ft.
-      expect(formatDistance(58.42, DistanceUnit.feet), '191.67 ft');
-      expect(formatDistance(12.19, DistanceUnit.feet), '39.99 ft');
+      // 58.42 m is 191 feet 8 inches, and that is how a meet writes it —
+      // not as 191.67, which is a number no throws sheet has ever printed.
+      expect(formatDistance(58.42, DistanceUnit.feet), '191-08');
+      // To the lesser quarter inch, which is the rule a mark is recorded
+      // under: 12.19 m is a hair under forty feet, so it is 39-11.75 and
+      // not a 40 flat.
+      expect(formatDistance(12.19, DistanceUnit.feet), '39-11.75');
+      // The quarter is written where there is one, and left off where
+      // there isn't.
+      expect(formatDistance((44 + 6 / 12) * 0.3048, DistanceUnit.feet),
+          '44-06');
+      expect(formatDistance((44 + 6.25 / 12) * 0.3048, DistanceUnit.feet),
+          '44-06.25');
+      // And a tape between two quarters is written as the lesser one, not
+      // rounded to the nearer.
+      expect(formatDistance((44 + 6.4 / 12) * 0.3048, DistanceUnit.feet),
+          '44-06.25');
+    });
+
+    test('writes a mark a meet could read back off the page', () {
+      // The round trip the app is actually asked for: a mark typed off a
+      // sheet comes back spelled the way the sheet spelled it.
+      for (final written in ['191-08', '44-06.25', '200-02', '58-11.75']) {
+        final meters = parseFeet(written)! * 0.3048;
+        expect(formatDistance(meters, DistanceUnit.feet), written);
+      }
     });
 
     test('takes feet as a meet writes them', () {
@@ -74,7 +97,7 @@ void main() {
       await tester.pump();
       expect(meters, closeTo(58.42, 1e-9));
       expect(unit, DistanceUnit.meters);
-      expect(tester.widget<TextField>(feetBox).controller!.text, '191.67');
+      expect(tester.widget<TextField>(feetBox).controller!.text, '191-08');
 
       await tester.enterText(feetBox, '150-06');
       await tester.pump();
@@ -103,7 +126,7 @@ void main() {
       // an example distance, which is a "58.42" of its own.
       final fields = tester.widgetList<TextField>(find.byType(TextField));
       expect(fields.first.controller!.text, '58.42');
-      expect(fields.last.controller!.text, '191.67');
+      expect(fields.last.controller!.text, '191-08');
     });
   });
 

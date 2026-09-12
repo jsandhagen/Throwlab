@@ -256,6 +256,29 @@ void main() {
     });
   });
 
+  group('a meet measured in feet', () {
+    testWidgets('writes the mark down the way it was called out',
+        (tester) async {
+      await mountEvent(tester);
+      await tapMark(tester);
+      // The second box is feet, and a US meet calls a mark out — and
+      // prints it — as feet and inches.
+      await tester.enterText(find.byType(TextField).last, '191-08');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save mark'));
+      await tester.pumpAndSettle();
+
+      // Stored in meters like everything else, and read back in the
+      // notation it was entered in.
+      expect(library.marks.single.distance, closeTo(58.4200, 1e-4));
+      expect(library.marks.single.distanceUnit, DistanceUnit.feet);
+      expect(find.text('191-08'), findsWidgets);
+      // Never as decimal feet: 191.67 is the same throw in a notation
+      // nobody at the meet is using.
+      expect(find.textContaining('191.67'), findsNothing);
+    });
+  });
+
   group('the throws that do not count', () {
     testWidgets('a foul is an X and leaves nothing in the record book',
         (tester) async {

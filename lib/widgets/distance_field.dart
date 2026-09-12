@@ -6,9 +6,15 @@ import 'throw_card.dart';
 /// How far it went, in whichever unit the meet measured in.
 ///
 /// Two boxes side by side, each showing the other's number converted: type
-/// 58.42 in meters and 191.67 appears in feet. Which box was typed in is
+/// 58.42 in meters and 191-08 appears in feet. Which box was typed in is
 /// what the throw remembers, so a distance measured in feet reads back in
 /// feet rather than as its metric equivalent.
+///
+/// The feet box is written the way a meet writes a mark — feet, a dash and
+/// the inches — because it is filled in from a sheet or from what was
+/// called across the sector, and both of those say '191-08'. It still
+/// takes a plain decimal, and half a typed mark ('44-') while somebody is
+/// still typing it.
 class DistanceField extends StatefulWidget {
   const DistanceField({
     super.key,
@@ -35,7 +41,7 @@ class _DistanceFieldState extends State<DistanceField> {
   late final TextEditingController _meters =
       TextEditingController(text: _text(widget.meters));
   late final TextEditingController _feet = TextEditingController(
-      text: widget.meters == null ? '' : _text(widget.meters! / metersPerFoot));
+      text: widget.meters == null ? '' : formatFeet(widget.meters!));
 
   static String _text(double? value) =>
       value == null ? '' : value.toStringAsFixed(2);
@@ -51,7 +57,7 @@ class _DistanceFieldState extends State<DistanceField> {
     final meters = parseDistanceValue(text);
     // Setting a controller's text doesn't fire its onChanged, so writing
     // the conversion into the other box can't bounce back into this one.
-    _feet.text = meters == null ? '' : _text(meters / metersPerFoot);
+    _feet.text = meters == null ? '' : formatFeet(meters);
     widget.onChanged(meters, DistanceUnit.meters);
   }
 

@@ -129,13 +129,37 @@ void main() {
     expect(rival, contains('44.90'));
   });
 
-  test('a mark measured in feet reads back in feet', () {
+  test('a mark measured in feet reads back the way a meet writes one', () {
     final made = meet();
     made.entries.add(entry('e1', 'Ana Diaz', [MeetAttempt.mark('m1')]));
     final text =
         read(made, [mark('m1', 'Ana Diaz', 58.34, unit: DistanceUnit.feet)]);
-    expect(text, contains('191.40'));
-    expect(text, contains('ft'));
+    // Feet and inches, to the lesser quarter — what the meet called out and
+    // what its own sheet will say. Not 191.40, which is the same throw in
+    // a notation nobody there is using.
+    expect(text, contains('191-04.75'));
+    expect(text, isNot(contains('191.40')));
+  });
+
+  test('gives a series in feet the room it needs', () {
+    final made = meet();
+    made.entries.add(entry('e1', 'Ana Diaz', [
+      MeetAttempt.mark('m1'),
+      MeetAttempt.mark('m2'),
+      MeetAttempt.mark('m3'),
+    ]));
+    final text = read(made, [
+      mark('m1', 'Ana Diaz', 58.34, unit: DistanceUnit.feet),
+      mark('m2', 'Ana Diaz', 61.02, unit: DistanceUnit.feet),
+      mark('m3', 'Ana Diaz', 59.10, unit: DistanceUnit.feet),
+    ]);
+    final row = text
+        .split('\n')
+        .firstWhere((line) => line.contains('191-04.75'));
+    // A column cut for '44.90' would run one of these into the next. The
+    // series is measured before it is set, so every mark keeps its own
+    // column whatever notation the meet used.
+    expect(row, matches(RegExp(r'191-04\.75\s+200-02\.25\s+193-10\.75')));
   });
 
   test('draws the cut where it falls', () {

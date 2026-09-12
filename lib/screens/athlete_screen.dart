@@ -750,7 +750,13 @@ class _BestTile extends StatelessWidget {
               if (season.length > 1) ...[
                 const SizedBox(height: 6),
                 ProgressionChart(
-                    points: season, color: eventColor(best.event), height: 78),
+                    points: season,
+                    color: eventColor(best.event),
+                    // The card's own unit: a best written '200-02.25' over
+                    // a chart labeled in meters is one throw in two
+                    // notations.
+                    unit: best.unit,
+                    height: 78),
                 Padding(
                   padding: const EdgeInsets.only(left: 4, top: 2),
                   child: Text(
