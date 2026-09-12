@@ -228,11 +228,22 @@ class AppUpdater {
   /// Hands the downloaded APK to the system installer. Android will not put
   /// the installer up for an app that isn't in front of somebody, so this is
   /// called when the app is resumed rather than the moment the bytes land.
+  ///
+  /// Only ever the build being offered. An APK that came down before
+  /// another release went out is the update before last, and installing it
+  /// would put somebody one version behind and then ask them to do the
+  /// whole thing again — see [resume].
   static Future<void> install() async {
     if (status.value.stage != UpdateStage.ready) return;
     final dir = await stagingDirectory();
     final apk = File('${dir.path}/ThrowLab.apk');
     if (!await apk.exists()) {
+      status.value = UpdateStatus.idle;
+      return;
+    }
+    if (await _stampedBuild(File('${dir.path}/ThrowLab.apk.build')) !=
+        status.value.build) {
+      await _discard(dir);
       status.value = UpdateStatus.idle;
       return;
     }
@@ -250,22 +261,55 @@ class AppUpdater {
   /// part file for [build] means a download to finish, a whole APK means an
   /// installer to open. Called on every return to the foreground, so a
   /// download that died with the process quietly carries on.
+  ///
+  /// [build] is the newest one published, and anything staged for another
+  /// one is thrown away rather than kept or installed. The release is a
+  /// rolling one: an APK that finished downloading before the next build
+  /// went out is not the update anybody is being offered any more, and
+  /// handing it to the installer would walk somebody up through the
+  /// releases one at a time — install, restart, find another update,
+  /// install again — when one download would have taken them to the end.
   static Future<void> resume(int build) async {
     if (status.value.isBusy) return;
     final dir = await stagingDirectory();
-    if (await File('${dir.path}/ThrowLab.apk').exists() &&
-        await _stampedBuild(File('${dir.path}/ThrowLab.apk.build')) == build) {
+    final staged = await _stampedBuild(File('${dir.path}/ThrowLab.apk.build'));
+
+    if (staged != null && staged != build) {
+      // Including a finished one sitting at [UpdateStage.ready], which the
+      // screen would otherwise open the installer for the moment somebody
+      // came back to the app.
+      await _discard(dir);
+      status.value = UpdateStatus.idle;
+      return;
+    }
+
+    if (await File('${dir.path}/ThrowLab.apk').exists() && staged == build) {
       status.value =
           UpdateStatus(stage: UpdateStage.ready, build: build, progress: 1);
       return;
     }
     if (status.value.stage == UpdateStage.failed) return;
     final part = File('${dir.path}/ThrowLab.apk.part');
-    if (!await part.exists()) return;
-    if (await _stampedBuild(File('${dir.path}/ThrowLab.apk.build')) != build) {
-      return;
-    }
+    if (!await part.exists() || staged != build) return;
     await download(build);
+  }
+
+  /// Clears the staging directory: the APK, whatever part of one is there,
+  /// and the build it belonged to.
+  static Future<void> _discard(Directory dir) async {
+    for (final name in [
+      'ThrowLab.apk',
+      'ThrowLab.apk.part',
+      'ThrowLab.apk.build'
+    ]) {
+      final file = File('${dir.path}/$name');
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        // A file that will not delete is one the next download overwrites
+        // anyway; the stamp is what decides, and that is rewritten there.
+      }
+    }
   }
 
   /// Which build the files in the staging directory belong to, if any.

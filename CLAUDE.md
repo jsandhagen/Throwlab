@@ -350,7 +350,10 @@ like the app rather than a bare Material default.
 - The live board is drawn to a scale, and the scale is a round number of
   meters (`boardSpans`) rather than whatever the field happens to span: a
   gap across the board is the same number of meters after a throw as it was
-  before it, and rings every `MeetBoard.grid` say how many. `fitBand` picks
+  before it, and a marker line every `MeetBoard.grid` says how many — the
+  lines a sector is painted with, never 'rings', because in throwing the
+  ring is the circle the throw is made from and there is one of those on
+  the board already. `fitBand` picks
   it — the shallowest rung that holds every line, going deeper only while
   going deeper picks up another mark. When one doesn't, the board *breaks*
   rather than zooming out: it keeps the run of the competition around the
@@ -358,8 +361,12 @@ like the app rather than a bare Material default.
   draws whatever is outside as an arrow off the edge carrying its mark and
   how far out it landed — a leader five meters clear is worth an arrow, not
   worth squashing the fight for second into an inch of sector. The band's
-  edges snap to the rings so it moves a ring at a time instead of sliding
-  under every throw. Pinching picks a rung by hand and a double-tap goes
+  edges snap to the marker lines so it moves a line at a time instead of
+  sliding under every throw. The ground past the cut is shaded to its own
+  arc rather than to a horizontal edge: a throw lands the same distance out
+  whether it goes down the middle or close to a sector line, and a straight
+  edge across the wedge shades ground that is short of the cut at the sides
+  — which is exactly where a place is lost. Pinching picks a rung by hand and a double-tap goes
   back to fitting; there are no zoom buttons, because a control over the
   board costs a meter of sector to answer a question the board has usually
   already answered. Only the labels move to avoid each other — the lines
@@ -399,8 +406,8 @@ like the app rather than a bare Material default.
 - The sheet is a report, not a dump. A table says what everybody threw and
   hides what the afternoon was like, so each competition is drawn as well
   as tabulated: a bar to the throw an athlete was placed on, a tick for
-  every other legal throw of their series, rings at a round number of
-  meters off the board's own `boardSpans`, and the cut as a dashed line
+  every other legal throw of their series, marker lines at a round number
+  of meters off the board's own `boardSpans`, and the cut as a dashed line
   across all of it — whether the winner was clear or hunted, and who found
   it once against who was there all day. The picture is drawn to the
   table's width rather than the page's so the two read as one block, and it
@@ -424,6 +431,13 @@ like the app rather than a bare Material default.
   to `AppUpdater`, not to the screen that started it, and writes into a part
   file it resumes from with a range request — so leaving the app mid-update
   costs the time it was away and none of the bytes, and Android reclaiming
-  the app costs the same. The banner carries the progress; nothing is
+  the app costs the same. Only ever the newest build: the release is a
+  rolling one, so anything staged for another build — a half-downloaded
+  part file, or a finished APK sitting ready to install — is thrown away
+  rather than resumed or opened. Keeping it would walk somebody up through
+  the releases one at a time, install and restart and find another update,
+  when one download takes them to the end. `_discard` is where that
+  happens, and `install` refuses an APK whose stamp is not the build being
+  offered. The banner carries the progress; nothing is
   blocked while it runs. The installer is opened when the app is in front of
   somebody, which is the one part that cannot happen in the background.

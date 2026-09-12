@@ -100,20 +100,66 @@ void main() {
     expect(await File('${staging.path}/ThrowLab.apk').readAsBytes(), apk);
   });
 
-  test('resumes only what belongs to the build being offered', () async {
+  test('resumes what belongs to the build being offered', () async {
     AppUpdater.openClient = () => _FakeClient(apk, cutAfter: 64);
     await AppUpdater.download(7);
 
-    // Nothing on offer for build 9, so nothing is fetched for it.
-    final other = _FakeClient(apk);
-    AppUpdater.openClient = () => other;
+    final rest = _FakeClient(apk);
+    AppUpdater.openClient = () => rest;
     AppUpdater.status.value = UpdateStatus.idle;
-    await AppUpdater.resume(9);
-    expect(other.ranges, isEmpty);
-
-    // The one it does belong to carries on.
     await AppUpdater.resume(7);
-    expect(other.ranges.single, 'bytes=64-');
+
+    expect(rest.ranges.single, 'bytes=64-');
     expect(AppUpdater.status.value.stage, UpdateStage.ready);
+  });
+
+  group('a build that has been overtaken', () {
+    test('is thrown away rather than resumed', () async {
+      AppUpdater.openClient = () => _FakeClient(apk, cutAfter: 64);
+      await AppUpdater.download(7);
+      expect(await File('${staging.path}/ThrowLab.apk.part').exists(), isTrue);
+
+      // Build 9 is out now. Half of build 7 is half of a file nobody is
+      // being offered, and resuming into it would finish a release that is
+      // already the one before last.
+      final other = _FakeClient(apk);
+      AppUpdater.openClient = () => other;
+      await AppUpdater.resume(9);
+
+      expect(other.ranges, isEmpty);
+      expect(await File('${staging.path}/ThrowLab.apk.part').exists(), isFalse);
+      expect(await File('${staging.path}/ThrowLab.apk.build').exists(),
+          isFalse);
+      expect(AppUpdater.status.value.stage, UpdateStage.idle);
+    });
+
+    test('is never installed, however finished it is', () async {
+      AppUpdater.openClient = () => _FakeClient(apk);
+      await AppUpdater.download(7);
+      expect(AppUpdater.status.value.stage, UpdateStage.ready);
+
+      // The whole APK is on the phone and the banner is offering to
+      // install it — and then build 9 goes out. Opening the installer now
+      // would put somebody on 7, restart them, and offer 9 all over again:
+      // the update walking up one release at a time instead of landing on
+      // the newest.
+      await AppUpdater.resume(9);
+
+      expect(AppUpdater.status.value.stage, UpdateStage.idle);
+      expect(await File('${staging.path}/ThrowLab.apk').exists(), isFalse);
+    });
+
+    test('is not handed to the installer by a stale banner', () async {
+      AppUpdater.openClient = () => _FakeClient(apk);
+      await AppUpdater.download(7);
+      // The APK on disk belongs to a build nobody is offering any more,
+      // whatever the status says.
+      await File('${staging.path}/ThrowLab.apk.build').writeAsString('9');
+
+      await AppUpdater.install();
+
+      expect(AppUpdater.status.value.stage, UpdateStage.idle);
+      expect(await File('${staging.path}/ThrowLab.apk').exists(), isFalse);
+    });
   });
 }
