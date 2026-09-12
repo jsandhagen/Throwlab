@@ -97,8 +97,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// centring maths below have to agree, so they read it from here.
   static const double _stripExtent = 72;
 
-  /// How much height the filmstrip costs the bottom overlay — the drawing
-  /// rail is inset by it too, so the tools stay clear of the stills.
+  /// How much height the filmstrip costs the bottom overlay.
   static const double _stripHeight = 52;
 
   _MeasureStep? _measureStep;
@@ -1398,6 +1397,22 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 ],
               ),
             if (!landscape && _set.length > 1) _filmstrip(),
+            // Upright the tools belong with the rest of the chrome rather
+            // than floating over the frame at a guessed inset: laid out
+            // here they sit hard against the scrubber whatever else the
+            // overlay is carrying, and have the width of the screen to
+            // spread along.
+            if (!landscape)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: DrawingRail(
+                    controller: _drawing,
+                    axis: Axis.horizontal,
+                  ),
+                ),
+              ),
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
@@ -1446,40 +1461,33 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               ),
           ] else
             Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 4,
-            bottom: 0,
-            child: SafeArea(
-              child: Padding(
-                // The tools hug the bottom-right corner, clear of the
-                // scrubber/transport overlay (a single shorter row in
-                // landscape) and of the filmstrip where there is one.
-                // Landscape starts them clear of the header rail down the
-                // left edge as well.
-                padding: EdgeInsets.only(
-                    left: landscape ? 64 : 4,
-                    bottom: landscape
-                        ? 60
-                        : (_set.length > 1 ? 150 + _stripHeight : 150)),
-                // Handed the whole box it has to fit into, since that is
-                // what decides whether the tools take one run or two.
-                child: Align(
-                  alignment: Alignment.bottomRight,
-                  child: DrawingRail(
-                    controller: _drawing,
-                    // On its side the frame fills the screen, so the tools
-                    // go up the right edge — past the release and the
-                    // flight, which is the least of the picture to stand in
-                    // front of. Upright the same clip is letterboxed, and
-                    // the band of black under it takes the tools for free.
-                    axis: landscape ? Axis.vertical : Axis.horizontal,
+          // On its side the frame fills the screen, so the tools float over
+          // it as a column up the right edge — past the release and the
+          // flight, which is the least of the picture to stand in front of
+          // — clear of the header rail down the left and of the transport
+          // along the bottom. Upright they live in the bottom overlay
+          // instead, where the letterbox already leaves room for them.
+          if (landscape)
+            Positioned(
+              top: 0,
+              left: 64,
+              right: 4,
+              bottom: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 60),
+                  // Handed the whole box it has to fit into, since that is
+                  // what decides whether the tools take one run or two.
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: DrawingRail(
+                      controller: _drawing,
+                      axis: Axis.vertical,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           Positioned(
             left: 0,
             right: 0,

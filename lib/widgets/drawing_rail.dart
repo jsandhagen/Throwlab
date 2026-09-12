@@ -255,10 +255,54 @@ class _DrawingRailState extends State<DrawingRail> {
     );
   }
 
-  /// The pen, set in one place: ten colors as a grid, three weights under
-  /// them, each drawn in the color that is currently chosen so the row
-  /// shows what the stroke will actually look like.
-  Widget _penPanel(ColorScheme scheme) {
+  /// Ten colors as a grid. A list of ten named rows is a menu long enough
+  /// to scroll on a short screen, and the names are the least of what a
+  /// swatch says anyway — they are the tooltip instead.
+  Widget _colorGrid(BuildContext context) => SizedBox(
+        width: 5 * 32,
+        child: Wrap(
+          children: [
+            for (final entry in kAnnotationColors) _swatch(context, entry)
+          ],
+        ),
+      );
+
+  /// The three weights, each drawn in the color that is currently chosen so
+  /// the row shows what the stroke will actually look like.
+  List<Widget> _weightRows(BuildContext context, ColorScheme scheme) => [
+        for (final (index, width) in kStrokeWidths.indexed)
+          InkWell(
+            onTap: () {
+              controller.strokeWidth = width;
+              Navigator.pop(context);
+            },
+            child: Tooltip(
+              message: '${_thicknessLabels[index]} line',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  children: [
+                    SizedBox(
+                        width: 28,
+                        child: Center(
+                            child: Icon(
+                          controller.strokeWidth == width ? Icons.check : null,
+                          size: 16,
+                          color: scheme.onSurface,
+                        ))),
+                    Expanded(child: _weightPreview(width, controller.color)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ];
+
+  /// A panel of whichever of the two the button is for, in the menu's own
+  /// padding. Up an edge the rail has no slot to spare and both go behind
+  /// one button; along one there is width for a button each.
+  Widget _panel(
+      {bool colors = true, bool weights = true, ColorScheme? scheme}) {
     return Builder(
       builder: (context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -266,45 +310,12 @@ class _DrawingRailState extends State<DrawingRail> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 5 * 32,
-              child: Wrap(
-                children: [
-                  for (final entry in kAnnotationColors) _swatch(context, entry)
-                ],
-              ),
-            ),
-            const SizedBox(height: 6),
-            Divider(height: 9, color: scheme.onSurface.withOpacity(0.2)),
-            for (final (index, width) in kStrokeWidths.indexed)
-              InkWell(
-                onTap: () {
-                  controller.strokeWidth = width;
-                  Navigator.pop(context);
-                },
-                child: Tooltip(
-                  message: '${_thicknessLabels[index]} line',
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                            width: 28,
-                            child: Center(
-                                child: Icon(
-                              controller.strokeWidth == width
-                                  ? Icons.check
-                                  : null,
-                              size: 16,
-                              color: scheme.onSurface,
-                            ))),
-                        Expanded(
-                            child: _weightPreview(width, controller.color)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            if (colors) _colorGrid(context),
+            if (colors && weights) ...[
+              const SizedBox(height: 6),
+              Divider(height: 9, color: scheme!.onSurface.withOpacity(0.2)),
+            ],
+            if (weights) ..._weightRows(context, scheme!),
           ],
         ),
       ),
@@ -346,14 +357,13 @@ class _DrawingRailState extends State<DrawingRail> {
           );
   }
 
-  /// What the rail measures as a single run — four controls for the pen,
-  /// four for the drawing, two gaps, the rule, and the padding around the
-  /// lot: 305 up an edge, 337 along one.
-  double get _oneRunExtent =>
-      (_upright ? _slotHeight : _slotWidth) * 8 +
-      _gapExtent * 2 +
-      _ruleExtent +
-      _sidePadding * 2;
+  /// What the rail measures as a single run: four controls for the drawing,
+  /// and for the pen four up an edge or five along one (where the weight
+  /// and the color get a button each), plus two gaps, the rule and the
+  /// padding around the lot — 305 up an edge, 377 along one.
+  double get _oneRunExtent => _upright
+      ? _slotHeight * 8 + _gapExtent * 2 + _ruleExtent + _sidePadding * 2
+      : _slotWidth * 9 + _gapExtent * 2 + _ruleExtent + _sidePadding * 2;
 
   /// How far the rail will shrink to stay one run. A few percent is
   /// invisible and is all a phone ever asks for — 300 of usable height on a
@@ -404,32 +414,63 @@ class _DrawingRailState extends State<DrawingRail> {
         onSelected: (tool) => controller.tool = tool,
       ),
       _gap,
-      // One button for the pen itself. Weight and color were a button each
-      // and a list each, which is two slots and two taps to set one pen;
-      // the panel sets either in a tap and shows both at once, so what is
-      // about to be drawn is one glance rather than two menus.
-      _menuButton<void>(
-        key: const ValueKey('rail-pen'),
-        tooltip: 'Pen: ${_thicknessLabels[kStrokeWidths.indexOf(
-                  controller.strokeWidth,
-                ).clamp(0, _thicknessLabels.length - 1)].toLowerCase()} '
-            '${_nameOf(controller.color).toLowerCase()}',
-        icon: _penPreview(),
-        selected: false,
-        items: [
-          PopupMenuItem<void>(
-            // Not an entry to be chosen: the taps that matter are the
-            // swatches and the weights inside it, each of which sets the
-            // pen and closes the menu itself.
-            enabled: false,
-            padding: EdgeInsets.zero,
-            child: _penPanel(scheme),
+      // The pen is one slot up an edge and two along one. Height is what a
+      // column is short of, so there the weight and the color go behind one
+      // button; a bar has the width for a button each, and a button each is
+      // one tap closer to the half being changed.
+      if (_upright)
+        _menuButton<void>(
+          key: const ValueKey('rail-pen'),
+          tooltip: 'Pen: ${_weightLabel.toLowerCase()} '
+              '${_nameOf(controller.color).toLowerCase()}',
+          icon: _penPreview(),
+          selected: false,
+          items: [_panelItem(_panel(scheme: scheme))],
+          onSelected: (_) {},
+        )
+      else ...[
+        _menuButton<void>(
+          key: const ValueKey('rail-width'),
+          tooltip: 'Line width: ${_weightLabel.toLowerCase()}',
+          icon: _weightPreview(controller.strokeWidth, controller.color),
+          selected: false,
+          items: [
+            _panelItem(_panel(colors: false, scheme: scheme)),
+          ],
+          onSelected: (_) {},
+        ),
+        _menuButton<void>(
+          key: const ValueKey('rail-color'),
+          tooltip: 'Color: ${_nameOf(controller.color)}',
+          icon: Container(
+            width: 16,
+            height: 16,
+            decoration: BoxDecoration(
+              color: controller.color,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24),
+            ),
           ),
-        ],
-        onSelected: (_) {},
-      ),
+          selected: false,
+          items: [_panelItem(_panel(weights: false))],
+          onSelected: (_) {},
+        ),
+      ],
     ];
   }
+
+  String get _weightLabel => _thicknessLabels[kStrokeWidths
+      .indexOf(controller.strokeWidth)
+      .clamp(0, _thicknessLabels.length - 1)];
+
+  /// The panel, as the menu's one entry. Not an entry to be chosen: the
+  /// taps that matter are the swatches and the weights inside it, each of
+  /// which sets the pen and closes the menu itself.
+  PopupMenuItem<void> _panelItem(Widget panel) => PopupMenuItem<void>(
+        enabled: false,
+        padding: EdgeInsets.zero,
+        child: panel,
+      );
 
   /// What is done to the drawing rather than with it. These three are in
   /// the open on purpose: a wrong stroke is undone where it happened rather

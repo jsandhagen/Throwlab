@@ -35,18 +35,25 @@ void main() {
       );
 
   /// Everything the rail shows at rest, in order along it: scrub, pen, the
-  /// placed-marks menu, the pen panel, undo, redo, clear, and the collapse
-  /// chevron.
-  final railControls = <Finder>[
-    find.byIcon(Icons.pan_tool_alt),
-    find.byIcon(Icons.draw),
-    find.byKey(const ValueKey('rail-place')),
-    find.byKey(const ValueKey('rail-pen')),
-    find.byKey(const ValueKey('rail-undo')),
-    find.byKey(const ValueKey('rail-redo')),
-    find.byKey(const ValueKey('rail-clear')),
-    find.byKey(const ValueKey('rail-collapse')),
-  ];
+  /// placed-marks menu, the pen (one button up a column, two along a bar),
+  /// undo, redo, clear, and the collapse chevron.
+  List<Finder> railControlsFor(Axis axis) => [
+        find.byIcon(Icons.pan_tool_alt),
+        find.byIcon(Icons.draw),
+        find.byKey(const ValueKey('rail-place')),
+        if (axis == Axis.vertical)
+          find.byKey(const ValueKey('rail-pen'))
+        else ...[
+          find.byKey(const ValueKey('rail-width')),
+          find.byKey(const ValueKey('rail-color')),
+        ],
+        find.byKey(const ValueKey('rail-undo')),
+        find.byKey(const ValueKey('rail-redo')),
+        find.byKey(const ValueKey('rail-clear')),
+        find.byKey(const ValueKey('rail-collapse')),
+      ];
+  final railControls = railControlsFor(Axis.vertical);
+  final barControls = railControlsFor(Axis.horizontal);
 
   void expectOnScreen(WidgetTester tester, Finder finder, Size screen,
       {required String what}) {
@@ -164,9 +171,7 @@ void main() {
       // Title has room here, unlike a 56px rail.
       expect(find.textContaining('Javelin'), findsOneWidget);
 
-      // Tools in a row along the bottom. Upright, a widescreen clip is
-      // letterboxed into a band of black under it, and the bar sits in the
-      // band rather than over any of the frame.
+      // Tools in a row along the bottom, in the letterbox under the frame.
       final pen = tester.getRect(find.byIcon(Icons.draw));
       final clear = tester.getRect(find.byKey(const ValueKey('rail-clear')));
       expect(clear.center.dy, closeTo(pen.center.dy, 1));
@@ -174,6 +179,11 @@ void main() {
       final video = tester.getRect(find.byType(DrawingCanvas));
       expect(pen.top, greaterThan(video.bottom),
           reason: 'the tools are over the frame');
+      // Upright there is width for a button each, which is a tap closer to
+      // whichever half of the pen is being changed.
+      expect(find.byKey(const ValueKey('rail-width')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rail-color')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rail-pen')), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
@@ -188,33 +198,41 @@ void main() {
   });
 
   group('a narrow phone', () {
-    testWidgets('still holds the tools in one row, at full size',
-        (tester) async {
+    testWidgets('still holds the tools in one row', (tester) async {
       await mount(tester, _narrowPhone);
-      final rects = [for (final c in railControls) tester.getRect(c)];
-      // 337 of tools into 352: merging the pen's weight and color into one
-      // button is what bought the row back on the commonest Android width.
+      final rects = [for (final c in barControls) tester.getRect(c)];
       final row = rects.first.center.dy;
       for (var i = 1; i < rects.length; i++) {
         expect(rects[i].center.dy, closeTo(row, 1));
         expect(rects[i].center.dx, greaterThan(rects[i - 1].center.dx));
       }
+      // 377 of tools into 352: a shrink of a few percent, not a second row.
       expect(tester.getRect(find.byKey(const ValueKey('rail-undo'))).width,
-          closeTo(40, 0.5));
+          closeTo(40, 3));
       expect(rects.last.right, greaterThan(_narrowPhone.width - 12));
-      for (final control in railControls) {
+      for (final control in barControls) {
         expectOnScreen(tester, control, _narrowPhone, what: '$control');
       }
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the row still clears the frame', (tester) async {
+    testWidgets('the row sits between the frame and the scrubber',
+        (tester) async {
       await mount(tester, _narrowPhone);
       final video = tester.getRect(find.byType(DrawingCanvas));
-      for (final control in railControls) {
-        expect(tester.getRect(control).top, greaterThan(video.bottom),
+      final slider = tester.getRect(find.byType(Slider));
+      for (final control in barControls) {
+        final rect = tester.getRect(control);
+        expect(rect.top, greaterThan(video.bottom),
             reason: '$control is over the frame');
+        expect(rect.bottom, lessThanOrEqualTo(slider.top),
+            reason: '$control is over the scrubber');
       }
+      // Hard against the scrubber rather than floating at a guessed inset.
+      final bar = barControls
+          .map((c) => tester.getRect(c).bottom)
+          .reduce((a, b) => a > b ? a : b);
+      expect(slider.top - bar, lessThan(24));
     });
   });
 }

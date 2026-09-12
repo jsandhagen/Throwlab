@@ -84,8 +84,10 @@ of it, both on a day with a meet on and on a day without, and with what has been
 thrown folded away — and the analysis screen: the drawing tools up the right
 edge of a frame on its side (on their own, with a ring, an arrow and a timer
 on the frame, with the marks menu open, with the pen panel open, and folded
-away to the one chevron), and the same tools lying along the bottom in the
-letterbox under an upright frame, at two widths. Open the PNGs to see
+away to the one chevron), and the same tools lying along the bottom of an
+upright screen, hard against the scrubber with the pen's weight and color
+split onto a button each — at the width that holds them and at the one that
+shrinks them. Open the PNGs to see
 exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
@@ -312,19 +314,21 @@ like the app rather than a bare Material default.
 - The drawing tools run along an edge of the frame and are anchored in its
   bottom-right corner. Which edge follows the shape of the *picture*, not
   the shape of the screen. A clip is filmed on its side, so held that way
-  the frame fills the screen and the tools have to sit on it somewhere: they
-  go up the right edge, out past the release and the flight, which is the
-  least of the picture to stand in front of. Held upright the same clip is
-  letterboxed into a band of black above and below, so the tools lie along
-  the bottom and cover none of the frame at all — which is what the line
-  under the frame naming the calibration reference was costing, so it is
-  gone: the reference is stated where it is used, on the measure sheet and
-  on the card in the library, and the two gestures were learned on the first
-  drag.
+  the frame fills the screen and the tools have to sit on it somewhere:
+  they float over it as a column up the right edge, out past the release
+  and the flight, which is the least of the picture to stand in front of.
+  Held upright the same clip is letterboxed into a band of black above and
+  below, and there the tools are not floated at all — they are laid out
+  inside the bottom overlay, above the scrubber, so they sit hard against
+  it whatever else the overlay is carrying rather than at a guessed inset
+  over the frame. That is also what killed the line under the frame naming
+  the calibration reference: the reference is stated where it is used, on
+  the measure sheet and on the card in the library, and the two gestures
+  were learned on the first drag.
   A phone is a few pixels short either way — ~300 of usable height on its
-  side and ~352 of width upright, against the 305/337 the tools want — so
-  the rail shrinks to fit, which at 98% nobody sees. It only breaks into two
-  runs where shrinking would leave a target a thumb misses at a track
+  side and ~352 of width upright, against the 305/377 the tools want — so
+  the rail shrinks to fit, a few percent nobody sees. It only breaks into
+  two runs where shrinking would leave a target a thumb misses at a track
   (`_minScale`), which is a screen no phone has; scrolling is never the
   answer, since a tool scrolled out of reach is one nobody finds and the
   scroll view that offered it swallowed every drag over the strip it
@@ -332,16 +336,20 @@ like the app rather than a bare Material default.
   grouped — what a tool is picked with in the first run, what is done to the
   drawing in the second — and the chevron is still last, so it is still in
   the corner.
-  Eight controls is what the fit is measured against, and what keeps it to
-  eight is that the marks *placed* on the frame share one menu button
-  wearing whichever is selected, and the pen is one button too: weight and
-  color were a button and a list each, which is two slots and two taps to
-  set one pen, where the panel sets either in a tap and shows both at once.
-  Undo, redo and clear are never behind a menu, because they are what a
-  drawing hand reaches for most. Clear can sit in the open because undo
-  brings the whole frame back — `DrawingController` keeps the edits rather
-  than snapshots of the frame, since an annotation goes on mutating while
-  the finger is down.
+  What keeps the count down is that the marks *placed* on the frame share
+  one menu button wearing whichever is selected. The pen is the one control
+  that differs by axis: height is what a column is short of, so up an edge
+  the weight and the color go behind a single button opening a panel of
+  both, while a bar has the width for a button each, which is a tap closer
+  to whichever half is being changed — eight controls up a column, nine
+  along a bar. Undo, redo and clear are never behind a menu, because they
+  are what a drawing hand reaches for most. Clear can sit in the open
+  because undo brings the whole frame back — `DrawingController` keeps the
+  edits rather than snapshots of the frame, since an annotation goes on
+  mutating while the finger is down. Ten colors are a grid of swatches with
+  their names as tooltips, never a list of ten named rows: a list that long
+  scrolls on a short screen, and the name is the least of what a swatch
+  says.
 - A mark is made the way it is measured. An arrow is dragged tail to head,
   a curved arrow traces the path it wants and takes its head where the
   finger lifts, and a circle is dragged out from the middle: what is being

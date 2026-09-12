@@ -172,17 +172,26 @@ Future<void> selectTool(WidgetTester tester, IconData icon) async {
   await tapRail(tester, find.byIcon(icon));
 }
 
-/// Picks a color out of the rail's pen panel. The swatches carry their name
-/// as a tooltip rather than beside them — ten of them read as a grid, not
-/// as a list.
+/// Opens whichever button carries that half of the pen: its own along a
+/// bar, the shared one up a column.
+Future<void> _openPen(WidgetTester tester, String key) async {
+  final own = find.byKey(ValueKey(key));
+  await tapRail(
+      tester,
+      own.evaluate().isEmpty ? find.byKey(const ValueKey('rail-pen')) : own);
+}
+
+/// Picks a color out of the rail's swatches. They carry their name as a
+/// tooltip rather than beside them — ten of them read as a grid, not as a
+/// list.
 Future<void> selectColor(WidgetTester tester, String name) async {
-  await tapRail(tester, find.byKey(const ValueKey('rail-pen')));
+  await _openPen(tester, 'rail-color');
   await tapRail(tester, find.byTooltip(name));
 }
 
-/// Picks a pen width out of the same panel.
+/// Picks a pen width the same way.
 Future<void> selectWidth(WidgetTester tester, String label) async {
-  await tapRail(tester, find.byKey(const ValueKey('rail-pen')));
+  await _openPen(tester, 'rail-width');
   await tapRail(tester, find.byTooltip('$label line'));
 }
 
