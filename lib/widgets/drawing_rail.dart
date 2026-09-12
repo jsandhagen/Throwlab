@@ -71,10 +71,11 @@ class _DrawingRailState extends State<DrawingRail> {
     (DrawTool.pen, Icons.draw, 'Freehand pen'),
   ];
 
-  /// The shapes a drag builds, sharing one menu button that shows whichever
-  /// is selected — five more icons is more than an edge of a phone has room
-  /// for.
-  static const _shapeTools = [
+  /// The marks that are placed rather than freehanded — four shapes built on
+  /// a drag, an angle and a timer on a tap — sharing one menu button that
+  /// shows whichever is selected. Six more icons is more than an edge of a
+  /// phone has room for.
+  static const _placedTools = [
     (DrawTool.line, Icons.timeline, 'Straight line'),
     (DrawTool.arrow, Icons.arrow_right_alt, 'Arrow (drag tail to head)'),
     (
@@ -88,15 +89,20 @@ class _DrawingRailState extends State<DrawingRail> {
       'Circle (press the middle, drag out to the rim)'
     ),
     (DrawTool.angle, Icons.square_foot, 'Angle (tap 3 points, vertex second)'),
+    (
+      DrawTool.timer,
+      Icons.timer_outlined,
+      'Timer (tap to drop, reads the gap from that frame)'
+    ),
   ];
 
   static const _thicknessLabels = ['Thin', 'Medium', 'Thick'];
 
-  /// The shape the menu button offers on a single tap — whichever shape is
-  /// active, or the plain arrow before one has been chosen.
-  (DrawTool, IconData, String) get _shape => _shapeTools.firstWhere(
+  /// The mark the menu button offers on a single tap — whichever is active,
+  /// or the plain arrow before one has been chosen.
+  (DrawTool, IconData, String) get _placed => _placedTools.firstWhere(
         (entry) => entry.$1 == controller.tool,
-        orElse: () => _shapeTools[1],
+        orElse: () => _placedTools[1],
       );
 
   /// Rail buttons are drawn 40x36 and sized to match: Material's default
@@ -202,6 +208,109 @@ class _DrawingRailState extends State<DrawingRail> {
         ),
       );
 
+  /// What the rail's pen button wears: the current color at the current
+  /// weight, which is the whole of what the pen is.
+  Widget _penPreview() => SizedBox(
+        width: 18,
+        height: 18,
+        child: Center(
+            child: _weightPreview(controller.strokeWidth, controller.color)),
+      );
+
+  String _nameOf(Color color) => kAnnotationColors
+      .firstWhere((entry) => entry.color == color,
+          orElse: () => kAnnotationColors.first)
+      .name;
+
+  /// One swatch in the pen panel. Tapping it sets the color and closes the
+  /// menu — the panel is a picker, not a page to be dismissed afterwards.
+  Widget _swatch(BuildContext context, ({Color color, String name}) entry) {
+    final chosen = controller.color == entry.color;
+    return Tooltip(
+      message: entry.name,
+      child: InkResponse(
+        radius: 20,
+        onTap: () {
+          controller.color = entry.color;
+          Navigator.pop(context);
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: entry.color,
+              shape: BoxShape.circle,
+              // Every swatch is outlined, so black reads as a color rather
+              // than as a hole, and the chosen one is outlined in white.
+              border: Border.all(
+                color: chosen ? Colors.white : Colors.white24,
+                width: chosen ? 3 : 1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The pen, set in one place: ten colors as a grid, three weights under
+  /// them, each drawn in the color that is currently chosen so the row
+  /// shows what the stroke will actually look like.
+  Widget _penPanel(ColorScheme scheme) {
+    return Builder(
+      builder: (context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 5 * 32,
+              child: Wrap(
+                children: [
+                  for (final entry in kAnnotationColors) _swatch(context, entry)
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Divider(height: 9, color: scheme.onSurface.withOpacity(0.2)),
+            for (final (index, width) in kStrokeWidths.indexed)
+              InkWell(
+                onTap: () {
+                  controller.strokeWidth = width;
+                  Navigator.pop(context);
+                },
+                child: Tooltip(
+                  message: '${_thicknessLabels[index]} line',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                            width: 28,
+                            child: Center(
+                                child: Icon(
+                              controller.strokeWidth == width
+                                  ? Icons.check
+                                  : null,
+                              size: 16,
+                              color: scheme.onSurface,
+                            ))),
+                        Expanded(
+                            child: _weightPreview(width, controller.color)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// The breath between groups of buttons, along the rail's own axis.
   static const _gapExtent = 2.0;
   Widget get _gap => SizedBox(
@@ -237,14 +346,21 @@ class _DrawingRailState extends State<DrawingRail> {
           );
   }
 
-  /// What the rail measures as a single run — five controls for the pen,
+  /// What the rail measures as a single run — four controls for the pen,
   /// four for the drawing, two gaps, the rule, and the padding around the
-  /// lot. It comes out within a few pixels of 340 either way up.
+  /// lot: 305 up an edge, 337 along one.
   double get _oneRunExtent =>
-      (_upright ? _slotHeight : _slotWidth) * 9 +
+      (_upright ? _slotHeight : _slotWidth) * 8 +
       _gapExtent * 2 +
       _ruleExtent +
       _sidePadding * 2;
+
+  /// How far the rail will shrink to stay one run. A few percent is
+  /// invisible and is all a phone ever asks for — 300 of usable height on a
+  /// landscape phone against the 305 the tools want. Past this the buttons
+  /// would be small enough for a thumb to miss at a track, and the rail
+  /// breaks into two runs instead, which is a screen no phone has.
+  static const _minScale = 0.85;
 
   /// Which way the chevron points: away from the tools when they are
   /// showing, back toward them when they are not. The rail is anchored at
@@ -257,23 +373,23 @@ class _DrawingRailState extends State<DrawingRail> {
   /// What is armed and what it draws with — the half of the bar a tool is
   /// picked out of.
   List<Widget> _penControls(ColorScheme scheme) {
-    final (shapeTool, shapeIcon, shapeTip) = _shape;
+    final (placedTool, placedIcon, placedTip) = _placed;
     return [
       _toolButton(
           _directTools[0].$1, _directTools[0].$2, _directTools[0].$3, scheme),
       _toolButton(
           _directTools[1].$1, _directTools[1].$2, _directTools[1].$3, scheme),
-      // Lines, arrows, circles and angles share a button: all
-      // built on one drag or a few taps, and five more icons is
-      // what ran the rail off a landscape screen.
+      // Lines, arrows, circles, angles and the timer share a
+      // button: all put on the frame rather than freehanded, and
+      // six more icons is what ran the rail off a phone.
       _menuButton<DrawTool>(
-        key: const ValueKey('rail-shapes'),
-        tooltip: shapeTip,
-        icon: Icon(shapeIcon, size: 20),
-        selected: controller.tool == shapeTool,
+        key: const ValueKey('rail-place'),
+        tooltip: placedTip,
+        icon: Icon(placedIcon, size: 20),
+        selected: controller.tool == placedTool,
         scheme: scheme,
         items: [
-          for (final (tool, icon, tip) in _shapeTools)
+          for (final (tool, icon, tip) in _placedTools)
             PopupMenuItem(
               value: tool,
               child: Row(
@@ -288,68 +404,29 @@ class _DrawingRailState extends State<DrawingRail> {
         onSelected: (tool) => controller.tool = tool,
       ),
       _gap,
-      _menuButton<double>(
-        key: const ValueKey('rail-width'),
-        tooltip: 'Line width',
-        icon: _weightPreview(controller.strokeWidth, controller.color),
+      // One button for the pen itself. Weight and color were a button each
+      // and a list each, which is two slots and two taps to set one pen;
+      // the panel sets either in a tap and shows both at once, so what is
+      // about to be drawn is one glance rather than two menus.
+      _menuButton<void>(
+        key: const ValueKey('rail-pen'),
+        tooltip: 'Pen: ${_thicknessLabels[kStrokeWidths.indexOf(
+                  controller.strokeWidth,
+                ).clamp(0, _thicknessLabels.length - 1)].toLowerCase()} '
+            '${_nameOf(controller.color).toLowerCase()}',
+        icon: _penPreview(),
         selected: false,
         items: [
-          for (final (index, width) in kStrokeWidths.indexed)
-            PopupMenuItem(
-              value: width,
-              child: Row(
-                children: [
-                  SizedBox(
-                      width: 24,
-                      child: _weightPreview(width, controller.color)),
-                  const SizedBox(width: 12),
-                  Text('${_thicknessLabels[index]} line'),
-                ],
-              ),
-            ),
-        ],
-        onSelected: (width) => controller.strokeWidth = width,
-      ),
-      _menuButton<Color>(
-        key: const ValueKey('rail-color'),
-        tooltip: 'Color',
-        icon: Container(
-          width: 16,
-          height: 16,
-          decoration: BoxDecoration(
-            color: controller.color,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white24),
+          PopupMenuItem<void>(
+            // Not an entry to be chosen: the taps that matter are the
+            // swatches and the weights inside it, each of which sets the
+            // pen and closes the menu itself.
+            enabled: false,
+            padding: EdgeInsets.zero,
+            child: _penPanel(scheme),
           ),
-        ),
-        selected: false,
-        items: [
-          for (final (index, color) in kAnnotationColors.indexed)
-            PopupMenuItem(
-              value: color,
-              child: Row(
-                children: [
-                  Container(
-                    width: 16,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: controller.color == color
-                            ? Colors.white
-                            : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(_colorNames[index]),
-                ],
-              ),
-            ),
         ],
-        onSelected: (color) => controller.color = color,
+        onSelected: (_) {},
       ),
     ];
   }
@@ -421,31 +498,35 @@ class _DrawingRailState extends State<DrawingRail> {
       animation: controller,
       builder: (context, _) => LayoutBuilder(
         builder: (context, constraints) {
-          // Out of room along the edge and the rail grows a second run
-          // rather than shrinking its buttons: a 34 px target is one a
-          // thumb misses at a track, and there is room going spare across
-          // the rail in both orientations. The seam is where the tools are
-          // already grouped — what a tool is picked with in the first run,
+          // A few pixels short and the rail shrinks to fit, which nobody
+          // sees. Properly short — a screen [_minScale] wouldn't save — and
+          // it breaks into two runs rather than shrinking to a target a
+          // thumb misses at a track. The seam is where the tools are
+          // already grouped: what a tool is picked with in the first run,
           // what is done to the drawing in the second, the chevron still
           // last and so still in the corner.
           final room = _upright ? constraints.maxHeight : constraints.maxWidth;
-          final oneRun = room >= _oneRunExtent;
+          final oneRun = room >= _oneRunExtent * _minScale;
           final pen = _penControls(scheme);
           final actions = [..._actionControls(scheme), _rule(scheme)];
-          return Material(
-            color: scheme.surface.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(24),
-            clipBehavior: Clip.antiAlias,
-            child: Padding(
-              padding: _upright
-                  ? const EdgeInsets.symmetric(vertical: _sidePadding)
-                  : const EdgeInsets.symmetric(horizontal: _sidePadding),
-              child: !_open
-                  ? _run([_collapseButton(scheme)])
-                  : oneRun
-                      ? _run(
-                          [...pen, _gap, ...actions, _collapseButton(scheme)])
-                      : _runs(pen, [...actions, _collapseButton(scheme)]),
+          return FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.bottomRight,
+            child: Material(
+              color: scheme.surface.withOpacity(0.8),
+              borderRadius: BorderRadius.circular(24),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: _upright
+                    ? const EdgeInsets.symmetric(vertical: _sidePadding)
+                    : const EdgeInsets.symmetric(horizontal: _sidePadding),
+                child: !_open
+                    ? _run([_collapseButton(scheme)])
+                    : oneRun
+                        ? _run(
+                            [...pen, _gap, ...actions, _collapseButton(scheme)])
+                        : _runs(pen, [...actions, _collapseButton(scheme)]),
+              ),
             ),
           );
         },
@@ -453,7 +534,3 @@ class _DrawingRailState extends State<DrawingRail> {
     );
   }
 }
-
-/// Names for the annotation colors, in [kAnnotationColors] order, for the
-/// rail's color menu.
-const _colorNames = ['Orange', 'Green', 'Cyan', 'Pink', 'White'];

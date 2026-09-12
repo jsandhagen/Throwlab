@@ -82,11 +82,10 @@ events found in it, one opened on its field with the flights ruled off in
 it, and the meet it leaves entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
 thrown folded away — and the analysis screen: the drawing tools up the right
-edge of a frame on its side, in two short columns in the corner (on their
-own, with a ring and an arrow drawn, with the shape menu open, and folded
+edge of a frame on its side (on their own, with a ring, an arrow and a timer
+on the frame, with the marks menu open, with the pen panel open, and folded
 away to the one chevron), and the same tools lying along the bottom in the
-letterbox under an upright frame — one row on a 393-wide phone, two on a
-360-wide one. Open the PNGs to see
+letterbox under an upright frame, at two widths. Open the PNGs to see
 exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
@@ -322,32 +321,55 @@ like the app rather than a bare Material default.
   gone: the reference is stated where it is used, on the measure sheet and
   on the card in the library, and the two gestures were learned on the first
   drag.
-  Either way they run out of room before they run out of controls — a phone
-  gives ~300 logical pixels of height on its side and 360 of width upright,
-  and the tools want 341 — so the rail grows a second run rather than
-  shrinking its buttons or scrolling: a 34 px target is one a thumb misses
-  at a track, a tool scrolled out of reach is one nobody finds, and the
-  scroll view that offered that swallowed every drag over the strip it
-  covered. The seam is where the tools are already grouped — what a tool is
-  picked with in the first run, what is done to the drawing in the second —
-  and the chevron is still last, so it is still in the corner. Two short
-  columns in the corner are also less of the frame than one long one down
-  the whole edge.
-  The shapes a drag builds share one menu button wearing whichever is
-  selected, and the pen weight and color are menus too, which is what keeps
-  the rail to nine controls; undo, redo and clear are never among them,
-  because they are what a drawing hand reaches for most. Clear can sit in
-  the open because undo brings the whole frame back — `DrawingController`
-  keeps the edits rather than snapshots of the frame, since an annotation
-  goes on mutating while the finger is down.
-- A shape is drawn the way it is measured. An arrow is dragged tail to head,
+  A phone is a few pixels short either way — ~300 of usable height on its
+  side and ~352 of width upright, against the 305/337 the tools want — so
+  the rail shrinks to fit, which at 98% nobody sees. It only breaks into two
+  runs where shrinking would leave a target a thumb misses at a track
+  (`_minScale`), which is a screen no phone has; scrolling is never the
+  answer, since a tool scrolled out of reach is one nobody finds and the
+  scroll view that offered it swallowed every drag over the strip it
+  covered. The seam, when it comes to that, is where the tools are already
+  grouped — what a tool is picked with in the first run, what is done to the
+  drawing in the second — and the chevron is still last, so it is still in
+  the corner.
+  Eight controls is what the fit is measured against, and what keeps it to
+  eight is that the marks *placed* on the frame share one menu button
+  wearing whichever is selected, and the pen is one button too: weight and
+  color were a button and a list each, which is two slots and two taps to
+  set one pen, where the panel sets either in a tap and shows both at once.
+  Undo, redo and clear are never behind a menu, because they are what a
+  drawing hand reaches for most. Clear can sit in the open because undo
+  brings the whole frame back — `DrawingController` keeps the edits rather
+  than snapshots of the frame, since an annotation goes on mutating while
+  the finger is down.
+- A mark is made the way it is measured. An arrow is dragged tail to head,
   a curved arrow traces the path it wants and takes its head where the
   finger lifts, and a circle is dragged out from the middle: what is being
   circled — a hip, a hand, where the implement landed — stays under the
   finger that started it, which a corner-to-corner box does not. A circle is
   stored as its middle and a point on the rim rather than a radius, because
   the two axes normalize by different amounts and a stored radius would come
-  back as an ellipse on a frame of another shape.
+  back as an ellipse on a frame of another shape. An angle and a
+  `TimerMarker` are tapped rather than dragged, since neither has a length
+  to pull out.
+- A `TimerMarker` is a stopwatch dropped on the frame: it holds the moment
+  it was dropped at and reads the gap from there to wherever the clip is
+  now, to the hundredth (`formatDelta`), so scrubbing forward times a
+  phase — block to release, ground contact, the delivery — without anybody
+  doing arithmetic on two frame numbers. It holds a position rather than a
+  frame index, because a position is what the player reports and what the
+  readout under the scrubber is already counting in. The canvas is rebuilt
+  off the player's own value for it, so a box on the frame can never
+  disagree with the numbers beside it. It reads a plain zero on its own
+  frame rather than a signed one, and is signed either way off it, because a
+  coach scrubs back through a throw as often as forward.
+- Ink is ink but a reading is type. The two things the canvas paints as
+  words — an angle's degrees and a timer's seconds — take their style from
+  `Theme.of(context).textTheme`, handed down to the painter: a `TextSpan`
+  built inside a `CustomPainter` inherits nothing, so left alone it sets
+  them in the engine's fallback face while the rest of the app is in
+  Barlow. Handing the style down is how they match without naming a family
+  outside `main.dart`.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

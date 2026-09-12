@@ -804,8 +804,16 @@ class _VideoPaneState extends State<_VideoPane> {
   }
 
   void _onTapUp(TapUpDetails details) {
-    if (widget.drawing.tool != DrawTool.angle || _videoRect.isEmpty) return;
-    addAngleVertex(widget.drawing, _normalize(details.localPosition));
+    if (_videoRect.isEmpty) return;
+    final point = _normalize(details.localPosition);
+    switch (widget.drawing.tool) {
+      case DrawTool.angle:
+        addAngleVertex(widget.drawing, point);
+      case DrawTool.timer:
+        dropTimer(widget.drawing, point, widget.controller.value.position);
+      default:
+        return;
+    }
     widget.onDraw?.call();
   }
 
@@ -889,8 +897,16 @@ class _VideoPaneState extends State<_VideoPane> {
                           ],
                         ),
                       ),
-                      DrawingCanvas(
-                          controller: widget.drawing, zoomScale: _zoom),
+                      // Rebuilt off this pane's own player, so a timer
+                      // dropped on one clip counts against that clip.
+                      ValueListenableBuilder<VideoPlayerValue>(
+                        valueListenable: widget.controller,
+                        builder: (context, value, _) => DrawingCanvas(
+                          controller: widget.drawing,
+                          zoomScale: _zoom,
+                          position: value.position,
+                        ),
+                      ),
                     ],
                   ),
                 ),

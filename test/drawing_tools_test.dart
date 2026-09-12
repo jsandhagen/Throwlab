@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/utils/time_format.dart';
 import 'package:throwlab/widgets/drawing_canvas.dart';
 
 import 'analysis_harness.dart';
@@ -28,7 +29,7 @@ void main() {
       var notifications = 0;
       controller.addListener(() => notifications++);
       controller.tool = DrawTool.none;
-      controller.color = kAnnotationColors.first;
+      controller.color = kAnnotationColors.first.color;
       controller.strokeWidth = kStrokeWidths[1];
       expect(notifications, 0);
     });
@@ -226,6 +227,54 @@ void main() {
     });
   });
 
+  group('pen panel', () {
+    late Directory temp;
+    late ThrowVideo video;
+
+    setUp(() async {
+      temp = await Directory.systemTemp.createTemp('throwlab_test');
+      video = testVideo(temp);
+    });
+
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    Future<void> openPanel(WidgetTester tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await tapRail(tester, find.byKey(const ValueKey('rail-pen')));
+    }
+
+    testWidgets('sets weight and color from the one menu', (tester) async {
+      await openPanel(tester);
+      // Both halves of the pen are on the panel at once.
+      expect(find.byTooltip('Thick line'), findsOneWidget);
+      expect(find.byTooltip('Purple'), findsOneWidget);
+
+      await tapRail(tester, find.byTooltip('Purple'));
+      await selectWidth(tester, 'Thick');
+
+      await selectTool(tester, Icons.draw);
+      await drawAlong(tester, const [
+        Offset(340, 200),
+        Offset(360, 240),
+        Offset(390, 300),
+      ]);
+      final stroke = annotationsOf<PenStroke>(tester).single;
+      expect(stroke.color, Colors.purpleAccent);
+      expect(stroke.width, kStrokeWidths.last);
+    });
+
+    testWidgets('offers every color in the palette', (tester) async {
+      await openPanel(tester);
+      for (final entry in kAnnotationColors) {
+        expect(find.byTooltip(entry.name), findsOneWidget,
+            reason: '${entry.name} is missing from the panel');
+      }
+    });
+  });
+
   group('arrow tool', () {
     late Directory temp;
     late ThrowVideo video;
@@ -380,7 +429,7 @@ void main() {
     testWidgets('a press that never travelled is no ring at all',
         (tester) async {
       final controller = DrawingController()
-        ..add(CircleAnnotation(kAnnotationColors.first, kStrokeWidths[1],
+        ..add(CircleAnnotation(kAnnotationColors.first.color, kStrokeWidths[1],
             const Offset(0.5, 0.5), const Offset(0.5, 0.5)));
       await tester.pumpWidget(
           MaterialApp(home: DrawingCanvas(controller: controller)));
@@ -399,6 +448,122 @@ void main() {
 
       await tapRail(tester, find.byKey(const ValueKey('rail-undo')));
       expect(annotationsOf<CircleAnnotation>(tester), isEmpty);
+    });
+  });
+
+  group('timer marker', () {
+    late Directory temp;
+    late ThrowVideo video;
+
+    setUp(() async {
+      temp = await Directory.systemTemp.createTemp('throwlab_test');
+      video = testVideo(temp);
+    });
+
+    tearDown(() => temp.deleteSync(recursive: true));
+
+    Future<void> mountWithTimer(WidgetTester tester) async {
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: const Size(800, 600),
+          videoSize: const Size(1920, 1080));
+      await selectTool(tester, Icons.timer_outlined);
+    }
+
+    Duration canvasPosition(WidgetTester tester) =>
+        tester.widget<DrawingCanvas>(find.byType(DrawingCanvas)).position;
+
+    testWidgets('a tap drops one, anchored where the clip is', (tester) async {
+      await mountWithTimer(tester);
+      await tester.tapAt(const Offset(360, 260));
+      await pumpFrames(tester);
+
+      final marker = annotationsOf<TimerMarker>(tester).single;
+      expect(inkFor(tester, marker.at),
+          within(distance: 1, from: const Offset(360, 260)));
+      expect(marker.from, canvasPosition(tester));
+      // Wears the pen, like everything else on the frame.
+      expect(marker.width, kStrokeWidths[1]);
+      expect(marker.color, kAnnotationColors.first.color);
+    });
+
+    testWidgets('reads zero on its own frame and counts off it',
+        (tester) async {
+      await mountWithTimer(tester);
+      await tester.tapAt(const Offset(360, 260));
+      await pumpFrames(tester);
+      final marker = annotationsOf<TimerMarker>(tester).single;
+      expect(formatDelta(canvasPosition(tester) - marker.from), '0.00 s');
+
+      // Step the clip on and the box counts, off the player's own position
+      // — the one the frame readout under the scrubber is counting.
+      await tester.tap(find.byIcon(Icons.skip_next));
+      await pumpFrames(tester, 12);
+      final moved = canvasPosition(tester);
+      expect(moved, greaterThan(marker.from));
+      expect(formatDelta(moved - marker.from), isNot('0.00 s'));
+    });
+
+    testWidgets('can be nudged out of the way it was dropped in',
+        (tester) async {
+      await mountWithTimer(tester);
+      await tester.tapAt(const Offset(360, 260));
+      await pumpFrames(tester);
+      final marker = annotationsOf<TimerMarker>(tester).single;
+
+      await drawAlong(tester, const [Offset(360, 260), Offset(420, 300)]);
+      expect(annotationsOf<TimerMarker>(tester), hasLength(1),
+          reason: 'dragging a dropped timer moves it, it does not drop more');
+      expect(inkFor(tester, marker.at),
+          within(distance: 2, from: const Offset(420, 300)));
+    });
+
+    testWidgets('undo takes the whole box', (tester) async {
+      await mountWithTimer(tester);
+      await tester.tapAt(const Offset(360, 260));
+      await pumpFrames(tester);
+      expect(annotationsOf<TimerMarker>(tester), hasLength(1));
+
+      await tapRail(tester, find.byKey(const ValueKey('rail-undo')));
+      expect(annotationsOf<TimerMarker>(tester), isEmpty);
+    });
+
+    testWidgets('paints a solid box with an outline in the pen color',
+        (tester) async {
+      final controller = DrawingController()
+        ..add(TimerMarker(kAnnotationColors.first.color, kStrokeWidths[1],
+            const Offset(0.5, 0.5), Duration.zero));
+      await tester.pumpWidget(MaterialApp(
+        home: DrawingCanvas(
+          controller: controller,
+          position: const Duration(milliseconds: 320),
+        ),
+      ));
+      expect(
+        find.byType(DrawingCanvas),
+        paints
+          ..rrect(color: const Color(0xFF101214))
+          ..rrect(color: kAnnotationColors.first.color),
+      );
+    });
+  });
+
+  group('formatDelta', () {
+    test('reads a plain zero on the frame it was dropped on', () {
+      expect(formatDelta(Duration.zero), '0.00 s');
+      // Under half a hundredth either way is still that frame's zero, and
+      // never -0.00.
+      expect(formatDelta(const Duration(microseconds: -3000)), '0.00 s');
+    });
+
+    test('signs which way the clip was scrubbed', () {
+      expect(formatDelta(const Duration(milliseconds: 320)), '+0.32 s');
+      expect(formatDelta(const Duration(milliseconds: -180)), '-0.18 s');
+    });
+
+    test('keeps the hundredth past a second', () {
+      expect(formatDelta(const Duration(milliseconds: 1250)), '+1.25 s');
+      expect(formatDelta(const Duration(milliseconds: 12345)), '+12.35 s');
     });
   });
 

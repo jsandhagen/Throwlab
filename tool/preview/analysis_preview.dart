@@ -85,24 +85,35 @@ void main() {
 
     // A ring round where the implement is, then an arrow off it: the two
     // marks a coach actually makes, both built on one drag.
-    await _pickShape(tester, Icons.circle_outlined);
+    await _pickMark(tester, Icons.circle_outlined);
     await _dragAlong(tester, const [
       Offset(430, 150),
       Offset(450, 150),
       Offset(468, 150),
     ]);
-    await _pickShape(tester, Icons.arrow_right_alt);
+    await _pickMark(tester, Icons.arrow_right_alt);
     await _dragAlong(tester, const [
       Offset(470, 140),
       Offset(530, 110),
       Offset(600, 80),
     ]);
+    // A timer dropped on the frame, reading the gap from where the clip is.
+    await _pickMark(tester, Icons.timer_outlined);
+    await tester.tapAt(const Offset(330, 250));
+    await _pump(tester, 10);
     await _shoot(tester, 'analysis_landscape_drawn');
 
-    // The shapes a drag builds, all behind the one button.
-    await tester.tap(find.byKey(const ValueKey('rail-shapes')));
+    // Everything a mark can be, all behind the one button.
+    await tester.tap(find.byKey(const ValueKey('rail-place')));
     await _pump(tester, 30);
-    await _shoot(tester, 'analysis_shapes');
+    await _shoot(tester, 'analysis_marks');
+    await tester.tapAt(const Offset(120, 120));
+    await _pump(tester, 30);
+
+    // The pen itself: ten colors and three weights, set in one place.
+    await tester.tap(find.byKey(const ValueKey('rail-pen')));
+    await _pump(tester, 30);
+    await _shoot(tester, 'analysis_pen');
     await tester.tapAt(const Offset(120, 120));
     await _pump(tester, 30);
 
@@ -123,9 +134,9 @@ void main() {
   });
 }
 
-/// Chooses one of the shapes out of the rail's shape menu.
-Future<void> _pickShape(WidgetTester tester, IconData icon) async {
-  await tester.tap(find.byKey(const ValueKey('rail-shapes')));
+/// Chooses one of the placed marks out of the rail's menu.
+Future<void> _pickMark(WidgetTester tester, IconData icon) async {
+  await tester.tap(find.byKey(const ValueKey('rail-place')));
   await _pump(tester, 30);
   await tester.tap(find.byIcon(icon).last);
   await _pump(tester, 30);

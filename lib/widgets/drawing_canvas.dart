@@ -1,21 +1,31 @@
 import 'dart:math' as math;
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 
-enum DrawTool { none, pen, line, arrow, curvedArrow, circle, angle }
+import '../utils/time_format.dart';
+
+enum DrawTool { none, pen, line, arrow, curvedArrow, circle, angle, timer }
 
 /// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
 /// middle one is the default.
 const kStrokeWidths = [1.5, 3.0, 6.0];
 
-/// Annotation colors, in the order the rail offers them: bright against
-/// grass, sky and a runway alike.
-const kAnnotationColors = [
-  Colors.orangeAccent,
-  Colors.lightGreenAccent,
-  Colors.cyanAccent,
-  Colors.pinkAccent,
-  Colors.white,
+/// Annotation colors, in the order the rail offers them: two rows of five,
+/// the bright end of the wheel first because grass, sky and a red runway
+/// are what a stroke has to carry against. Black is last and is there for
+/// the one background the bright ones lose on — a white sky.
+const kAnnotationColors = <({Color color, String name})>[
+  (color: Colors.orangeAccent, name: 'Orange'),
+  (color: Colors.yellowAccent, name: 'Yellow'),
+  (color: Colors.lightGreenAccent, name: 'Green'),
+  (color: Colors.cyanAccent, name: 'Cyan'),
+  (color: Colors.white, name: 'White'),
+  (color: Colors.redAccent, name: 'Red'),
+  (color: Colors.pinkAccent, name: 'Pink'),
+  (color: Colors.purpleAccent, name: 'Purple'),
+  (color: Colors.blueAccent, name: 'Blue'),
+  (color: Colors.black, name: 'Black'),
 ];
 
 /// How much of a zoom the ink takes on. Annotations are painted inside the
@@ -119,6 +129,25 @@ class CurvedArrowAnnotation extends Annotation {
   final List<Offset> points;
 }
 
+/// A stopwatch dropped on the frame: it holds the moment it was dropped at
+/// and reads the gap from there to wherever the clip is now, so scrubbing
+/// forward times a phase — block to release, ground contact, the delivery —
+/// without anybody doing arithmetic on two frame numbers.
+///
+/// [from] is a position in the clip rather than a frame index, because that
+/// is what the player reports and what the readout under the scrubber is
+/// already counting in; a frame index would have to be converted back
+/// through the clip's own frame times to be compared with it.
+class TimerMarker extends Annotation {
+  TimerMarker(super.color, super.width, this.at, this.from);
+
+  /// Where the box sits on the frame, normalized like everything else.
+  Offset at;
+
+  /// The frame it was dropped on, which is the zero it counts from.
+  final Duration from;
+}
+
 /// Three taps: first arm point, vertex, second arm point. The measured angle
 /// is at the vertex.
 class AngleAnnotation extends Annotation {
@@ -191,7 +220,7 @@ class _Wiped extends _Edit {
 
 class DrawingController extends ChangeNotifier {
   DrawTool _tool = DrawTool.none;
-  Color _color = Colors.orangeAccent;
+  Color _color = kAnnotationColors.first.color;
   double _strokeWidth = kStrokeWidths[1];
   final List<Annotation> _annotations = [];
 
@@ -308,6 +337,7 @@ bool beginAnnotation(DrawingController controller, Offset point) {
           controller.color, controller.strokeWidth, point, point));
       return true;
     case DrawTool.angle:
+    case DrawTool.timer:
     case DrawTool.none:
       return false;
   }
@@ -343,6 +373,7 @@ void extendAnnotation(DrawingController controller, Offset point) {
         controller.notifyChanged();
       }
     case DrawTool.angle:
+    case DrawTool.timer:
     case DrawTool.none:
       break;
   }
@@ -360,6 +391,12 @@ void addAngleVertex(DrawingController controller, Offset point) {
   }
 }
 
+/// Drops a timer at normalized [point], counting from [from] — the frame the
+/// clip is showing as it is placed.
+void dropTimer(DrawingController controller, Offset point, Duration from) =>
+    controller.add(
+        TimerMarker(controller.color, controller.strokeWidth, point, from));
+
 /// Paint-only annotation layer stacked over the video player. Gestures are
 /// handled by the screen, which owns a single recognizer for zooming,
 /// scrubbing, drawing, and node dragging — separate competing recognizers
@@ -369,6 +406,7 @@ class DrawingCanvas extends StatelessWidget {
     super.key,
     required this.controller,
     this.zoomScale = 1,
+    this.position = Duration.zero,
   });
 
   final DrawingController controller;
@@ -377,14 +415,27 @@ class DrawingCanvas extends StatelessWidget {
   /// instead of blowing up with the picture (see [inkScaleFor]).
   final double zoomScale;
 
+  /// Where the clip is now, which is what a [TimerMarker] counts to. It is
+  /// the player's own position — the same one the frame readout under the
+  /// scrubber is counting — so a box on the frame can never disagree with
+  /// the numbers beside it.
+  final Duration position;
+
   @override
   Widget build(BuildContext context) {
+    // A painter builds its own TextSpans, which inherit nothing — left to
+    // itself the canvas sets its labels in the engine's fallback face while
+    // the rest of the app is in Barlow. Handing the theme's own style down
+    // keeps them the same type without naming a family here.
+    final labelStyle =
+        Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) => CustomPaint(
           size: Size.infinite,
-          painter: _AnnotationPainter(controller.annotations, zoomScale),
+          painter: _AnnotationPainter(
+              controller.annotations, zoomScale, position, labelStyle),
         ),
       ),
     );
@@ -392,10 +443,16 @@ class DrawingCanvas extends StatelessWidget {
 }
 
 class _AnnotationPainter extends CustomPainter {
-  _AnnotationPainter(this.annotations, this.zoomScale);
+  _AnnotationPainter(
+      this.annotations, this.zoomScale, this.position, this.labelStyle);
 
   final List<Annotation> annotations;
   final double zoomScale;
+  final Duration position;
+
+  /// The app's own type, for the two things on the canvas that are words
+  /// rather than ink: an angle's reading and a timer's.
+  final TextStyle labelStyle;
 
   Offset _denormalize(Offset point, Size size) =>
       Offset(point.dx * size.width, point.dy * size.height);
@@ -437,6 +494,8 @@ class _AnnotationPainter extends CustomPainter {
           canvas.drawCircle(middle, radius, paint);
         case AngleAnnotation():
           _paintAngle(canvas, size, annotation, paint);
+        case TimerMarker():
+          _paintTimer(canvas, size, annotation);
       }
     }
   }
@@ -498,6 +557,43 @@ class _AnnotationPainter extends CustomPainter {
     return total;
   }
 
+  /// A small solid box reading the gap from the frame it was dropped on,
+  /// centered on where it was put. Solid rather than translucent because it
+  /// is read at a glance against whatever the frame happens to be, and set
+  /// in tabular figures so the number doesn't jitter sideways as it counts.
+  void _paintTimer(Canvas canvas, Size size, TimerMarker marker) {
+    final label = TextPainter(
+      text: TextSpan(
+        text: formatDelta(position - marker.from),
+        style: labelStyle.copyWith(
+          color: marker.color,
+          fontSize: _fixed(14),
+          fontWeight: FontWeight.w600,
+          // Tabular figures so the number doesn't shuffle sideways as it
+          // counts, which on a box this small reads as a wobble.
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final padX = _fixed(8);
+    final padY = _fixed(5);
+    final box = Rect.fromCenter(
+      center: _denormalize(marker.at, size),
+      width: label.width + padX * 2,
+      height: label.height + padY * 2,
+    );
+    final rounded = RRect.fromRectAndRadius(box, Radius.circular(_fixed(6)));
+    canvas.drawRRect(rounded, Paint()..color = const Color(0xFF101214));
+    canvas.drawRRect(
+        rounded,
+        Paint()
+          ..color = marker.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _ink(marker.width) * 0.6);
+    label.paint(canvas, Offset(box.left + padX, box.top + padY));
+  }
+
   void _paintAngle(
       Canvas canvas, Size size, AngleAnnotation angle, Paint paint) {
     final points = angle.points.map((p) => _denormalize(p, size)).toList();
@@ -518,7 +614,7 @@ class _AnnotationPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: '${degrees.toStringAsFixed(1)}°',
-          style: TextStyle(
+          style: labelStyle.copyWith(
             color: angle.color,
             fontSize: _fixed(16),
             fontWeight: FontWeight.bold,

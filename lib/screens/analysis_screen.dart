@@ -367,6 +367,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       if (found == null) return null;
       return (p) => setState(() => found(p));
     }
+    if (_drawing.tool == DrawTool.timer) {
+      TimerMarker? hitMarker;
+      for (final annotation in _drawing.annotations) {
+        if (annotation is! TimerMarker) continue;
+        final d = (_denormalizeCanvas(annotation.at) - canvasPoint).distance;
+        if (d < best) {
+          best = d;
+          hitMarker = annotation;
+        }
+      }
+      final marker = hitMarker;
+      if (marker == null) return null;
+      return (p) {
+        marker.at = _normalizeCanvas(p);
+        _drawing.notifyChanged();
+      };
+    }
     if (_drawing.tool == DrawTool.angle) {
       AngleAnnotation? hitAnnotation;
       var hitIndex = 0;
@@ -409,6 +426,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     }
     if (_drawing.tool == DrawTool.angle) {
       addAngleVertex(_drawing, _normalizeCanvas(canvasPoint));
+    } else if (_drawing.tool == DrawTool.timer) {
+      dropTimer(_drawing, _normalizeCanvas(canvasPoint),
+          _controller.value.position);
     }
   }
 
@@ -987,9 +1007,18 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                     // that never travels leaves the video alone.
                                     Positioned.fill(
                                         child: ScrubStill(shuttle: _shuttle)),
-                                    DrawingCanvas(
-                                      controller: _drawing,
-                                      zoomScale: _zoomScale,
+                                    // Rebuilt off the player's own value so
+                                    // a dropped timer counts as the clip
+                                    // moves; nothing else on the canvas
+                                    // cares where the clip is.
+                                    ValueListenableBuilder<VideoPlayerValue>(
+                                      valueListenable: _controller,
+                                      builder: (context, value, _) =>
+                                          DrawingCanvas(
+                                        controller: _drawing,
+                                        zoomScale: _zoomScale,
+                                        position: value.position,
+                                      ),
                                     ),
                                     IgnorePointer(
                                       child: CustomPaint(

@@ -35,13 +35,13 @@ void main() {
       );
 
   /// Everything the rail shows at rest, in order along it: scrub, pen, the
-  /// shape menu, width, color, undo, redo, clear, and the collapse chevron.
+  /// placed-marks menu, the pen panel, undo, redo, clear, and the collapse
+  /// chevron.
   final railControls = <Finder>[
     find.byIcon(Icons.pan_tool_alt),
     find.byIcon(Icons.draw),
-    find.byKey(const ValueKey('rail-shapes')),
-    find.byKey(const ValueKey('rail-width')),
-    find.byKey(const ValueKey('rail-color')),
+    find.byKey(const ValueKey('rail-place')),
+    find.byKey(const ValueKey('rail-pen')),
     find.byKey(const ValueKey('rail-undo')),
     find.byKey(const ValueKey('rail-redo')),
     find.byKey(const ValueKey('rail-clear')),
@@ -93,41 +93,38 @@ void main() {
         (tester) async {
       await mount(tester, _landscapePhone);
       final rects = [for (final c in railControls) tester.getRect(c)];
-      // Two columns — 341 of tools into 300 of usable height — so the pen
-      // reads down the first and the drawing's own controls down the
-      // second. Centers, since a finder on an icon measures the glyph and
-      // one on a button measures the slot around it.
-      final columns = rects.map((r) => r.center.dx).toSet();
-      expect(columns, hasLength(2));
-      final pen = rects.take(5).toList();
-      for (var i = 1; i < pen.length; i++) {
-        expect(pen[i].center.dx, closeTo(pen.first.center.dx, 1));
-        expect(pen[i].center.dy, greaterThan(pen[i - 1].center.dy));
+      // One column, reading down. Centers, since a finder on an icon
+      // measures the glyph and one on a button measures the slot around it.
+      for (var i = 1; i < rects.length; i++) {
+        expect(rects[i].center.dx, closeTo(rects.first.center.dx, 1));
+        expect(rects[i].center.dy, greaterThan(rects[i - 1].center.dy));
       }
-      // Full-size buttons: growing a second column is what that is for.
-      expect(tester.getSize(find.byKey(const ValueKey('rail-clear'))),
-          const Size(40, 36));
-      // Hard against the right edge, with the chevron last and so in the
-      // corner.
-      final collapse = rects.last;
-      expect(collapse.right, greaterThan(_landscapePhone.width * 0.9));
-      expect(collapse.center.dx, greaterThan(pen.first.center.dx));
-      expect(collapse.bottom, greaterThan(_landscapePhone.height * 0.75));
+      // Hard against the right edge, chevron last and so in the corner.
+      expect(rects.last.right, greaterThan(_landscapePhone.width * 0.9));
+      expect(rects.last.bottom, greaterThan(_landscapePhone.height * 0.75));
       for (final control in railControls) {
         expectOnScreen(tester, control, _landscapePhone, what: '$control');
       }
     });
 
-    testWidgets('the tools keep to the corner, not the length of the edge',
+    testWidgets('shrinks the last few pixels rather than breaking in two',
         (tester) async {
       await mount(tester, _landscapePhone);
-      // Two short columns rather than one long one: the top half of the
-      // frame — and everything left of the last 12% of it — is the video's.
+      // 305 of tools into 300 of usable height: a scale nobody sees, and
+      // one column rather than two.
+      final undo = tester.getRect(find.byKey(const ValueKey('rail-undo')));
+      expect(undo.width, closeTo(40, 2));
+      expect(undo.height, closeTo(36, 2));
+    });
+
+    testWidgets('the tools keep to the right edge of the frame',
+        (tester) async {
+      await mount(tester, _landscapePhone);
+      // Whatever height the column takes, it never leaves the last sliver
+      // of the frame: the throw is everywhere left of it.
       for (final control in railControls) {
-        final rect = tester.getRect(control);
-        expect(rect.top, greaterThan(_landscapePhone.height * 0.25),
-            reason: '$control is up in the frame');
-        expect(rect.left, greaterThan(_landscapePhone.width * 0.85),
+        expect(tester.getRect(control).left,
+            greaterThan(_landscapePhone.width * 0.85),
             reason: '$control is out in the frame');
       }
     });
@@ -191,35 +188,27 @@ void main() {
   });
 
   group('a narrow phone', () {
-    testWidgets('grows the tools a second row rather than shrinking them',
+    testWidgets('still holds the tools in one row, at full size',
         (tester) async {
       await mount(tester, _narrowPhone);
       final rects = [for (final c in railControls) tester.getRect(c)];
-      final rows = rects.map((r) => r.center.dy).toSet();
-      expect(rows, hasLength(2), reason: 'the tools should be on two rows');
-
-      // Split where the bar is already grouped: what a tool is picked with
-      // above, what is done to the drawing below.
-      final top = rects.first.center.dy;
-      expect(rects.take(5).every((r) => r.center.dy == top), isTrue);
-      expect(rects.skip(5).every((r) => r.center.dy != top), isTrue);
-
-      // Full-size buttons, not a squeezed row: what the second row is for.
-      for (final key in ['rail-undo', 'rail-redo', 'rail-clear']) {
-        expect(tester.getSize(find.byKey(ValueKey(key))),
-            const Size(40, 36), reason: key);
+      // 337 of tools into 352: merging the pen's weight and color into one
+      // button is what bought the row back on the commonest Android width.
+      final row = rects.first.center.dy;
+      for (var i = 1; i < rects.length; i++) {
+        expect(rects[i].center.dy, closeTo(row, 1));
+        expect(rects[i].center.dx, greaterThan(rects[i - 1].center.dx));
       }
-      // The chevron is still last, and so still in the corner.
-      final collapse = tester.getRect(railControls.last);
-      expect(collapse.center.dy, greaterThan(top));
-      expect(collapse.right, greaterThan(_narrowPhone.width - 12));
+      expect(tester.getRect(find.byKey(const ValueKey('rail-undo'))).width,
+          closeTo(40, 0.5));
+      expect(rects.last.right, greaterThan(_narrowPhone.width - 12));
       for (final control in railControls) {
         expectOnScreen(tester, control, _narrowPhone, what: '$control');
       }
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the two rows still clear the frame', (tester) async {
+    testWidgets('the row still clears the frame', (tester) async {
       await mount(tester, _narrowPhone);
       final video = tester.getRect(find.byType(DrawingCanvas));
       for (final control in railControls) {
