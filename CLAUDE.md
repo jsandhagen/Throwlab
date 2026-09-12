@@ -232,7 +232,13 @@ like the app rather than a bare Material default.
   `MeetEventScreen`. That is the unit a competition is actually run in: one
   implement, one order, one cut. So the throwing order is per event too,
   even though `MeetEntry.order` numbers the whole meet — moving an athlete
-  swaps two positions inside their own event and leaves the rest alone.
+  swaps two positions inside their own event and leaves the rest alone. It
+  is the unit one is removed in, too: `MeetLibrary.removeCompetition` takes
+  the event and everybody in it off the meet, because a program read in
+  with the wrong event ticked is thirty entries nobody wants to tap away
+  one at a time. What was thrown stays where it is — the marks and clips
+  are the athlete's record, not the meet's, exactly as when one athlete is
+  taken out.
 - A meet holds no results of its own: every measured attempt is a
   `ThrowMark` or a `ThrowVideo` in `VideoLibrary` the moment it is entered,
   which the `MeetAttempt` points at by id. That is what keeps a series from

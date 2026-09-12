@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/meet.dart';
+import '../models/throw_event.dart';
 
 /// Persists the meets: who was entered, and what each attempt came to.
 ///
@@ -114,6 +115,30 @@ class MeetLibrary extends ChangeNotifier {
     final meet = byId(meetId);
     if (meet == null) return;
     meet.entries.removeWhere((entry) => entry.id == entryId);
+    await _persist();
+    notifyListeners();
+  }
+
+  /// Takes a whole competition out of a meet — everyone entered in that
+  /// event at that weight.
+  ///
+  /// An event is the unit a meet is read in, so it has to be the unit one
+  /// can be removed in: a heat sheet read in with the shot put ticked by
+  /// mistake is thirty entries nobody wants to tap away one at a time.
+  /// What was thrown stays where it is. The marks and clips live in
+  /// [VideoLibrary] and are the athlete's record, not the meet's — the
+  /// same as taking one athlete out.
+  Future<void> removeCompetition(
+    String meetId, {
+    required ThrowEvent event,
+    required double implementKg,
+  }) async {
+    final meet = byId(meetId);
+    if (meet == null) return;
+    final before = meet.entries.length;
+    meet.entries.removeWhere(
+        (entry) => entry.event == event && entry.implementKg == implementKg);
+    if (meet.entries.length == before) return;
     await _persist();
     notifyListeners();
   }

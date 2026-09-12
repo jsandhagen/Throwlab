@@ -197,6 +197,117 @@ void main() {
     });
   });
 
+  group('removing an event', () {
+    /// The meet with a javelin alongside Ana's discus, and a rival in each.
+    Future<void> twoEvents() async {
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'r1',
+            athlete: 'M. Okoye',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            tracked: false,
+            order: 1,
+          )..setAttempt(0, MeetAttempt.untracked(44.90)));
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'j1',
+            athlete: 'T. Brandt',
+            event: ThrowEvent.javelin,
+            implementKg: 0.8,
+            tracked: false,
+            order: 2,
+          )..setAttempt(0, MeetAttempt.untracked(60.40)));
+    }
+
+    Future<void> openMenu(WidgetTester tester, int card) async {
+      await tester.tap(find.byTooltip('Event').at(card));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove event'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('takes the whole field of it out of the meet',
+        (tester) async {
+      await twoEvents();
+      await mountMeet(tester);
+      expect(find.textContaining('Discus'), findsOneWidget);
+
+      await openMenu(tester, 0);
+      // Said out loud first, with what goes and what doesn't: a program
+      // read in wrong is the usual reason, and nobody should lose a throw
+      // tidying one up.
+      expect(find.textContaining('Remove Discus'), findsOneWidget);
+      expect(find.textContaining('all 2 athletes'), findsOneWidget);
+      expect(find.textContaining('stay in the library'), findsOneWidget);
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      // The discus is gone, entries and all; the javelin is untouched.
+      final left = meets.byId('k1')!.entries;
+      expect(left.map((e) => e.id), ['j1']);
+      expect(find.textContaining('Discus'), findsNothing);
+      expect(find.textContaining('Javelin'), findsOneWidget);
+    });
+
+    testWidgets('leaves the throws in the record book', (tester) async {
+      await twoEvents();
+      await meets.setAttempt('k1', 'e1', 0, MeetAttempt.mark('m1'));
+      await library.addMark(ThrowMark(
+        id: 'm1',
+        athlete: 'Ana Diaz',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        distance: 41.20,
+        achievedOn: DateTime(2026, 6, 13),
+      ));
+      await mountMeet(tester);
+      await openMenu(tester, 0);
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      // A meet holds no results of its own. Taking the event off it takes
+      // nothing off the athlete.
+      expect(library.marks.single.id, 'm1');
+      expect(library.marks.single.distance, 41.20);
+    });
+
+    testWidgets('does nothing until it is agreed to', (tester) async {
+      await twoEvents();
+      await mountMeet(tester);
+      await openMenu(tester, 0);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(meets.byId('k1')!.entries.length, 3);
+      expect(find.textContaining('Discus'), findsOneWidget);
+    });
+
+    testWidgets('takes only the weight it was asked for', (tester) async {
+      // The same event at two weights is two competitions, and an athlete
+      // is only ever placed against the one they are in.
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'h1',
+            athlete: 'B. Kowalski',
+            event: ThrowEvent.discus,
+            implementKg: 2,
+            tracked: false,
+            order: 1,
+          )..setAttempt(0, MeetAttempt.untracked(52.10)));
+      await mountMeet(tester);
+      expect(find.textContaining('Discus · 1 kg'), findsOneWidget);
+      expect(find.textContaining('Discus · 2 kg'), findsOneWidget);
+
+      await openMenu(tester, 0);
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      expect(meets.byId('k1')!.entries.map((e) => e.id), ['h1']);
+      expect(find.textContaining('Discus · 2 kg'), findsOneWidget);
+    });
+  });
+
   group('writing a mark down', () {
     testWidgets('puts it in the series and in the record book', (tester) async {
       await mountEvent(tester);

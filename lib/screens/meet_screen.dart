@@ -139,6 +139,8 @@ class MeetScreen extends StatelessWidget {
                                         prelimRounds: meet.prelimRounds),
                                     onOpen: () =>
                                         _openEvent(context, meet, competition),
+                                    onRemove: () => _removeEvent(
+                                        context, meets, meet, competition),
                                   ),
                                 ),
                             ],
@@ -233,6 +235,42 @@ class MeetScreen extends StatelessWidget {
     }
   }
 
+  /// Takes a whole event out of the meet, once somebody has said so.
+  ///
+  /// The one thing worth spelling out is what does not go: a meet holds no
+  /// results of its own, so the marks and the clips stay in the library
+  /// exactly as they do when one athlete is taken out. Nobody loses a
+  /// throw by tidying up a program that was read in wrong.
+  Future<void> _removeEvent(BuildContext context, MeetLibrary meets, Meet meet,
+      MeetCompetition competition) async {
+    final field = competition.entries.length;
+    final mine = competition.entries.where((entry) => entry.tracked).length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${competition.label}?'),
+        content: Text(
+          'Takes the event and '
+          '${field == 1 ? 'the one athlete' : 'all $field athletes'} in it '
+          'out of this meet.'
+          '${mine == 0 ? '' : ' The marks and clips already recorded stay '
+              'in the library.'}',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await meets.removeCompetition(meet.id,
+        event: competition.event, implementKg: competition.implementKg);
+  }
+
   Future<void> _editConditions(
       BuildContext context, MeetLibrary meets, Meet meet) async {
     final edited = await showConditionsSheet(context,
@@ -322,11 +360,17 @@ class _EventCard extends StatelessWidget {
     required this.meet,
     required this.standings,
     required this.onOpen,
+    required this.onRemove,
   });
 
   final Meet meet;
   final MeetStandings standings;
   final VoidCallback onOpen;
+
+  /// Takes the whole event off the meet. Behind a menu rather than on the
+  /// card: it is the one thing here that cannot be undone by tapping
+  /// again, and the card's own job is to be tapped.
+  final VoidCallback onRemove;
 
   MeetCompetition get competition => standings.competition;
 
@@ -411,6 +455,29 @@ class _EventCard extends StatelessWidget {
                         ],
                       ),
                     ],
+                  ],
+                ),
+              ),
+              // Narrow on purpose: what this card is for is the line under
+              // its name — the field, the round, who is leading — and a
+              // full-sized tap target here takes enough width off that to
+              // wrap it onto a second line.
+              SizedBox(
+                width: 32,
+                child: PopupMenuButton<String>(
+                  tooltip: 'Event',
+                  icon: const Icon(Icons.more_horiz, size: 18),
+                  padding: EdgeInsets.zero,
+                  iconSize: 18,
+                  onSelected: (_) => onRemove(),
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                        value: 'remove',
+                        child: ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete_outline, size: 18),
+                            title: Text('Remove event'))),
                   ],
                 ),
               ),
