@@ -134,13 +134,14 @@ void main() {
 
   testWidgets('portrait', (tester) async {
     await mount(tester, _portrait, siblings: session(temp));
+    // The session shows on top, under the header — out of the way of the
+    // scrubber, the transport and the drawing tools.
     await _shoot(tester, 'analysis_portrait');
 
-    // The set, pulled down from under the header — where it is out of the
-    // way of the scrubber, the transport and the drawing tools.
-    await tester.tap(find.byKey(const ValueKey('throw-picker')));
+    // Put away on its handle, which keeps the pager.
+    await tester.tap(find.byKey(const ValueKey('throw-strip-handle')));
     await _pump(tester, 20);
-    await _shoot(tester, 'analysis_portrait_picker');
+    await _shoot(tester, 'analysis_portrait_nostrip');
   });
 
   testWidgets('narrow portrait', (tester) async {

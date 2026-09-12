@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
@@ -24,6 +25,7 @@ import '../widgets/drawing_rail.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/scrub_still.dart';
+import '../widgets/throw_actions.dart';
 import '../widgets/throw_picker.dart';
 import 'comparison_screen.dart';
 
@@ -44,17 +46,9 @@ class AnalysisScreen extends StatefulWidget {
     super.key,
     required this.video,
     this.siblings = const [],
-    this.pickerOpen = false,
   });
 
   final ThrowVideo video;
-
-  /// Whether the throw picker is already pulled down. Paging through a
-  /// session replaces this screen with the next throw's, and a coach
-  /// picking one throw out of the set usually picks another a moment
-  /// later — so the panel is carried across rather than snapping shut
-  /// under the finger that just used it.
-  final bool pickerOpen;
 
   /// The throws [video] was opened alongside — one athlete's, or one
   /// event's. Given them, the screen pages through the set instead of
@@ -108,8 +102,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// How much height the filmstrip costs the bottom overlay.
   static const double _stripHeight = 52;
 
-  /// Whether the throw picker is pulled down from under the header.
-  late bool _pickerOpen = widget.pickerOpen && _set.length > 1;
+  /// Where the coach last left the strip of stills. Remembered, because it
+  /// is a preference about how they work rather than about this throw —
+  /// and because paging through a session replaces this screen with the
+  /// next throw's, which would otherwise pull the strip back down under the
+  /// finger that just put it away.
+  static const _stripKey = 'throwlab.throwStrip';
+
+  /// The session shows on top by default: a strip of stills is how a throw
+  /// is picked out, and it is the first thing wanted on opening one.
+  bool _stripOpen = true;
 
   _MeasureStep? _measureStep;
   Offset? _refA, _refB, _pointA, _pointB;
@@ -125,6 +127,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     // Without this, opening throw 7 of 8 leaves the strip scrolled to the
     // start, showing everything except the throw actually on screen.
     WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
+    unawaited(_loadStripDock());
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
     final framesDir = widget.video.scrubFramesDir;
@@ -1056,19 +1059,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  String get _throwName => '${widget.video.event.label} · '
+  /// What the throw is, and nothing about where it sits in the set: which
+  /// of eight throws is on screen is answered by the strip of stills, and
+  /// spending the title on it says nothing a coach needed.
+  String get _throwLabel => '${widget.video.event.label} · '
       '${widget.video.implementSpec.weightLabel}';
-
-  String get _throwLabel => _set.length > 1
-      ? '$_throwName · ${_index + 1} of ${_set.length}'
-      : _throwName;
-
-  /// The same label with the count in front of it, for the handle the set
-  /// is pulled down on. The portrait header is back, a title and five
-  /// actions on a 390px screen, so the title ellipsizes — and what it can
-  /// least afford to lose is the half saying there is a session behind it.
-  String get _pickerLabel =>
-      '${_index + 1} of ${_set.length} · $_throwName';
 
   /// Back, then the per-throw actions. [vertical] lays them out for the
   /// left rail, where the title is carried by the implement glyph's tooltip
@@ -1100,37 +1095,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 color: eventColor(widget.video.event)),
           ),
         )
-      else if (_set.length <= 1)
-        Expanded(child: title)
       else
-        // With a session behind it the title is the handle the set is
-        // pulled down on: it already says which throw of how many, so the
-        // chevron only has to say that there is more behind it.
+        // The title names the throw, and tapping it asks about the throw:
+        // when it was taken, how far it went, what was written down, and
+        // the edits for all three. The same sheet the library opens on a
+        // long press, so there is one place a throw is described.
         Expanded(
           child: InkWell(
-            key: const ValueKey('throw-picker'),
+            key: const ValueKey('throw-title'),
             borderRadius: BorderRadius.circular(8),
-            onTap: _togglePicker,
+            onTap: _showThrowInfo,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      _pickerLabel,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Icon(
-                    _pickerOpen
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    size: 20,
-                  ),
-                ],
-              ),
+              child: title,
             ),
           ),
         ),
@@ -1268,8 +1245,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     Navigator.pushReplacement(
       context,
       PageRouteBuilder<void>(
-        pageBuilder: (_, __, ___) => AnalysisScreen(
-            video: video, siblings: _set, pickerOpen: _pickerOpen),
+        pageBuilder: (_, __, ___) =>
+            AnalysisScreen(video: video, siblings: _set),
         // The frame should change like a channel, not like a page arriving.
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
@@ -1278,13 +1255,86 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Scrolls the strip so the open throw sits in the middle of it.
-  void _togglePicker() {
-    setState(() => _pickerOpen = !_pickerOpen);
-    // The strip is only in the tree once the panel is down, so it is
-    // centered on the open rather than at init.
-    if (_pickerOpen) {
+  Future<void> _showThrowInfo() async {
+    await showThrowActions(context, widget.video);
+    // The sheet edits the throw in place — the athlete, the distance, the
+    // note — and the header is drawn from it.
+    if (mounted) setState(() {});
+  }
+
+  /// The tab the strip is put away on and pulled back down by, hanging off
+  /// the bottom edge of it, with the pager either side. On the panel rather
+  /// than in the header, which is already back, a title and five actions
+  /// wide on a 390px screen — and a handle on the thing it moves is the one
+  /// nobody has to be told about.
+  ///
+  /// The chevrons ride here rather than in the strip so that putting the
+  /// stills away costs the *pictures* and not the paging: next and previous
+  /// throw is the commonest thing asked of a session, and hiding the strip
+  /// should not be the thing that takes it away.
+  Widget _stripHandle() {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Material(
+        color: scheme.surface.withOpacity(0.92),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pagerButton(forward: false),
+            InkWell(
+              key: const ValueKey('throw-strip-handle'),
+              onTap: _toggleStrip,
+              child: Tooltip(
+                message: _stripOpen ? 'Hide the session' : 'Show the session',
+                child: SizedBox(
+                  width: 48,
+                  height: 30,
+                  child: Icon(
+                    _stripOpen
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+            ),
+            _pagerButton(forward: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadStripDock() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final open = prefs.getBool(_stripKey) ?? true;
+      if (open == _stripOpen) return;
+      setState(() => _stripOpen = open);
+    } catch (_) {
+      // Storage that will not answer just means the strip stays showing.
+    }
+  }
+
+  void _toggleStrip() {
+    setState(() => _stripOpen = !_stripOpen);
+    // The strip is only in the tree once it is down, so it is centered on
+    // the open rather than at init.
+    if (_stripOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
     }
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_stripKey, _stripOpen);
+      } catch (_) {
+        // It has already moved; it just won't be there next time.
+      }
+    }());
   }
 
   void _centerStrip() {
@@ -1302,6 +1352,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final target = forward ? _laterThrow : _earlierThrow;
     return IconButton(
       tooltip: forward ? 'Next throw' : 'Previous throw',
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 40, height: 30),
       icon: Icon(forward ? Icons.chevron_right : Icons.chevron_left),
       onPressed: target == null ? null : () => _openThrow(target),
     );
@@ -1326,7 +1379,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       ),
       child: Row(
         children: [
-          _pagerButton(forward: false),
           Expanded(
             child: ListView.builder(
               controller: _strip,
@@ -1361,7 +1413,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               },
             ),
           ),
-          _pagerButton(forward: true),
         ],
       ),
     );
@@ -1385,19 +1436,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: _headerActions(vertical: false)),
-            // Pulled down from under the header rather than laid along the
-            // bottom. A strip of stills is how a throw is picked out — by
-            // looking at it — but it is looked at once and then in the way,
-            // and the bottom of the screen is where the scrubber, the
-            // transport and the drawing tools all already are.
-            AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              alignment: Alignment.topCenter,
-              child: _pickerOpen
-                  ? _filmstrip()
-                  : const SizedBox(width: double.infinity),
-            ),
+            // Under the header rather than along the bottom. A strip of
+            // stills is how a throw is picked out — by looking at it — and
+            // it is the first thing wanted on opening one, so it shows;
+            // but the bottom of the screen is where the scrubber, the
+            // transport and the drawing tools all already are, and a strip
+            // down there was in the way of all three.
+            if (_set.length > 1) ...[
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                alignment: Alignment.topCenter,
+                child: _stripOpen
+                    ? _filmstrip()
+                    : const SizedBox(width: double.infinity),
+              ),
+              _stripHandle(),
+            ],
             if (banner != null) banner,
           ],
         ),
