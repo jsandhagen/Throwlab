@@ -65,15 +65,17 @@ to push the last event onto a second page.
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
-profiles (each with the season drawn under its best, what it averages and
-what it fouled away, how that has moved season by season, and the meets it
-was thrown at — and one of them read over last season instead, through the
-picker), a training note (as
+profiles (each with the season drawn under its best, what it averages at a
+meet and what it fouled away, how that has moved season by season, and the
+meets it was thrown at — and one of them read over last season instead
+through the picker, and one read as the best of each meet rather than as
+every throw of it), a training note (as
 it opens, and with the keyboard up — which the note preview fakes, insets
 and all — toolbar above it, and pinned to the top), and the meet tracker:
 the meets as a list and as a calendar, a meet's events, one of them
 part-way through, the standings with the cut and what the coach's own
-athlete is averaging under it, the field as a list, the live card (four times — a podium, a field with the
+athlete is averaging under it, the field as a list, the live card (four
+times — a podium, a field with the
 cut falling below it, a board that has broken, where the leader is off
 the top of it as an arrow, and a field thrown in flights, where the coach's
 own athlete is in the one that hasn't been called), the flighted field as a
@@ -525,41 +527,47 @@ like the app rather than a bare Material default.
   and `fouls` is what it cost — never rolled together, since a foul is a
   throw that went unmeasured and averaging it in as zero would say an
   athlete threw half as far as they did. `SeasonAverages` reads those over
-  a season, per event and weight the way a best is: the mean of each meet's
-  best (the level competed at), the mean of every attempt at those meets
-  (how reliably it is reached), and the mean of what was thrown away from a
-  meet (the training). The last two are a pair and are kept apart — a mark
-  is competition because a series points at it, everything else in the
-  record book is training — because the gap between a Saturday and a
-  Tuesday is the thing worth looking at, and one figure with both in it
-  would close that gap by arithmetic. None of them is drawn off a single
-  throw: a mean of one is the throw again under a heading that promises a
-  season. The averages sit
-  in their own section under the bests, headed the way a competition names
-  itself (`Discus · 1 kg`) rather than the way a record book does (`1 kg
-  Discus`), so the two lists don't read as the same rows twice; the meet
-  average is drawn across the season like a progression, because an average
-  is only interesting next to the one before it.
-  A card says one of them large and the rest small. Three averages set as
-  equals across the top read as three answers to one question — 52.66,
-  52.15 and 49.68 are near enough alike that nothing about them says which
-  is which — so the meet average leads, the line under it is the same
-  number taken one meet at a time, and the best-of-each-meet and the
-  training sit underneath as asides named in words. What the big one was
-  taken over is written beneath it in the same words a coach would say
-  ('over 5 throws at 2 meets · 3 of 10 fouled'), since an average is only
-  worth what is behind it. An athlete who has not competed leads with the
-  training, which is the only average they have. It is said where it is
-  thrown, too: under each meet on a profile, and under the coach's own
-  athletes in the standings — a coach at the ring is asking what the
-  afternoon is averaging, not only what the best of it was.
+  a season, per event and weight the way a best is.
+  Competitions only. Training is thrown under conditions nobody is
+  recording — a light implement, a short run, a good day at the end of a
+  session — and a number built out of it answers a question about Saturday
+  with Tuesday's throwing. What an athlete does in training is drawn on the
+  progression under their best, where every measured throw is plotted
+  against the calendar; this section is about meets, and an athlete who has
+  not competed has no section at all.
+  A meet can be read two ways and both are worth asking — `MeetLine`: every
+  measured attempt of the series averaged, or the best of it, the throw the
+  placing was made on. An athlete whose averages climb while their bests
+  stand still is closing on something; one whose bests hold up on a falling
+  average is living off one throw a day. Neither shows on the other's line,
+  so a switch in the card's header picks which, and everything on the card
+  follows it at once — the figure, the line under it, and the seasons under
+  that. Which way is remembered (`throwlab.meetLine`), because it is a
+  preference about how a coach thinks rather than about one athlete.
+  The averages sit in their own section under the bests, headed the way a
+  competition names itself (`Discus · 1 kg`) rather than the way a record
+  book does (`1 kg Discus`), so the two lists don't read as the same rows
+  twice.
+  A card says one number large and the rest small. Averages set as equals
+  across the top read as rival answers to one question — 52.66 and 52.15
+  are near enough alike that nothing about them says which is which — so
+  the chosen reading leads, with what it was taken over written beneath it
+  in the words a coach would say ('over 5 throws at 2 meets · 3 of 10
+  fouled · 2 passed'; the fouls wear the app's red and the passes do not,
+  since a pass is a round given up on purpose). The other reading, and the
+  furthest thrown at a meet all season, follow as asides named in full. A
+  mean is never drawn off a single throw: a mean of one is the throw again
+  under a heading that promises a season.
+  It is said where it is thrown, too: under each meet on a profile, and
+  under the coach's own athletes in the standings — a coach at the ring is
+  asking what the afternoon is averaging, not only what the best of it was.
 - The averages are read one season at a time, and a season is a calendar
   year (`SeasonAverages.seasonsOf`, `forSeason(season:)`). A career average
   answers a question about this spring with the throwing of two years ago
-  in it, so the section opens on the most recent season there is anything
-  in and the picker in its heading reaches the others, 'Every season'
-  included. An athlete with one season on record is never shown it — there
-  is nothing to tell apart — and the choice is not remembered between
+  in it, so the section opens on the most recent season with a competition
+  in it and the picker in its heading reaches the others, 'Every season'
+  included. An athlete who has competed in one season is never shown it —
+  there is nothing to tell apart — and the choice is not remembered between
   athletes, since the default is already the season being coached. A year
   is exactly right for an outdoor season and wrong for an indoor winter,
   which is one season across two years; `seasonsOf` is the one place that
@@ -567,18 +575,17 @@ like the app rather than a bare Material default.
   sits in and nothing else: a personal best is a personal best whatever
   season it was thrown in.
 - Under the card, the seasons themselves (`SeasonAverages.history`): what
-  the meets averaged each year, most recent first, with what each moved
-  from the year before. The chart above it is the meets inside one season,
-  which is the question asked in June; this is the one asked in January.
-  Rows rather than a line — four points a year apart drawn as a line
-  invent a shape between them nobody threw — and the picker never narrows
-  it, since the comparison is the one thing on the card a season filter
-  must not touch. What the bar draws is the *change*, not the mark: a bar
-  for a 48 m average beside one for 52 m has to start somewhere, and
-  anywhere but zero draws a seven per cent season as a fivefold one, while
-  zero draws two bars of the same length and says nothing. A difference
-  has a real zero. Only seasons with a meet average are rows: a winter
-  spent training is not a year of meet performance to be read against.
+  the meets came to each year, most recent first, read the same way the
+  rest of the card is, with what each moved from the year before. The chart
+  above it is the meets inside one season, which is the question asked in
+  June; this is the one asked in January. Rows rather than a line — four
+  points a year apart drawn as a line invent a shape between them nobody
+  threw — and the picker never narrows it, since the comparison is the one
+  thing on the card a season filter must not touch. What the bar draws is
+  the *change*, not the mark: a bar for a 48 m average beside one for 52 m
+  has to start somewhere, and anywhere but zero draws a seven per cent
+  season as a fivefold one, while zero draws two bars of the same length
+  and says nothing. A difference has a real zero.
 - A meet's results go out as a PDF, written by `pdf_writer` — as narrow as
   `pdf_text` is at the other end, and set in Courier, because a results
   sheet is columns and a fixed-width face lines them up without a table of

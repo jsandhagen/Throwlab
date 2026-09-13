@@ -477,7 +477,7 @@ void main() {
       expect(find.text('averaged 70.50 m from 4 · 2 fouls'), findsOneWidget);
     });
 
-    testWidgets('put the training beside the competition, not into it',
+    testWidgets('say nothing about what was thrown in training',
         (tester) async {
       final meets = await competed([61, 63]);
       for (final mark in [('t1', 56.00), ('t2', 58.00)]) {
@@ -492,25 +492,57 @@ void main() {
       }
       await mountProfile(tester, meets: meets);
 
-      // The meet average leads; the training is an aside under it, named
-      // in words so the two can't read as rival answers to one question.
+      // The Tuesdays are drawn on the progression under her best, where
+      // every measured throw is. Here they would answer a question about
+      // Saturday with Tuesday's throwing.
       expect(find.text('AVERAGE AT A MEET'), findsOneWidget);
       expect(find.text('62.00 m'), findsOneWidget);
-      // The Tuesdays on their own: a figure with the meet marks rolled in
-      // would close the gap the pair exists to show.
-      expect(find.text('In training'), findsOneWidget);
-      expect(find.text('57.00 m'), findsOneWidget);
+      expect(find.text('57.00 m'), findsNothing);
+      expect(find.text('59.50 m'), findsNothing);
     });
 
-    testWidgets('a meet average on its own is not a second figure',
+    testWidgets('read a meet as its best instead, at a tap', (tester) async {
+      // 60 and 64 in May, then 70 and 62 in June: every throw averages
+      // 64.00 and the best of each averages 67.00, and the season moved
+      // +4.00 one way and +6.00 the other.
+      final meets = await competed([60, 64], on: DateTime(2026, 5, 2));
+      for (final meet
+          in (await competed([70, 62], id: 'k2', on: DateTime(2026, 6, 13)))
+              .meets) {
+        await meets.save(meet);
+      }
+      await mountProfile(tester, meets: meets);
+
+      expect(find.text('AVERAGE AT A MEET'), findsOneWidget);
+      expect(find.text('64.00 m'), findsWidgets);
+      expect(find.text('+4.00 m since 2 May'), findsOneWidget);
+      // The other reading of the same meets waits underneath as an aside.
+      expect(find.text('Best of each meet'), findsOneWidget);
+
+      await tester.tap(find.text('Best'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('AVERAGE BEST AT A MEET'), findsOneWidget);
+      expect(find.textContaining('best of each of 2 meets'), findsOneWidget);
+      // The line under it moves with it.
+      expect(find.text('+6.00 m since 2 May'), findsOneWidget);
+      // And the two readings change places.
+      expect(find.text('Every throw averaged'), findsOneWidget);
+      expect(find.text('Best of each meet'), findsNothing);
+    });
+
+    testWidgets('name the furthest of the season and when it came',
         (tester) async {
-      await mountProfile(tester, meets: await competed([60, 64]));
-      // Everything measured was measured at the meet, so widening to the
-      // record book would print the same number twice.
-      expect(find.text('In training'), findsNothing);
+      await mountProfile(tester,
+          meets: await competed([60, 64], on: DateTime(2026, 6, 13)));
+      // The furthest of the season at a meet, and the day it came — not
+      // the personal best, which is all-time and counts the Tuesdays.
+      expect(find.text('Furthest at a meet'), findsOneWidget);
+      expect(find.text('64.00 m'), findsWidgets);
+      expect(find.text('13 Jun'), findsWidgets);
     });
 
-    testWidgets('an athlete who only trains still has an average',
+    testWidgets('an athlete who only trains has no averages section',
         (tester) async {
       await fill([
         testVideo(temp,
@@ -527,13 +559,9 @@ void main() {
             distance: 43.20),
       ]);
       await mountProfile(tester);
-      // Nothing was thrown at a meet, so the training is the average they
-      // have and the card leads with it.
-      expect(find.text('AVERAGE IN TRAINING'), findsOneWidget);
-      expect(find.text('42.20 m'), findsOneWidget);
-      expect(find.textContaining('away from a meet'), findsOneWidget);
-      expect(find.text('AVERAGE AT A MEET'), findsNothing);
-      expect(find.text('Best of each meet'), findsNothing);
+      // Their throwing is on the progression under their best; this
+      // section is about competitions, and they have none.
+      expect(find.text('AVERAGES'), findsNothing);
     });
 
     testWidgets('one mark is not an average of anything', (tester) async {
@@ -602,9 +630,8 @@ void main() {
       expect(find.textContaining('−'), findsNothing);
     });
 
-    testWidgets('one season of meets has nothing to compare itself with',
+    testWidgets('a season with no meets in it is not a season here',
         (tester) async {
-      // Two seasons on record, but only one of them was competed in.
       final meets = await competed([60, 64], on: DateTime(2026, 6, 13));
       await library.addMark(ThrowMark(
         id: 't1',
@@ -616,7 +643,9 @@ void main() {
       ));
       await mountProfile(tester, meets: meets);
 
-      expect(find.byTooltip('Season'), findsOneWidget);
+      // Last year holds a training mark and no competition, so there is
+      // nothing here to tell this season apart from.
+      expect(find.byTooltip('Season'), findsNothing);
       expect(find.text('SEASON BY SEASON'), findsNothing);
     });
 
@@ -654,9 +683,7 @@ void main() {
       }
       await mountProfile(tester, meets: meets);
       // 61 in June, 66 a fortnight later.
-      expect(
-          find.textContaining('each meet on its own · +5.00 m since 13 Jun'),
-          findsOneWidget);
+      expect(find.textContaining('+5.00 m since 13 Jun'), findsOneWidget);
     });
   });
 }

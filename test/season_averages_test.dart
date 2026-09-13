@@ -35,7 +35,8 @@ Meet _meetFor(
 }
 
 /// The record book behind those series — every legal round, as a meet
-/// writes it into the library the moment it is entered.
+/// writes it into the library the moment it is entered. The averages are
+/// read off the meets, but the meets are read off these.
 List<ThrowMark> _book(
   String id,
   DateTime on,
@@ -56,22 +57,21 @@ List<ThrowMark> _book(
           ),
     ];
 
-/// A throw taken on a Tuesday, which is in the record book and at no meet.
-ThrowMark _training(String id, DateTime on, double distance,
-        {ThrowEvent event = ThrowEvent.discus, double implementKg = 1}) =>
-    ThrowMark(
-      id: id,
-      athlete: 'Ana Diaz',
-      event: event,
-      implementKg: implementKg,
-      distance: distance,
-      achievedOn: on,
-    );
-
 List<MeetOuting> _outings(List<Meet> meets, List<ThrowMark> book) =>
     MeetOuting.forAthlete('Ana Diaz', meets, book);
 
-/// Averages: what a season comes to between the bests.
+/// A run of meets, thrown as given.
+List<MeetOuting> _season(Map<String, (DateTime, List<double?>)> meets) {
+  final competitions = <Meet>[];
+  final book = <ThrowMark>[];
+  for (final meet in meets.entries) {
+    competitions.add(_meetFor(meet.key, meet.value.$1, meet.value.$2));
+    book.addAll(_book(meet.key, meet.value.$1, meet.value.$2));
+  }
+  return _outings(competitions, book);
+}
+
+/// Averages: what a season of competitions comes to between the bests.
 void main() {
   final may = DateTime(2026, 5, 2);
   final june = DateTime(2026, 6, 13);
@@ -93,61 +93,60 @@ void main() {
 
     test('an afternoon of fouls averages nothing at all', () {
       final series = <double?>[null, null, null];
-      final outing =
-          _outings([_meetFor('k1', june, series)], const []).single;
+      final outing = _outings([_meetFor('k1', june, series)], const []).single;
       expect(outing.average, isNull);
       expect(outing.fouls, 3);
     });
   });
 
   group('a season', () {
-    test('averages the bests and the whole of every series', () {
-      final may1 = <double?>[60, null, 64];
-      final june1 = <double?>[70, 66, null];
-      final averages = SeasonAverages.forSeason(
-        _outings(
-          [_meetFor('k1', may, may1), _meetFor('k2', june, june1)],
-          [..._book('k1', may, may1), ..._book('k2', june, june1)],
-        ),
-        [..._book('k1', may, may1), ..._book('k2', june, june1)],
-      ).single;
+    test('reads the meets two ways and keeps the count of each', () {
+      final averages = SeasonAverages.forSeason(_season({
+        'k1': (may, [60, null, 64]),
+        'k2': (june, [70, 66, null]),
+      })).single;
 
       expect(averages.event, ThrowEvent.discus);
       // 64 and 70 — the level competed at.
       expect(averages.averageBest, closeTo(67.00, 0.001));
+      expect(averages.on(MeetLine.best), closeTo(67.00, 0.001));
       expect(averages.meetsScored, 2);
       // 60, 64, 70, 66 — how reliably it is reached.
-      expect(averages.averageMeetMark, closeTo(65.00, 0.001));
-      expect(averages.meetMarks, 4);
+      expect(averages.averageMark, closeTo(65.00, 0.001));
+      expect(averages.on(MeetLine.average), closeTo(65.00, 0.001));
+      expect(averages.marks, 4);
       expect(averages.fouls, 2);
       expect(averages.attempts, 6);
       expect(averages.foulRate, closeTo(1 / 3, 0.001));
-      // Nothing was thrown outside the meets, so there is no training
-      // average to put beside it.
-      expect(averages.hasTraining, isFalse);
-      expect(averages.averageTraining, isNull);
     });
 
-    test('keeps the training apart from the competition', () {
-      final series = <double?>[60, 64];
-      final averages = SeasonAverages.forSeason(
-        _outings([_meetFor('k1', june, series)], _book('k1', june, series)),
-        [
-          ..._book('k1', june, series),
-          _training('t1', may, 56),
-          _training('t2', may, 58),
-        ],
-      ).single;
+    test('names the furthest of them and the day it was thrown', () {
+      final averages = SeasonAverages.forSeason(_season({
+        'k1': (may, [60, 64]),
+        'k2': (june, [70, 66]),
+      })).single;
+      expect(averages.best, 70);
+      expect(averages.bestOn, june);
+    });
 
-      // A meet's marks are in the record book like any others; what makes
-      // them competition is that a series points at them.
-      expect(averages.averageMeetMark, closeTo(62.00, 0.001));
-      expect(averages.meetMarks, 2);
-      // The Tuesdays, and only the Tuesdays — the gap between the two is
-      // the reason they are two numbers.
-      expect(averages.averageTraining, closeTo(57.00, 0.001));
-      expect(averages.trainingMarks, 2);
-      expect(averages.hasTraining, isTrue);
+    test('counts what was passed as well as what was fouled', () {
+      final meet = _meetFor('k1', june, [60, 64]);
+      meet.entries.single
+        ..setAttempt(2, MeetAttempt.pass())
+        ..setAttempt(3, MeetAttempt.foul());
+      final averages = SeasonAverages.forSeason(
+              _outings([meet], _book('k1', june, [60, 64])))
+          .single;
+      expect(averages.passes, 1);
+      expect(averages.fouls, 1);
+      expect(averages.attempts, 4);
+    });
+
+    test('has nothing to say about an athlete who has not competed', () {
+      // The record book may be full of Tuesdays; the averages are about
+      // meets, so with no meets there is nothing here to average.
+      expect(SeasonAverages.forSeason(const []), isEmpty);
+      expect(SeasonAverages.seasonsOf(const []), isEmpty);
     });
 
     test('keeps each implement to itself', () {
@@ -155,65 +154,50 @@ void main() {
       final shot = <double?>[18, 19];
       final meets = [
         _meetFor('k1', june, discus),
-        _meetFor('k2', june, shot,
-            event: ThrowEvent.shotPut, implementKg: 4),
+        _meetFor('k2', june, shot, event: ThrowEvent.shotPut, implementKg: 4),
       ];
       final book = [
         ..._book('k1', june, discus),
         ..._book('k2', june, shot, event: ThrowEvent.shotPut, implementKg: 4),
       ];
-      final averages = SeasonAverages.forSeason(_outings(meets, book), book);
+      final averages = SeasonAverages.forSeason(_outings(meets, book));
 
       expect(averages, hasLength(2));
       // Event order, the way the bests above them are listed.
       expect(averages.first.event, ThrowEvent.shotPut);
-      expect(averages.first.averageMeetMark, closeTo(18.50, 0.001));
+      expect(averages.first.averageMark, closeTo(18.50, 0.001));
       expect(averages.last.event, ThrowEvent.discus);
-      expect(averages.last.averageMeetMark, closeTo(62.00, 0.001));
+      expect(averages.last.averageMark, closeTo(62.00, 0.001));
     });
 
-    test('reads the meet average forwards, and says what it moved', () {
-      final may1 = <double?>[60, 62];
-      final june1 = <double?>[64, 68];
-      final averages = SeasonAverages.forSeason(
-        _outings(
-          [_meetFor('k1', may, may1), _meetFor('k2', june, june1)],
-          [..._book('k1', may, may1), ..._book('k2', june, june1)],
-        ),
-        [..._book('k1', may, may1), ..._book('k2', june, june1)],
-      ).single;
+    test('reads the season forwards, and says what it moved either way', () {
+      final averages = SeasonAverages.forSeason(_season({
+        'k1': (may, [60, 62]),
+        'k2': (june, [64, 70]),
+      })).single;
 
       // Oldest first, whatever order the meets were read in: a line is
       // drawn in the direction the season was thrown.
       expect([for (final meet in averages.meets) meet.meet.id], ['k1', 'k2']);
-      // 61 then 66.
-      expect(averages.moved, closeTo(5.00, 0.001));
+      // Averaged, 61 then 67. On the bests, 62 then 70.
+      expect(averages.movement(MeetLine.average), closeTo(6.00, 0.001));
+      expect(averages.movement(MeetLine.best), closeTo(8.00, 0.001));
     });
 
     test('a season with one meet in it has nothing to compare', () {
-      final series = <double?>[60, 62];
-      final averages = SeasonAverages.forSeason(
-        _outings([_meetFor('k1', june, series)], _book('k1', june, series)),
-        _book('k1', june, series),
-      ).single;
-      expect(averages.moved, isNull);
+      final averages = SeasonAverages.forSeason(_season({
+        'k1': (june, [60, 62]),
+      })).single;
+      expect(averages.movement(MeetLine.average), isNull);
+      expect(averages.movement(MeetLine.best), isNull);
       expect(averages.scoredMeets, hasLength(1));
     });
 
-    test('training on its own still averages', () {
-      final averages = SeasonAverages.forSeason(
-        const [],
-        [_training('t1', may, 56), _training('t2', june, 60)],
-      ).single;
-      expect(averages.averageTraining, closeTo(58.00, 0.001));
-      expect(averages.averageBest, isNull);
-      expect(averages.averageMeetMark, isNull);
-      expect(averages.foulRate, isNull);
-      expect(averages.isEmpty, isFalse);
-    });
-
-    test('an athlete with nothing on record has nothing to average', () {
-      expect(SeasonAverages.forSeason(const [], const []), isEmpty);
+    test('one throw at a meet is not an average of anything', () {
+      final averages = SeasonAverages.forSeason(_season({
+        'k1': (june, [60, null]),
+      })).single;
+      expect(averages.isEmpty, isTrue);
     });
   });
 
@@ -221,83 +205,57 @@ void main() {
     final lastYear = DateTime(2025, 6, 14);
     final thisYear = DateTime(2026, 6, 13);
 
-    List<Meet> bothYears() => [
-          _meetFor('k1', lastYear, [50, 54]),
-          _meetFor('k2', thisYear, [60, 64]),
-        ];
-    List<ThrowMark> bothBooks() => [
-          ..._book('k1', lastYear, [50, 54]),
-          ..._book('k2', thisYear, [60, 64]),
-        ];
+    List<MeetOuting> bothYears() => _season({
+          'k1': (lastYear, [50, 54]),
+          'k2': (thisYear, [60, 64]),
+        });
 
-    test('lists the seasons on record, most recent first', () {
-      expect(
-        SeasonAverages.seasonsOf(
-            _outings(bothYears(), bothBooks()), bothBooks()),
-        [2026, 2025],
-      );
+    test('lists the seasons competed in, most recent first', () {
+      expect(SeasonAverages.seasonsOf(bothYears()), [2026, 2025]);
     });
 
     test('a season is only named once, however much was thrown in it', () {
-      final series = <double?>[60, 64];
       expect(
-        SeasonAverages.seasonsOf(
-          _outings([
-            _meetFor('k1', thisYear, series),
-            _meetFor('k2', DateTime(2026, 8, 1), series),
-          ], _book('k1', thisYear, series)),
-          [
-            ..._book('k1', thisYear, series),
-            _training('t1', DateTime(2026, 3, 2), 58),
-          ],
-        ),
+        SeasonAverages.seasonsOf(_season({
+          'k1': (thisYear, [60, 64]),
+          'k2': (DateTime(2026, 8, 1), [62, 66]),
+        })),
         [2026],
       );
     });
 
     test('averages only what was thrown in the season asked for', () {
-      final outings = _outings(bothYears(), bothBooks());
-      final book = bothBooks();
+      final outings = bothYears();
 
-      final now = SeasonAverages.forSeason(outings, book, season: 2026).single;
+      final now = SeasonAverages.forSeason(outings, season: 2026).single;
       expect(now.season, 2026);
-      expect(now.averageMeetMark, closeTo(62.00, 0.001));
-      expect(now.meetMarks, 2);
+      expect(now.averageMark, closeTo(62.00, 0.001));
+      expect(now.marks, 2);
       expect(now.meets, hasLength(1));
 
-      final then = SeasonAverages.forSeason(outings, book, season: 2025).single;
-      expect(then.averageMeetMark, closeTo(52.00, 0.001));
-      expect(then.meetMarks, 2);
+      final then = SeasonAverages.forSeason(outings, season: 2025).single;
+      expect(then.averageMark, closeTo(52.00, 0.001));
+      expect(then.marks, 2);
 
       // And every season is the two of them together, which is the number
       // a season on its own is worth telling apart from.
-      final ever = SeasonAverages.forSeason(outings, book).single;
+      final ever = SeasonAverages.forSeason(outings).single;
       expect(ever.season, isNull);
-      expect(ever.averageMeetMark, closeTo(57.00, 0.001));
+      expect(ever.averageMark, closeTo(57.00, 0.001));
       expect(ever.meets, hasLength(2));
     });
 
     test('a season nothing was thrown in averages nothing', () {
-      final outings = _outings(bothYears(), bothBooks());
-      expect(
-        SeasonAverages.forSeason(outings, bothBooks(), season: 2024),
-        isEmpty,
-      );
+      expect(SeasonAverages.forSeason(bothYears(), season: 2024), isEmpty);
     });
 
-    test('the season a training mark falls in is the season it counts to',
-        () {
-      final averages = SeasonAverages.forSeason(
-        const [],
-        [
-          _training('t1', lastYear, 50),
-          _training('t2', lastYear, 54),
-          _training('t3', thisYear, 60),
-        ],
-        season: 2025,
-      ).single;
-      expect(averages.averageTraining, closeTo(52.00, 0.001));
-      expect(averages.trainingMarks, 2);
+    test('the history is one reading per season, read either way', () {
+      final history =
+          SeasonAverages.history(bothYears(), ThrowEvent.discus, 1);
+      expect([for (final season in history) season.season], [2026, 2025]);
+      expect(history.first.on(MeetLine.average), closeTo(62.00, 0.001));
+      expect(history.first.on(MeetLine.best), closeTo(64.00, 0.001));
+      expect(history.last.on(MeetLine.best), closeTo(54.00, 0.001));
     });
   });
 }

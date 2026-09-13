@@ -65,10 +65,13 @@ void main() {
     // seasons on record, so the averages open on the most recent.
     await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
         'athlete_bests');
-    // The same profile read over last season instead — the card a season
-    // with nothing but training marks in it comes to.
+    // The same profile read over last season instead.
     await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
         'athlete_last_season', season: '${DateTime.now().year - 1}');
+    // And read as the best of each meet rather than as every throw of it,
+    // which is the other half of the switch in the card's header.
+    await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
+        'athlete_meet_bests', best: true);
     // Two weights at once — each keeps its own mark, under an edited nickname.
     await _shoot(tester, library, notes, athletes, meets, 'Adam',
         'athlete_two_implements');
@@ -89,7 +92,8 @@ Future<void> _shoot(
     MeetLibrary meets,
     String name,
     String file,
-    {String? season}) async {
+    {String? season,
+    bool best = false}) async {
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -101,6 +105,10 @@ Future<void> _shoot(
       child: MaterialApp(
         theme: ThrowLabApp.theme,
         home: AthleteScreen(
+          // A key per shot, so each one mounts a fresh screen: two shots of
+          // the same athlete would otherwise share the state of the first,
+          // and the second would open on whatever the first was left on.
+          key: ValueKey(file),
           name: name,
           titleFor: (ThrowVideo video) =>
               '${video.event.label} · ${video.implementSpec.weightLabel}',
@@ -115,6 +123,10 @@ Future<void> _shoot(
     await tester.tap(find.byTooltip('Season'));
     await tester.pumpAndSettle();
     await tester.tap(find.text(season).last);
+    await settle(tester);
+  }
+  if (best) {
+    await tester.tap(find.text('Best'));
     await settle(tester);
   }
   await expectLater(

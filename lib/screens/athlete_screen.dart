@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/athlete_profile.dart';
 import '../models/athlete_record.dart';
@@ -197,7 +198,7 @@ class AthleteScreen extends StatelessWidget {
               );
             },
           ),
-        ..._averagesSection(context, profile, outings),
+        ..._averagesSection(context, outings),
         ..._meetsSection(context, outings),
         _notesSection(context, profile.name),
         if (loose.isNotEmpty) ...[
@@ -293,18 +294,17 @@ class AthleteScreen extends StatelessWidget {
   /// has no season boundary anywhere else either, and the progression
   /// drawn under each best is the same span. A coach who wants last year
   /// left out is asking a different question than this answers.
-  List<Widget> _averagesSection(BuildContext context, AthleteProfile profile,
-      List<MeetOuting> outings) {
+  List<Widget> _averagesSection(
+      BuildContext context, List<MeetOuting> outings) {
     // Nothing worth averaging anywhere in their history means no section at
     // all — rather than a heading and a season picker over an empty space.
-    final ever = SeasonAverages.forSeason(outings, profile.results);
+    final ever = SeasonAverages.forSeason(outings);
     if (ever.every((reading) => reading.isEmpty)) return const [];
     return [
       SliverToBoxAdapter(
         child: _AveragesSection(
           outings: outings,
-          results: profile.results,
-          seasons: SeasonAverages.seasonsOf(outings, profile.results),
+          seasons: SeasonAverages.seasonsOf(outings),
         ),
       ),
     ];
@@ -527,30 +527,28 @@ class _SectionHeading extends StatelessWidget {
   }
 }
 
-/// The averages, and the season they are taken over.
+/// The averages, the season they are taken over, and which way a meet is
+/// read.
 ///
-/// A career average is not what anybody means by an average: two seasons
-/// ago pulls this spring's number down, and a coach reading it in June is
-/// asking about this spring. So the section opens on the most recent season
-/// there is anything in, and the picker in its heading is how the others
-/// are reached — an athlete with only one season on record is not asked to
+/// A career average is not what anybody means by one: two seasons ago
+/// pulls this spring's number down, and a coach reading it in June is
+/// asking about this spring. So the section opens on the most recent
+/// season there is a competition in, and the picker in its heading reaches
+/// the others — an athlete with only one season on record is not asked to
 /// choose between a year and itself, and never sees it.
 ///
-/// The choice is not remembered between athletes on purpose: the default
+/// The season is not remembered between athletes on purpose: the default
 /// is already the season being coached, and a picker left on 2025 from the
 /// last profile would quietly answer a question about this one with last
-/// year's numbers.
+/// year's numbers. Which way a meet is read *is* remembered, in
+/// [_lineKey] — that is a preference about how a coach thinks rather than
+/// about one athlete, and flipping it on every profile would be a chore.
 class _AveragesSection extends StatefulWidget {
-  const _AveragesSection({
-    required this.outings,
-    required this.results,
-    required this.seasons,
-  });
+  const _AveragesSection({required this.outings, required this.seasons});
 
   final List<MeetOuting> outings;
-  final List<ThrowResult> results;
 
-  /// Every season there is anything on record for, most recent first.
+  /// Every season there is a competition on record for, most recent first.
   final List<int> seasons;
 
   @override
@@ -558,21 +556,49 @@ class _AveragesSection extends StatefulWidget {
 }
 
 class _AveragesSectionState extends State<_AveragesSection> {
+  /// Whether a meet counts as its average or as its best, remembered
+  /// across athletes the way the other view choices are.
+  static const _lineKey = 'throwlab.meetLine';
+
   /// The season being shown, or null for every one of them.
   int? _season;
+
+  MeetLine _line = MeetLine.average;
 
   @override
   void initState() {
     super.initState();
     _season = widget.seasons.length > 1 ? widget.seasons.first : null;
+    _restoreLine();
+  }
+
+  Future<void> _restoreLine() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final line = MeetLine.values.asNameMap()[prefs.getString(_lineKey)];
+      if (line != null) setState(() => _line = line);
+    } catch (_) {
+      // Storage is allowed to fail; the average is a fine place to land.
+    }
+  }
+
+  Future<void> _setLine(MeetLine line) async {
+    setState(() => _line = line);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_lineKey, line.name);
+    } catch (_) {
+      // Not worth telling anyone about: the card still changed.
+    }
   }
 
   @override
   void didUpdateWidget(_AveragesSection old) {
     super.didUpdateWidget(old);
     // A mark recorded while this is open can add a season, or take the last
-    // throw out of the one being shown. Fall back to the newest rather than
-    // leave the picker naming a season with nothing in it.
+    // competition out of the one being shown. Fall back to the newest
+    // rather than leave the picker naming a season with nothing in it.
     if (_season != null && !widget.seasons.contains(_season)) {
       _season = widget.seasons.isEmpty ? null : widget.seasons.first;
     }
@@ -581,9 +607,8 @@ class _AveragesSectionState extends State<_AveragesSection> {
   @override
   Widget build(BuildContext context) {
     final averages = [
-      for (final reading in SeasonAverages.forSeason(
-          widget.outings, widget.results,
-          season: _season))
+      for (final reading
+          in SeasonAverages.forSeason(widget.outings, season: _season))
         if (!reading.isEmpty) reading,
     ];
     return Column(
@@ -618,12 +643,14 @@ class _AveragesSectionState extends State<_AveragesSection> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: _AveragesTile(
                 averages: reading,
+                line: _line,
+                onLine: _setLine,
                 // The seasons before this one, so the card can say what
                 // the meets averaged then as well as now. Read whole
                 // rather than through the picker — the comparison is the
                 // one thing on the card the filter must not narrow.
-                history: SeasonAverages.history(widget.outings, widget.results,
-                    reading.event, reading.implementKg),
+                history: SeasonAverages.history(
+                    widget.outings, reading.event, reading.implementKg),
               ),
             ),
       ],
@@ -702,44 +729,46 @@ class _SeasonPicker extends StatelessWidget {
   }
 }
 
-/// What a season averages at one event and weight.
+/// What a season of competitions averages at one event and weight.
 ///
-/// One number, said once and said large: what this athlete averages at a
-/// meet. Three averages in a row across the top read as three answers to
-/// the same question — 52.66, 52.15, 49.68 are near enough alike that
-/// nothing about them says which is which, and a card that has to be
-/// studied to be read is a card nobody reads at a track. So the meet
-/// average leads, the line under it draws the same number meet by meet,
-/// and the rest sit underneath as asides with their meaning spelled out in
-/// words rather than in a heading.
-///
-/// An athlete with no competitions leads with the training instead, since
-/// that is the only average they have.
+/// One number, said once and said large, and a switch for which number it
+/// is: what an athlete averages across every throw of a meet, or what the
+/// best of each meet averages. Both are worth asking and they answer
+/// different questions — see [MeetLine] — but set side by side as equals
+/// they read as two answers to one, near enough alike that nothing about
+/// them says which is which. So one leads, the line under it is the same
+/// number meet by meet, the seasons under that are the same number year by
+/// year, and the other is an aside.
 class _AveragesTile extends StatelessWidget {
-  const _AveragesTile({required this.averages, this.history = const []});
+  const _AveragesTile({
+    required this.averages,
+    required this.line,
+    required this.onLine,
+    this.history = const [],
+  });
 
   final SeasonAverages averages;
+
+  /// Which way a meet is being read, and how to change it.
+  final MeetLine line;
+  final ValueChanged<MeetLine> onLine;
 
   /// The same reading for every season on record, most recent first.
   final List<SeasonAverages> history;
 
-  /// Whether there is enough competition here to lead with it. Meets come
-  /// first when there are any: a season is judged on Saturdays.
-  bool get _atMeets => averages.meetMarks > 1;
-
-  double? get _headline =>
-      _atMeets ? averages.averageMeetMark : averages.averageTraining;
+  bool get _byBest => line == MeetLine.best;
 
   /// What the big number was taken over, in the words a coach would use
-  /// saying it out loud — and what it cost in fouls, which is half of what
-  /// an average at a meet is worth knowing.
+  /// saying it out loud — and what it cost, which is half of what an
+  /// average at a meet is worth knowing.
   String get _over {
-    if (!_atMeets) {
-      return 'over ${averages.trainingMarks} throws away from a meet';
-    }
     final meets = averages.meetsScored;
-    return 'over ${averages.meetMarks} throws '
-        'at $meets meet${meets == 1 ? '' : 's'}';
+    final at = '$meets meet${meets == 1 ? '' : 's'}';
+    // Kept short: the fouls and the passes are written on the same line,
+    // and a phrase that reads well on its own ellipsizes beside them.
+    return _byBest
+        ? 'best of each of $at'
+        : 'over ${averages.marks} throws at $at';
   }
 
   /// 'nothing fouled', or '3 of 10 fouled'. Null before anything has been
@@ -756,8 +785,8 @@ class _AveragesTile extends StatelessWidget {
     final scheme = theme.colorScheme;
     final accent = eventColor(averages.event);
     final season = averages.scoredMeets;
-    final moved = averages.moved;
-    final fouled = _atMeets ? _fouled : null;
+    final moved = averages.movement(line);
+    final fouled = _fouled;
     final seasons = _seasons;
     return Material(
       color: scheme.surfaceContainerHighest.withOpacity(0.45),
@@ -779,11 +808,13 @@ class _AveragesTile extends StatelessWidget {
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.w600)),
                 ),
+                const SizedBox(width: 8),
+                _LineToggle(line: line, onChanged: onLine, accent: accent),
               ],
             ),
             const SizedBox(height: 10),
             Text(
-              _atMeets ? 'AVERAGE AT A MEET' : 'AVERAGE IN TRAINING',
+              _byBest ? 'AVERAGE BEST AT A MEET' : 'AVERAGE AT A MEET',
               style: theme.textTheme.labelSmall?.copyWith(
                   fontSize: 9,
                   letterSpacing: 0.8,
@@ -791,7 +822,7 @@ class _AveragesTile extends StatelessWidget {
             ),
             const SizedBox(height: 1),
             Text(
-              formatDistance(_headline!, averages.unit),
+              formatDistance(averages.on(line)!, averages.unit),
               style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700, color: accent),
             ),
@@ -813,6 +844,15 @@ class _AveragesTile extends StatelessWidget {
                             ? scheme.onSurfaceVariant
                             : scheme.error),
                   ),
+                // A pass is not a foul and does not wear its color: it is
+                // a round given up on purpose, usually by somebody whose
+                // place is already safe.
+                if (averages.passes > 0)
+                  Text(
+                    '  ·  ${averages.passes} passed',
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
               ],
             ),
             if (season.length > 1) ...[
@@ -821,7 +861,9 @@ class _AveragesTile extends StatelessWidget {
                 points: [
                   for (final meet in season)
                     ProgressionPoint(
-                        on: meet.date, meters: meet.average!, atMeet: true),
+                        on: meet.date,
+                        meters: meetValue(meet, line)!,
+                        atMeet: true),
                 ],
                 color: accent,
                 unit: averages.unit,
@@ -830,10 +872,9 @@ class _AveragesTile extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 4, top: 2),
                 child: Text(
-                  // Says what the line is as well as what it did: the dots
-                  // are the same average as the figure above, taken one
-                  // meet at a time rather than over the season at once.
-                  'each meet on its own · '
+                  // The same number the figure above is, taken one meet at
+                  // a time — which the switch in the header has named, so
+                  // this only has to say what it did.
                   '${moved! >= 0 ? '+' : '−'}'
                   '${formatDistance(moved.abs(), averages.unit)} '
                   'since ${shortThrowDate(season.first.date)}',
@@ -856,7 +897,11 @@ class _AveragesTile extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               _SeasonRows(
-                  seasons: seasons, showing: averages.season, accent: accent),
+                seasons: seasons,
+                showing: averages.season,
+                line: line,
+                accent: accent,
+              ),
             ],
           ],
         ),
@@ -864,50 +909,106 @@ class _AveragesTile extends StatelessWidget {
     );
   }
 
-  /// The other averages, set small and named in full.
+  /// The rest of the competition, set small and named in full.
   ///
-  /// They are the same kind of number as the figure above — a mean of
-  /// throws in meters — so what keeps them from reading as rival answers
-  /// to one question is that they are plainly subordinate and that each
-  /// says, in words, which throws it was taken over.
+  /// The other reading of the same meets, and the one throw a season is
+  /// remembered by. They are the same kind of number as the figure above —
+  /// a mean of throws in meters — so what keeps them from reading as rival
+  /// answers is that they are plainly subordinate and say, in words, what
+  /// they were taken over.
   List<Widget> _asides(ThemeData theme, ColorScheme scheme) {
-    final best = averages.meetsScored > 1 ? averages.averageBest : null;
-    final training =
-        _atMeets && averages.trainingMarks > 1 ? averages.averageTraining : null;
-    if (best == null && training == null) return const [];
+    final other = averages
+        .on(_byBest ? MeetLine.average : MeetLine.best);
+    final best = averages.best;
     return [
       const SizedBox(height: 10),
       Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.5)),
       const SizedBox(height: 6),
+      if (other != null)
+        _Aside(
+          label: _byBest ? 'Every throw averaged' : 'Best of each meet',
+          value: formatDistance(other, averages.unit),
+          over: _byBest
+              ? '${averages.marks} throws'
+              : '${averages.meetsScored} meets',
+        ),
       if (best != null)
         _Aside(
-          // The best throw of each meet, averaged — the level competed at,
-          // which runs above the average of the whole series by however
-          // much the one that came off stands out from the rest.
-          label: 'Best of each meet',
+          // The furthest of the season at a meet — not the personal best,
+          // which is all-time and counts the training days too.
+          label: 'Furthest at a meet',
           value: formatDistance(best, averages.unit),
-          over: '${averages.meetsScored} meets',
-        ),
-      if (training != null)
-        _Aside(
-          label: 'In training',
-          value: formatDistance(training, averages.unit),
-          over: '${averages.trainingMarks} throws',
+          over: shortThrowDate(averages.bestOn!),
         ),
     ];
   }
 
-  /// The seasons there is a meet average for, most recent first. A season
-  /// spent training is not a year of meet performance to compare against,
-  /// and a row of dashes says nothing a missing row doesn't.
+  /// The seasons there is a competition average for, most recent first.
   List<SeasonAverages> get _seasons => [
         for (final season in history)
-          if (season.averageMeetMark != null) season,
+          if (season.averageMark != null) season,
       ];
 }
 
-/// One of the averages the card does not lead with: what it is in words,
-/// what it comes to, and how many throws are behind it.
+/// Which way a meet is read on this card: as its average, or as its best.
+///
+/// Two words rather than an icon, because neither reading has a picture
+/// anybody would recognize, and a card whose numbers change under a symbol
+/// nobody can name is a card that looks broken.
+class _LineToggle extends StatelessWidget {
+  const _LineToggle({
+    required this.line,
+    required this.onChanged,
+    required this.accent,
+  });
+
+  final MeetLine line;
+  final ValueChanged<MeetLine> onChanged;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: ShapeDecoration(
+        shape: angularShape(8),
+        color: scheme.surfaceContainerHighest.withOpacity(0.7),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final option in MeetLine.values)
+            _half(context, option, option == MeetLine.average ? 'Avg' : 'Best'),
+        ],
+      ),
+    );
+  }
+
+  Widget _half(BuildContext context, MeetLine option, String label) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final on = option == line;
+    return Material(
+      color: on ? accent.withOpacity(0.22) : Colors.transparent,
+      shape: angularShape(8),
+      child: InkWell(
+        onTap: on ? null : () => onChanged(option),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          child: Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: on ? accent : scheme.onSurfaceVariant,
+                fontWeight: on ? FontWeight.w700 : FontWeight.w500),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One of the numbers the card does not lead with: what it is in words,
+/// what it comes to, and what it was taken over.
 class _Aside extends StatelessWidget {
   const _Aside({
     required this.label,
@@ -939,10 +1040,14 @@ class _Aside extends StatelessWidget {
             style: theme.textTheme.bodyMedium
                 ?.copyWith(fontWeight: FontWeight.w700),
           ),
+          const SizedBox(width: 10),
+          // Wide enough for a date carrying its year — '20 Sep 2025' —
+          // since a season on record long enough to be worth comparing is
+          // one whose dates need saying in full.
           SizedBox(
-            width: 66,
+            width: 88,
             child: Text(
-              '  $over',
+              over,
               textAlign: TextAlign.right,
               style: theme.textTheme.labelSmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
@@ -954,8 +1059,8 @@ class _Aside extends StatelessWidget {
   }
 }
 
-/// What the meets averaged, a season at a time — the card's chart carried
-/// up a level.
+/// What the meets came to, a season at a time — the card's chart carried
+/// up a level, and read the same way it is.
 ///
 /// The chart above it draws the meets inside one season, which is the
 /// question a coach asks in June. This is the one they ask in January: is
@@ -969,15 +1074,16 @@ class _Aside extends StatelessWidget {
 /// zero draws a seven per cent season as a fivefold one — while zero draws
 /// two bars of near enough the same length, which says nothing at all. The
 /// difference between the seasons has a real zero, so that is what gets the
-/// bar: how far the average moved, and which way.
+/// bar: how far it moved, and which way.
 class _SeasonRows extends StatelessWidget {
   const _SeasonRows({
     required this.seasons,
     required this.showing,
+    required this.line,
     required this.accent,
   });
 
-  /// Most recent first, each with a meet average.
+  /// Most recent first, each with a competition average.
   final List<SeasonAverages> seasons;
 
   /// The season the rest of the card is filtered to, picked out here so the
@@ -985,6 +1091,9 @@ class _SeasonRows extends StatelessWidget {
   /// the card is showing every season at once, and then no row is the one
   /// being shown.
   final int? showing;
+
+  /// Which way a meet is read, the same as everything above.
+  final MeetLine line;
 
   final Color accent;
 
@@ -994,8 +1103,7 @@ class _SeasonRows extends StatelessWidget {
   List<double?> get _moves => [
         for (var i = 0; i < seasons.length; i++)
           i + 1 < seasons.length
-              ? seasons[i].averageMeetMark! -
-                  seasons[i + 1].averageMeetMark!
+              ? seasons[i].on(line)! - seasons[i + 1].on(line)!
               : null,
       ];
 
@@ -1041,7 +1149,7 @@ class _SeasonRows extends StatelessWidget {
         SizedBox(
           width: 82,
           child: Text(
-            formatDistance(season.averageMeetMark!, unit),
+            formatDistance(season.on(line)!, unit),
             textAlign: TextAlign.right,
             style: theme.textTheme.labelMedium?.copyWith(
                 fontWeight: FontWeight.w700,
