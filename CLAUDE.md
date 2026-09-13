@@ -157,10 +157,17 @@ like the app rather than a bare Material default.
   calibrates against. Add a weight by adding a row to the table in
   `throw_event.dart` — nothing else enumerates them. A weight named in
   pounds where it is thrown carries a `label` and wears it everywhere
-  (`weightLabel`): a U.S. high school shot reads as a 12 lb, because that
-  is what it is ordered as and called at the ring, not as 5.44 kg. It is
-  its own weight rather than a rounded 5 kg, since a best is per
-  implement.
+  (`weightLabel`): the men's shot reads as a 16 lb and the U.S. high
+  school boys' as a 12 lb, because that is what they are ordered as and
+  called at the ring, not 7.26 kg and 5.44 kg. The 7.26 kg hammer is the
+  same ball on a wire and takes the same name, since one weight reading
+  two ways on one profile is the same implement called two things. The
+  label is a name and never an identity — `weightKg` is what a throw is
+  filed under, what a best is kept per, and what the analyzer calibrates
+  against — and the 12 lb is its own weight rather than a rounded 5 kg,
+  since a best is per implement. The discus goes the other way: a U.S.
+  high school 1.6 kg is called a 1.6 wherever it is thrown, never a
+  3.5 lb, so it keeps its metric name.
 - A throw's distance (`ThrowVideo.distance`, always meters, null until
   recorded) is the badge on its card, shown in the unit it was entered in
   (`distanceUnit`). `DistanceField` is the meters/feet pair that converts

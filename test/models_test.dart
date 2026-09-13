@@ -34,7 +34,8 @@ void main() {
     });
 
     test('leaves the metric implements naming themselves in kilos', () {
-      expect(ThrowEvent.shotPut.specFor(7.26).weightLabel, '7.26 kg');
+      expect(ThrowEvent.shotPut.specFor(6).weightLabel, '6 kg');
+      expect(ThrowEvent.discus.specFor(1.6).weightLabel, '1.6 kg');
       expect(ThrowEvent.javelin.specFor(0.6).weightLabel, '600 g');
     });
   });
@@ -116,10 +117,15 @@ void main() {
     });
 
     test('weights read the way they are spoken about', () {
-      expect(ThrowEvent.shotPut.specFor(7.26).weightLabel, '7.26 kg');
+      // The same ball, shot or hammer, and the name it is called by.
+      expect(ThrowEvent.shotPut.specFor(7.26).weightLabel, '16 lb');
+      expect(ThrowEvent.hammer.specFor(7.26).weightLabel, '16 lb');
+      expect(ThrowEvent.shotPut.specFor(5.44).weightLabel, '12 lb');
       expect(ThrowEvent.discus.specFor(1).weightLabel, '1 kg');
       expect(ThrowEvent.discus.specFor(1.75).weightLabel, '1.75 kg');
       expect(ThrowEvent.javelin.specFor(0.6).weightLabel, '600 g');
+      // What it is called is not what it is filed under.
+      expect(ThrowEvent.shotPut.specFor(7.26).weightKg, 7.26);
     });
   });
 
