@@ -539,7 +539,17 @@ like the app rather than a bare Material default.
   itself (`Discus · 1 kg`) rather than the way a record book does (`1 kg
   Discus`), so the two lists don't read as the same rows twice; the meet
   average is drawn across the season like a progression, because an average
-  is only interesting next to the one before it. It is said where it is
+  is only interesting next to the one before it.
+  A card says one of them large and the rest small. Three averages set as
+  equals across the top read as three answers to one question — 52.66,
+  52.15 and 49.68 are near enough alike that nothing about them says which
+  is which — so the meet average leads, the line under it is the same
+  number taken one meet at a time, and the best-of-each-meet and the
+  training sit underneath as asides named in words. What the big one was
+  taken over is written beneath it in the same words a coach would say
+  ('over 5 throws at 2 meets · 3 of 10 fouled'), since an average is only
+  worth what is behind it. An athlete who has not competed leads with the
+  training, which is the only average they have. It is said where it is
   thrown, too: under each meet on a profile, and under the coach's own
   athletes in the standings — a coach at the ring is asking what the
   afternoon is averaging, not only what the best of it was.

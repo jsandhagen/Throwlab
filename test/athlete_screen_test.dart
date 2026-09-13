@@ -467,12 +467,12 @@ void main() {
           meets: await competed([69, null, 67, 80, null, 66]));
 
       expect(find.text('AVERAGES'), findsOneWidget);
-      // The level competed at is the best; the middle of the series is
-      // what the rest of it came to.
-      expect(find.text('80.00 m'), findsWidgets);
+      // One number, said once: the middle of the series, with what it was
+      // taken over and what it cost written under it in words.
+      expect(find.text('AVERAGE AT A MEET'), findsOneWidget);
       expect(find.text('70.50 m'), findsOneWidget);
-      expect(find.text('2 of 6'), findsOneWidget);
-      expect(find.text('33% of attempts'), findsOneWidget);
+      expect(find.textContaining('over 4 throws at 1 meet'), findsOneWidget);
+      expect(find.textContaining('2 of 6 fouled'), findsOneWidget);
       // And on the meet itself, under the series it came out of.
       expect(find.text('averaged 70.50 m from 4 · 2 fouls'), findsOneWidget);
     });
@@ -492,11 +492,13 @@ void main() {
       }
       await mountProfile(tester, meets: meets);
 
-      expect(find.text('IN COMPETITION'), findsOneWidget);
+      // The meet average leads; the training is an aside under it, named
+      // in words so the two can't read as rival answers to one question.
+      expect(find.text('AVERAGE AT A MEET'), findsOneWidget);
       expect(find.text('62.00 m'), findsOneWidget);
       // The Tuesdays on their own: a figure with the meet marks rolled in
       // would close the gap the pair exists to show.
-      expect(find.text('IN TRAINING'), findsOneWidget);
+      expect(find.text('In training'), findsOneWidget);
       expect(find.text('57.00 m'), findsOneWidget);
     });
 
@@ -505,7 +507,7 @@ void main() {
       await mountProfile(tester, meets: await competed([60, 64]));
       // Everything measured was measured at the meet, so widening to the
       // record book would print the same number twice.
-      expect(find.text('IN TRAINING'), findsNothing);
+      expect(find.text('In training'), findsNothing);
     });
 
     testWidgets('an athlete who only trains still has an average',
@@ -525,10 +527,13 @@ void main() {
             distance: 43.20),
       ]);
       await mountProfile(tester);
-      expect(find.text('IN TRAINING'), findsOneWidget);
+      // Nothing was thrown at a meet, so the training is the average they
+      // have and the card leads with it.
+      expect(find.text('AVERAGE IN TRAINING'), findsOneWidget);
       expect(find.text('42.20 m'), findsOneWidget);
-      expect(find.text('MEET BEST'), findsNothing);
-      expect(find.text('FOULS'), findsNothing);
+      expect(find.textContaining('away from a meet'), findsOneWidget);
+      expect(find.text('AVERAGE AT A MEET'), findsNothing);
+      expect(find.text('Best of each meet'), findsNothing);
     });
 
     testWidgets('one mark is not an average of anything', (tester) async {
@@ -650,7 +655,7 @@ void main() {
       await mountProfile(tester, meets: meets);
       // 61 in June, 66 a fortnight later.
       expect(
-          find.textContaining('+5.00 m since 13 Jun · 2 meets averaged'),
+          find.textContaining('each meet on its own · +5.00 m since 13 Jun'),
           findsOneWidget);
     });
   });

@@ -702,15 +702,19 @@ class _SeasonPicker extends StatelessWidget {
   }
 }
 
-/// What a season averages at one event and weight: the level competed at,
-/// how reliably it is reached, and what it cost in fouls.
+/// What a season averages at one event and weight.
 ///
-/// Laid out as figures rather than as a table, because that is how they are
-/// asked for — a coach wants the number they would say out loud, and the
-/// thing it was taken over written under it small so the number can't lie
-/// about what is behind it. The meet average is drawn as a line for the
-/// same reason the best is: an average is only interesting next to the one
-/// before it.
+/// One number, said once and said large: what this athlete averages at a
+/// meet. Three averages in a row across the top read as three answers to
+/// the same question — 52.66, 52.15, 49.68 are near enough alike that
+/// nothing about them says which is which, and a card that has to be
+/// studied to be read is a card nobody reads at a track. So the meet
+/// average leads, the line under it draws the same number meet by meet,
+/// and the rest sit underneath as asides with their meaning spelled out in
+/// words rather than in a heading.
+///
+/// An athlete with no competitions leads with the training instead, since
+/// that is the only average they have.
 class _AveragesTile extends StatelessWidget {
   const _AveragesTile({required this.averages, this.history = const []});
 
@@ -719,6 +723,33 @@ class _AveragesTile extends StatelessWidget {
   /// The same reading for every season on record, most recent first.
   final List<SeasonAverages> history;
 
+  /// Whether there is enough competition here to lead with it. Meets come
+  /// first when there are any: a season is judged on Saturdays.
+  bool get _atMeets => averages.meetMarks > 1;
+
+  double? get _headline =>
+      _atMeets ? averages.averageMeetMark : averages.averageTraining;
+
+  /// What the big number was taken over, in the words a coach would use
+  /// saying it out loud — and what it cost in fouls, which is half of what
+  /// an average at a meet is worth knowing.
+  String get _over {
+    if (!_atMeets) {
+      return 'over ${averages.trainingMarks} throws away from a meet';
+    }
+    final meets = averages.meetsScored;
+    return 'over ${averages.meetMarks} throws '
+        'at $meets meet${meets == 1 ? '' : 's'}';
+  }
+
+  /// 'nothing fouled', or '3 of 10 fouled'. Null before anything has been
+  /// thrown at a meet at all.
+  String? get _fouled {
+    if (averages.attempts == 0) return null;
+    if (averages.fouls == 0) return 'nothing fouled';
+    return '${averages.fouls} of ${averages.attempts} fouled';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -726,6 +757,8 @@ class _AveragesTile extends StatelessWidget {
     final accent = eventColor(averages.event);
     final season = averages.scoredMeets;
     final moved = averages.moved;
+    final fouled = _atMeets ? _fouled : null;
+    final seasons = _seasons;
     return Material(
       color: scheme.surfaceContainerHighest.withOpacity(0.45),
       clipBehavior: Clip.antiAlias,
@@ -749,10 +782,38 @@ class _AveragesTile extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 22,
-              runSpacing: 12,
-              children: _figures(accent, scheme),
+            Text(
+              _atMeets ? 'AVERAGE AT A MEET' : 'AVERAGE IN TRAINING',
+              style: theme.textTheme.labelSmall?.copyWith(
+                  fontSize: 9,
+                  letterSpacing: 0.8,
+                  color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              formatDistance(_headline!, averages.unit),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700, color: accent),
+            ),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    _over,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ),
+                if (fouled != null)
+                  Text(
+                    '  ·  $fouled',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: averages.fouls == 0
+                            ? scheme.onSurfaceVariant
+                            : scheme.error),
+                  ),
+              ],
             ),
             if (season.length > 1) ...[
               const SizedBox(height: 8),
@@ -769,19 +830,20 @@ class _AveragesTile extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 4, top: 2),
                 child: Text(
-                  // The meet average, first meet to last. Signed both ways:
-                  // an average that has come down is the thing this card
-                  // exists to show, and hiding it would be flattery.
+                  // Says what the line is as well as what it did: the dots
+                  // are the same average as the figure above, taken one
+                  // meet at a time rather than over the season at once.
+                  'each meet on its own · '
                   '${moved! >= 0 ? '+' : '−'}'
                   '${formatDistance(moved.abs(), averages.unit)} '
-                  'since ${shortThrowDate(season.first.date)} · '
-                  '${season.length} meets averaged',
+                  'since ${shortThrowDate(season.first.date)}',
                   style: theme.textTheme.labelSmall
                       ?.copyWith(color: scheme.onSurfaceVariant),
                 ),
               ),
             ],
-            if (_seasons.length > 1) ...[
+            ..._asides(theme, scheme),
+            if (seasons.length > 1) ...[
               const SizedBox(height: 10),
               Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.5)),
               const SizedBox(height: 8),
@@ -794,12 +856,45 @@ class _AveragesTile extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               _SeasonRows(
-                  seasons: _seasons, showing: averages.season, accent: accent),
+                  seasons: seasons, showing: averages.season, accent: accent),
             ],
           ],
         ),
       ),
     );
+  }
+
+  /// The other averages, set small and named in full.
+  ///
+  /// They are the same kind of number as the figure above — a mean of
+  /// throws in meters — so what keeps them from reading as rival answers
+  /// to one question is that they are plainly subordinate and that each
+  /// says, in words, which throws it was taken over.
+  List<Widget> _asides(ThemeData theme, ColorScheme scheme) {
+    final best = averages.meetsScored > 1 ? averages.averageBest : null;
+    final training =
+        _atMeets && averages.trainingMarks > 1 ? averages.averageTraining : null;
+    if (best == null && training == null) return const [];
+    return [
+      const SizedBox(height: 10),
+      Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.5)),
+      const SizedBox(height: 6),
+      if (best != null)
+        _Aside(
+          // The best throw of each meet, averaged — the level competed at,
+          // which runs above the average of the whole series by however
+          // much the one that came off stands out from the rest.
+          label: 'Best of each meet',
+          value: formatDistance(best, averages.unit),
+          over: '${averages.meetsScored} meets',
+        ),
+      if (training != null)
+        _Aside(
+          label: 'In training',
+          value: formatDistance(training, averages.unit),
+          over: '${averages.trainingMarks} throws',
+        ),
+    ];
   }
 
   /// The seasons there is a meet average for, most recent first. A season
@@ -809,50 +904,53 @@ class _AveragesTile extends StatelessWidget {
         for (final season in history)
           if (season.averageMeetMark != null) season,
       ];
+}
 
-  /// The numbers themselves, in the order a coach reads them: what they
-  /// compete at, what the whole series comes to, and what was thrown away.
-  List<Widget> _figures(Color accent, ColorScheme scheme) {
-    // Every figure is a mean, and a mean of one is the throw itself: a
-    // season's average best needs a second meet before it is one, and a
-    // series average a second mark.
-    final best = averages.meetsScored > 1 ? averages.averageBest : null;
-    final meetMark = averages.meetMarks > 1 ? averages.averageMeetMark : null;
-    final training =
-        averages.trainingMarks > 1 ? averages.averageTraining : null;
-    final rate = averages.foulRate;
-    return [
-      if (best != null)
-        _Figure(
-          label: 'Meet best',
-          value: formatDistance(best, averages.unit),
-          under: '${averages.meetsScored} meets',
-          color: accent,
-        ),
-      if (meetMark != null)
-        _Figure(
-          label: 'In competition',
-          value: formatDistance(meetMark, averages.unit),
-          under: '${averages.meetMarks} marks',
-        ),
-      // The other half of the pair, and kept out of the one beside it: the
-      // gap between what an athlete throws on a Saturday and what they
-      // throw on a Tuesday is the thing worth looking at, and a figure
-      // with both in it would close that gap by arithmetic.
-      if (training != null)
-        _Figure(
-          label: 'In training',
-          value: formatDistance(training, averages.unit),
-          under: '${averages.trainingMarks} marks',
-        ),
-      if (rate != null)
-        _Figure(
-          label: 'Fouls',
-          value: '${averages.fouls} of ${averages.attempts}',
-          under: '${(rate * 100).round()}% of attempts',
-          color: averages.fouls == 0 ? null : scheme.error,
-        ),
-    ];
+/// One of the averages the card does not lead with: what it is in words,
+/// what it comes to, and how many throws are behind it.
+class _Aside extends StatelessWidget {
+  const _Aside({
+    required this.label,
+    required this.value,
+    required this.over,
+  });
+
+  final String label;
+  final String value;
+  final String over;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          Text(
+            value,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          SizedBox(
+            width: 66,
+            child: Text(
+              '  $over',
+              textAlign: TextAlign.right,
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -982,57 +1080,6 @@ class _SeasonRows extends StatelessWidget {
                     ? scheme.onSurfaceVariant
                     : scheme.error),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-/// One figure: what it is, what it comes to, and what it was taken over.
-class _Figure extends StatelessWidget {
-  const _Figure({
-    required this.label,
-    required this.value,
-    required this.under,
-    this.color,
-  });
-
-  final String label;
-  final String value;
-
-  /// How many throws are behind it. An average with nothing under it
-  /// invites being read as a season when it is one afternoon.
-  final String under;
-
-  /// The event's color for the figure a coach came for; the default ink
-  /// for the ones that put it in context.
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: theme.textTheme.labelSmall?.copyWith(
-              fontSize: 9,
-              letterSpacing: 0.8,
-              color: scheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 1),
-        Text(
-          value,
-          style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700, color: color ?? scheme.onSurface),
-        ),
-        Text(
-          under,
-          style: theme.textTheme.labelSmall
-              ?.copyWith(fontSize: 10, color: scheme.onSurfaceVariant),
         ),
       ],
     );
