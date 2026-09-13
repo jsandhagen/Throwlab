@@ -10,7 +10,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -46,7 +46,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/meet_preview.dart \
                               tool/preview/schedule_preview.dart \
                               tool/preview/heat_sheet_preview.dart \
-                              tool/preview/season_preview.dart
+                              tool/preview/season_preview.dart \
+                              tool/preview/analysis_preview.dart
 ```
 
 The results sheet is reviewed the same way, except that the artifact is the
@@ -83,7 +84,15 @@ leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field with the flights ruled off in
 it, and the meet it leaves entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
-thrown folded away. Open the PNGs to see exactly what the screen paints. **Re-run it
+thrown folded away — and the analysis screen: the drawing tools up the right
+edge of a frame on its side (on their own, with a ring, an arrow and a timer
+on the frame, with the marks menu open, with the pen panel open, and folded
+away to the one chevron), and the same tools lying along the bottom of an
+upright screen, hard against the scrubber with the pen's weight and color
+split onto a button each — at the width that holds them and at the one that
+shrinks them, with the session on top as a strip of stills and with that
+strip put away on its tab. Open the PNGs to see
+exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -101,6 +110,13 @@ it rather than rolling your own:
 - `warmImages()` — decodes files into the image cache *before* `pumpWidget`.
   Test bindings fake out async work, so an image first resolved inside a pump
   never finishes decoding and the thumbnail paints empty.
+
+The analysis preview is the one that borrows from `test/`: it mounts the
+real screen on the widget tests' in-memory player, so the 'video' is a flat
+blue rectangle — which is the point, since what is being looked at is where
+the chrome sits over the frame and how much of it it costs. Its clip is
+stamped as already having scrub frames, so the screen never reaches for the
+ffmpeg and path_provider plugins that aren't behind a widget test.
 
 Sample throws and their thumbnails come from `sample_library.dart`, generated
 at run time (there is a tiny PNG encoder at the bottom of it), so no fixtures
@@ -299,6 +315,99 @@ like the app rather than a bare Material default.
   event carrying on, flight and all, rather than as a second one of the same
   name: the fields it happens to are the long ones, which are exactly the
   flighted ones.
+- The set a throw was opened with hangs under the header, not along the
+  bottom. A strip of stills is the right way to pick a throw out — a coach
+  picks one by looking at it, which a list of 'Shot Put · Men · 2026-09-02'
+  rows never allowed — and it is the first thing wanted on opening a throw,
+  so it shows; but the bottom of the screen is where the scrubber, the
+  transport and the drawing tools all already are, and down there it was in
+  the way of all three. It puts away on a tab hanging off its own bottom
+  edge — a handle on the thing it moves is the one nobody has to be told
+  about, and the portrait header has no width for another button — and
+  where it was last left is remembered (`throwlab.throwStrip`), because
+  paging replaces the screen and would otherwise drop the strip back down
+  under the finger that just put it away. The pager chevrons ride on that
+  tab rather than in the strip, so putting the stills away costs the
+  pictures and not the paging: next and previous throw is the commonest
+  thing asked of a session. The panel carries its own surface rather than
+  the header's scrim — over a frame that fills the top of the screen, stills
+  on a fading gradient read as floating over the throw instead of as a
+  drawer in front of it. Landscape has no strip at all: the pager lives in
+  the left rail there.
+- The title names the throw and nothing else — the event and the weight.
+  Which of eight throws is on screen is answered by the strip of stills, so
+  spending the title on it said nothing a coach needed. Tapping it asks
+  about the *throw*: when it was taken, how far it went, what was written
+  down, and the edits for each — `showThrowActions`, the same sheet the
+  library opens on a long press, so there is one place a throw is
+  described.
+- The drawing tools run along an edge of the frame and are anchored in its
+  bottom-right corner. Which edge follows the shape of the *picture*, not
+  the shape of the screen. A clip is filmed on its side, so held that way
+  the frame fills the screen and the tools have to sit on it somewhere:
+  they float over it as a column up the right edge, out past the release
+  and the flight, which is the least of the picture to stand in front of.
+  Held upright the same clip is letterboxed into a band of black above and
+  below, and there the tools are not floated at all — they are laid out
+  inside the bottom overlay, above the scrubber, so they sit hard against
+  it whatever else the overlay is carrying rather than at a guessed inset
+  over the frame. That is also what killed the line under the frame naming
+  the calibration reference: the reference is stated where it is used, on
+  the measure sheet and on the card in the library, and the two gestures
+  were learned on the first drag.
+  A phone is a few pixels short either way — ~300 of usable height on its
+  side and ~352 of width upright, against the 305/377 the tools want — so
+  the rail shrinks to fit, a few percent nobody sees. It only breaks into
+  two runs where shrinking would leave a target a thumb misses at a track
+  (`_minScale`), which is a screen no phone has; scrolling is never the
+  answer, since a tool scrolled out of reach is one nobody finds and the
+  scroll view that offered it swallowed every drag over the strip it
+  covered. The seam, when it comes to that, is where the tools are already
+  grouped — what a tool is picked with in the first run, what is done to the
+  drawing in the second — and the chevron is still last, so it is still in
+  the corner.
+  What keeps the count down is that the marks *placed* on the frame share
+  one menu button wearing whichever is selected. The pen is the one control
+  that differs by axis: height is what a column is short of, so up an edge
+  the weight and the color go behind a single button opening a panel of
+  both, while a bar has the width for a button each, which is a tap closer
+  to whichever half is being changed — eight controls up a column, nine
+  along a bar. Undo, redo and clear are never behind a menu, because they
+  are what a drawing hand reaches for most. Clear can sit in the open
+  because undo brings the whole frame back — `DrawingController` keeps the
+  edits rather than snapshots of the frame, since an annotation goes on
+  mutating while the finger is down. Ten colors are a grid of swatches with
+  their names as tooltips, never a list of ten named rows: a list that long
+  scrolls on a short screen, and the name is the least of what a swatch
+  says.
+- A mark is made the way it is measured. An arrow is dragged tail to head,
+  a curved arrow traces the path it wants and takes its head where the
+  finger lifts, and a circle is dragged out from the middle: what is being
+  circled — a hip, a hand, where the implement landed — stays under the
+  finger that started it, which a corner-to-corner box does not. A circle is
+  stored as its middle and a point on the rim rather than a radius, because
+  the two axes normalize by different amounts and a stored radius would come
+  back as an ellipse on a frame of another shape. An angle and a
+  `TimerMarker` are tapped rather than dragged, since neither has a length
+  to pull out.
+- A `TimerMarker` is a stopwatch dropped on the frame: it holds the moment
+  it was dropped at and reads the gap from there to wherever the clip is
+  now, to the hundredth (`formatDelta`), so scrubbing forward times a
+  phase — block to release, ground contact, the delivery — without anybody
+  doing arithmetic on two frame numbers. It holds a position rather than a
+  frame index, because a position is what the player reports and what the
+  readout under the scrubber is already counting in. The canvas is rebuilt
+  off the player's own value for it, so a box on the frame can never
+  disagree with the numbers beside it. It reads a plain zero on its own
+  frame rather than a signed one, and is signed either way off it, because a
+  coach scrubs back through a throw as often as forward.
+- Ink is ink but a reading is type. The two things the canvas paints as
+  words — an angle's degrees and a timer's seconds — take their style from
+  `Theme.of(context).textTheme`, handed down to the painter: a `TextSpan`
+  built inside a `CustomPainter` inherits nothing, so left alone it sets
+  them in the engine's fallback face while the rest of the app is in
+  Barlow. Handing the style down is how they match without naming a family
+  outside `main.dart`.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

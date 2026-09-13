@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
@@ -24,6 +25,7 @@ import '../widgets/drawing_rail.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/scrub_still.dart';
+import '../widgets/throw_actions.dart';
 import '../widgets/throw_picker.dart';
 import 'comparison_screen.dart';
 
@@ -97,9 +99,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// centring maths below have to agree, so they read it from here.
   static const double _stripExtent = 72;
 
-  /// How much height the filmstrip costs the bottom overlay — the drawing
-  /// rail is inset by it too, so the tools stay clear of the stills.
+  /// How much height the filmstrip costs the bottom overlay.
   static const double _stripHeight = 52;
+
+  /// Where the coach last left the strip of stills. Remembered, because it
+  /// is a preference about how they work rather than about this throw —
+  /// and because paging through a session replaces this screen with the
+  /// next throw's, which would otherwise pull the strip back down under the
+  /// finger that just put it away.
+  static const _stripKey = 'throwlab.throwStrip';
+
+  /// The session shows on top by default: a strip of stills is how a throw
+  /// is picked out, and it is the first thing wanted on opening one.
+  bool _stripOpen = true;
 
   _MeasureStep? _measureStep;
   Offset? _refA, _refB, _pointA, _pointB;
@@ -115,6 +127,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     // Without this, opening throw 7 of 8 leaves the strip scrolled to the
     // start, showing everything except the throw actually on screen.
     WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
+    unawaited(_loadStripDock());
     _openFailed = !File(widget.video.path).existsSync();
     _controller = VideoPlayerController.file(File(widget.video.path));
     final framesDir = widget.video.scrubFramesDir;
@@ -367,6 +380,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       if (found == null) return null;
       return (p) => setState(() => found(p));
     }
+    if (_drawing.tool == DrawTool.timer) {
+      TimerMarker? hitMarker;
+      for (final annotation in _drawing.annotations) {
+        if (annotation is! TimerMarker) continue;
+        final d = (_denormalizeCanvas(annotation.at) - canvasPoint).distance;
+        if (d < best) {
+          best = d;
+          hitMarker = annotation;
+        }
+      }
+      final marker = hitMarker;
+      if (marker == null) return null;
+      return (p) {
+        marker.at = _normalizeCanvas(p);
+        _drawing.notifyChanged();
+      };
+    }
     if (_drawing.tool == DrawTool.angle) {
       AngleAnnotation? hitAnnotation;
       var hitIndex = 0;
@@ -409,6 +439,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     }
     if (_drawing.tool == DrawTool.angle) {
       addAngleVertex(_drawing, _normalizeCanvas(canvasPoint));
+    } else if (_drawing.tool == DrawTool.timer) {
+      dropTimer(_drawing, _normalizeCanvas(canvasPoint),
+          _controller.value.position);
     }
   }
 
@@ -419,7 +452,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _nodeDrag = null;
     if (details.pointerCount > 1) {
       // A pinch that began as a one-finger drag: discard the stray stroke.
-      if (_activeStroke) _drawing.undo();
+      if (_activeStroke) _drawing.discardStroke();
       _activeStroke = false;
       return;
     }
@@ -987,9 +1020,18 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                     // that never travels leaves the video alone.
                                     Positioned.fill(
                                         child: ScrubStill(shuttle: _shuttle)),
-                                    DrawingCanvas(
-                                      controller: _drawing,
-                                      zoomScale: _zoomScale,
+                                    // Rebuilt off the player's own value so
+                                    // a dropped timer counts as the clip
+                                    // moves; nothing else on the canvas
+                                    // cares where the clip is.
+                                    ValueListenableBuilder<VideoPlayerValue>(
+                                      valueListenable: _controller,
+                                      builder: (context, value, _) =>
+                                          DrawingCanvas(
+                                        controller: _drawing,
+                                        zoomScale: _zoomScale,
+                                        position: value.position,
+                                      ),
                                     ),
                                     IgnorePointer(
                                       child: CustomPaint(
@@ -1017,13 +1059,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  String get _throwLabel {
-    final throwName = '${widget.video.event.label} · '
-        '${widget.video.implementSpec.weightLabel}';
-    return _set.length > 1
-        ? '$throwName · ${_index + 1} of ${_set.length}'
-        : throwName;
-  }
+  /// What the throw is, and nothing about where it sits in the set: which
+  /// of eight throws is on screen is answered by the strip of stills, and
+  /// spending the title on it says nothing a coach needed.
+  String get _throwLabel => '${widget.video.event.label} · '
+      '${widget.video.implementSpec.weightLabel}';
 
   /// Back, then the per-throw actions. [vertical] lays them out for the
   /// left rail, where the title is carried by the implement glyph's tooltip
@@ -1056,7 +1096,21 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           ),
         )
       else
-        Expanded(child: title),
+        // The title names the throw, and tapping it asks about the throw:
+        // when it was taken, how far it went, what was written down, and
+        // the edits for all three. The same sheet the library opens on a
+        // long press, so there is one place a throw is described.
+        Expanded(
+          child: InkWell(
+            key: const ValueKey('throw-title'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: _showThrowInfo,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: title,
+            ),
+          ),
+        ),
       IconButton(
         tooltip: widget.video.athlete.isEmpty
             ? 'Tag athlete'
@@ -1201,6 +1255,88 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// Scrolls the strip so the open throw sits in the middle of it.
+  Future<void> _showThrowInfo() async {
+    await showThrowActions(context, widget.video);
+    // The sheet edits the throw in place — the athlete, the distance, the
+    // note — and the header is drawn from it.
+    if (mounted) setState(() {});
+  }
+
+  /// The tab the strip is put away on and pulled back down by, hanging off
+  /// the bottom edge of it, with the pager either side. On the panel rather
+  /// than in the header, which is already back, a title and five actions
+  /// wide on a 390px screen — and a handle on the thing it moves is the one
+  /// nobody has to be told about.
+  ///
+  /// The chevrons ride here rather than in the strip so that putting the
+  /// stills away costs the *pictures* and not the paging: next and previous
+  /// throw is the commonest thing asked of a session, and hiding the strip
+  /// should not be the thing that takes it away.
+  Widget _stripHandle() {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Material(
+        color: scheme.surface.withOpacity(0.92),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _pagerButton(forward: false),
+            InkWell(
+              key: const ValueKey('throw-strip-handle'),
+              onTap: _toggleStrip,
+              child: Tooltip(
+                message: _stripOpen ? 'Hide the session' : 'Show the session',
+                child: SizedBox(
+                  width: 48,
+                  height: 30,
+                  child: Icon(
+                    _stripOpen
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: scheme.onSurface,
+                  ),
+                ),
+              ),
+            ),
+            _pagerButton(forward: true),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadStripDock() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final open = prefs.getBool(_stripKey) ?? true;
+      if (open == _stripOpen) return;
+      setState(() => _stripOpen = open);
+    } catch (_) {
+      // Storage that will not answer just means the strip stays showing.
+    }
+  }
+
+  void _toggleStrip() {
+    setState(() => _stripOpen = !_stripOpen);
+    // The strip is only in the tree once it is down, so it is centered on
+    // the open rather than at init.
+    if (_stripOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
+    }
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool(_stripKey, _stripOpen);
+      } catch (_) {
+        // It has already moved; it just won't be there next time.
+      }
+    }());
+  }
+
   void _centerStrip() {
     if (!mounted || !_strip.hasClients) return;
     final target = _index * _stripExtent +
@@ -1216,6 +1352,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final target = forward ? _laterThrow : _earlierThrow;
     return IconButton(
       tooltip: forward ? 'Next throw' : 'Previous throw',
+      iconSize: 20,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 40, height: 30),
       icon: Icon(forward ? Icons.chevron_right : Icons.chevron_left),
       onPressed: target == null ? null : () => _openThrow(target),
     );
@@ -1227,11 +1366,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// never allowed.
   Widget _filmstrip() {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
+    return Container(
       height: _stripHeight,
+      // Its own surface rather than the header's scrim: pulled down over a
+      // frame that fills the top of the screen, stills on a fading gradient
+      // read as floating over the throw instead of as a drawer in front of
+      // it.
+      decoration: BoxDecoration(
+        color: scheme.surface.withOpacity(0.92),
+        borderRadius:
+            const BorderRadius.vertical(bottom: Radius.circular(16)),
+      ),
       child: Row(
         children: [
-          _pagerButton(forward: false),
           Expanded(
             child: ListView.builder(
               controller: _strip,
@@ -1266,7 +1413,6 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               },
             ),
           ),
-          _pagerButton(forward: true),
         ],
       ),
     );
@@ -1290,6 +1436,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: _headerActions(vertical: false)),
+            // Under the header rather than along the bottom. A strip of
+            // stills is how a throw is picked out — by looking at it — and
+            // it is the first thing wanted on opening one, so it shows;
+            // but the bottom of the screen is where the scrubber, the
+            // transport and the drawing tools all already are, and a strip
+            // down there was in the way of all three.
+            if (_set.length > 1) ...[
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                alignment: Alignment.topCenter,
+                child: _stripOpen
+                    ? _filmstrip()
+                    : const SizedBox(width: double.infinity),
+              ),
+              _stripHandle(),
+            ],
             if (banner != null) banner,
           ],
         ),
@@ -1323,10 +1486,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
-  /// Bottom scrim: calibration hint, scrubber, and transport controls.
-  /// Landscape drops the hint and lays the controls on one line to give
-  /// the short screen back to the video.
-  Widget _bottomOverlay(ImplementSpec spec) {
+  /// Bottom scrim: scrubber and transport controls, plus whatever the
+  /// screen is busy preparing. Landscape lays the controls on one line to
+  /// give the short screen back to the video.
+  ///
+  /// It used to carry a line naming the calibration reference and the two
+  /// gestures. The reference is already stated where it is used — on the
+  /// measure sheet, and on the card in the library — and the gestures are
+  /// learned on the first drag; what the line actually cost was a strip of
+  /// the black band the drawing tools now sit in.
+  Widget _bottomOverlay() {
     final landscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     return Container(
@@ -1361,20 +1530,23 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                           .bodySmall
                           ?.copyWith(color: Colors.white70)),
                 ],
-              )
-            else if (!landscape)
-              Text(
-                'Ref: ${spec.weightLabel} '
-                '${spec.referenceLabel.toLowerCase()} '
-                '${(spec.nominalSize * 100).toStringAsFixed(1)} cm '
-                '· drag video to scrub · pinch to zoom',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: Colors.white70),
               ),
-            if (!landscape && _set.length > 1) _filmstrip(),
+            // Upright the tools belong with the rest of the chrome rather
+            // than floating over the frame at a guessed inset: laid out
+            // here they sit hard against the scrubber whatever else the
+            // overlay is carrying, and have the width of the screen to
+            // spread along.
+            if (!landscape)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
+                child: Align(
+                  alignment: Alignment.bottomRight,
+                  child: DrawingRail(
+                    controller: _drawing,
+                    axis: Axis.horizontal,
+                  ),
+                ),
+              ),
             PlaybackControls(
               controller: _controller,
               fps: widget.video.fps,
@@ -1423,35 +1595,38 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               ),
           ] else
             Positioned(top: 0, left: 0, right: 0, child: _topOverlay()),
-          Positioned(
-            top: 0,
-            right: 4,
-            bottom: 0,
-            child: SafeArea(
-              child: Padding(
-                // Hugs the bottom-right corner: the throw action lives in
-                // the right-center and upper-right of the frame, and the
-                // inset keeps it clear of the scrubber/transport overlay
-                // (a single shorter row in landscape).
-                padding: EdgeInsets.only(
-                    bottom: landscape
-                        ? 60
-                        : (_set.length > 1 ? 150 + _stripHeight : 150)),
-                child: Align(
-                  alignment: Alignment.bottomRight,
-                  child: SingleChildScrollView(
-                    reverse: true,
-                    child: DrawingRail(controller: _drawing),
+          // On its side the frame fills the screen, so the tools float over
+          // it as a column up the right edge — past the release and the
+          // flight, which is the least of the picture to stand in front of
+          // — clear of the header rail down the left and of the transport
+          // along the bottom. Upright they live in the bottom overlay
+          // instead, where the letterbox already leaves room for them.
+          if (landscape)
+            Positioned(
+              top: 0,
+              left: 64,
+              right: 4,
+              bottom: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 60),
+                  // Handed the whole box it has to fit into, since that is
+                  // what decides whether the tools take one run or two.
+                  child: Align(
+                    alignment: Alignment.bottomRight,
+                    child: DrawingRail(
+                      controller: _drawing,
+                      axis: Axis.vertical,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           Positioned(
             left: 0,
             right: 0,
             bottom: 0,
-            child: _bottomOverlay(widget.video.implementSpec),
+            child: _bottomOverlay(),
           ),
         ],
       ),

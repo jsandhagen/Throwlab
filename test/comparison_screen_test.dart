@@ -297,9 +297,9 @@ void main() {
       await drawInPane(tester, 1);
 
       expect(paneAnnotations<PenStroke>(tester, 0).single.color,
-          kAnnotationColors[2]);
+          kAnnotationColors[3].color);
       expect(paneAnnotations<PenStroke>(tester, 1).single.color,
-          kAnnotationColors[2]);
+          kAnnotationColors[3].color);
     });
 
     testWidgets('the weight picked once arms both panes', (tester) async {
