@@ -774,10 +774,8 @@ class _AveragesTile extends StatelessWidget {
     // series average a second mark.
     final best = averages.meetsScored > 1 ? averages.averageBest : null;
     final meetMark = averages.meetMarks > 1 ? averages.averageMeetMark : null;
-    final everyMark = averages.everyMarks > 1 &&
-            (averages.hasTraining || meetMark == null)
-        ? averages.averageEveryMark
-        : null;
+    final training =
+        averages.trainingMarks > 1 ? averages.averageTraining : null;
     final rate = averages.foulRate;
     return [
       if (best != null)
@@ -793,16 +791,15 @@ class _AveragesTile extends StatelessWidget {
           value: formatDistance(meetMark, averages.unit),
           under: '${averages.meetMarks} marks',
         ),
-      // The same average widened to the whole record book — worth its width
-      // only when there is training in it to widen to, since otherwise it
-      // is the competition average again under another name. It is named
-      // for what it widens: beside the competition figure it is what
-      // training does to it, and standing alone it is simply everything.
-      if (everyMark != null)
+      // The other half of the pair, and kept out of the one beside it: the
+      // gap between what an athlete throws on a Saturday and what they
+      // throw on a Tuesday is the thing worth looking at, and a figure
+      // with both in it would close that gap by arithmetic.
+      if (training != null)
         _Figure(
-          label: meetMark == null ? 'Every mark' : 'With training',
-          value: formatDistance(everyMark, averages.unit),
-          under: '${averages.everyMarks} marks',
+          label: 'In training',
+          value: formatDistance(training, averages.unit),
+          under: '${averages.trainingMarks} marks',
         ),
       if (rate != null)
         _Figure(

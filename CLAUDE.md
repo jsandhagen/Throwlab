@@ -411,10 +411,14 @@ like the app rather than a bare Material default.
   athlete threw half as far as they did. `SeasonAverages` reads those over
   a season, per event and weight the way a best is: the mean of each meet's
   best (the level competed at), the mean of every attempt at those meets
-  (how reliably it is reached), and the mean of the whole record book,
-  training in. The third is only drawn when there is training in it to
-  widen to, and none of them is drawn off a single throw — a mean of one is
-  the throw again under a heading that promises a season. The averages sit
+  (how reliably it is reached), and the mean of what was thrown away from a
+  meet (the training). The last two are a pair and are kept apart — a mark
+  is competition because a series points at it, everything else in the
+  record book is training — because the gap between a Saturday and a
+  Tuesday is the thing worth looking at, and one figure with both in it
+  would close that gap by arithmetic. None of them is drawn off a single
+  throw: a mean of one is the throw again under a heading that promises a
+  season. The averages sit
   in their own section under the bests, headed the way a competition names
   itself (`Discus · 1 kg`) rather than the way a record book does (`1 kg
   Discus`), so the two lists don't read as the same rows twice; the meet

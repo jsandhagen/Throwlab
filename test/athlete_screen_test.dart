@@ -449,23 +449,27 @@ void main() {
       expect(find.text('averaged 70.50 m from 4 · 2 fouls'), findsOneWidget);
     });
 
-    testWidgets('widen to the record book when there is training in it',
+    testWidgets('put the training beside the competition, not into it',
         (tester) async {
       final meets = await competed([61, 63]);
-      await library.addMark(ThrowMark(
-        id: 't1',
-        athlete: 'Ana Diaz',
-        event: ThrowEvent.discus,
-        implementKg: 1,
-        distance: 56.00,
-        achievedOn: DateTime(2026, 5, 2),
-      ));
+      for (final mark in [('t1', 56.00), ('t2', 58.00)]) {
+        await library.addMark(ThrowMark(
+          id: mark.$1,
+          athlete: 'Ana Diaz',
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          distance: mark.$2,
+          achievedOn: DateTime(2026, 5, 2),
+        ));
+      }
       await mountProfile(tester, meets: meets);
 
       expect(find.text('IN COMPETITION'), findsOneWidget);
       expect(find.text('62.00 m'), findsOneWidget);
-      expect(find.text('WITH TRAINING'), findsOneWidget);
-      expect(find.text('60.00 m'), findsOneWidget);
+      // The Tuesdays on their own: a figure with the meet marks rolled in
+      // would close the gap the pair exists to show.
+      expect(find.text('IN TRAINING'), findsOneWidget);
+      expect(find.text('57.00 m'), findsOneWidget);
     });
 
     testWidgets('a meet average on its own is not a second figure',
@@ -473,8 +477,7 @@ void main() {
       await mountProfile(tester, meets: await competed([60, 64]));
       // Everything measured was measured at the meet, so widening to the
       // record book would print the same number twice.
-      expect(find.text('WITH TRAINING'), findsNothing);
-      expect(find.text('EVERY MARK'), findsNothing);
+      expect(find.text('IN TRAINING'), findsNothing);
     });
 
     testWidgets('an athlete who only trains still has an average',
@@ -494,7 +497,7 @@ void main() {
             distance: 43.20),
       ]);
       await mountProfile(tester);
-      expect(find.text('EVERY MARK'), findsOneWidget);
+      expect(find.text('IN TRAINING'), findsOneWidget);
       expect(find.text('42.20 m'), findsOneWidget);
       expect(find.text('MEET BEST'), findsNothing);
       expect(find.text('FOULS'), findsNothing);

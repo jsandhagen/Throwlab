@@ -122,26 +122,31 @@ void main() {
       expect(averages.fouls, 2);
       expect(averages.attempts, 6);
       expect(averages.foulRate, closeTo(1 / 3, 0.001));
-      // Nothing was thrown outside the meets, so there is no second
-      // average to draw: it would be the competition one again.
+      // Nothing was thrown outside the meets, so there is no training
+      // average to put beside it.
       expect(averages.hasTraining, isFalse);
+      expect(averages.averageTraining, isNull);
     });
 
-    test('widens to the record book when there is training in it', () {
+    test('keeps the training apart from the competition', () {
       final series = <double?>[60, 64];
       final averages = SeasonAverages.forSeason(
         _outings([_meetFor('k1', june, series)], _book('k1', june, series)),
         [
           ..._book('k1', june, series),
           _training('t1', may, 56),
-          _training('t2', may, 60),
+          _training('t2', may, 58),
         ],
       ).single;
 
+      // A meet's marks are in the record book like any others; what makes
+      // them competition is that a series points at them.
       expect(averages.averageMeetMark, closeTo(62.00, 0.001));
-      // The whole season: the two at the meet and the two on a Tuesday.
-      expect(averages.averageEveryMark, closeTo(60.00, 0.001));
-      expect(averages.everyMarks, 4);
+      expect(averages.meetMarks, 2);
+      // The Tuesdays, and only the Tuesdays — the gap between the two is
+      // the reason they are two numbers.
+      expect(averages.averageTraining, closeTo(57.00, 0.001));
+      expect(averages.trainingMarks, 2);
       expect(averages.hasTraining, isTrue);
     });
 
@@ -200,7 +205,7 @@ void main() {
         const [],
         [_training('t1', may, 56), _training('t2', june, 60)],
       ).single;
-      expect(averages.averageEveryMark, closeTo(58.00, 0.001));
+      expect(averages.averageTraining, closeTo(58.00, 0.001));
       expect(averages.averageBest, isNull);
       expect(averages.averageMeetMark, isNull);
       expect(averages.foulRate, isNull);
@@ -262,7 +267,7 @@ void main() {
 
       final then = SeasonAverages.forSeason(outings, book, season: 2025).single;
       expect(then.averageMeetMark, closeTo(52.00, 0.001));
-      expect(then.everyMarks, 2);
+      expect(then.meetMarks, 2);
 
       // And every season is the two of them together, which is the number
       // a season on its own is worth telling apart from.
@@ -291,8 +296,8 @@ void main() {
         ],
         season: 2025,
       ).single;
-      expect(averages.averageEveryMark, closeTo(52.00, 0.001));
-      expect(averages.everyMarks, 2);
+      expect(averages.averageTraining, closeTo(52.00, 0.001));
+      expect(averages.trainingMarks, 2);
     });
   });
 }

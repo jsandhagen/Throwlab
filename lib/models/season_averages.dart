@@ -14,10 +14,13 @@ import 'throw_video.dart';
 /// Three averages, because a coach asks three different questions. The mean
 /// of each meet's best is the level competed at. The mean of every measured
 /// attempt at those meets is how reliably that level is reached. The mean
-/// of everything measured, training included, is the season as the record
-/// book holds it. The fouls sit beside all three: an average is only worth
-/// what it was taken over, and a series averaging 60 off two marks and four
-/// fouls is not a good afternoon.
+/// of what was thrown away from a meet is what the training is running at,
+/// and it is kept apart from the competition rather than rolled in with it
+/// — the whole point of the pair is the gap between them, and an athlete
+/// who throws further on a Tuesday than they manage on a Saturday has a
+/// problem no blended number would show. The fouls sit beside all three: an
+/// average is only worth what it was taken over, and a series averaging 60
+/// off two marks and four fouls is not a good afternoon.
 ///
 /// Per weight for the same reason a personal best is: 17.80 m
 /// with the 6 kg and 17.80 m with the 7.26 kg are not one number, and an
@@ -33,8 +36,8 @@ class SeasonAverages {
     required this.meetsScored,
     required this.averageMeetMark,
     required this.meetMarks,
-    required this.averageEveryMark,
-    required this.everyMarks,
+    required this.averageTraining,
+    required this.trainingMarks,
     required this.fouls,
     required this.attempts,
     required this.unit,
@@ -72,12 +75,13 @@ class SeasonAverages {
   /// How many attempts that was over.
   final int meetMarks;
 
-  /// The mean of every measured throw of the season, training included —
-  /// the whole record book at this event and weight.
-  final double? averageEveryMark;
+  /// The mean of everything measured away from a meet — the training, on
+  /// its own. A competition mark is never in here: it has its own average
+  /// two figures to the left, and the two are read against each other.
+  final double? averageTraining;
 
   /// How many throws that was over.
-  final int everyMarks;
+  final int trainingMarks;
 
   /// Attempts fouled at a meet.
   final int fouls;
@@ -98,15 +102,14 @@ class SeasonAverages {
   /// Two throws, at the least. One is a measurement: its average is the
   /// throw itself, printed a second time under a heading that promises a
   /// season and a card that promises a trend.
-  bool get hasAverage => everyMarks > 1 || meetMarks > 1 || meetsScored > 1;
+  bool get hasAverage =>
+      trainingMarks > 1 || meetMarks > 1 || meetsScored > 1;
 
   /// Whether there is anything here worth drawing.
   bool get isEmpty => !hasAverage;
 
-  /// Whether the record book holds throws the meets don't — training marks,
-  /// which is what makes [averageEveryMark] a second number rather than the
-  /// same one again.
-  bool get hasTraining => everyMarks > meetMarks;
+  /// Whether anything was thrown away from a meet at all.
+  bool get hasTraining => trainingMarks > 0;
 
   /// What the meet average has done over the season, first meet to last.
   ///
@@ -235,11 +238,26 @@ class SeasonAverages {
       }
     }
 
-    final measured = [...results]
-      ..sort((a, b) => a.displayDate.compareTo(b.displayDate));
-    var everyTotal = 0.0;
-    for (final result in measured) {
-      everyTotal += result.distance!;
+    // Which of the record book's throws were taken at one of these meets.
+    // The rest is the training, and the two are averaged apart: rolled
+    // together they make a number that is neither.
+    final atMeet = <String>{
+      for (final meet in meets)
+        for (final attempt in meet.entry.attempts)
+          if (attempt?.resultId != null) attempt!.resultId!,
+    };
+    var trainingTotal = 0.0;
+    var trained = 0;
+    // The newest throw of the lot, competition or not: it spells the unit,
+    // the way the newest throw spells an athlete's name.
+    ThrowResult? newest;
+    for (final result in results) {
+      if (newest == null || result.displayDate.isAfter(newest.displayDate)) {
+        newest = result;
+      }
+      if (atMeet.contains(result.id)) continue;
+      trainingTotal += result.distance!;
+      trained++;
     }
 
     return SeasonAverages._(
@@ -251,17 +269,14 @@ class SeasonAverages {
       meetsScored: scored,
       averageMeetMark: marks == 0 ? null : markTotal / marks,
       meetMarks: marks,
-      averageEveryMark:
-          measured.isEmpty ? null : everyTotal / measured.length,
-      everyMarks: measured.length,
+      averageTraining: trained == 0 ? null : trainingTotal / trained,
+      trainingMarks: trained,
       fouls: fouls,
       attempts: attempts,
-      // The newest throw spells the unit, the way the newest throw spells
-      // an athlete's name. A rival's series is the fallback: an untracked
-      // entry leaves nothing in the record book to read one off.
-      unit: measured.isNotEmpty
-          ? measured.last.distanceUnit
-          : (meets.isEmpty ? DistanceUnit.meters : meets.last.unit),
+      // A rival's series is the fallback: an untracked entry leaves nothing
+      // in the record book to read a unit off.
+      unit: newest?.distanceUnit ??
+          (meets.isEmpty ? DistanceUnit.meters : meets.last.unit),
     );
   }
 }
