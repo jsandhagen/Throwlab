@@ -406,16 +406,33 @@ void main() {
       expect(find.text('MEETS'), findsNothing);
     });
 
-    testWidgets('a season of one throw draws no line', (tester) async {
+    testWidgets('one mark is a measurement, not a record with a history',
+        (tester) async {
       await mountProfile(tester, meets: await season(series: [41.20]));
-      // One mark is a measurement, not a direction.
-      expect(find.textContaining('measured'), findsNothing);
+      expect(find.textContaining('broken'), findsNothing);
     });
 
-    testWidgets('a season of two says which way it went', (tester) async {
+    testWidgets('the best draws its own climb and what it took',
+        (tester) async {
       await mountProfile(tester, meets: await season());
-      expect(find.textContaining('+1.86 m since 13 Jun · 2 measured'),
-          findsOneWidget);
+      // 41.20 opened it and 43.06 took it off her the same afternoon.
+      expect(find.text('+1.86 m since 13 Jun · broken once'), findsOneWidget);
+    });
+
+    testWidgets('a throw that beat nothing is not on the line', (tester) async {
+      await mountProfile(tester,
+          meets: await season(series: [41.20, 40.00, 43.06]));
+      // Three throws, two records: the 40.00 in the middle never stood as
+      // her best and has no business on a chart of what did.
+      expect(find.text('+1.86 m since 13 Jun · broken once'), findsOneWidget);
+    });
+
+    testWidgets('a mark that only equals the best does not reset it',
+        (tester) async {
+      await mountProfile(tester, meets: await season(series: [41.20, 41.20]));
+      // A record stands until it is beaten, not until it is matched — so
+      // there is one mark in its history and no line to draw.
+      expect(find.textContaining('broken'), findsNothing);
     });
   });
 
@@ -575,8 +592,8 @@ void main() {
     testWidgets('open on the most recent season, and split by the picker',
         (tester) async {
       // Last season and this one, at the same event and weight.
-      final meets = await competed([50, 54],
-          id: 'k0', on: DateTime(2025, 6, 14));
+      final meets =
+          await competed([50, 54], id: 'k0', on: DateTime(2025, 6, 14));
       for (final meet
           in (await competed([60, 64], on: DateTime(2026, 6, 13))).meets) {
         await meets.save(meet);
@@ -612,10 +629,9 @@ void main() {
       expect(find.text('52.00 m'), findsOneWidget);
     });
 
-    testWidgets('say what the meets averaged season by season',
-        (tester) async {
-      final meets = await competed([50, 54],
-          id: 'k0', on: DateTime(2025, 6, 14));
+    testWidgets('say what the meets averaged season by season', (tester) async {
+      final meets =
+          await competed([50, 54], id: 'k0', on: DateTime(2025, 6, 14));
       for (final meet
           in (await competed([60, 64], on: DateTime(2026, 6, 13))).meets) {
         await meets.save(meet);
@@ -676,8 +692,8 @@ void main() {
 
     testWidgets('the meet average is drawn across the season', (tester) async {
       final meets = await competed([60, 62]);
-      final june = await competed([64, 68],
-          id: 'k2', on: DateTime(2026, 6, 27));
+      final june =
+          await competed([64, 68], id: 'k2', on: DateTime(2026, 6, 27));
       for (final meet in june.meets) {
         await meets.save(meet);
       }

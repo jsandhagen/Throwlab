@@ -64,12 +64,14 @@ feet in a field measured in meters, a personal best, and enough of a field
 to push the last event onto a second page.
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
-athlete and by event, a search in progress, the empty state, four athlete
-profiles (each with the season drawn under its best, what it averages at a
-meet and what it fouled away, how that has moved season by season, and the
-meets it was thrown at — and one of them read over last season instead
-through the picker, and one read as the best of each meet rather than as
-every throw of it), a training note (as
+athlete and by event, a search in progress, the empty state, five athlete
+profiles — among them a shot putter with a full season on him, six meets
+this spring and three last, which is the shape the averages and the
+record's own staircase are drawn for — each with the history of its best,
+what it averages at a meet and what it fouled away, how that has moved
+season by season, and the meets it was thrown at; and one of them read
+over last season instead through the picker, and one read as the best of
+each meet rather than as every throw of it, a training note (as
 it opens, and with the keyboard up — which the note preview fakes, insets
 and all — toolbar above it, and pinned to the top), and the meet tracker:
 the meets as a list and as a calendar, a meet's events, one of them
@@ -508,10 +510,17 @@ like the app rather than a bare Material default.
   it hit the sector, and a note for the rest. Asked for in one line across
   the top of the meet, and never for a fixture that hasn't happened yet.
 - An athlete's profile reads the season two ways. Each personal best draws
-  the throws behind it — every measured mark at that event and weight,
-  against the calendar, the ones taken at a meet solid and the training
-  marks hollow — and says what the season moved, first mark to last rather
-  than best to best, since a best only ever goes up. Under the bests,
+  its own history: every throw that stood as the best at that event and
+  weight on the day it was taken, against the calendar, the ones set at a
+  meet solid and the ones set in training hollow — and says how far the
+  mark has come and how many times it was broken to get there. Only those
+  throws. A card under a heading that says PERSONAL BESTS is about the
+  mark, and the scatter of every measured throw it used to draw was
+  answering a different question — how the throwing is going — which the
+  averages below answer properly, meet by meet and season by season. So the
+  line climbs, because that is what a record does; a mark that only equals
+  the best does not reset it, the way a record stands until it is beaten
+  rather than matched. Under the bests,
   `MeetOuting` reads the meets from the athlete's side: the series round by
   round, which round the big throw came in, the field, the placing and the
   weather. The meets are looked up softly (`meetsOf`), like the athlete

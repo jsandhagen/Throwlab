@@ -188,7 +188,7 @@ class AthleteScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _BestTile(
                   best: best,
-                  season: _progressionFor(profile, best, atMeet),
+                  record: _progressionFor(profile, best, atMeet),
                   // A filmed best opens its clip; one that was only ever
                   // written down opens the thing it actually is, the entry.
                   onTap: () => best.isFilmed
@@ -255,23 +255,47 @@ class AthleteScreen extends StatelessWidget {
     );
   }
 
-  /// Every measured throw of theirs at one event and weight, oldest first.
-  /// Training marks included: an athlete throwing further on a Tuesday than
-  /// they manage on a Saturday is exactly what a coach wants to see, and a
-  /// chart of competition days alone would hide it.
+  /// The record as it was set and reset: every throw of theirs that stood
+  /// as the best at this event and weight on the day it was taken, oldest
+  /// first, ending on the one that holds it now.
+  ///
+  /// Only those. A card under a heading that says PERSONAL BESTS is about
+  /// the mark, and a scatter of every throw behind it was answering a
+  /// different question — how the throwing is going — which the averages
+  /// below answer properly, meet by meet and season by season. Here the
+  /// line climbs, because that is what a record does.
+  ///
+  /// A mark that equals the best does not reset it, the way a record
+  /// stands until it is beaten rather than matched — the same rule
+  /// `personalBestIds` scores by.
   List<ProgressionPoint> _progressionFor(
       AthleteProfile profile, PersonalBest best, Set<String> atMeet) {
-    final points = [
+    final measured = [
       for (final result in profile.results)
         if (result.event == best.event &&
             result.implementKg == best.implementKg &&
             result.distance != null)
-          ProgressionPoint(
-            on: result.displayDate,
-            meters: result.distance!,
-            atMeet: atMeet.contains(result.id),
-          ),
-    ]..sort((a, b) => a.on.compareTo(b.on));
+          result,
+    ]..sort((a, b) {
+        final byDate = a.displayDate.compareTo(b.displayDate);
+        // Two on one day is a series, and nothing says which came first;
+        // the id settles it so the staircase is drawn the same way twice.
+        return byDate != 0 ? byDate : a.id.compareTo(b.id);
+      });
+
+    final points = <ProgressionPoint>[];
+    double? standing;
+    for (final result in measured) {
+      if (standing != null && result.distance! <= standing) continue;
+      standing = result.distance;
+      points.add(ProgressionPoint(
+        on: result.displayDate,
+        meters: result.distance!,
+        // Still worth saying where it was set: a best thrown on a Tuesday
+        // is a best nobody else saw.
+        atMeet: atMeet.contains(result.id),
+      ));
+    }
     return points;
   }
 
@@ -1392,24 +1416,30 @@ class _SeriesLine extends StatelessWidget {
 class _BestTile extends StatelessWidget {
   const _BestTile({
     required this.best,
-    required this.season,
+    required this.record,
     required this.onTap,
   });
 
   final PersonalBest best;
 
-  /// Every measured throw at this event and weight, oldest first. Drawn
-  /// under the mark once there are two of them: a best is the high-water
-  /// line and says nothing about the direction of travel, and an athlete
-  /// two meters off theirs in June is either building or falling away.
-  final List<ProgressionPoint> season;
+  /// The mark's own history, oldest first: every throw that stood as the
+  /// best when it was taken. Drawn under it once there are two of them —
+  /// one is a first measurement, and a line needs somewhere to have come
+  /// from.
+  final List<ProgressionPoint> record;
 
   final VoidCallback onTap;
 
-  /// What the season has moved, first mark to last. Not best to best: a
-  /// best only ever goes up, so measuring against it would draw every
-  /// athlete as improving.
-  double get _moved => season.last.meters - season.first.meters;
+  /// How far the mark has come since the first one they had. It only ever
+  /// goes up, which is what a record does; how the throwing is *going* is
+  /// the averages' question, and they answer it meet by meet.
+  double get _moved => record.last.meters - record.first.meters;
+
+  /// How many times it was beaten to get here.
+  String get _broken {
+    final times = record.length - 1;
+    return times == 1 ? 'broken once' : 'broken $times times';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1492,10 +1522,10 @@ class _BestTile extends StatelessWidget {
                   ),
                 ],
               ),
-              if (season.length > 1) ...[
+              if (record.length > 1) ...[
                 const SizedBox(height: 6),
                 ProgressionChart(
-                    points: season,
+                    points: record,
                     color: eventColor(best.event),
                     // The card's own unit: a best written '200-02.25' over
                     // a chart labeled in meters is one throw in two
@@ -1505,12 +1535,10 @@ class _BestTile extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(left: 4, top: 2),
                   child: Text(
-                    // Signed both ways, because a season that went
-                    // backwards should say so.
-                    '${_moved >= 0 ? '+' : '−'}'
-                    '${formatDistance(_moved.abs(), best.unit)} '
-                    'since ${shortThrowDate(season.first.on)} · '
-                    '${season.length} measured',
+                    // Never signed: this line is the record's own climb,
+                    // and a record that came down is one nobody kept.
+                    '+${formatDistance(_moved, best.unit)} '
+                    'since ${shortThrowDate(record.first.on)} · $_broken',
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),

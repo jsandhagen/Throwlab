@@ -68,19 +68,24 @@ void main() {
     // The same profile read over last season instead.
     await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
         'athlete_last_season', season: '${DateTime.now().year - 1}');
-    // And read as the best of each meet rather than as every throw of it,
-    // which is the other half of the switch in the card's header.
-    await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
-        'athlete_meet_bests', best: true);
     // Two weights at once — each keeps its own mark, under an edited nickname.
     await _shoot(tester, library, notes, athletes, meets, 'Adam',
         'athlete_two_implements');
     // A mark entered in feet, which is how it reads back.
     await _shoot(
         tester, library, notes, athletes, meets, 'Jakob', 'athlete_feet');
+    // Six meets this spring and three last: a full season, which is what
+    // the averages and the record's own staircase are shaped for.
+    await _shoot(tester, library, notes, athletes, meets, 'Marcus Reed',
+        'athlete_season');
     // A whole season with nothing filmed.
     await _shoot(tester, library, notes, athletes, meets, 'Priya Raman',
         'athlete_marks_only');
+    // Last, because it is the one shot that leaves something behind: which
+    // way a meet is read is remembered, so a card shot after this one
+    // would open on the best rather than on the average.
+    await _shoot(tester, library, notes, athletes, meets, 'Marcus Reed',
+        'athlete_meet_bests', best: true);
   });
 }
 

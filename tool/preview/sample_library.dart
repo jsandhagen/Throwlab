@@ -62,6 +62,45 @@ List<Map<String, dynamic>> sampleNotes() {
 
 /// Marks with no clip behind them: one athlete's competition results, and
 /// a thrower who is only ever in a results sheet.
+
+/// One competition in a sample season: when it was, what it was called,
+/// where, and the series that was thrown at it. A round is a distance, an
+/// 'F' for a foul or a 'P' for a pass, so the table reads the way a series
+/// is called out.
+typedef _Outing = (int month, int day, String name, String venue,
+    List<String> rounds, double rival);
+
+/// A shot putter with a season behind him: six meets this spring and three
+/// last. Enough for the averages to have a line worth drawing, a record
+/// with a staircase behind it, and two seasons to be told apart.
+const _thisSeason = <_Outing>[
+  (4, 11, 'Season Opener', 'Ashton', //
+      ['17.44', 'F', '17.80', '17.62', 'F', '17.95'], 17.60),
+  (4, 25, 'Spring Open', 'Sportcity', //
+      ['17.88', '18.02', 'F', '17.90', '18.14', '17.96'], 18.40),
+  (5, 9, 'League match', 'Ashton', //
+      ['17.60', 'F', 'F', '18.05', '17.99', '18.22'], 17.84),
+  (5, 23, 'Invitational', 'Hayward Field', //
+      ['18.30', '18.05', '18.44', 'F', '18.20', 'P'], 18.62),
+  (6, 6, 'County Champs', 'Sportcity', //
+      ['18.12', 'F', '18.51', '18.60', 'P', 'P'], 18.05),
+  (6, 20, 'Regional final', 'Hayward Field', //
+      ['18.40', '18.72', 'F', '18.66', '18.90', 'F'], 18.44),
+];
+
+const _lastSeason = <_Outing>[
+  (4, 19, 'Spring Open', 'Sportcity', //
+      ['16.90', 'F', '17.12', '17.05'], 17.30),
+  (5, 17, 'League match', 'Ashton', //
+      ['17.20', '17.35', 'F', '17.28'], 16.98),
+  (6, 14, 'County Champs', 'Sportcity', //
+      ['17.40', 'F', '17.58', '17.44'], 17.52),
+];
+
+/// The id a season's meet is filed under: 'sp26-2' for the third of this
+/// spring's. Its marks take the same id with the round on the end.
+String _outingId(int year, int index) => 'sp$year-$index';
+
 List<Map<String, dynamic>> sampleMarks() {
   final now = DateTime.now();
   String daysAgo(int days) =>
@@ -117,6 +156,25 @@ List<Map<String, dynamic>> sampleMarks() {
         note: 'Autumn Open'),
     mark('m7', 'Anna Sofia', 'discus', 1, 46.80, lastSeason(8, 30)),
     mark('m8', 'Anna Sofia', 'discus', 1, 45.90, lastSeason(8, 16)),
+    // A season of shot put a round at a time, this spring and last: what a
+    // meet writes into the record book as it is entered.
+    for (final season in [
+      (now.year, _thisSeason),
+      (now.year - 1, _lastSeason),
+    ])
+      for (var meet = 0; meet < season.$2.length; meet++)
+        for (var round = 0; round < season.$2[meet].$5.length; round++)
+          if (double.tryParse(season.$2[meet].$5[round]) != null)
+            mark(
+              '${_outingId(season.$1, meet)}-$round',
+              'Marcus Reed',
+              'shotPut',
+              7.26,
+              double.parse(season.$2[meet].$5[round]),
+              DateTime(season.$1, season.$2[meet].$1, season.$2[meet].$2, 13)
+                  .toIso8601String(),
+              note: season.$2[meet].$3,
+            ),
     // Nothing of hers was ever filmed: the whole season is a results sheet.
     mark('m3', 'Priya Raman', 'hammer', 4, 58.44, daysAgo(11),
         note: 'Regional final'),
@@ -222,6 +280,39 @@ List<Map<String, dynamic>> sampleMeets() {
         ], tracked: false),
       ],
     },
+    // The shot putter's two seasons, meet by meet: his own series against
+    // one rival, so a placing on the card means something.
+    for (final season in [
+      (now.year, _thisSeason),
+      (now.year - 1, _lastSeason),
+    ])
+      for (var index = 0; index < season.$2.length; index++)
+        {
+          'id': _outingId(season.$1, index),
+          'name': season.$2[index].$3,
+          'date':
+              DateTime(season.$1, season.$2[index].$1, season.$2[index].$2, 13)
+                  .toIso8601String(),
+          'venue': season.$2[index].$4,
+          'rounds': season.$2[index].$5.length,
+          'prelimRounds': season.$2[index].$5.length,
+          'advancing': 99,
+          'entries': [
+            entry('${_outingId(season.$1, index)}-e1', 'Marcus Reed', 'shotPut',
+                7.26, 0, [
+              // 'at' rather than 'round', which is the name of the helper
+              // that turns one into an attempt.
+              for (var at = 0; at < season.$2[index].$5.length; at++)
+                if (double.tryParse(season.$2[index].$5[at]) != null)
+                  round('${_outingId(season.$1, index)}-$at')
+                else
+                  round(null, pass: season.$2[index].$5[at] == 'P'),
+            ]),
+            entry('${_outingId(season.$1, index)}-e2', 'D. Bennett (Sale)',
+                'shotPut', 7.26, 1, [rival(season.$2[index].$6)],
+                tracked: false),
+          ],
+        },
     {
       // Last season's, so a profile has a meet average to read this
       // season's against rather than one year standing on its own.
