@@ -405,6 +405,12 @@ like the app rather than a bare Material default.
   round, which round the big throw came in, the field, the placing and the
   weather. The meets are looked up softly (`meetsOf`), like the athlete
   records, so a profile still paints with nothing but the clips.
+  The Marks list underneath holds what is left over: a mark a meet series
+  points at is written out round by round on that meet's own card, and
+  listing it again below is the same throw twice — so the list is the
+  throws no meet was keeping score for. They are still the athlete's marks
+  everywhere else, bests included; a meet's are edited where they were
+  entered, on the competition screen.
 - A best is the one throw that came off; the season is what the rest of
   them average. `MeetSeries.average` is the mean of a series' legal marks
   and `fouls` is what it cost — never rolled together, since a foul is a

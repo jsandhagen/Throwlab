@@ -364,6 +364,34 @@ void main() {
       expect(find.text('Overcast · Headwind · wet ring'), findsOneWidget);
     });
 
+    testWidgets('are not listed a second time under Marks', (tester) async {
+      await library.addMark(ThrowMark(
+        id: 'tuesday',
+        athlete: 'Ana Diaz',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        distance: 39.50,
+        achievedOn: DateTime(2026, 6, 6),
+      ));
+      await mountProfile(tester, meets: await season());
+
+      // The series is written out on the meet's own card above; the same
+      // two throws in a list underneath would be them twice.
+      expect(find.text('MARKS'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+      expect(find.text('39.50 m'), findsOneWidget);
+      // Her opener at the meet, which the series above already gives. The
+      // day's best is left out of this check because it is also the mark
+      // on her personal best tile, where it belongs.
+      expect(find.text('41.20 m'), findsNothing);
+    });
+
+    testWidgets('leave nothing under Marks when that is all there was',
+        (tester) async {
+      await mountProfile(tester, meets: await season());
+      expect(find.text('MARKS'), findsNothing);
+    });
+
     testWidgets('are nothing at all when there are no meets in scope',
         (tester) async {
       await fill([

@@ -157,6 +157,14 @@ class AthleteScreen extends StatelessWidget {
       meetsOf(context)?.meets ?? const <Meet>[],
       library.results,
     );
+    // The marks a meet hasn't already written out. A competition series is
+    // spelled round by round in the section above, and the same throw
+    // listed again underneath is the same throw twice — what is left is
+    // what was thrown where no meet was keeping score.
+    final loose = [
+      for (final mark in profile.marks)
+        if (!atMeet.contains(mark.id)) mark,
+    ];
     return CustomScrollView(
       slivers: [
         if (record != null && !record.isEmpty)
@@ -192,15 +200,15 @@ class AthleteScreen extends StatelessWidget {
         ..._averagesSection(context, profile, outings),
         ..._meetsSection(context, outings),
         _notesSection(context, profile.name),
-        if (profile.marks.isNotEmpty) ...[
+        if (loose.isNotEmpty) ...[
           SliverToBoxAdapter(
-            child: _SectionHeading('Marks', '${profile.marks.length}'),
+            child: _SectionHeading('Marks', '${loose.length}'),
           ),
           SliverList.separated(
-            itemCount: profile.marks.length,
+            itemCount: loose.length,
             separatorBuilder: (context, _) => const SizedBox(height: 6),
             itemBuilder: (context, index) {
-              final mark = profile.marks[index];
+              final mark = loose[index];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _MarkTile(
