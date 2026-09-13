@@ -155,6 +155,26 @@ class SeasonAverages {
     return years.toList()..sort((a, b) => b.compareTo(a));
   }
 
+  /// The same reading taken one season at a time, most recent first.
+  ///
+  /// An average is read against the one before it, and the picker's whole
+  /// job is to keep the seasons from being blended — so the comparison has
+  /// to be handed over as a list of them rather than as a career. Only the
+  /// seasons this event and weight was thrown in: a discus average has
+  /// nothing to say about a winter somebody spent on the shot.
+  static List<SeasonAverages> history(
+    Iterable<MeetOuting> outings,
+    Iterable<ThrowResult> results,
+    ThrowEvent event,
+    double implementKg,
+  ) =>
+      [
+        for (final season in seasonsOf(outings, results))
+          for (final reading in forSeason(outings, results, season: season))
+            if (reading.event == event && reading.implementKg == implementKg)
+              reading,
+      ];
+
   /// One reading per event and weight the athlete has thrown, in the order
   /// their bests are listed in — event order, heaviest implement first — so
   /// the averages line up with the marks above them.

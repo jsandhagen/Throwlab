@@ -65,8 +65,9 @@ to push the last event onto a second page.
 That writes `build/preview/*.png` (gitignored) — the library grouped by
 athlete and by event, a search in progress, the empty state, four athlete
 profiles (each with the season drawn under its best, what it averages and
-what it fouled away, and the meets it was thrown at — and one of them read
-over last season instead, through the picker), a training note (as
+what it fouled away, how that has moved season by season, and the meets it
+was thrown at — and one of them read over last season instead, through the
+picker), a training note (as
 it opens, and with the keyboard up — which the note preview fakes, insets
 and all — toolbar above it, and pinned to the top), and the meet tracker:
 the meets as a list and as a calendar, a meet's events, one of them
@@ -440,6 +441,19 @@ like the app rather than a bare Material default.
   would have to learn the difference. The picker governs the section it
   sits in and nothing else: a personal best is a personal best whatever
   season it was thrown in.
+- Under the card, the seasons themselves (`SeasonAverages.history`): what
+  the meets averaged each year, most recent first, with what each moved
+  from the year before. The chart above it is the meets inside one season,
+  which is the question asked in June; this is the one asked in January.
+  Rows rather than a line — four points a year apart drawn as a line
+  invent a shape between them nobody threw — and the picker never narrows
+  it, since the comparison is the one thing on the card a season filter
+  must not touch. What the bar draws is the *change*, not the mark: a bar
+  for a 48 m average beside one for 52 m has to start somewhere, and
+  anywhere but zero draws a seven per cent season as a fivefold one, while
+  zero draws two bars of the same length and says nothing. A difference
+  has a real zero. Only seasons with a meet average are rows: a winter
+  spent training is not a year of meet performance to be read against.
 - A meet's results go out as a PDF, written by `pdf_writer` — as narrow as
   `pdf_text` is at the other end, and set in Courier, because a results
   sheet is columns and a fixed-width face lines them up without a table of

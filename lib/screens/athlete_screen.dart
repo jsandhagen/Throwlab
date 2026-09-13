@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -606,7 +608,15 @@ class _AveragesSectionState extends State<_AveragesSection> {
           for (final reading in averages)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: _AveragesTile(averages: reading),
+              child: _AveragesTile(
+                averages: reading,
+                // The seasons before this one, so the card can say what
+                // the meets averaged then as well as now. Read whole
+                // rather than through the picker — the comparison is the
+                // one thing on the card the filter must not narrow.
+                history: SeasonAverages.history(widget.outings, widget.results,
+                    reading.event, reading.implementKg),
+              ),
             ),
       ],
     );
@@ -694,9 +704,12 @@ class _SeasonPicker extends StatelessWidget {
 /// same reason the best is: an average is only interesting next to the one
 /// before it.
 class _AveragesTile extends StatelessWidget {
-  const _AveragesTile({required this.averages});
+  const _AveragesTile({required this.averages, this.history = const []});
 
   final SeasonAverages averages;
+
+  /// The same reading for every season on record, most recent first.
+  final List<SeasonAverages> history;
 
   @override
   Widget build(BuildContext context) {
@@ -760,11 +773,34 @@ class _AveragesTile extends StatelessWidget {
                 ),
               ),
             ],
+            if (_seasons.length > 1) ...[
+              const SizedBox(height: 10),
+              Divider(height: 1, color: scheme.outlineVariant.withOpacity(0.5)),
+              const SizedBox(height: 8),
+              Text(
+                'SEASON BY SEASON',
+                style: theme.textTheme.labelSmall?.copyWith(
+                    fontSize: 9,
+                    letterSpacing: 0.8,
+                    color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 6),
+              _SeasonRows(
+                  seasons: _seasons, showing: averages.season, accent: accent),
+            ],
           ],
         ),
       ),
     );
   }
+
+  /// The seasons there is a meet average for, most recent first. A season
+  /// spent training is not a year of meet performance to compare against,
+  /// and a row of dashes says nothing a missing row doesn't.
+  List<SeasonAverages> get _seasons => [
+        for (final season in history)
+          if (season.averageMeetMark != null) season,
+      ];
 
   /// The numbers themselves, in the order a coach reads them: what they
   /// compete at, what the whole series comes to, and what was thrown away.
@@ -809,6 +845,138 @@ class _AveragesTile extends StatelessWidget {
           color: averages.fouls == 0 ? null : scheme.error,
         ),
     ];
+  }
+}
+
+/// What the meets averaged, a season at a time — the card's chart carried
+/// up a level.
+///
+/// The chart above it draws the meets inside one season, which is the
+/// question a coach asks in June. This is the one they ask in January: is
+/// the whole thing further along than it was last year. Rows rather than a
+/// line, because a season is one number and there are rarely more than
+/// three or four of them — a line drawn through four points a year apart
+/// invents a shape between them that nobody threw.
+///
+/// What is drawn is the *change*, not the mark. A bar for a 48 m average
+/// beside one for a 52 m average has to start somewhere, and anywhere but
+/// zero draws a seven per cent season as a fivefold one — while zero draws
+/// two bars of near enough the same length, which says nothing at all. The
+/// difference between the seasons has a real zero, so that is what gets the
+/// bar: how far the average moved, and which way.
+class _SeasonRows extends StatelessWidget {
+  const _SeasonRows({
+    required this.seasons,
+    required this.showing,
+    required this.accent,
+  });
+
+  /// Most recent first, each with a meet average.
+  final List<SeasonAverages> seasons;
+
+  /// The season the rest of the card is filtered to, picked out here so the
+  /// figures above can be found in the history they came from. Null when
+  /// the card is showing every season at once, and then no row is the one
+  /// being shown.
+  final int? showing;
+
+  final Color accent;
+
+  /// What each season moved from the one before it. The list runs newest
+  /// first, so a season's predecessor is the row underneath; the oldest has
+  /// nothing behind it and moved from nothing.
+  List<double?> get _moves => [
+        for (var i = 0; i < seasons.length; i++)
+          i + 1 < seasons.length
+              ? seasons[i].averageMeetMark! -
+                  seasons[i + 1].averageMeetMark!
+              : null,
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final moves = _moves;
+    // The biggest move sets the scale, so the bars are read against each
+    // other and a season that barely moved draws as barely moving.
+    final widest = moves.fold<double>(
+        0, (most, move) => math.max(most, move == null ? 0 : move.abs()));
+
+    return Column(
+      children: [
+        for (var i = 0; i < seasons.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _row(theme, scheme, seasons[i], moves[i], widest),
+          ),
+      ],
+    );
+  }
+
+  Widget _row(ThemeData theme, ColorScheme scheme, SeasonAverages season,
+      double? moved, double widest) {
+    final mine = season.season == showing;
+    final unit = season.unit;
+    // Down is the app's one red: the same one a foul wears, for the same
+    // reason — it is the thing a coach is looking for.
+    final tint = moved == null || moved >= 0 ? accent : scheme.error;
+    return Row(
+      children: [
+        SizedBox(
+          width: 38,
+          child: Text(
+            '${season.season}',
+            style: theme.textTheme.labelMedium?.copyWith(
+                color: mine ? accent : scheme.onSurfaceVariant,
+                fontWeight: mine ? FontWeight.w700 : FontWeight.w500),
+          ),
+        ),
+        SizedBox(
+          width: 82,
+          child: Text(
+            formatDistance(season.averageMeetMark!, unit),
+            textAlign: TextAlign.right,
+            style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: mine ? scheme.onSurface : scheme.onSurfaceVariant),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: moved == null || widest == 0
+              ? const SizedBox.shrink()
+              : Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    // Never nothing: a season that moved a centimeter
+                    // moved, and a bar of no width says it didn't.
+                    widthFactor: (moved.abs() / widest).clamp(0.05, 1.0),
+                    child: Container(
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: tint.withOpacity(mine ? 0.9 : 0.45),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+        SizedBox(
+          width: 64,
+          child: Text(
+            moved == null
+                ? ''
+                : '${moved >= 0 ? '+' : '−'}${formatDistance(moved.abs(), unit)}',
+            textAlign: TextAlign.right,
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: moved == null || moved >= 0
+                    ? scheme.onSurfaceVariant
+                    : scheme.error),
+          ),
+        ),
+      ],
+    );
   }
 }
 

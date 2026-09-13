@@ -108,10 +108,15 @@ List<Map<String, dynamic>> sampleMarks() {
         note: 'League match'),
     // Last September, which is a season of its own: the averages are read
     // over one season at a time, and a card with nothing to compare itself
-    // to would never show the picker.
+    // to would never show the picker. Two of them are the series she threw
+    // at the autumn open, so last season has a meet average for this one
+    // to be read against.
     mark('m5', 'Anna Sofia', 'discus', 1, 49.10, lastSeason(9, 20),
-        note: 'End of last season'),
-    mark('m6', 'Anna Sofia', 'discus', 1, 47.66, lastSeason(8, 30)),
+        note: 'Autumn Open'),
+    mark('m6', 'Anna Sofia', 'discus', 1, 47.66, lastSeason(9, 20),
+        note: 'Autumn Open'),
+    mark('m7', 'Anna Sofia', 'discus', 1, 46.80, lastSeason(8, 30)),
+    mark('m8', 'Anna Sofia', 'discus', 1, 45.90, lastSeason(8, 16)),
     // Nothing of hers was ever filmed: the whole season is a results sheet.
     mark('m3', 'Priya Raman', 'hammer', 4, 58.44, daysAgo(11),
         note: 'Regional final'),
@@ -125,6 +130,8 @@ List<Map<String, dynamic>> sampleMeets() {
   final now = DateTime.now();
   String daysAgo(int days) =>
       DateTime(now.year, now.month, now.day - days, 11).toIso8601String();
+  String lastSeason(int month, int day) =>
+      DateTime(now.year - 1, month, day, 11).toIso8601String();
 
   /// One round: a mark in the record book, a foul, or a pass.
   Map<String, dynamic>? round(String? markId, {bool pass = false}) =>
@@ -212,6 +219,28 @@ List<Map<String, dynamic>> sampleMeets() {
         entry('e5', 'R. Hall (Sale)', 'discus', 1, 1, [
           rival(52.60),
           rival(51.90),
+        ], tracked: false),
+      ],
+    },
+    {
+      // Last season's, so a profile has a meet average to read this
+      // season's against rather than one year standing on its own.
+      'id': 'k4',
+      'name': 'Autumn Open',
+      'date': lastSeason(9, 20),
+      'venue': 'Ashton',
+      'rounds': 4,
+      'prelimRounds': 4,
+      'advancing': 99,
+      'entries': [
+        entry('e7', 'Anna Sofia', 'discus', 1, 0, [
+          round('m5'),
+          round(null),
+          round('m6'),
+        ]),
+        entry('e8', 'R. Hall (Sale)', 'discus', 1, 1, [
+          rival(48.20),
+          rival(47.10),
         ], tracked: false),
       ],
     },

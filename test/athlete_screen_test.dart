@@ -524,22 +524,67 @@ void main() {
 
       // A career average would answer a question about this spring with
       // last year's throwing in it.
-      expect(find.text('2026'), findsOneWidget);
-      expect(find.text('62.00 m'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byTooltip('Season'), matching: find.text('2026')),
+          findsOneWidget);
+      // Twice: the figure, and the row for the same season in the history
+      // under it — which is the two agreeing, not a number said twice by
+      // accident.
+      expect(find.text('62.00 m'), findsNWidgets(2));
       expect(find.text('57.00 m'), findsNothing);
 
-      await tester.tap(find.text('2026'));
+      await tester.tap(find.byTooltip('Season'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('2025').last);
       await tester.pumpAndSettle();
-      expect(find.text('52.00 m'), findsOneWidget);
+      expect(find.text('52.00 m'), findsNWidgets(2));
 
-      // And all of it together, for the coach who wants the career.
-      await tester.tap(find.text('2025'));
+      // And all of it together, for the coach who wants the career. The
+      // history underneath stays split whatever the picker says.
+      await tester.tap(find.byTooltip('Season'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Every season').last);
       await tester.pumpAndSettle();
       expect(find.text('57.00 m'), findsOneWidget);
+      expect(find.text('62.00 m'), findsOneWidget);
+      expect(find.text('52.00 m'), findsOneWidget);
+    });
+
+    testWidgets('say what the meets averaged season by season',
+        (tester) async {
+      final meets = await competed([50, 54],
+          id: 'k0', on: DateTime(2025, 6, 14));
+      for (final meet
+          in (await competed([60, 64], on: DateTime(2026, 6, 13))).meets) {
+        await meets.save(meet);
+      }
+      await mountProfile(tester, meets: meets);
+
+      expect(find.text('SEASON BY SEASON'), findsOneWidget);
+      // 52.00 last year, 62.00 this — and the ten meters between them,
+      // which is the whole question.
+      expect(find.textContaining('+10.00 m'), findsOneWidget);
+      // The oldest season has nothing behind it to have moved from.
+      expect(find.textContaining('−'), findsNothing);
+    });
+
+    testWidgets('one season of meets has nothing to compare itself with',
+        (tester) async {
+      // Two seasons on record, but only one of them was competed in.
+      final meets = await competed([60, 64], on: DateTime(2026, 6, 13));
+      await library.addMark(ThrowMark(
+        id: 't1',
+        athlete: 'Ana Diaz',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        distance: 56.00,
+        achievedOn: DateTime(2025, 6, 14),
+      ));
+      await mountProfile(tester, meets: meets);
+
+      expect(find.byTooltip('Season'), findsOneWidget);
+      expect(find.text('SEASON BY SEASON'), findsNothing);
     });
 
     testWidgets('one season on record is not a choice', (tester) async {
@@ -557,7 +602,7 @@ void main() {
         await meets.save(meet);
       }
       await mountProfile(tester, meets: meets);
-      await tester.tap(find.text('2026'));
+      await tester.tap(find.byTooltip('Season'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('2025').last);
       await tester.pumpAndSettle();
