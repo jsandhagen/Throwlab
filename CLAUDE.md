@@ -472,6 +472,18 @@ like the app rather than a bare Material default.
   scrub handoff, where an ffmpeg still is replaced by the player's own
   frame. Only for HD, and only when nobody has said: standard definition
   really is Rec. 601.
+- A tag settles what the video means; `VideoOptimizer.jpegColorFilter` is
+  what makes a still written out of it mean the same thing, and it is the
+  bigger half of the same shift. A JPEG has nowhere to say what its numbers
+  are: the format *is* full-range Rec. 601, and Flutter reads one that way —
+  but ffmpeg, handed a Rec. 709 clip, writes the file by stretching the
+  range and leaving the coefficients alone, so the still ends up holding 709
+  numbers that are then read as 601. Measured on a real clip that cost the
+  red track about nine levels of red for as long as a finger was down. So
+  every JPEG this app writes — the scrub stills and the library thumbnail —
+  names both ends of the conversion: the matrix the clip is actually in
+  (what it declares, else the same HD-is-709 guess `colorTagsFor` makes), and
+  the matrix a JPEG is actually read with.
 - A meet is tracked live, not written up afterwards. `MeetFlight` works
   out where a competition has got to — the round being thrown, and the
   three an infield calls out (`inTheCircle`, `onDeck`, `inTheHole`) — from
