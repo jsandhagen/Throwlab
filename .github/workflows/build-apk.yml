@@ -101,18 +101,24 @@ jobs:
           # AGP writes the merged manifest as plain XML on the way to the APK,
           # which is worth more than aapt2's dump of the binary one: it is
           # readable, so a failure here can say what it actually found.
-          # Under build/, not android/app/build/: Flutter points Gradle's
-          # build directory at the project root, which is why the APK above
-          # comes out of build/app/outputs.
-          MERGED=$(find build -name AndroidManifest.xml -path '*merged*' \
+          # build/app, not build/ and not android/app/build: Flutter points
+          # Gradle's build directory at the project root (which is why the
+          # APK above comes out of build/app/outputs) and every plugin gets
+          # a sibling directory there — searching build/ finds ffmpeg-kit's
+          # merged manifest, which was never going to declare our service.
+          MERGED=$(find build/app -name AndroidManifest.xml -path '*merged*' \
             -path '*release*' 2>/dev/null | head -1)
           if [ -z "$MERGED" ]; then
-            MERGED=$(find build -name AndroidManifest.xml -path '*merged*' \
-              2>/dev/null | head -1)
+            echo "no merged manifest for the app; every manifest under build/:"
+            find build -name AndroidManifest.xml | head -30
+            exit 1
           fi
-          if [ -z "$MERGED" ]; then
-            echo "no merged manifest found; every manifest under build/:"
-            find build -name AndroidManifest.xml | head -20
+          # Prove it is the app's before believing anything it does or does
+          # not say: the last failure read a plugin's manifest and reported
+          # four things missing from a file that never had them.
+          if ! grep -q 'MainActivity' "$MERGED"; then
+            echo "$MERGED is not the app's manifest (no MainActivity); candidates:"
+            find build/app -name AndroidManifest.xml -path '*merged*' | head -20
             exit 1
           fi
           echo "reading $MERGED"
