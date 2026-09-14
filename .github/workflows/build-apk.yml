@@ -101,11 +101,18 @@ jobs:
           # AGP writes the merged manifest as plain XML on the way to the APK,
           # which is worth more than aapt2's dump of the binary one: it is
           # readable, so a failure here can say what it actually found.
-          MERGED=$(find android/app/build/intermediates -name AndroidManifest.xml \
-            -path '*merged*' -path '*release*' | head -1)
+          # Under build/, not android/app/build/: Flutter points Gradle's
+          # build directory at the project root, which is why the APK above
+          # comes out of build/app/outputs.
+          MERGED=$(find build -name AndroidManifest.xml -path '*merged*' \
+            -path '*release*' 2>/dev/null | head -1)
           if [ -z "$MERGED" ]; then
-            echo "no merged manifest found; looked under:"
-            find android/app/build/intermediates -name AndroidManifest.xml | head -20
+            MERGED=$(find build -name AndroidManifest.xml -path '*merged*' \
+              2>/dev/null | head -1)
+          fi
+          if [ -z "$MERGED" ]; then
+            echo "no merged manifest found; every manifest under build/:"
+            find build -name AndroidManifest.xml | head -20
             exit 1
           fi
           echo "reading $MERGED"
