@@ -149,10 +149,25 @@ void main() {
 
       // Paging replaces the screen, so without remembering it the strip
       // would drop back down under the finger that just put it away.
-      await tester.tap(find.byIcon(Icons.chevron_right));
+      await mount(tester, video: throwNumber(3));
       await pumpFrames(tester, 30);
-      expect(openThrow(tester), 'v3');
       expect(stills(), findsNothing);
+      // And the tab is still there to pull it back down by.
+      expect(find.byKey(const ValueKey('throw-strip-handle')), findsOneWidget);
+    });
+
+    testWidgets('the pager is in the tray, and goes away with it',
+        (tester) async {
+      await mount(tester, video: throwNumber(2));
+      expect(find.byIcon(Icons.chevron_left), findsOneWidget);
+      expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+
+      // Next and previous are about the set, so they live with the stills
+      // rather than out on the tab over the frame.
+      await tester.tap(find.byKey(const ValueKey('throw-strip-handle')));
+      await pumpFrames(tester, 20);
+      expect(find.byIcon(Icons.chevron_left), findsNothing);
+      expect(find.byIcon(Icons.chevron_right), findsNothing);
     });
 
     testWidgets('tapping next moves on to the following throw', (tester) async {

@@ -359,10 +359,17 @@ like the app rather than a bare Material default.
   about, and the portrait header has no width for another button — and
   where it was last left is remembered (`throwlab.throwStrip`), because
   paging replaces the screen and would otherwise drop the strip back down
-  under the finger that just put it away. The pager chevrons ride on that
-  tab rather than in the strip, so putting the stills away costs the
-  pictures and not the paging: next and previous throw is the commonest
-  thing asked of a session. The panel carries its own surface rather than
+  under the finger that just put it away. The tab is a grab bar and nothing
+  else — the box around it takes the tap, so it is easy to hit and nearly
+  invisible — because it stands on the frame of every throw, including all
+  the ones nobody is paging through, and a pixel of chrome there is a pixel
+  of the throw. It keeps a faint surface behind it rather than sitting bare:
+  a bar alone disappears against a bright frame, which is a handle nobody
+  can find on exactly the throws this app is pointed at. The pager sits in
+  the tray, at the ends of the stills it steps through: next and previous
+  are about the set, and the set is what the tray is, so they come and go
+  with it rather than holding a card and two buttons open over the frame
+  for the whole session. The panel carries its own surface rather than
   the header's scrim — over a frame that fills the top of the screen, stills
   on a fading gradient read as floating over the throw instead of as a
   drawer in front of it. Landscape has no strip at all: the pager lives in

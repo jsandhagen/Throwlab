@@ -1263,46 +1263,56 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   /// The tab the strip is put away on and pulled back down by, hanging off
-  /// the bottom edge of it, with the pager either side. On the panel rather
-  /// than in the header, which is already back, a title and five actions
-  /// wide on a 390px screen — and a handle on the thing it moves is the one
-  /// nobody has to be told about.
+  /// the bottom edge of it. On the panel rather than in the header, which is
+  /// already back, a title and five actions wide on a 390px screen — and a
+  /// handle on the thing it moves is the one nobody has to be told about.
   ///
-  /// The chevrons ride here rather than in the strip so that putting the
-  /// stills away costs the *pictures* and not the paging: next and previous
-  /// throw is the commonest thing asked of a session, and hiding the strip
-  /// should not be the thing that takes it away.
+  /// A grab bar and nothing else. It sits over the frame, and every pixel of
+  /// chrome there is a pixel of the throw: the tab is a way back to the
+  /// stills, not a control worth a card and three buttons of its own. What is
+  /// drawn is a bar barely wider than a thumbnail's corner; what is *hit* is
+  /// the box around it, so the thing stays easy to find with a thumb while
+  /// being nearly invisible to the eye.
+  ///
+  /// It keeps a faint surface behind it rather than sitting bare on the
+  /// video. A bar alone disappears against a bright frame — a sky, an infield
+  /// in full sun — which is a handle nobody can find on exactly the throws
+  /// this app is pointed at.
   Widget _stripHandle() {
     final scheme = Theme.of(context).colorScheme;
     return Center(
-      child: Material(
-        color: scheme.surface.withOpacity(0.92),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _pagerButton(forward: false),
-            InkWell(
-              key: const ValueKey('throw-strip-handle'),
-              onTap: _toggleStrip,
-              child: Tooltip(
-                message: _stripOpen ? 'Hide the session' : 'Show the session',
-                child: SizedBox(
-                  width: 48,
-                  height: 30,
-                  child: Icon(
-                    _stripOpen
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    size: 20,
-                    color: scheme.onSurface,
+      child: GestureDetector(
+        key: const ValueKey('throw-strip-handle'),
+        // The whole box takes the tap, not just the bar painted inside it.
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggleStrip,
+        child: Tooltip(
+          message: _stripOpen ? 'Hide the session' : 'Show the session',
+          child: SizedBox(
+            width: 72,
+            height: 26,
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Container(
+                width: 44,
+                height: 15,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.surface.withOpacity(0.55),
+                  borderRadius:
+                      const BorderRadius.vertical(bottom: Radius.circular(8)),
+                ),
+                child: Container(
+                  width: 22,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: scheme.onSurface.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
             ),
-            _pagerButton(forward: true),
-          ],
+          ),
         ),
       ),
     );
@@ -1364,6 +1374,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// the session, and a one-tap jump to any other. Coaches pick a throw out
   /// by looking at it, which a list of "Shot Put · Men · 2026-09-02" rows
   /// never allowed.
+  ///
+  /// The pager sits in here, at the ends of the stills it steps through,
+  /// rather than out on the tab: next and previous are about the set, and the
+  /// set is what this tray is. Out on the tab they were two buttons and a
+  /// card's worth of chrome standing on the frame of every throw, including
+  /// the throws nobody was paging through.
   Widget _filmstrip() {
     final scheme = Theme.of(context).colorScheme;
     return Container(
@@ -1379,6 +1395,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       ),
       child: Row(
         children: [
+          _pagerButton(forward: false),
           Expanded(
             child: ListView.builder(
               controller: _strip,
@@ -1413,6 +1430,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               },
             ),
           ),
+          _pagerButton(forward: true),
         ],
       ),
     );
