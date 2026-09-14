@@ -156,6 +156,45 @@ void main() {
       expect(find.byKey(const ValueKey('throw-strip-handle')), findsOneWidget);
     });
 
+    testWidgets('the session pulls down and pushes back up', (tester) async {
+      await mount(tester, video: throwNumber(2));
+      final handle = find.byKey(const ValueKey('throw-strip-handle'));
+
+      // A bar across the top of a panel is the shape of something dragged,
+      // so a thumb that pushes it up should put the stills away.
+      await tester.drag(handle, const Offset(0, -40));
+      await pumpFrames(tester, 20);
+      expect(stills(), findsNothing);
+
+      await tester.drag(handle, const Offset(0, 40));
+      await pumpFrames(tester, 20);
+      expect(stills(), findsNWidgets(3));
+    });
+
+    testWidgets('a pull the way it cannot go leaves it alone', (tester) async {
+      await mount(tester, video: throwNumber(2));
+      final handle = find.byKey(const ValueKey('throw-strip-handle'));
+
+      // Already showing: pulling down again is not a request to hide it.
+      // A pull has a direction and means what it points at — unlike the
+      // tap, which just changes whichever way it is now.
+      await tester.drag(handle, const Offset(0, 60));
+      await pumpFrames(tester, 20);
+      expect(stills(), findsNWidgets(3));
+    });
+
+    testWidgets('one pull moves it once, however far it goes',
+        (tester) async {
+      await mount(tester, video: throwNumber(2));
+      final handle = find.byKey(const ValueKey('throw-strip-handle'));
+
+      // Well past the slop in one go: it closes, and does not bounce back
+      // open on the rest of the same drag.
+      await tester.drag(handle, const Offset(0, -300));
+      await pumpFrames(tester, 20);
+      expect(stills(), findsNothing);
+    });
+
     testWidgets('the pager is in the tray, and goes away with it',
         (tester) async {
       await mount(tester, video: throwNumber(2));

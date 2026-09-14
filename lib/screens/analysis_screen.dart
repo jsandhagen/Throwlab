@@ -1278,6 +1278,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// video. A bar alone disappears against a bright frame — a sky, an infield
   /// in full sun — which is a handle nobody can find on exactly the throws
   /// this app is pointed at.
+  ///
+  /// Tap it or pull it. A bar across the top of a panel is the shape of
+  /// something that gets dragged, so a thumb that comes down on it and
+  /// pushes is asking for the tray whether or not anybody said it could —
+  /// and a drag that did nothing would read as a handle that was stuck.
+  /// Both gestures land on the same toggle, so the tray is never left half
+  /// way: past [_pullSlop] in the direction that has somewhere to go, it
+  /// opens or shuts on its own animation.
   Widget _stripHandle() {
     final scheme = Theme.of(context).colorScheme;
     return Center(
@@ -1286,6 +1294,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         // The whole box takes the tap, not just the bar painted inside it.
         behavior: HitTestBehavior.opaque,
         onTap: _toggleStrip,
+        onVerticalDragStart: (_) {
+          _pulled = 0;
+          _pullSpent = false;
+        },
+        onVerticalDragUpdate: _pullHandle,
         child: Tooltip(
           message: _stripOpen ? 'Hide the session' : 'Show the session',
           child: SizedBox(
@@ -1328,6 +1341,36 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     } catch (_) {
       // Storage that will not answer just means the strip stays showing.
     }
+  }
+
+  /// How far the handle has been dragged in the current gesture, and
+  /// whether that gesture has already moved the tray.
+  double _pulled = 0;
+  bool _pullSpent = false;
+
+  /// Enough travel to read a direction off. Small on purpose: what separates
+  /// a pull from a tap is Flutter's own `kTouchSlop`, which the gesture has
+  /// already cleared before the first of these arrives — a thumb that moves
+  /// less than that never gets here, it lands on [_toggleStrip] as a tap.
+  /// Stacking a second threshold of any size on top of that would only make
+  /// the tray answer late.
+  static const double _pullSlop = 4;
+
+  /// Opens the tray on a pull down and shuts it on a push up, once per
+  /// gesture. Dragging the way it cannot go — down when it is already
+  /// showing — does nothing rather than toggling: a pull has a direction
+  /// and it should mean what it points at, unlike the tap, which is the
+  /// gesture for 'whichever way it is now, change it'.
+  void _pullHandle(DragUpdateDetails drag) {
+    if (_pullSpent) return;
+    _pulled += drag.delta.dy;
+    final opening = _pulled > _pullSlop && !_stripOpen;
+    final closing = _pulled < -_pullSlop && _stripOpen;
+    if (!opening && !closing) return;
+    // Acted on mid-gesture rather than on release, so the tray comes with
+    // the thumb instead of after it.
+    _pullSpent = true;
+    _toggleStrip();
   }
 
   void _toggleStrip() {

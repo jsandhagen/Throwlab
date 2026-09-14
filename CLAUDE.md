@@ -356,7 +356,18 @@ like the app rather than a bare Material default.
   transport and the drawing tools all already are, and down there it was in
   the way of all three. It puts away on a tab hanging off its own bottom
   edge — a handle on the thing it moves is the one nobody has to be told
-  about, and the portrait header has no width for another button — and
+  about, and the portrait header has no width for another button. Tap it or
+  pull it: a bar across the top of a panel is the shape of something that
+  gets dragged, so a thumb that comes down and pushes is asking for the
+  tray whether or not anybody said it could, and a drag that did nothing
+  would read as a handle that was stuck. Both land on the same toggle, so
+  the tray is never left half way. The difference is that a pull means the
+  way it points — pulling down on a tray already showing does nothing —
+  while the tap is the gesture for 'whichever way it is now, change it'.
+  What separates the two is Flutter's own `kTouchSlop`, already cleared
+  before the first drag callback arrives, which is why `_pullSlop` is only
+  big enough to read a direction off: a second threshold of any size on top
+  of that only makes the tray answer late. And
   where it was last left is remembered (`throwlab.throwStrip`), because
   paging replaces the screen and would otherwise drop the strip back down
   under the finger that just put it away. The tab is a grab bar and nothing
