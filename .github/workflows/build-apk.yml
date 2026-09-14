@@ -98,19 +98,37 @@ jobs:
       # read it back off the built APK rather than trusting the merge.
       - name: Verify the foreground service survived the manifest merge
         run: |
-          TOOLS="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
-          APK=build/app/outputs/flutter-apk/app-release.apk
-          if [ -x "$TOOLS/aapt2" ]; then
-            "$TOOLS/aapt2" dump xmltree --file AndroidManifest.xml "$APK" > merged.txt
-          else
-            "$TOOLS/aapt" dump xmltree "$APK" AndroidManifest.xml > merged.txt
+          # AGP writes the merged manifest as plain XML on the way to the APK,
+          # which is worth more than aapt2's dump of the binary one: it is
+          # readable, so a failure here can say what it actually found.
+          MERGED=$(find android/app/build/intermediates -name AndroidManifest.xml \
+            -path '*merged*' -path '*release*' | head -1)
+          if [ -z "$MERGED" ]; then
+            echo "no merged manifest found; looked under:"
+            find android/app/build/intermediates -name AndroidManifest.xml | head -20
+            exit 1
           fi
-          grep -q "com.pravera.flutter_foreground_task.service.ForegroundService" merged.txt
-          grep -q "android.permission.FOREGROUND_SERVICE_DATA_SYNC" merged.txt
-          grep -q "android.permission.FOREGROUND_SERVICE\"" merged.txt
-          # dataSync is 0x1 in the merged binary manifest; accept either form.
-          grep -qE "foregroundServiceType.*(0x1|dataSync)" merged.txt
-          echo "foreground service is in the shipped manifest"
+          echo "reading $MERGED"
+          echo "--- what it declares ---"
+          grep -nE 'uses-permission|<service|foregroundServiceType' "$MERGED" || true
+          echo "------------------------"
+          fail=0
+          for want in \
+            'com.pravera.flutter_foreground_task.service.ForegroundService' \
+            'android.permission.FOREGROUND_SERVICE_DATA_SYNC' \
+            'android.permission.FOREGROUND_SERVICE"' \
+            'foregroundServiceType="dataSync"'; do
+            if grep -qF "$want" "$MERGED"; then
+              echo "ok   $want"
+            else
+              echo "MISSING   $want"
+              fail=1
+            fi
+          done
+          # A service missing here throws at startService, the updater
+          # swallows it, and downloading quietly goes back to working only
+          # while the app is open — so this is worth failing the build for.
+          [ "$fail" = 0 ]
       # Gradle signs with a debug keystore generated per-runner, which changes
       # the signature every build and makes Android reject updates over the
       # previous install. Re-sign deterministically with the repo keystore,
