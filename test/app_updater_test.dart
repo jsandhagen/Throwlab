@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:throwlab/services/app_updater.dart';
+import 'package:throwlab/services/update_keep_alive.dart';
 
 /// Serves [body] in chunks, and can be told to die part-way through — which
 /// is what leaving the app, or losing the track's wifi, looks like from
@@ -46,6 +47,37 @@ class _FakeClient extends http.BaseClient {
   }
 }
 
+/// Stands in for the foreground service: records what it was asked to do,
+/// and can be told to fail the way a service Android refuses to start does.
+class _FakeKeepAlive implements UpdateKeepAlive {
+  _FakeKeepAlive({this.broken = false});
+
+  /// Whether every call throws — a service that will not start.
+  final bool broken;
+
+  int started = 0;
+  int stopped = 0;
+  final progress = <double?>[];
+
+  @override
+  Future<void> start(int build) async {
+    started++;
+    if (broken) throw StateError('no foreground service');
+  }
+
+  @override
+  Future<void> report(double? fraction) async {
+    progress.add(fraction);
+    if (broken) throw StateError('no foreground service');
+  }
+
+  @override
+  Future<void> stop() async {
+    stopped++;
+    if (broken) throw StateError('no foreground service');
+  }
+}
+
 void main() {
   late Directory staging;
   final apk = List<int>.generate(200, (i) => i % 251);
@@ -53,12 +85,14 @@ void main() {
   setUp(() async {
     staging = await Directory.systemTemp.createTemp('throwlab-update');
     AppUpdater.stagingDirectory = () async => staging;
+    AppUpdater.keepAlive = const NoKeepAlive();
     AppUpdater.status.value = UpdateStatus.idle;
   });
 
   tearDown(() async {
     AppUpdater.openClient = http.Client.new;
     AppUpdater.stagingDirectory = () async => staging;
+    AppUpdater.keepAlive = const ForegroundKeepAlive();
     await staging.delete(recursive: true);
   });
 
@@ -160,6 +194,65 @@ void main() {
 
       expect(AppUpdater.status.value.stage, UpdateStage.idle);
       expect(await File('${staging.path}/ThrowLab.apk').exists(), isFalse);
+    });
+  });
+
+  group('keeping the process up', () {
+    test('holds the service around the transfer and lets it go after',
+        () async {
+      final service = _FakeKeepAlive();
+      AppUpdater.keepAlive = service;
+      AppUpdater.openClient = () => _FakeClient(apk);
+
+      await AppUpdater.download(7);
+
+      // Started once, and let go — a service left running would sit in the
+      // notification shade for the rest of the day.
+      expect(service.started, 1);
+      expect(service.stopped, 1);
+      expect(service.progress.last, 1);
+      expect(AppUpdater.status.value.stage, UpdateStage.ready);
+    });
+
+    test('lets go of the service when the download dies', () async {
+      final service = _FakeKeepAlive();
+      AppUpdater.keepAlive = service;
+      AppUpdater.openClient = () => _FakeClient(apk, cutAfter: 64);
+
+      await AppUpdater.download(7);
+
+      expect(AppUpdater.status.value.stage, UpdateStage.held);
+      expect(service.stopped, 1);
+    });
+
+    test('downloads anyway when there is no service to be had', () async {
+      // The whole point of asking for the service around the download
+      // rather than running the download inside it: a phone that refuses
+      // one still gets its update, exactly as it did before there was any
+      // of this.
+      final service = _FakeKeepAlive(broken: true);
+      AppUpdater.keepAlive = service;
+      AppUpdater.openClient = () => _FakeClient(apk);
+
+      await AppUpdater.download(7);
+
+      expect(service.started, 1);
+      expect(AppUpdater.status.value.stage, UpdateStage.ready);
+      expect(await File('${staging.path}/ThrowLab.apk').readAsBytes(), apk);
+    });
+
+    test('asks for nothing when the APK is already down', () async {
+      AppUpdater.openClient = () => _FakeClient(apk);
+      await AppUpdater.download(7);
+
+      final service = _FakeKeepAlive();
+      AppUpdater.keepAlive = service;
+      AppUpdater.status.value = UpdateStatus.idle;
+      await AppUpdater.download(7);
+
+      // Nothing to download, so nothing to hold the phone awake for.
+      expect(service.started, 0);
+      expect(AppUpdater.status.value.stage, UpdateStage.ready);
     });
   });
 }

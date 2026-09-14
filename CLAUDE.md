@@ -8,7 +8,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | Path | What lives there |
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
@@ -693,3 +693,22 @@ like the app rather than a bare Material default.
   offered. The banner carries the progress; nothing is
   blocked while it runs. The installer is opened when the app is in front of
   somebody, which is the one part that cannot happen in the background.
+  The bytes do keep coming when somebody walks away, and that takes a
+  foreground service (`update_keep_alive.dart`). A backgrounded Flutter app
+  is a cached process — Android kills it when it wants the memory, and Doze
+  cuts its network once the screen has been off a while — so a download in
+  the main isolate stops whenever the system says so, which is exactly when
+  a coach has gone to film something. The service costs a notification and
+  buys a process Android leaves alone; the download stays in the main
+  isolate, resuming from the same part file as before, and the service only
+  holds it up. It is asked for and never depended on: every call goes
+  through `AppUpdater._holding`, which swallows whatever the service makes
+  of it, so a phone that refuses one downloads exactly as it did before any
+  of this — as far as Android allows, then onward from the part file next
+  time. That is the whole reason the download was wrapped in a service
+  rather than moved inside one. The service has to be declared in the
+  manifest by `.github/workflows/build-apk.yml`: the plugin's own manifest
+  merges in FOREGROUND_SERVICE, WAKE_LOCK and POST_NOTIFICATIONS, but not
+  the `<service>` element, not the Android 14+ `FOREGROUND_SERVICE_DATA_SYNC`
+  and not the `ACCESS_WIFI_STATE` the wifi lock wants — so the step asserts
+  both landed rather than trusting a `sed`.

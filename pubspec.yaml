@@ -18,6 +18,11 @@ dependencies:
   path_provider: ^2.1.4
   open_filex: ^4.5.0
   ffmpeg_kit_flutter_new: ^4.2.1
+  # Holds the process up while the update downloads — see AppUpdater.
+  # Held at 9.x on purpose: 11.x wants Dart 3.12, which is newer than the
+  # SDK .claude/hooks/session-start.sh pins, so an agent session could not
+  # compile what CI builds. Bump both together or neither.
+  flutter_foreground_task: ^9.2.2
   file_selector: ^1.1.0
 
 dev_dependencies:

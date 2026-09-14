@@ -41,10 +41,20 @@ jobs:
       - name: Generate Android platform folder
         run: flutter create . --platforms=android --project-name throwlab
       # The in-app updater downloads the new APK (INTERNET) and hands it to
-      # the system installer (REQUEST_INSTALL_PACKAGES).
+      # the system installer (REQUEST_INSTALL_PACKAGES). It downloads under a
+      # foreground service so leaving the app doesn't stop it: that needs the
+      # Android 14+ type permission and a wifi lock, and the service itself
+      # has to be declared here — flutter_foreground_task's own manifest
+      # merges in FOREGROUND_SERVICE, WAKE_LOCK and POST_NOTIFICATIONS, but
+      # not these and not the <service> element.
       - name: Add updater permissions to manifest
         run: |
-          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|</application>|    <service\n            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"\n            android:foregroundServiceType="dataSync"\n            android:exported="false" />\n    </application>|' android/app/src/main/AndroidManifest.xml
+          # A silently failed sed here ships an app whose update stops the
+          # moment the phone is locked, so prove both landed.
+          grep -q 'FOREGROUND_SERVICE_DATA_SYNC' android/app/src/main/AndroidManifest.xml
+          grep -q 'flutter_foreground_task.service.ForegroundService' android/app/src/main/AndroidManifest.xml
       # ffmpeg-kit requires Android 7+ (API 24).
       - name: Raise minSdk for ffmpeg-kit
         run: |
