@@ -101,19 +101,40 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     )..loadTimes(VideoOptimizer.framesTimesFile);
   }
 
+  /// Both clips are opened mixing with other audio, which is the whole
+  /// reason two of them can run at once. A player that does *not* mix asks
+  /// Android for exclusive audio focus the moment it starts, and the one
+  /// that asks second takes the focus off the first — whose player answers
+  /// a focus loss by pausing itself. So starting B stopped A dead on
+  /// whatever frame it had reached, which is the freeze: one pane playing,
+  /// the other stuck, and no way to see the two throws side by side in
+  /// motion. Mixing means neither claims what the other is holding.
+  static VideoPlayerOptions get _bothAtOnce =>
+      VideoPlayerOptions(mixWithOthers: true);
+
+  VideoPlayerController _open(ThrowVideo video) {
+    final controller = VideoPlayerController.file(
+      File(video.path),
+      videoPlayerOptions: _bothAtOnce,
+    );
+    controller
+        .initialize()
+        // Muted, because mixing is exactly what would now let both
+        // soundtracks be heard at once. A comparison is watched, not
+        // listened to.
+        .then((_) => controller.setVolume(0))
+        .then((_) => mounted ? setState(() {}) : null)
+        .catchError((Object _) => mounted ? setState(() {}) : null);
+    return controller;
+  }
+
   @override
   void initState() {
     super.initState();
     _framesA = _framesFor(widget.videoA);
     _framesB = _framesFor(widget.videoB);
-    _controllerA = VideoPlayerController.file(File(widget.videoA.path))
-      ..initialize()
-          .then((_) => mounted ? setState(() {}) : null)
-          .catchError((Object _) => mounted ? setState(() {}) : null);
-    _controllerB = VideoPlayerController.file(File(widget.videoB.path))
-      ..initialize()
-          .then((_) => mounted ? setState(() {}) : null)
-          .catchError((Object _) => mounted ? setState(() {}) : null);
+    _controllerA = _open(widget.videoA);
+    _controllerB = _open(widget.videoB);
     _shuttleA = ScrubShuttle(
       controller: _controllerA,
       seeker: _seekerA,
@@ -260,12 +281,15 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   }
 
   Future<void> _playLoop() async {
+    _uncoverVideo();
     _controllerA.setPlaybackSpeed(_speed);
     _controllerB.setPlaybackSpeed(_speed);
     await _rewindLoop();
     if (!mounted) return;
-    await _controllerA.play();
-    await _controllerB.play();
+    // Together, not one after the other: awaiting A's platform call before
+    // B's is asked starts the two a round trip apart, which is a handful of
+    // frames of offset at the very moment they are meant to match.
+    await Future.wait([_controllerA.play(), _controllerB.play()]);
     if (!mounted) return;
     _loopTickAt = Duration.zero;
     if (!_loopTicker.isActive) _loopTicker.start();
@@ -288,14 +312,22 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     _rewindLoop().then((_) {
       if (!mounted || !_looping) return;
       // A clip that ran to its end is left paused by the player, so both are
-      // started again rather than resumed.
-      _controllerA.play();
-      _controllerB.play();
+      // started again rather than resumed — and started together.
+      Future.wait([_controllerA.play(), _controllerB.play()]);
     });
   }
 
   void _stopLoop() {
     if (_loopTicker.isActive) _loopTicker.stop();
+  }
+
+  /// Takes down any scrub still left over a pane before the clips run. The
+  /// overlay holds the last still until the decoder has caught up, and a
+  /// still is a frozen frame: left up over a video that has just started, it
+  /// is that pane appearing to freeze for as long as the handoff lasts.
+  void _uncoverVideo() {
+    _shuttleA.release();
+    _shuttleB.release();
   }
 
   void _togglePlay() {
@@ -311,6 +343,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       _playLoop();
       return;
     }
+    _uncoverVideo();
     _controllerA.setPlaybackSpeed(_speed);
     _controllerB.setPlaybackSpeed(_speed);
     // A clip parked at its last frame ignores play(), which is what left one
@@ -319,8 +352,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       if (controller.value.position >= controller.value.duration) {
         controller.seekTo(Duration.zero);
       }
-      controller.play();
     }
+    Future.wait([_controllerA.play(), _controllerB.play()]);
     setState(() {});
   }
 

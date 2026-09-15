@@ -116,7 +116,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     // start, showing everything except the throw actually on screen.
     WidgetsBinding.instance.addPostFrameCallback((_) => _centerStrip());
     _openFailed = !File(widget.video.path).existsSync();
-    _controller = VideoPlayerController.file(File(widget.video.path));
+    _controller = VideoPlayerController.file(
+      File(widget.video.path),
+      // Said out loud rather than left to the default: on Android the mixing
+      // option is process-wide and applied when a player is created, so a
+      // comparison opened earlier in the session would otherwise leave every
+      // clip opened after it mixing. One clip on screen takes the audio.
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
+    );
     final framesDir = widget.video.scrubFramesDir;
     if (framesDir != null && widget.video.scrubFrameCount > 0) {
       _frames = ScrubFrames(

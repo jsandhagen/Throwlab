@@ -33,7 +33,13 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   Future<void> init() async {}
 
   @override
-  Future<int?> create(DataSource dataSource) async => _nextPlayerId++;
+  Future<int?> create(DataSource dataSource) async {
+    final id = _nextPlayerId++;
+    // The real Android plugin reads the shared option at create time, which
+    // is why it is recorded per player rather than once.
+    mixWithOthers[id] = _mixWithOthers;
+    return id;
+  }
 
   @override
   Stream<VideoEvent> videoEventsFor(int playerId) {
@@ -65,7 +71,8 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   @override
   Future<void> pause(int playerId) async => pauses.add(playerId);
   @override
-  Future<void> setVolume(int playerId, double volume) async {}
+  Future<void> setVolume(int playerId, double volume) async =>
+      volumes[playerId] = volume;
   @override
   Future<void> setPlaybackSpeed(int playerId, double speed) async {}
 
@@ -82,8 +89,21 @@ class FakeVideoPlayerPlatform extends VideoPlayerPlatform
   @override
   Future<Duration> getPosition(int playerId) async =>
       _positions[playerId] ?? Duration.zero;
+
+  /// Whether each player was created mixing with other audio. Two players
+  /// that don't mix can't run together — the second takes the audio focus
+  /// off the first, which pauses it.
+  final Map<int, bool> mixWithOthers = {};
+  bool _mixWithOthers = false;
+
   @override
-  Future<void> setMixWithOthers(bool mixWithOthers) async {}
+  Future<void> setMixWithOthers(bool mixWithOthers) async {
+    _mixWithOthers = mixWithOthers;
+  }
+
+  /// Volume each player was last set to, so a test can prove a pane is
+  /// muted.
+  final Map<int, double> volumes = {};
   @override
   Widget buildView(int playerId) => const ColoredBox(color: Colors.blue);
 }

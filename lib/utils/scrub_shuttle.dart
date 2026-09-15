@@ -312,6 +312,21 @@ class ScrubShuttle extends ChangeNotifier {
     watch();
   }
 
+  /// Drops the overlay now, whatever stage it had reached: a screen about to
+  /// play the clip has no use for a held still, and holding one over a video
+  /// that has started running is the picture appearing to freeze until the
+  /// handoff times out. Safe at any time — with nothing on screen it does
+  /// nothing.
+  void release() {
+    stopHandoff();
+    if (_ticker.isActive) _ticker.stop();
+    if (!_scrubbing && !_handoff && !_moved) return;
+    _scrubbing = false;
+    _handoff = false;
+    _moved = false;
+    notifyListeners();
+  }
+
   void _clearHandoff() {
     if (_disposed || !_handoff) return;
     _handoff = false;

@@ -142,6 +142,36 @@ void main() {
     });
   });
 
+  group('playing both at once', () {
+    testWidgets('both clips are opened mixing with other audio',
+        (tester) async {
+      await mount(tester);
+
+      // The whole reason two of them can run together: a player that does
+      // not mix takes the audio focus off the other one when it starts, and
+      // losing focus is what pauses a player. Left at the default, starting
+      // B froze A on whatever frame it had reached.
+      expect(platform.mixWithOthers, {1: true, 2: true});
+    });
+
+    testWidgets('and muted, since mixing would play both soundtracks',
+        (tester) async {
+      await mount(tester);
+
+      expect(platform.volumes, {1: 0.0, 2: 0.0});
+    });
+
+    testWidgets('play runs both before any release is marked', (tester) async {
+      await mount(tester);
+
+      platform.plays.clear();
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 10);
+
+      expect(platform.plays.toSet(), {1, 2});
+    });
+  });
+
   group('the release loop', () {
     Duration lastSeek(int playerId) =>
         platform.seeks.lastWhere((seek) => seek.playerId == playerId).position;
