@@ -61,18 +61,31 @@ void main() {
         fullName: 'Adam Okafor',
         school: 'Central HS'));
 
-    // Sessions on one implement, meet marks, and written-up notes.
+    // Sessions on one implement, meet marks, and written-up notes. Two
+    // seasons on record, so the averages open on the most recent.
     await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
         'athlete_bests');
+    // The same profile read over last season instead.
+    await _shoot(tester, library, notes, athletes, meets, 'Anna Sofia',
+        'athlete_last_season', season: '${DateTime.now().year - 1}');
     // Two weights at once — each keeps its own mark, under an edited nickname.
     await _shoot(tester, library, notes, athletes, meets, 'Adam',
         'athlete_two_implements');
     // A mark entered in feet, which is how it reads back.
     await _shoot(
         tester, library, notes, athletes, meets, 'Jakob', 'athlete_feet');
+    // Six meets this spring and three last: a full season, which is what
+    // the averages and the record's own staircase are shaped for.
+    await _shoot(tester, library, notes, athletes, meets, 'Marcus Reed',
+        'athlete_season');
     // A whole season with nothing filmed.
     await _shoot(tester, library, notes, athletes, meets, 'Priya Raman',
         'athlete_marks_only');
+    // Last, because it is the one shot that leaves something behind: which
+    // way a meet is read is remembered, so a card shot after this one
+    // would open on the best rather than on the average.
+    await _shoot(tester, library, notes, athletes, meets, 'Marcus Reed',
+        'athlete_meet_bests', best: true);
   });
 }
 
@@ -83,7 +96,9 @@ Future<void> _shoot(
     AthleteLibrary athletes,
     MeetLibrary meets,
     String name,
-    String file) async {
+    String file,
+    {String? season,
+    bool best = false}) async {
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -95,6 +110,10 @@ Future<void> _shoot(
       child: MaterialApp(
         theme: ThrowLabApp.theme,
         home: AthleteScreen(
+          // A key per shot, so each one mounts a fresh screen: two shots of
+          // the same athlete would otherwise share the state of the first,
+          // and the second would open on whatever the first was left on.
+          key: ValueKey(file),
           name: name,
           titleFor: (ThrowVideo video) =>
               '${video.event.label} · ${video.implementSpec.weightLabel}',
@@ -103,6 +122,18 @@ Future<void> _shoot(
     ),
   );
   await settle(tester);
+  if (season != null) {
+    // Through the picker rather than by seeding it, so the shot is the
+    // screen a coach is actually looking at after choosing a season.
+    await tester.tap(find.byTooltip('Season'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(season).last);
+    await settle(tester);
+  }
+  if (best) {
+    await tester.tap(find.text('Best'));
+    await settle(tester);
+  }
   await expectLater(
       find.byType(MaterialApp), matchesGoldenFile('$_out/$file.png'));
 }

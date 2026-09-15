@@ -129,6 +129,10 @@ void main() {
       final shot = one('Event 15 Boys Shot Put 12lb');
       expect(shot.implementKg, 5.44);
       expect(shot.weightGuessed, isFalse);
+      // And the men's, which the sheet and the app both call a 16 lb.
+      final mens = one("Event 21 Men's Shot Put 16lb");
+      expect(mens.implementKg, 7.26);
+      expect(mens.event.specFor(mens.implementKg).weightLabel, '16 lb');
     });
 
     test('comes off the heading in kilos, however it is written', () {

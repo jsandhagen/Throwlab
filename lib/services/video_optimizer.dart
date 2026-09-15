@@ -282,7 +282,11 @@ class VideoOptimizer {
   ///   5 — each still's real presentation time is recorded alongside it, so
   ///       a scrub ends on the frame the still was showing instead of a
   ///       neighbour on clips that aren't exactly constant-rate.
-  static const scrubFramesVersion = 5;
+  ///   6 — both ends of the JPEG's color conversion are named (see
+  ///       [jpegColorFilter]). Measured on a real clip, the stills held
+  ///       Rec. 709 numbers that Flutter then read as Rec. 601, which cost
+  ///       the red track ~9 levels of red for as long as a finger was down.
+  static const scrubFramesVersion = 6;
 
   /// Pre-extracts frames as JPEGs so scrubbing can show cached stills at
   /// display rate instead of waiting on the decoder to seek. Returns the
@@ -312,6 +316,9 @@ class VideoOptimizer {
     } catch (_) {
       // Total unknown → assume no striding is needed.
     }
+    // What color the clip is in, so the stills are written out of it rather
+    // than out of a guess — see [jpegColorFilter].
+    final color = await _jpegColorFilterFor(videoPath);
     final total = (seconds != null && fps > 0) ? (seconds * fps).round() : 0;
     final stride =
         total > _maxScrubFrames ? (total / _maxScrubFrames).ceil() : 1;
@@ -326,10 +333,12 @@ class VideoOptimizer {
     // than the video they cover. force_divisible_by=2 then matches the
     // playback copy's "-2" width rounding, so the two agree exactly rather
     // than differing by the odd pixel.
+    // The color conversion rides on the same scale, which is the only place
+    // the pixels are touched.
     final select = stride > 1 ? "select='not(mod(n\\,$stride))'," : '';
     final vf = '${select}scale=iw*sar:ih,setsar=1,'
         'scale=w=$scrubFrameMax:h=$scrubFrameMax:'
-        'force_original_aspect_ratio=decrease:force_divisible_by=2';
+        'force_original_aspect_ratio=decrease:force_divisible_by=2:$color';
 
     final done = Completer<bool>();
     final totalMs = (seconds ?? 0) * 1000;
@@ -462,8 +471,9 @@ class VideoOptimizer {
   /// converted two ways — and it is visible, because the smooth-scrub
   /// stills come from ffmpeg and the frame they hand back to at the end of
   /// a drag comes from the player. Saying which it is stops the guessing at
-  /// the source, and the stills extracted from this copy afterwards read
-  /// the tag too.
+  /// the source. It is only half of it, though: a tag settles what the
+  /// pixels mean, and [jpegColorFilter] is what makes the stills written out
+  /// of them mean the same thing.
   ///
   /// Only for HD, and only when nobody has said: standard-definition
   /// footage really is Rec. 601, and a clip that declares its color is
@@ -475,6 +485,79 @@ class VideoOptimizer {
         declared.isNotEmpty && declared != 'unknown' && declared != 'n/a';
     if (known || (height ?? 0) < 720) return '';
     return ' -colorspace bt709 -color_primaries bt709 -color_trc bt709';
+  }
+
+  /// The matrix ffmpeg has to read a clip's YCbCr with, named the way
+  /// swscale names them: whatever the clip declares, and failing that the
+  /// same guess a player makes — Rec. 709 for HD, Rec. 601 for standard
+  /// definition. Deliberately the same rule [colorTagsFor] writes, so the
+  /// two ends of a clip can't come to different conclusions about an
+  /// untagged one. 'auto' for a clip that was not measured at all: leaving
+  /// ffmpeg to its own default beats inventing a matrix for it.
+  @visibleForTesting
+  static String readMatrixFor({String? colorSpace, int? height}) {
+    switch ((colorSpace ?? '').trim().toLowerCase()) {
+      case 'bt709':
+        return 'bt709';
+      case 'bt601':
+      case 'bt470bg':
+      case 'smpte170m':
+        return 'bt601';
+      case 'smpte240m':
+        return 'smpte240m';
+      case 'fcc':
+        return 'fcc';
+      case 'bt2020nc':
+      case 'bt2020_ncl':
+        return 'bt2020';
+    }
+    if ((height ?? 0) <= 0) return 'auto';
+    return height! >= 720 ? 'bt709' : 'bt601';
+  }
+
+  /// The color half of the scale every JPEG this class writes goes through.
+  ///
+  /// A JPEG has nowhere to say what its numbers mean: the format *is*
+  /// full-range Rec. 601, and every decoder — Flutter's included — reads one
+  /// that way. Handed a Rec. 709 clip, ffmpeg writes the JPEG by stretching
+  /// the range and leaving the coefficients where they were, so the file
+  /// ends up holding 709 numbers that are then read as 601. Naming both ends
+  /// of the conversion is what stops it: read the clip with the matrix it is
+  /// actually in, write the matrix a JPEG is actually read with.
+  ///
+  /// This is the other half of the shift [colorTagsFor] went after, and the
+  /// bigger half — a tag on the clip settles what the video means, and this
+  /// settles what the still standing in for it means. It is not a rounding
+  /// difference: it desaturates and swings the hue of anything strongly
+  /// colored, measured at ~9 levels of red on a red track, for exactly as
+  /// long as a finger is down on a scrub.
+  ///
+  /// Returned as scale options rather than a filter of its own, so it rides
+  /// on the scale that is already resizing the frame instead of costing a
+  /// second pass over it.
+  @visibleForTesting
+  static String jpegColorFilter({String? colorSpace, int? height}) =>
+      'in_color_matrix=${readMatrixFor(colorSpace: colorSpace, height: height)}'
+      ':out_color_matrix=bt601:out_range=pc';
+
+  /// [jpegColorFilter] for the clip at [path], read off the clip itself. A
+  /// file that won't probe falls back to what ffmpeg would have read it as,
+  /// which is no worse than before it was asked.
+  static Future<String> _jpegColorFilterFor(String path) async {
+    try {
+      final info =
+          (await FFprobeKit.getMediaInformation(path)).getMediaInformation();
+      for (final stream in info?.getStreams() ?? []) {
+        if (stream.getType() != 'video') continue;
+        return jpegColorFilter(
+          colorSpace: '${stream.getAllProperties()?['color_space'] ?? ''}',
+          height: stream.getHeight(),
+        );
+      }
+    } catch (_) {
+      // Unmeasured → 'auto' below.
+    }
+    return jpegColorFilter();
   }
 
   /// Parses ffprobe rate strings: "240", "240.000000", or "30000/1001".
@@ -496,8 +579,11 @@ class VideoOptimizer {
     final dir = Directory('${docs.path}/throws');
     await dir.create(recursive: true);
     final outPath = '${dir.path}/$id.jpg';
+    // Same JPEG, same conversion: a card whose thumbnail is a shade off the
+    // clip it opens is the scrub shift again, standing still.
+    final color = await _jpegColorFilterFor(videoPath);
     final session = await FFmpegKit.execute(
-      '-y -ss 0.3 -i "$videoPath" -frames:v 1 -vf scale=480:-2 '
+      '-y -ss 0.3 -i "$videoPath" -frames:v 1 -vf scale=480:-2:$color '
       '-q:v 4 "$outPath"',
     );
     if (!ReturnCode.isSuccess(await session.getReturnCode())) {

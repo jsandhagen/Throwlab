@@ -1,21 +1,31 @@
 import 'dart:math' as math;
+import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 
-enum DrawTool { none, pen, line, arrow, curvedArrow, angle }
+import '../utils/time_format.dart';
+
+enum DrawTool { none, pen, line, arrow, curvedArrow, circle, angle, timer }
 
 /// Selectable pen thicknesses, thin → thick, in video-canvas pixels. The
 /// middle one is the default.
 const kStrokeWidths = [1.5, 3.0, 6.0];
 
-/// Annotation colors, in the order the rail offers them: bright against
-/// grass, sky and a runway alike.
-const kAnnotationColors = [
-  Colors.orangeAccent,
-  Colors.lightGreenAccent,
-  Colors.cyanAccent,
-  Colors.pinkAccent,
-  Colors.white,
+/// Annotation colors, in the order the rail offers them: two rows of five,
+/// the bright end of the wheel first because grass, sky and a red runway
+/// are what a stroke has to carry against. Black is last and is there for
+/// the one background the bright ones lose on — a white sky.
+const kAnnotationColors = <({Color color, String name})>[
+  (color: Colors.orangeAccent, name: 'Orange'),
+  (color: Colors.yellowAccent, name: 'Yellow'),
+  (color: Colors.lightGreenAccent, name: 'Green'),
+  (color: Colors.cyanAccent, name: 'Cyan'),
+  (color: Colors.white, name: 'White'),
+  (color: Colors.redAccent, name: 'Red'),
+  (color: Colors.pinkAccent, name: 'Pink'),
+  (color: Colors.purpleAccent, name: 'Purple'),
+  (color: Colors.blueAccent, name: 'Blue'),
+  (color: Colors.black, name: 'Black'),
 ];
 
 /// How much of a zoom the ink takes on. Annotations are painted inside the
@@ -89,6 +99,21 @@ class LineAnnotation extends Annotation {
   Offset end;
 }
 
+/// A ring drawn out from its middle: press on what is being circled and
+/// drag to the rim. Sizing a circle from the middle keeps the thing it is
+/// about — a hip, a hand, where the implement landed — under the finger
+/// that started it, which a corner-to-corner box does not.
+///
+/// [edge] is a point on the rim rather than a radius, because a radius is a
+/// length and the two axes normalize by different amounts: stored as a
+/// point, the ring is struck at the screen-space distance between the two
+/// and stays round at any size of frame.
+class CircleAnnotation extends Annotation {
+  CircleAnnotation(super.color, super.width, this.center, this.edge);
+  Offset center;
+  Offset edge;
+}
+
 /// Drawn tail → head, so the arrow points where the drag finished.
 class ArrowAnnotation extends Annotation {
   ArrowAnnotation(super.color, super.width, this.start, this.end);
@@ -102,6 +127,25 @@ class ArrowAnnotation extends Annotation {
 class CurvedArrowAnnotation extends Annotation {
   CurvedArrowAnnotation(super.color, super.width, this.points);
   final List<Offset> points;
+}
+
+/// A stopwatch dropped on the frame: it holds the moment it was dropped at
+/// and reads the gap from there to wherever the clip is now, so scrubbing
+/// forward times a phase — block to release, ground contact, the delivery —
+/// without anybody doing arithmetic on two frame numbers.
+///
+/// [from] is a position in the clip rather than a frame index, because that
+/// is what the player reports and what the readout under the scrubber is
+/// already counting in; a frame index would have to be converted back
+/// through the clip's own frame times to be compared with it.
+class TimerMarker extends Annotation {
+  TimerMarker(super.color, super.width, this.at, this.from);
+
+  /// Where the box sits on the frame, normalized like everything else.
+  Offset at;
+
+  /// The frame it was dropped on, which is the zero it counts from.
+  final Duration from;
 }
 
 /// Three taps: first arm point, vertex, second arm point. The measured angle
@@ -122,16 +166,78 @@ class AngleAnnotation extends Annotation {
   }
 }
 
+/// One reversible edit to the drawing. The history is kept as edits rather
+/// than as snapshots of the whole frame because annotations are mutable —
+/// a line's end follows the finger, an angle grows a vertex at a time — so
+/// a snapshot would have to deep-copy every stroke on every touch move.
+sealed class _Edit {
+  /// Puts the drawing back the way it was before this edit.
+  void undo(List<Annotation> annotations);
+
+  /// Does it again.
+  void redo(List<Annotation> annotations);
+}
+
+/// An annotation was drawn. It is matched by identity, so the object the
+/// drag went on mutating is the one that comes back.
+class _Drawn extends _Edit {
+  _Drawn(this.annotation);
+  final Annotation annotation;
+
+  @override
+  void undo(List<Annotation> annotations) => annotations.remove(annotation);
+
+  @override
+  void redo(List<Annotation> annotations) => annotations.add(annotation);
+}
+
+/// A vertex joined an angle already on the frame, so tapping out an angle
+/// comes back a point at a time rather than all three at once.
+class _VertexPlaced extends _Edit {
+  _VertexPlaced(this.angle, this.point);
+  final AngleAnnotation angle;
+  final Offset point;
+
+  @override
+  void undo(List<Annotation> annotations) => angle.points.removeLast();
+
+  @override
+  void redo(List<Annotation> annotations) => angle.points.add(point);
+}
+
+/// The frame was wiped. Undoing brings the lot back, which is what makes
+/// clear worth a button of its own instead of a confirmation.
+class _Wiped extends _Edit {
+  _Wiped(this.annotations);
+  final List<Annotation> annotations;
+
+  @override
+  void undo(List<Annotation> into) => into.addAll(annotations);
+
+  @override
+  void redo(List<Annotation> into) => into.clear();
+}
+
 class DrawingController extends ChangeNotifier {
   DrawTool _tool = DrawTool.none;
-  Color _color = Colors.orangeAccent;
+  Color _color = kAnnotationColors.first.color;
   double _strokeWidth = kStrokeWidths[1];
   final List<Annotation> _annotations = [];
+
+  /// What has been done, oldest first, and what has been undone out of it,
+  /// newest last. A fresh edit drops the redo stack — the usual rule, and
+  /// the only one that can't leave a redo pointing at a frame that no
+  /// longer exists.
+  final List<_Edit> _done = [];
+  final List<_Edit> _undone = [];
 
   DrawTool get tool => _tool;
   Color get color => _color;
   double get strokeWidth => _strokeWidth;
   List<Annotation> get annotations => List.unmodifiable(_annotations);
+
+  bool get canUndo => _done.isNotEmpty;
+  bool get canRedo => _undone.isNotEmpty;
 
   // The pen setters are no-ops when the value is already what was asked
   // for. The comparison screen mirrors one pane's pen onto the other
@@ -157,28 +263,48 @@ class DrawingController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void add(Annotation annotation) {
-    _annotations.add(annotation);
+  void _record(_Edit edit) {
+    edit.redo(_annotations);
+    _done.add(edit);
+    _undone.clear();
     notifyListeners();
   }
 
+  void add(Annotation annotation) => _record(_Drawn(annotation));
+
+  /// Adds [point] to an angle that is already on the frame.
+  void placeAngleVertex(AngleAnnotation angle, Offset point) =>
+      _record(_VertexPlaced(angle, point));
+
+  /// A drag carried the annotation it started on somewhere new. That is the
+  /// same edit going on, not another one, so it only repaints.
   void notifyChanged() => notifyListeners();
 
+  /// Throws the edit in progress away without leaving it to be redone — a
+  /// stroke a pinch turned out to be, which the user never meant to draw.
+  void discardStroke() {
+    if (_done.isEmpty) return;
+    _done.removeLast().undo(_annotations);
+    notifyListeners();
+  }
+
   void undo() {
-    if (_annotations.isEmpty) return;
-    final last = _annotations.last;
-    // Remove an in-progress angle one point at a time.
-    if (last is AngleAnnotation && last.points.length > 1) {
-      last.points.removeLast();
-    } else {
-      _annotations.removeLast();
-    }
+    if (_done.isEmpty) return;
+    final edit = _done.removeLast()..undo(_annotations);
+    _undone.add(edit);
+    notifyListeners();
+  }
+
+  void redo() {
+    if (_undone.isEmpty) return;
+    final edit = _undone.removeLast()..redo(_annotations);
+    _done.add(edit);
     notifyListeners();
   }
 
   void clear() {
-    _annotations.clear();
-    notifyListeners();
+    if (_annotations.isEmpty) return;
+    _record(_Wiped(List.of(_annotations)));
   }
 }
 
@@ -205,7 +331,13 @@ bool beginAnnotation(DrawingController controller, Offset point) {
       controller.add(CurvedArrowAnnotation(
           controller.color, controller.strokeWidth, [point]));
       return true;
+    case DrawTool.circle:
+      // Middle where the press landed, rim where the drag gets to.
+      controller.add(CircleAnnotation(
+          controller.color, controller.strokeWidth, point, point));
+      return true;
     case DrawTool.angle:
+    case DrawTool.timer:
     case DrawTool.none:
       return false;
   }
@@ -235,7 +367,13 @@ void extendAnnotation(DrawingController controller, Offset point) {
         last.points.add(point);
         controller.notifyChanged();
       }
+    case DrawTool.circle:
+      if (last is CircleAnnotation) {
+        last.edge = point;
+        controller.notifyChanged();
+      }
     case DrawTool.angle:
+    case DrawTool.timer:
     case DrawTool.none:
       break;
   }
@@ -246,13 +384,18 @@ void extendAnnotation(DrawingController controller, Offset point) {
 void addAngleVertex(DrawingController controller, Offset point) {
   final last = controller.annotations.lastOrNull;
   if (last is AngleAnnotation && !last.isComplete) {
-    last.points.add(point);
-    controller.notifyChanged();
+    controller.placeAngleVertex(last, point);
   } else {
     controller.add(AngleAnnotation(controller.color, controller.strokeWidth)
       ..points.add(point));
   }
 }
+
+/// Drops a timer at normalized [point], counting from [from] — the frame the
+/// clip is showing as it is placed.
+void dropTimer(DrawingController controller, Offset point, Duration from) =>
+    controller.add(
+        TimerMarker(controller.color, controller.strokeWidth, point, from));
 
 /// Paint-only annotation layer stacked over the video player. Gestures are
 /// handled by the screen, which owns a single recognizer for zooming,
@@ -263,6 +406,7 @@ class DrawingCanvas extends StatelessWidget {
     super.key,
     required this.controller,
     this.zoomScale = 1,
+    this.position = Duration.zero,
   });
 
   final DrawingController controller;
@@ -271,14 +415,27 @@ class DrawingCanvas extends StatelessWidget {
   /// instead of blowing up with the picture (see [inkScaleFor]).
   final double zoomScale;
 
+  /// Where the clip is now, which is what a [TimerMarker] counts to. It is
+  /// the player's own position — the same one the frame readout under the
+  /// scrubber is counting — so a box on the frame can never disagree with
+  /// the numbers beside it.
+  final Duration position;
+
   @override
   Widget build(BuildContext context) {
+    // A painter builds its own TextSpans, which inherit nothing — left to
+    // itself the canvas sets its labels in the engine's fallback face while
+    // the rest of the app is in Barlow. Handing the theme's own style down
+    // keeps them the same type without naming a family here.
+    final labelStyle =
+        Theme.of(context).textTheme.bodyMedium ?? const TextStyle();
     return IgnorePointer(
       child: AnimatedBuilder(
         animation: controller,
         builder: (context, _) => CustomPaint(
           size: Size.infinite,
-          painter: _AnnotationPainter(controller.annotations, zoomScale),
+          painter: _AnnotationPainter(
+              controller.annotations, zoomScale, position, labelStyle),
         ),
       ),
     );
@@ -286,10 +443,16 @@ class DrawingCanvas extends StatelessWidget {
 }
 
 class _AnnotationPainter extends CustomPainter {
-  _AnnotationPainter(this.annotations, this.zoomScale);
+  _AnnotationPainter(
+      this.annotations, this.zoomScale, this.position, this.labelStyle);
 
   final List<Annotation> annotations;
   final double zoomScale;
+  final Duration position;
+
+  /// The app's own type, for the two things on the canvas that are words
+  /// rather than ink: an angle's reading and a timer's.
+  final TextStyle labelStyle;
 
   Offset _denormalize(Offset point, Size size) =>
       Offset(point.dx * size.width, point.dy * size.height);
@@ -323,8 +486,16 @@ class _AnnotationPainter extends CustomPainter {
           _paintArrow(canvas, size, annotation, paint);
         case CurvedArrowAnnotation():
           _paintCurvedArrow(canvas, size, annotation, paint);
+        case CircleAnnotation(:final center, :final edge):
+          final middle = _denormalize(center, size);
+          final radius = (_denormalize(edge, size) - middle).distance;
+          // A press that never travelled is a tap, not a ring.
+          if (radius < 1) continue;
+          canvas.drawCircle(middle, radius, paint);
         case AngleAnnotation():
           _paintAngle(canvas, size, annotation, paint);
+        case TimerMarker():
+          _paintTimer(canvas, size, annotation);
       }
     }
   }
@@ -386,6 +557,43 @@ class _AnnotationPainter extends CustomPainter {
     return total;
   }
 
+  /// A small solid box reading the gap from the frame it was dropped on,
+  /// centered on where it was put. Solid rather than translucent because it
+  /// is read at a glance against whatever the frame happens to be, and set
+  /// in tabular figures so the number doesn't jitter sideways as it counts.
+  void _paintTimer(Canvas canvas, Size size, TimerMarker marker) {
+    final label = TextPainter(
+      text: TextSpan(
+        text: formatDelta(position - marker.from),
+        style: labelStyle.copyWith(
+          color: marker.color,
+          fontSize: _fixed(14),
+          fontWeight: FontWeight.w600,
+          // Tabular figures so the number doesn't shuffle sideways as it
+          // counts, which on a box this small reads as a wobble.
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final padX = _fixed(8);
+    final padY = _fixed(5);
+    final box = Rect.fromCenter(
+      center: _denormalize(marker.at, size),
+      width: label.width + padX * 2,
+      height: label.height + padY * 2,
+    );
+    final rounded = RRect.fromRectAndRadius(box, Radius.circular(_fixed(6)));
+    canvas.drawRRect(rounded, Paint()..color = const Color(0xFF101214));
+    canvas.drawRRect(
+        rounded,
+        Paint()
+          ..color = marker.color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = _ink(marker.width) * 0.6);
+    label.paint(canvas, Offset(box.left + padX, box.top + padY));
+  }
+
   void _paintAngle(
       Canvas canvas, Size size, AngleAnnotation angle, Paint paint) {
     final points = angle.points.map((p) => _denormalize(p, size)).toList();
@@ -406,7 +614,7 @@ class _AnnotationPainter extends CustomPainter {
       final textPainter = TextPainter(
         text: TextSpan(
           text: '${degrees.toStringAsFixed(1)}°',
-          style: TextStyle(
+          style: labelStyle.copyWith(
             color: angle.color,
             fontSize: _fixed(16),
             fontWeight: FontWeight.bold,

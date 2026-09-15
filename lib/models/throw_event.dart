@@ -30,15 +30,20 @@ class ImplementSpec {
   final String usedBy;
 
   /// What the implement is called where it is thrown, when that is not its
-  /// weight in kilos. A U.S. high school shot is a 12 lb: it is ordered as
-  /// one, written '12lb' on the heat sheet and called one at the ring, and
-  /// naming it 5.44 kg names the same ball in a way nobody there would use.
+  /// weight in kilos. A men's shot is a 16 lb and a U.S. high school boys'
+  /// is a 12 lb: they are ordered that way, written '16lb' and '12lb' on
+  /// the heat sheet and called that at the ring, and naming them 7.26 kg
+  /// and 5.44 kg names the same balls in a way nobody there would use.
+  ///
+  /// A name, never an identity. [weightKg] is what a throw is filed under,
+  /// what a personal best is kept per, and what the analyzer calibrates
+  /// against; this is only what the number is read out as.
   final String? label;
 
   /// Midpoint of the legal range — the default calibration value.
   double get nominalSize => (minSize + maxSize) / 2;
 
-  /// '7.26 kg', '600 g', '12 lb' — implements under a kilo are sold and
+  /// '16 lb', '600 g', '4 kg' — implements under a kilo are sold and
   /// spoken about in grams, and one named in pounds where it is thrown
   /// keeps that name.
   String get weightLabel =>
@@ -54,12 +59,17 @@ class ImplementSpec {
 /// (the 0.75 kg discus, the 2 kg shot) it is thrown as the next size's
 /// shell and is listed here as such.
 const _shotPut = [
+  // The men's shot, which is a 16 lb wherever it is thrown in the U.S. and
+  // on every heat sheet printed there. 7.26 kg is the same ball under the
+  // name the rest of the world uses; this app is written in American
+  // English and calls it what a coach standing at the ring calls it.
   ImplementSpec(
       weightKg: 7.26,
       referenceLabel: 'Ball diameter',
       minSize: 0.110,
       maxSize: 0.130,
-      usedBy: 'Men, M35–M49'),
+      usedBy: 'Men, M35–M49',
+      label: '16 lb'),
   ImplementSpec(
       weightKg: 6,
       referenceLabel: 'Ball diameter',
@@ -150,12 +160,16 @@ const _discus = [
 // The wire and grip are not a calibration reference: they hang, bend and
 // foreshorten, while the head is a sphere from every angle.
 const _hammer = [
+  // The same ball on a wire, and the same name: a 16 lb hammer. One weight
+  // reading two ways in one app — a 16 lb shot beside a 7.26 kg hammer —
+  // would be the same implement called two things on one profile.
   ImplementSpec(
       weightKg: 7.26,
       referenceLabel: 'Head diameter',
       minSize: 0.110,
       maxSize: 0.130,
-      usedBy: 'Men, M35–M49'),
+      usedBy: 'Men, M35–M49',
+      label: '16 lb'),
   ImplementSpec(
       weightKg: 6,
       referenceLabel: 'Head diameter',

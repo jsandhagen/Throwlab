@@ -1926,6 +1926,28 @@ class _PlaceRow extends StatelessWidget {
   /// What it would take to make the final, for an athlete who is out of it.
   final double? needed;
 
+  /// How the series is going as a whole — 'averaging 52.44 m from 4 · 2
+  /// fouls'. The table gives the one throw an athlete is placed on, which
+  /// is the competition's question; this is the coach's, and it is asked
+  /// standing at the ring rather than written up afterwards.
+  ///
+  /// Null before there is anything to say about it.
+  String? get _consistency {
+    final series = place.series;
+    final marks = series.legalMarks.length;
+    // A mean of one throw is that throw, which the row already gives on
+    // the right — the fouls beside it are still worth saying, since the
+    // series itself is a tab away.
+    final average = marks > 1 ? series.average : null;
+    final fouls = series.fouls;
+    if (average == null && fouls == 0) return null;
+    return [
+      if (average != null)
+        'averaging ${formatDistance(average, series.unit)} from $marks',
+      if (fouls > 0) '$fouls foul${fouls == 1 ? '' : 's'}',
+    ].join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1971,6 +1993,17 @@ class _PlaceRow extends StatelessWidget {
               ),
             ],
           ),
+          // Only for the coach's own, like the line under it: the rest of
+          // the field is here to be placed against, not read.
+          if (mine && _consistency != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 2),
+              child: Text(
+                _consistency!,
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
           // Only for the coach's own: what the rest of the field needs is
           // not their problem.
           if (mine && needed != null)

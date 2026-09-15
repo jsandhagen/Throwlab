@@ -209,4 +209,44 @@ void main() {
       expect(tags(), '');
     });
   });
+
+  group('VideoOptimizer.jpegColorFilter', () {
+    String filter({String? colorSpace, int? height}) =>
+        VideoOptimizer.jpegColorFilter(colorSpace: colorSpace, height: height);
+    String reads({String? colorSpace, int? height}) =>
+        VideoOptimizer.readMatrixFor(colorSpace: colorSpace, height: height);
+
+    test('always writes the matrix a JPEG is read with', () {
+      // The shift a scrub drag showed: ffmpeg left the clip's own
+      // coefficients in the file and Flutter read them as full-range
+      // Rec. 601, because that is what a JPEG is. Both ends are named now,
+      // whatever the clip turns out to be in.
+      for (final space in ['bt709', 'smpte170m', 'unknown', '']) {
+        expect(filter(colorSpace: space, height: 1440),
+            contains('out_color_matrix=bt601'));
+        expect(
+            filter(colorSpace: space, height: 1440), contains('out_range=pc'));
+      }
+    });
+
+    test('reads a clip in the color it declares', () {
+      expect(reads(colorSpace: 'bt709', height: 480), 'bt709');
+      expect(reads(colorSpace: 'bt470bg', height: 1440), 'bt601');
+      expect(reads(colorSpace: 'smpte170m', height: 1440), 'bt601');
+      expect(reads(colorSpace: 'bt2020nc', height: 2160), 'bt2020');
+    });
+
+    test('guesses an untagged clip the way the player guesses it', () {
+      // Same rule as colorTagsFor writes, so a clip tagged by one recipe and
+      // a clip left untagged by an older one come out the same color.
+      expect(reads(height: 1080), 'bt709');
+      expect(reads(colorSpace: 'unknown', height: 720), 'bt709');
+      expect(reads(colorSpace: 'N/A', height: 480), 'bt601');
+    });
+
+    test('leaves a clip it could not measure to ffmpeg', () {
+      expect(reads(), 'auto');
+      expect(filter(), contains('in_color_matrix=auto'));
+    });
+  });
 }

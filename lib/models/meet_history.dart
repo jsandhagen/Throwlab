@@ -48,6 +48,18 @@ class MeetOuting {
   /// How many of those were measured.
   int get legalMarks => series.legalMarks.length;
 
+  /// What the afternoon averaged, over the throws that were measured —
+  /// the rest of the competition, next to the one throw it was placed on.
+  double? get average => series.average;
+
+  /// How many attempts were fouled. Read beside [average], never into it:
+  /// a foul is a throw that didn't count, not a throw of nothing.
+  int get fouls => series.fouls;
+
+  /// The unit the series was measured in, which is the one to write its
+  /// average in.
+  DistanceUnit get unit => series.unit;
+
   /// Whether they won it. A field of one is not a competition, so it is
   /// not a win either.
   bool get won => fieldSize > 1 && place?.place == 1;

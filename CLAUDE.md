@@ -7,10 +7,10 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side) |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), drawing canvas and rail, playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -46,7 +46,10 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/meet_preview.dart \
                               tool/preview/schedule_preview.dart \
                               tool/preview/heat_sheet_preview.dart \
-                              tool/preview/season_preview.dart
+                              tool/preview/season_preview.dart \
+                              tool/preview/analysis_preview.dart \
+                              tool/preview/compare_preview.dart \
+                              tool/preview/gold_preview.dart
 ```
 
 The results sheet is reviewed the same way, except that the artifact is the
@@ -63,13 +66,20 @@ feet in a field measured in meters, a personal best, and enough of a field
 to push the last event onto a second page.
 
 That writes `build/preview/*.png` (gitignored) — the library grouped by
-athlete and by event, a search in progress, the empty state, four athlete
-profiles (each with the season drawn under its best, and the meets it was
-thrown at), a training note (as it opens, and with the keyboard up — which
-the note preview fakes, insets and all — toolbar above it, and pinned to
-the top), and the meet tracker: the meets as a list and as a calendar, a
-meet's events, one of them part-way through, the standings with the cut,
-the field as a list, the live card (four times — a podium, a field with the
+athlete and by event, a search in progress, the empty state, five athlete
+profiles — among them a shot putter with a full season on him, six meets
+this spring and three last, which is the shape the averages and the
+record's own staircase are drawn for — each with the history of its best,
+what it averages at a meet and what it fouled away, how that has moved
+season by season, and the meets it was thrown at; and one of them read
+over last season instead through the picker, and one read as the best of
+each meet rather than as every throw of it, a training note (as
+it opens, and with the keyboard up — which the note preview fakes, insets
+and all — toolbar above it, and pinned to the top), and the meet tracker:
+the meets as a list and as a calendar, a meet's events, one of them
+part-way through, the standings with the cut and what the coach's own
+athlete is averaging under it, the field as a list, the live card (four
+times — a podium, a field with the
 cut falling below it, a board that has broken, where the leader is off
 the top of it as an arrow, and a field thrown in flights, where the coach's
 own athlete is in the one that hasn't been called), the flighted field as a
@@ -80,7 +90,20 @@ leaves behind — and the heat sheet import: the program pasted in, the
 events found in it, one opened on its field with the flights ruled off in
 it, and the meet it leaves entered — and the season list: the next fixture at full size over the rest
 of it, both on a day with a meet on and on a day without, and with what has been
-thrown folded away. Open the PNGs to see exactly what the screen paints. **Re-run it
+thrown folded away — and the analysis screen: the drawing tools up the right
+edge of a frame on its side (on their own, with a ring, an arrow and a timer
+on the frame, with the marks menu open, with the pen panel open, and folded
+away to the one chevron), and the same tools lying along the bottom of an
+upright screen, hard against the scrubber with the pen's weight and color
+split onto a button each — at the width that holds them and at the one that
+shrinks them, with the session on top as a strip of stills and with that
+strip put away on its tab — and the compare picker: both slots still empty,
+one filled, both filled and ready to open, the sheet as it opens off a
+throw, the same sheet off the event filter, and a search that found
+something and one that found nothing — and the gold itself: the medal at
+every size the app pins it at, on a line of type and on a card's corner
+beside the frame, and then one big enough to see what was drawn. Open the
+PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
 the compiler and kill each other.
@@ -98,6 +121,13 @@ it rather than rolling your own:
 - `warmImages()` — decodes files into the image cache *before* `pumpWidget`.
   Test bindings fake out async work, so an image first resolved inside a pump
   never finishes decoding and the thumbnail paints empty.
+
+The analysis preview is the one that borrows from `test/`: it mounts the
+real screen on the widget tests' in-memory player, so the 'video' is a flat
+blue rectangle — which is the point, since what is being looked at is where
+the chrome sits over the frame and how much of it it costs. Its clip is
+stamped as already having scrub frames, so the screen never reaches for the
+ffmpeg and path_provider plugins that aren't behind a widget test.
 
 Sample throws and their thumbnails come from `sample_library.dart`, generated
 at run time (there is a tiny PNG encoder at the bottom of it), so no fixtures
@@ -134,10 +164,17 @@ like the app rather than a bare Material default.
   calibrates against. Add a weight by adding a row to the table in
   `throw_event.dart` — nothing else enumerates them. A weight named in
   pounds where it is thrown carries a `label` and wears it everywhere
-  (`weightLabel`): a U.S. high school shot reads as a 12 lb, because that
-  is what it is ordered as and called at the ring, not as 5.44 kg. It is
-  its own weight rather than a rounded 5 kg, since a best is per
-  implement.
+  (`weightLabel`): the men's shot reads as a 16 lb and the U.S. high
+  school boys' as a 12 lb, because that is what they are ordered as and
+  called at the ring, not 7.26 kg and 5.44 kg. The 7.26 kg hammer is the
+  same ball on a wire and takes the same name, since one weight reading
+  two ways on one profile is the same implement called two things. The
+  label is a name and never an identity — `weightKg` is what a throw is
+  filed under, what a best is kept per, and what the analyzer calibrates
+  against — and the 12 lb is its own weight rather than a rounded 5 kg,
+  since a best is per implement. The discus goes the other way: a U.S.
+  high school 1.6 kg is called a 1.6 wherever it is thrown, never a
+  3.5 lb, so it keeps its metric name.
 - A throw's distance (`ThrowVideo.distance`, always meters, null until
   recorded) is the badge on its card, shown in the unit it was entered in
   (`distanceUnit`). `DistanceField` is the meters/feet pair that converts
@@ -193,6 +230,21 @@ like the app rather than a bare Material default.
   shared by `GoldEdgePainter` (the card's frame) and `FirstPlaceMedal` (the
   star-cutout medal), so the two read as the same metal. Keep the ramp
   narrow — a wide one makes a convincing coin and a blotchy frame.
+  The medal is a badge before it is a picture: it is pinned at 13 px beside
+  a placing and at 34 px on a shelf, and the size that has to work is the
+  small one. The disc is the subject, it carries the whole width, and it
+  hangs clear of the ribbon — the two are the same metal, so with nothing
+  between them the straps melt into the top of the coin. The ribbon is one
+  band, tapering as it comes down, with a slot cut across it that leans
+  harder than the band's edges draw in: the right-hand piece runs out to a
+  point and the left carries on to a square end. That lopsidedness is the
+  read. A ribbon has a front and a back and is folded through itself, and
+  two straps leaning symmetrically into each other are a V, which is a
+  letter — which is what the first one looked like beside a mark. Every
+  number in `_MedalPainter` is measured off a reference rather than
+  invented, so change them together or not at all. The star is a hole
+  rather than a lighter shape, which is what keeps it a medal at 13 px
+  instead of a yellow blob with a smudge in it.
 - A training note is a list of typed blocks (`NoteBlockKind`), not a
   document: heading, paragraph, bullet, numbered, checklist, picture with a
   caption. Emphasis is markers in the text (`**bold**`, `*italic*`,
@@ -296,6 +348,117 @@ like the app rather than a bare Material default.
   event carrying on, flight and all, rather than as a second one of the same
   name: the fields it happens to are the long ones, which are exactly the
   flighted ones.
+- The set a throw was opened with hangs under the header, not along the
+  bottom. A strip of stills is the right way to pick a throw out — a coach
+  picks one by looking at it, which a list of 'Shot Put · Men · 2026-09-02'
+  rows never allowed — and it is the first thing wanted on opening a throw,
+  so it shows; but the bottom of the screen is where the scrubber, the
+  transport and the drawing tools all already are, and down there it was in
+  the way of all three. It puts away on a tab hanging off its own bottom
+  edge — a handle on the thing it moves is the one nobody has to be told
+  about, and the portrait header has no width for another button. Tap it or
+  pull it: a bar across the top of a panel is the shape of something that
+  gets dragged, so a thumb that comes down and pushes is asking for the
+  tray whether or not anybody said it could, and a drag that did nothing
+  would read as a handle that was stuck. Both land on the same toggle, so
+  the tray is never left half way. The difference is that a pull means the
+  way it points — pulling down on a tray already showing does nothing —
+  while the tap is the gesture for 'whichever way it is now, change it'.
+  What separates the two is Flutter's own `kTouchSlop`, already cleared
+  before the first drag callback arrives, which is why `_pullSlop` is only
+  big enough to read a direction off: a second threshold of any size on top
+  of that only makes the tray answer late. And
+  where it was last left is remembered (`throwlab.throwStrip`), because
+  paging replaces the screen and would otherwise drop the strip back down
+  under the finger that just put it away. The tab is a grab bar and nothing
+  else — the box around it takes the tap, so it is easy to hit and nearly
+  invisible — because it stands on the frame of every throw, including all
+  the ones nobody is paging through, and a pixel of chrome there is a pixel
+  of the throw. It keeps a faint surface behind it rather than sitting bare:
+  a bar alone disappears against a bright frame, which is a handle nobody
+  can find on exactly the throws this app is pointed at. The pager sits in
+  the tray, at the ends of the stills it steps through: next and previous
+  are about the set, and the set is what the tray is, so they come and go
+  with it rather than holding a card and two buttons open over the frame
+  for the whole session. The panel carries its own surface rather than
+  the header's scrim — over a frame that fills the top of the screen, stills
+  on a fading gradient read as floating over the throw instead of as a
+  drawer in front of it. Landscape has no strip at all: the pager lives in
+  the left rail there.
+- The title names the throw and nothing else — the event and the weight.
+  Which of eight throws is on screen is answered by the strip of stills, so
+  spending the title on it said nothing a coach needed. Tapping it asks
+  about the *throw*: when it was taken, how far it went, what was written
+  down, and the edits for each — `showThrowActions`, the same sheet the
+  library opens on a long press, so there is one place a throw is
+  described.
+- The drawing tools run along an edge of the frame and are anchored in its
+  bottom-right corner. Which edge follows the shape of the *picture*, not
+  the shape of the screen. A clip is filmed on its side, so held that way
+  the frame fills the screen and the tools have to sit on it somewhere:
+  they float over it as a column up the right edge, out past the release
+  and the flight, which is the least of the picture to stand in front of.
+  Held upright the same clip is letterboxed into a band of black above and
+  below, and there the tools are not floated at all — they are laid out
+  inside the bottom overlay, above the scrubber, so they sit hard against
+  it whatever else the overlay is carrying rather than at a guessed inset
+  over the frame. That is also what killed the line under the frame naming
+  the calibration reference: the reference is stated where it is used, on
+  the measure sheet and on the card in the library, and the two gestures
+  were learned on the first drag.
+  A phone is a few pixels short either way — ~300 of usable height on its
+  side and ~352 of width upright, against the 305/377 the tools want — so
+  the rail shrinks to fit, a few percent nobody sees. It only breaks into
+  two runs where shrinking would leave a target a thumb misses at a track
+  (`_minScale`), which is a screen no phone has; scrolling is never the
+  answer, since a tool scrolled out of reach is one nobody finds and the
+  scroll view that offered it swallowed every drag over the strip it
+  covered. The seam, when it comes to that, is where the tools are already
+  grouped — what a tool is picked with in the first run, what is done to the
+  drawing in the second — and the chevron is still last, so it is still in
+  the corner.
+  What keeps the count down is that the marks *placed* on the frame share
+  one menu button wearing whichever is selected. The pen is the one control
+  that differs by axis: height is what a column is short of, so up an edge
+  the weight and the color go behind a single button opening a panel of
+  both, while a bar has the width for a button each, which is a tap closer
+  to whichever half is being changed — eight controls up a column, nine
+  along a bar. Undo, redo and clear are never behind a menu, because they
+  are what a drawing hand reaches for most. Clear can sit in the open
+  because undo brings the whole frame back — `DrawingController` keeps the
+  edits rather than snapshots of the frame, since an annotation goes on
+  mutating while the finger is down. Ten colors are a grid of swatches with
+  their names as tooltips, never a list of ten named rows: a list that long
+  scrolls on a short screen, and the name is the least of what a swatch
+  says.
+- A mark is made the way it is measured. An arrow is dragged tail to head,
+  a curved arrow traces the path it wants and takes its head where the
+  finger lifts, and a circle is dragged out from the middle: what is being
+  circled — a hip, a hand, where the implement landed — stays under the
+  finger that started it, which a corner-to-corner box does not. A circle is
+  stored as its middle and a point on the rim rather than a radius, because
+  the two axes normalize by different amounts and a stored radius would come
+  back as an ellipse on a frame of another shape. An angle and a
+  `TimerMarker` are tapped rather than dragged, since neither has a length
+  to pull out.
+- A `TimerMarker` is a stopwatch dropped on the frame: it holds the moment
+  it was dropped at and reads the gap from there to wherever the clip is
+  now, to the hundredth (`formatDelta`), so scrubbing forward times a
+  phase — block to release, ground contact, the delivery — without anybody
+  doing arithmetic on two frame numbers. It holds a position rather than a
+  frame index, because a position is what the player reports and what the
+  readout under the scrubber is already counting in. The canvas is rebuilt
+  off the player's own value for it, so a box on the frame can never
+  disagree with the numbers beside it. It reads a plain zero on its own
+  frame rather than a signed one, and is signed either way off it, because a
+  coach scrubs back through a throw as often as forward.
+- Ink is ink but a reading is type. The two things the canvas paints as
+  words — an angle's degrees and a timer's seconds — take their style from
+  `Theme.of(context).textTheme`, handed down to the painter: a `TextSpan`
+  built inside a `CustomPainter` inherits nothing, so left alone it sets
+  them in the engine's fallback face while the rest of the app is in
+  Barlow. Handing the style down is how they match without naming a family
+  outside `main.dart`.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which
@@ -309,6 +472,18 @@ like the app rather than a bare Material default.
   scrub handoff, where an ffmpeg still is replaced by the player's own
   frame. Only for HD, and only when nobody has said: standard definition
   really is Rec. 601.
+- A tag settles what the video means; `VideoOptimizer.jpegColorFilter` is
+  what makes a still written out of it mean the same thing, and it is the
+  bigger half of the same shift. A JPEG has nowhere to say what its numbers
+  are: the format *is* full-range Rec. 601, and Flutter reads one that way —
+  but ffmpeg, handed a Rec. 709 clip, writes the file by stretching the
+  range and leaving the coefficients alone, so the still ends up holding 709
+  numbers that are then read as 601. Measured on a real clip that cost the
+  red track about nine levels of red for as long as a finger was down. So
+  every JPEG this app writes — the scrub stills and the library thumbnail —
+  names both ends of the conversion: the matrix the clip is actually in
+  (what it declares, else the same HD-is-709 guess `colorTagsFor` makes), and
+  the matrix a JPEG is actually read with.
 - A meet is tracked live, not written up afterwards. `MeetFlight` works
   out where a competition has got to — the round being thrown, and the
   three an infield calls out (`inTheCircle`, `onDeck`, `inTheHole`) — from
@@ -394,14 +569,91 @@ like the app rather than a bare Material default.
   it hit the sector, and a note for the rest. Asked for in one line across
   the top of the meet, and never for a fixture that hasn't happened yet.
 - An athlete's profile reads the season two ways. Each personal best draws
-  the throws behind it — every measured mark at that event and weight,
-  against the calendar, the ones taken at a meet solid and the training
-  marks hollow — and says what the season moved, first mark to last rather
-  than best to best, since a best only ever goes up. Under the bests,
+  its own history: every throw that stood as the best at that event and
+  weight on the day it was taken, against the calendar, the ones set at a
+  meet solid and the ones set in training hollow — and says how far the
+  mark has come and how many times it was broken to get there. Only those
+  throws. A card under a heading that says PERSONAL BESTS is about the
+  mark, and the scatter of every measured throw it used to draw was
+  answering a different question — how the throwing is going — which the
+  averages below answer properly, meet by meet and season by season. So the
+  line climbs, because that is what a record does; a mark that only equals
+  the best does not reset it, the way a record stands until it is beaten
+  rather than matched. Under the bests,
   `MeetOuting` reads the meets from the athlete's side: the series round by
   round, which round the big throw came in, the field, the placing and the
   weather. The meets are looked up softly (`meetsOf`), like the athlete
   records, so a profile still paints with nothing but the clips.
+  The Marks list underneath holds what is left over: a mark a meet series
+  points at is written out round by round on that meet's own card, and
+  listing it again below is the same throw twice — so the list is the
+  throws no meet was keeping score for. They are still the athlete's marks
+  everywhere else, bests included; a meet's are edited where they were
+  entered, on the competition screen.
+- A best is the one throw that came off; the season is what the rest of
+  them average. `MeetSeries.average` is the mean of a series' legal marks
+  and `fouls` is what it cost — never rolled together, since a foul is a
+  throw that went unmeasured and averaging it in as zero would say an
+  athlete threw half as far as they did. `SeasonAverages` reads those over
+  a season, per event and weight the way a best is.
+  Competitions only. Training is thrown under conditions nobody is
+  recording — a light implement, a short run, a good day at the end of a
+  session — and a number built out of it answers a question about Saturday
+  with Tuesday's throwing. What an athlete does in training is drawn on the
+  progression under their best, where every measured throw is plotted
+  against the calendar; this section is about meets, and an athlete who has
+  not competed has no section at all.
+  A meet can be read two ways and both are worth asking — `MeetLine`: every
+  measured attempt of the series averaged, or the best of it, the throw the
+  placing was made on. An athlete whose averages climb while their bests
+  stand still is closing on something; one whose bests hold up on a falling
+  average is living off one throw a day. Neither shows on the other's line,
+  so a switch in the card's header picks which, and everything on the card
+  follows it at once — the figure, the line under it, and the seasons under
+  that. Which way is remembered (`throwlab.meetLine`), because it is a
+  preference about how a coach thinks rather than about one athlete.
+  The averages sit in their own section under the bests, headed the way a
+  competition names itself (`Discus · 1 kg`) rather than the way a record
+  book does (`1 kg Discus`), so the two lists don't read as the same rows
+  twice.
+  A card says one number large and the rest small. Averages set as equals
+  across the top read as rival answers to one question — 52.66 and 52.15
+  are near enough alike that nothing about them says which is which — so
+  the chosen reading leads, with what it was taken over written beneath it
+  in the words a coach would say ('over 5 throws at 2 meets · 3 of 10
+  fouled · 2 passed'; the fouls wear the app's red and the passes do not,
+  since a pass is a round given up on purpose). The other reading, and the
+  furthest thrown at a meet all season, follow as asides named in full. A
+  mean is never drawn off a single throw: a mean of one is the throw again
+  under a heading that promises a season.
+  It is said where it is thrown, too: under each meet on a profile, and
+  under the coach's own athletes in the standings — a coach at the ring is
+  asking what the afternoon is averaging, not only what the best of it was.
+- The averages are read one season at a time, and a season is a calendar
+  year (`SeasonAverages.seasonsOf`, `forSeason(season:)`). A career average
+  answers a question about this spring with the throwing of two years ago
+  in it, so the section opens on the most recent season with a competition
+  in it and the picker in its heading reaches the others, 'Every season'
+  included. An athlete who has competed in one season is never shown it —
+  there is nothing to tell apart — and the choice is not remembered between
+  athletes, since the default is already the season being coached. A year
+  is exactly right for an outdoor season and wrong for an indoor winter,
+  which is one season across two years; `seasonsOf` is the one place that
+  would have to learn the difference. The picker governs the section it
+  sits in and nothing else: a personal best is a personal best whatever
+  season it was thrown in.
+- Under the card, the seasons themselves (`SeasonAverages.history`): what
+  the meets came to each year, most recent first, read the same way the
+  rest of the card is, with what each moved from the year before. The chart
+  above it is the meets inside one season, which is the question asked in
+  June; this is the one asked in January. Rows rather than a line — four
+  points a year apart drawn as a line invent a shape between them nobody
+  threw — and the picker never narrows it, since the comparison is the one
+  thing on the card a season filter must not touch. What the bar draws is
+  the *change*, not the mark: a bar for a 48 m average beside one for 52 m
+  has to start somewhere, and anywhere but zero draws a seven per cent
+  season as a fivefold one, while zero draws two bars of the same length
+  and says nothing. A difference has a real zero.
 - A meet's results go out as a PDF, written by `pdf_writer` — as narrow as
   `pdf_text` is at the other end, and set in Courier, because a results
   sheet is columns and a fixed-width face lines them up without a table of
@@ -432,6 +684,23 @@ like the app rather than a bare Material default.
   the sheet, and named at the foot of it with what it beat. Only a tracked
   athlete can hold one, which falls out for free, because the rest of the
   field's distances never reach the library to be ranked.
+- Comparing two throws is one picker, opened two ways. `pickThrowsToCompare`
+  returns the pair in the order the comparison lays them out — A is the left
+  pane in landscape, the top one in portrait, and the clip the linked scrub
+  is driven from — so the sheet says which is which rather than leaving it
+  to the order things were tapped in. Opened from a throw, that throw is A
+  and one tap on a candidate opens the pair: it is the clip being watched,
+  and confirming it would be a tap spent on something already on screen.
+  Opened from the library, both halves go into slots that show what is
+  chosen and what is still missing, and a tap with both full lands in B —
+  the checkbox list this replaced swallowed the third tap, which is a
+  control that looks broken. The narrowing is chips named after the
+  reference throw's own event and athlete, on by default for the event
+  because a javelin release against a shot put says nothing, and droppable
+  because sometimes that is the comparison. Never onto an empty list,
+  though: with nothing else of that event the sheet opens wide. A filter or
+  a search that empties the list says which one did it and offers the one
+  tap that undoes it.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs
   to `AppUpdater`, not to the screen that started it, and writes into a part
@@ -447,3 +716,22 @@ like the app rather than a bare Material default.
   offered. The banner carries the progress; nothing is
   blocked while it runs. The installer is opened when the app is in front of
   somebody, which is the one part that cannot happen in the background.
+  The bytes do keep coming when somebody walks away, and that takes a
+  foreground service (`update_keep_alive.dart`). A backgrounded Flutter app
+  is a cached process — Android kills it when it wants the memory, and Doze
+  cuts its network once the screen has been off a while — so a download in
+  the main isolate stops whenever the system says so, which is exactly when
+  a coach has gone to film something. The service costs a notification and
+  buys a process Android leaves alone; the download stays in the main
+  isolate, resuming from the same part file as before, and the service only
+  holds it up. It is asked for and never depended on: every call goes
+  through `AppUpdater._holding`, which swallows whatever the service makes
+  of it, so a phone that refuses one downloads exactly as it did before any
+  of this — as far as Android allows, then onward from the part file next
+  time. That is the whole reason the download was wrapped in a service
+  rather than moved inside one. The service has to be declared in the
+  manifest by `.github/workflows/build-apk.yml`: the plugin's own manifest
+  merges in FOREGROUND_SERVICE, WAKE_LOCK and POST_NOTIFICATIONS, but not
+  the `<service>` element, not the Android 14+ `FOREGROUND_SERVICE_DATA_SYNC`
+  and not the `ACCESS_WIFI_STATE` the wifi lock wants — so the step asserts
+  both landed rather than trusting a `sed`.

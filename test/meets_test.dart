@@ -128,6 +128,54 @@ void main() {
       expect(series.filmedAt(1), isTrue);
     });
 
+    test('averages what was measured and counts what was not', () {
+      final entry = _entry();
+      // 69, foul, 67, 80, foul, 66 — the afternoon a coach wants a number
+      // for, fouls and all.
+      final rounds = <MeetAttempt>[
+        MeetAttempt.mark('m1'),
+        MeetAttempt.foul(),
+        MeetAttempt.mark('m2'),
+        MeetAttempt.mark('m3'),
+        MeetAttempt.foul(),
+        MeetAttempt.mark('m4'),
+      ];
+      for (var round = 0; round < rounds.length; round++) {
+        entry.setAttempt(round, rounds[round]);
+      }
+      final series = MeetSeries(entry, [
+        _mark('m1', 69),
+        _mark('m2', 67),
+        _mark('m3', 80),
+        _mark('m4', 66),
+      ]);
+      // Over the four that were measured: a foul is a throw that didn't
+      // count, not a throw of nothing.
+      expect(series.average, closeTo(70.50, 0.001));
+      expect(series.fouls, 2);
+      expect(series.passes, 0);
+      expect(series.best, 80);
+    });
+
+    test('a series with nothing on the board averages nothing', () {
+      final entry = _entry();
+      entry.setAttempt(0, MeetAttempt.foul());
+      entry.setAttempt(1, MeetAttempt.pass());
+      final series = MeetSeries(entry, const []);
+      expect(series.average, isNull);
+      expect(series.fouls, 1);
+      expect(series.passes, 1);
+    });
+
+    test('averages in the unit the competition was measured in', () {
+      final entry = _entry();
+      entry.setAttempt(0, MeetAttempt.foul());
+      entry.setAttempt(1, MeetAttempt.untracked(18.29, distanceUnit: DistanceUnit.feet));
+      final series = MeetSeries(entry, const []);
+      expect(series.unit, DistanceUnit.feet);
+      expect(series.average, 18.29);
+    });
+
     test('a pass is neither a distance nor a foul', () {
       final entry = _entry();
       entry.setAttempt(0, MeetAttempt.pass());

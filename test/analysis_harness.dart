@@ -169,36 +169,50 @@ Future<void> tapRail(WidgetTester tester, Finder control) async {
   await pumpFrames(tester, 30);
 }
 
-/// Tools that live behind the rail's shape menu rather than on the rail.
-const shapeToolIcons = [
+/// Tools that live behind the rail's placed-marks menu rather than on the
+/// rail itself.
+const placedToolIcons = [
   Icons.timeline,
   Icons.arrow_right_alt,
   Icons.turn_slight_right,
+  Icons.circle_outlined,
   Icons.square_foot,
+  Icons.timer_outlined,
 ];
 
-/// Selects a drawing tool, opening the shape menu when the tool lives
-/// there. [icon] is the tool's rail/menu icon.
+/// Selects a drawing tool, opening the placed-marks menu when the tool
+/// lives there. [icon] is the tool's rail/menu icon.
 Future<void> selectTool(WidgetTester tester, IconData icon) async {
-  if (shapeToolIcons.contains(icon)) {
-    // The button's icon is whichever shape is selected, so find it by key.
-    await tapRail(tester, find.byKey(const ValueKey('rail-shapes')));
+  if (placedToolIcons.contains(icon)) {
+    // The button's icon is whichever mark is selected, so find it by key.
+    await tapRail(tester, find.byKey(const ValueKey('rail-place')));
     await tapRail(tester, find.byIcon(icon).last);
     return;
   }
   await tapRail(tester, find.byIcon(icon));
 }
 
-/// Picks a color from the rail's color menu.
-Future<void> selectColor(WidgetTester tester, String name) async {
-  await tapRail(tester, find.byKey(const ValueKey('rail-color')));
-  await tapRail(tester, find.text(name));
+/// Opens whichever button carries that half of the pen: its own along a
+/// bar, the shared one up a column.
+Future<void> _openPen(WidgetTester tester, String key) async {
+  final own = find.byKey(ValueKey(key));
+  await tapRail(
+      tester,
+      own.evaluate().isEmpty ? find.byKey(const ValueKey('rail-pen')) : own);
 }
 
-/// Picks a pen width from the rail's width menu.
+/// Picks a color out of the rail's swatches. They carry their name as a
+/// tooltip rather than beside them — ten of them read as a grid, not as a
+/// list.
+Future<void> selectColor(WidgetTester tester, String name) async {
+  await _openPen(tester, 'rail-color');
+  await tapRail(tester, find.byTooltip(name));
+}
+
+/// Picks a pen width the same way.
 Future<void> selectWidth(WidgetTester tester, String label) async {
-  await tapRail(tester, find.byKey(const ValueKey('rail-width')));
-  await tapRail(tester, find.text('$label line'));
+  await _openPen(tester, 'rail-width');
+  await tapRail(tester, find.byTooltip('$label line'));
 }
 
 List<T> annotationsOf<T extends Annotation>(WidgetTester tester) {

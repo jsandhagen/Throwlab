@@ -6,6 +6,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'update_keep_alive.dart';
+
 const _releaseBase =
     'https://github.com/jsandhagen/Throwlab/releases/download/latest';
 const _versionUrl = '$_releaseBase/version.txt';
@@ -94,6 +96,11 @@ class AppUpdater {
   @visibleForTesting
   static Future<Directory> Function() stagingDirectory = getTemporaryDirectory;
 
+  /// What holds the process up while the bytes come down. Swapped out in a
+  /// test, where there is no foreground service to ask for.
+  @visibleForTesting
+  static UpdateKeepAlive keepAlive = const ForegroundKeepAlive();
+
   static Uri _fresh(String url) =>
       Uri.parse('$url?t=${DateTime.now().microsecondsSinceEpoch}');
 
@@ -167,6 +174,10 @@ class AppUpdater {
     );
 
     final client = openClient();
+    // Around the transfer and nothing else: the service is what stops
+    // Android killing this isolate or cutting its network while somebody is
+    // in the camera or has the phone in a pocket.
+    await _holding((k) => k.start(build));
     try {
       var have = await part.exists() ? await part.length() : 0;
       final request = http.Request('GET', _fresh(_apkUrl))
@@ -196,11 +207,13 @@ class AppUpdater {
         await for (final chunk in response.stream) {
           sink.add(chunk);
           received += chunk.length;
+          final fraction = total == null ? null : received / total;
           status.value = UpdateStatus(
             stage: UpdateStage.downloading,
             build: build,
-            progress: total == null ? null : received / total,
+            progress: fraction,
           );
+          await _holding((k) => k.report(fraction));
         }
       } finally {
         await sink.close();
@@ -222,6 +235,7 @@ class AppUpdater {
       );
     } finally {
       client.close();
+      await _holding((k) => k.stop());
     }
   }
 
@@ -292,6 +306,21 @@ class AppUpdater {
     final part = File('${dir.path}/ThrowLab.apk.part');
     if (!await part.exists() || staged != build) return;
     await download(build);
+  }
+
+  /// Runs one thing on the [keepAlive] and swallows whatever it makes of
+  /// it. Asked for, never depended on: a phone that refuses the service, or
+  /// one whose service dies on its own, still gets its update — it just
+  /// gets as far as Android lets it and picks the part file up next time,
+  /// which is what happened before there was a service at all. The download
+  /// is the point; the notification is not.
+  static Future<void> _holding(
+      Future<void> Function(UpdateKeepAlive) act) async {
+    try {
+      await act(keepAlive);
+    } catch (_) {
+      // Deliberately nothing.
+    }
   }
 
   /// Clears the staging directory: the APK, whatever part of one is there,

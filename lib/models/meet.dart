@@ -453,6 +453,47 @@ class MeetSeries {
   /// in because nobody had the camera up is not.
   bool filmedAt(int round) => resultAt(round) is ThrowVideo;
 
+  /// What the series averaged, over the throws that were measured.
+  ///
+  /// A foul is not a nought. It is a throw that went unmeasured, and
+  /// averaging it in as zero would say an athlete who fouled twice threw
+  /// half as far as they did — so it is counted in [fouls] instead, which
+  /// is the honest way to carry it. The two are read together: an average
+  /// off four marks and an average off six are different afternoons.
+  double? get average {
+    final marks = legalMarks;
+    if (marks.isEmpty) return null;
+    var total = 0.0;
+    for (final mark in marks) {
+      total += mark;
+    }
+    return total / marks.length;
+  }
+
+  /// How many rounds were thrown and not measured.
+  int get fouls => _rounds(AttemptKind.foul);
+
+  /// How many were passed up.
+  int get passes => _rounds(AttemptKind.pass);
+
+  int _rounds(AttemptKind kind) {
+    var count = 0;
+    for (final attempt in entry.attempts) {
+      if (attempt?.kind == kind) count++;
+    }
+    return count;
+  }
+
+  /// The unit the series was measured in — the first legal round's, since a
+  /// competition is measured one way all afternoon. Meters for a series
+  /// with nothing on the board, which has no mark to write anyway.
+  DistanceUnit get unit {
+    for (var round = 0; round < entry.attempts.length; round++) {
+      if (distanceAt(round) != null) return unitAt(round);
+    }
+    return DistanceUnit.meters;
+  }
+
   /// The furthest legal attempt — the one the athlete is placed on.
   double? get best {
     double? furthest;

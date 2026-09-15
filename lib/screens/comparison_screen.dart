@@ -707,17 +707,26 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     child: Stack(
                       children: [
                         Positioned.fill(child: _panes(landscape)),
-                        // Same rail as the analysis screen, in the same
-                        // corner: it acts on the pane last drawn in, and the
-                        // tool it sets arms both.
+                        // Same tools as the analysis screen, along the
+                        // bottom the same way: they act on the pane last
+                        // drawn in, and the tool they set arms both.
                         Positioned(
+                          // Anchored top as well as bottom so the rail is
+                          // handed a height: that is what tells it whether
+                          // the tools take one run up the edge or two.
+                          top: 4,
+                          left: 4,
                           right: 4,
                           bottom: 4,
-                          child: SingleChildScrollView(
-                            reverse: true,
+                          child: Align(
+                            alignment: Alignment.bottomRight,
                             child: DrawingRail(
-                                controller: _activeDrawing,
-                                initiallyOpen: false),
+                              controller: _activeDrawing,
+                              initiallyOpen: false,
+                              axis: landscape
+                                  ? Axis.vertical
+                                  : Axis.horizontal,
+                            ),
                           ),
                         ),
                       ],
@@ -925,7 +934,7 @@ class _VideoPaneState extends State<_VideoPane> {
     _zoomAtGestureStart = _zoom;
     if (details.pointerCount > 1) {
       // A pinch that began as a one-finger drag: discard the stray stroke.
-      if (_activeStroke) widget.drawing.undo();
+      if (_activeStroke) widget.drawing.discardStroke();
       _activeStroke = false;
       return;
     }
@@ -953,8 +962,16 @@ class _VideoPaneState extends State<_VideoPane> {
   }
 
   void _onTapUp(TapUpDetails details) {
-    if (widget.drawing.tool != DrawTool.angle || _videoRect.isEmpty) return;
-    addAngleVertex(widget.drawing, _normalize(details.localPosition));
+    if (_videoRect.isEmpty) return;
+    final point = _normalize(details.localPosition);
+    switch (widget.drawing.tool) {
+      case DrawTool.angle:
+        addAngleVertex(widget.drawing, point);
+      case DrawTool.timer:
+        dropTimer(widget.drawing, point, widget.controller.value.position);
+      default:
+        return;
+    }
     widget.onDraw?.call();
   }
 
@@ -1038,8 +1055,16 @@ class _VideoPaneState extends State<_VideoPane> {
                           ],
                         ),
                       ),
-                      DrawingCanvas(
-                          controller: widget.drawing, zoomScale: _zoom),
+                      // Rebuilt off this pane's own player, so a timer
+                      // dropped on one clip counts against that clip.
+                      ValueListenableBuilder<VideoPlayerValue>(
+                        valueListenable: widget.controller,
+                        builder: (context, value, _) => DrawingCanvas(
+                          controller: widget.drawing,
+                          zoomScale: _zoom,
+                          position: value.position,
+                        ),
+                      ),
                     ],
                   ),
                 ),

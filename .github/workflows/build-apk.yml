@@ -41,10 +41,20 @@ jobs:
       - name: Generate Android platform folder
         run: flutter create . --platforms=android --project-name throwlab
       # The in-app updater downloads the new APK (INTERNET) and hands it to
-      # the system installer (REQUEST_INSTALL_PACKAGES).
+      # the system installer (REQUEST_INSTALL_PACKAGES). It downloads under a
+      # foreground service so leaving the app doesn't stop it: that needs the
+      # Android 14+ type permission and a wifi lock, and the service itself
+      # has to be declared here — flutter_foreground_task's own manifest
+      # merges in FOREGROUND_SERVICE, WAKE_LOCK and POST_NOTIFICATIONS, but
+      # not these and not the <service> element.
       - name: Add updater permissions to manifest
         run: |
-          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />\n    <application|' android/app/src/main/AndroidManifest.xml
+          sed -i 's|</application>|    <service\n            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"\n            android:foregroundServiceType="dataSync"\n            android:exported="false" />\n    </application>|' android/app/src/main/AndroidManifest.xml
+          # A silently failed sed here ships an app whose update stops the
+          # moment the phone is locked, so prove both landed.
+          grep -q 'FOREGROUND_SERVICE_DATA_SYNC' android/app/src/main/AndroidManifest.xml
+          grep -q 'flutter_foreground_task.service.ForegroundService' android/app/src/main/AndroidManifest.xml
       # ffmpeg-kit requires Android 7+ (API 24).
       - name: Raise minSdk for ffmpeg-kit
         run: |
@@ -79,6 +89,59 @@ jobs:
         run: |
           unzip -p build/app/outputs/flutter-apk/app-release.apk 'classes*.dex' \
             | grep -aq "io/flutter/plugins/sharedpreferences/SharedPreferencesPlugin"
+          unzip -p build/app/outputs/flutter-apk/app-release.apk 'classes*.dex' \
+            | grep -aq "com/pravera/flutter_foreground_task/FlutterForegroundTaskPlugin"
+      # The seds above edit the source manifest; what runs on the phone is the
+      # *merged* one. A service missing from that throws at startService, the
+      # updater quietly falls back to downloading only while the app is open,
+      # and nobody finds out until a download dies at the lock screen — so
+      # read it back off the built APK rather than trusting the merge.
+      - name: Verify the foreground service survived the manifest merge
+        run: |
+          # AGP writes the merged manifest as plain XML on the way to the APK,
+          # which is worth more than aapt2's dump of the binary one: it is
+          # readable, so a failure here can say what it actually found.
+          # build/app, not build/ and not android/app/build: Flutter points
+          # Gradle's build directory at the project root (which is why the
+          # APK above comes out of build/app/outputs) and every plugin gets
+          # a sibling directory there — searching build/ finds ffmpeg-kit's
+          # merged manifest, which was never going to declare our service.
+          MERGED=$(find build/app -name AndroidManifest.xml -path '*merged*' \
+            -path '*release*' 2>/dev/null | head -1)
+          if [ -z "$MERGED" ]; then
+            echo "no merged manifest for the app; every manifest under build/:"
+            find build -name AndroidManifest.xml | head -30
+            exit 1
+          fi
+          # Prove it is the app's before believing anything it does or does
+          # not say: the last failure read a plugin's manifest and reported
+          # four things missing from a file that never had them.
+          if ! grep -q 'MainActivity' "$MERGED"; then
+            echo "$MERGED is not the app's manifest (no MainActivity); candidates:"
+            find build/app -name AndroidManifest.xml -path '*merged*' | head -20
+            exit 1
+          fi
+          echo "reading $MERGED"
+          echo "--- what it declares ---"
+          grep -nE 'uses-permission|<service|foregroundServiceType' "$MERGED" || true
+          echo "------------------------"
+          fail=0
+          for want in \
+            'com.pravera.flutter_foreground_task.service.ForegroundService' \
+            'android.permission.FOREGROUND_SERVICE_DATA_SYNC' \
+            'android.permission.FOREGROUND_SERVICE"' \
+            'foregroundServiceType="dataSync"'; do
+            if grep -qF "$want" "$MERGED"; then
+              echo "ok   $want"
+            else
+              echo "MISSING   $want"
+              fail=1
+            fi
+          done
+          # A service missing here throws at startService, the updater
+          # swallows it, and downloading quietly goes back to working only
+          # while the app is open — so this is worth failing the build for.
+          [ "$fail" = 0 ]
       # Gradle signs with a debug keystore generated per-runner, which changes
       # the signature every build and makes Android reject updates over the
       # previous install. Re-sign deterministically with the repo keystore,
