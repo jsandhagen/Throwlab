@@ -288,6 +288,29 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   Duration get _loopWindow => _loopLeadIn + _loopFollowThrough;
 
+  /// Whether there is a release loop to play: *both* releases marked, with
+  /// footage around them to run.
+  ///
+  /// Linked is not the same question, and answering it with the window
+  /// alone was the bug. A release that has not been marked is
+  /// [Duration.zero] — the same sentinel the sync row reads to say 'Set
+  /// release' — so an unmarked clip contributes a lead-in of nothing while
+  /// the follow-through still comes out at the full 1.5 s off the clips'
+  /// lengths. The window was therefore positive for any pair of clips with
+  /// a second and a half in them, and hitting the link button before
+  /// marking anything turned play into a 1.5-second loop of the top of each
+  /// clip rather than the two throws playing. Mark one release and only
+  /// that clip loops around something; the other sits replaying its first
+  /// second and a half.
+  ///
+  /// [CompareLoop.hasWindow] states the same rule for the stills path, and
+  /// the two have to agree — the decoders are the fallback for the same
+  /// routine, not a second feature.
+  bool get _hasReleaseLoop =>
+      _syncA > Duration.zero &&
+      _syncB > Duration.zero &&
+      _loopWindow > Duration.zero;
+
   /// How the loop plays the two throws. Only reachable on the stills path:
   /// holding one clip still while the other finishes its throw is indexing
   /// two sets of frames off one clock, which is not something two video
@@ -434,7 +457,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     // Both releases marked: play the same window around each, on a loop —
     // off the stills where the clips have them, since two of these clips
     // will not decode side by side.
-    if (_linked && _loopWindow > Duration.zero) {
+    if (_hasReleaseLoop) {
       final stills = _stills;
       if (stills != null) {
         _playStills(stills);
@@ -843,7 +866,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       ),
                       IconButton(
                         iconSize: 56,
-                        tooltip: !_linked
+                        tooltip: !_hasReleaseLoop
                             ? 'Play both'
                             : _staggered
                                 ? 'Play in together, then each throw in turn, '
@@ -874,7 +897,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       ),
                       // Only where the loop can honor it: linked, and with
                       // stills on both clips to index.
-                      if (_linked && _stills != null) ...[
+                      if (_hasReleaseLoop && _stills != null) ...[
                         const SizedBox(width: 8),
                         IconButton(
                           tooltip: _staggered

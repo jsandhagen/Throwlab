@@ -708,6 +708,23 @@ like the app rather than a bare Material default.
   though: with nothing else of that event the sheet opens wide. A filter or
   a search that empties the list says which one did it and offers the one
   tap that undoes it.
+- Linking two clips and looping them are two different questions, and the
+  loop is armed by the *releases*. `_linked` is one scrubber driving both,
+  which is worth having on any pair; the release loop plays the same
+  stretch around each release over and over, which needs both releases
+  marked to mean anything. An unmarked release is `Duration.zero` — the
+  sentinel the sync row reads to say 'Set release' — so an unmarked clip
+  contributes no lead-in while the follow-through still comes out at the
+  full 1.5 s off the clips' lengths, and a window read on its own is
+  positive for any two clips with a second and a half in them. Gated on
+  that, hitting the link button before marking anything turned play into a
+  1.5-second loop of the top of each clip. `_hasReleaseLoop` is the rule —
+  both releases marked, and a window around them — and
+  `CompareLoop.hasWindow` states the same one for the stills path. The two
+  have to agree: the decoders are the fallback for the same routine, not a
+  second feature. The stagger toggle hangs off it too, since a routine that
+  holds one throw while the other finishes has nothing to hold around
+  without releases.
 - Either clip in a comparison can be turned left-to-right, because two
   throws are rarely filmed from the same side of the ring: a right-hander
   seen from the left is the mirror of the same right-hander seen from the

@@ -291,6 +291,73 @@ void main() {
   });
 
   group('the release loop', () {
+    /// Turns the link on by hand, which is the only way to reach it with a
+    /// release still unmarked — marking both links the clips on its own.
+    Future<void> linkByHand(WidgetTester tester) async {
+      await tester.tap(find.byIcon(Icons.link_off));
+      await pumpFrames(tester);
+    }
+
+    /// Plays, then lets four seconds of wall time go by — long enough at
+    /// half speed for a 1.5-second window to have come round twice.
+    Future<void> playAWhile(WidgetTester tester) async {
+      platform.plays.clear();
+      platform.seeks.clear();
+      await tester.tap(find.byIcon(Icons.play_circle));
+      for (var i = 0; i < 40; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+    }
+
+    testWidgets('linking alone does not turn play into a loop',
+        (tester) async {
+      // The link is about one scrubber driving both clips; the loop is
+      // about the releases. Reading the window alone said there was a loop
+      // whenever the clips held a second and a half between them, so
+      // linking before marking anything replayed the top of each clip over
+      // and over instead of playing the two throws.
+      await mount(tester);
+      await linkByHand(tester);
+
+      await playAWhile(tester);
+
+      expect(platform.plays, hasLength(2));
+      expect(platform.plays.toSet(), {1, 2});
+      // A rewind here is the loop coming round on a window nobody marked.
+      expect(platform.seeks, isEmpty);
+    });
+
+    testWidgets('one release marked is still not a loop', (tester) async {
+      // Worse than no releases: the marked clip would loop around
+      // something and the unmarked one around its own first frames, which
+      // is two clips running to different places at once.
+      await mount(tester);
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(400, 0));
+      await pumpFrames(tester, 20);
+      await tester.tap(find.text('Set release').first);
+      await pumpFrames(tester, 10);
+      await linkByHand(tester);
+
+      await playAWhile(tester);
+
+      expect(platform.plays, hasLength(2));
+      expect(platform.seeks, isEmpty);
+    });
+
+    testWidgets('marking the second release is what arms it', (tester) async {
+      await mount(tester);
+      await markReleases(tester);
+
+      await playAWhile(tester);
+
+      // Both rewound to the top of their own window, more than once.
+      expect(platform.seeks.where((seek) => seek.playerId == 1).length,
+          greaterThan(1));
+      expect(platform.seeks.where((seek) => seek.playerId == 2).length,
+          greaterThan(1));
+    });
+
+
     testWidgets('play starts both clips, the same run-up before each release',
         (tester) async {
       await mount(tester);
