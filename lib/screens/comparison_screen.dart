@@ -273,6 +273,22 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   Duration get _loopWindow => _loopLeadIn + _loopFollowThrough;
 
+  /// How the loop plays the two throws. Only reachable on the stills path:
+  /// holding one clip still while the other finishes its throw is indexing
+  /// two sets of frames off one clock, which is not something two video
+  /// players told to wait can be relied on to do.
+  CompareRoutine _routine = CompareRoutine.together;
+
+  void _setRoutine(CompareRoutine routine) {
+    setState(() => _routine = routine);
+    // From the top of the new routine, so the change is something you see
+    // rather than a jump into the middle of a leg that has no counterpart.
+    final stills = _stills;
+    if (stills == null) return;
+    stills.routine = routine;
+    if (stills.running) _playStills(stills);
+  }
+
   /// The still-driven loop, or null when a clip has no extracted frames.
   /// Nothing listens to it at screen level on purpose: the panes repaint off
   /// [ScrubFrames.current] on their own, so only the transport's readout
@@ -305,6 +321,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   void _playStills(CompareLoop stills) {
     stills
       ..speed = _speed
+      ..routine = _routine
       ..setClips(
         syncA: _syncA,
         syncB: _syncB,
@@ -376,6 +393,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   /// Either loop is running — the stills one when the clips have frames, the
   /// decoder one when they don't.
   bool get _playingLoop => _looping || (_stills?.running ?? false);
+
+  bool get _staggered => _routine == CompareRoutine.inTurn;
 
   /// Takes down any scrub still left over a pane before the clips run. The
   /// overlay holds the last still until the decoder has caught up, and a
@@ -757,9 +776,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       ),
                       IconButton(
                         iconSize: 56,
-                        tooltip: _linked
-                            ? 'Play both around the release, on a loop'
-                            : 'Play both',
+                        tooltip: !_linked
+                            ? 'Play both'
+                            : _staggered
+                                ? 'Play in together, then each throw in turn, '
+                                    'on a loop'
+                                : 'Play both around the release, on a loop',
                         icon: Icon(_controllerA.value.isPlaying || _playingLoop
                             ? Icons.pause_circle
                             : Icons.play_circle),
@@ -783,6 +805,24 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                           setState(() => _linked = !_linked);
                         },
                       ),
+                      // Only where the loop can honor it: linked, and with
+                      // stills on both clips to index.
+                      if (_linked && _stills != null) ...[
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: _staggered
+                              ? 'Releases together'
+                              : 'Stagger: run in together, then each throw '
+                                  'finishes on its own',
+                          isSelected: _staggered,
+                          icon: Icon(_staggered
+                              ? Icons.alt_route
+                              : Icons.compare_arrows),
+                          onPressed: () => _setRoutine(_staggered
+                              ? CompareRoutine.together
+                              : CompareRoutine.inTurn),
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       SpeedMenuButton(
                         speed: _speed,

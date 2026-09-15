@@ -208,6 +208,37 @@ void main() {
       expect(find.byIcon(Icons.pause_circle), findsOneWidget);
     });
 
+    testWidgets('the stagger toggle is only offered where it can be honored',
+        (tester) async {
+      await mount(tester);
+      await markReleases(tester);
+      // No stills on these clips, so the loop is running on the decoders and
+      // cannot hold one throw while the other finishes.
+      expect(find.byIcon(Icons.compare_arrows), findsNothing);
+    });
+
+    testWidgets('staggered, the two hold and then finish one at a time',
+        (tester) async {
+      for (final video in [videoA, videoB]) {
+        video.scrubFramesDir = '${temp.path}/frames-${video.id}';
+        video.scrubFrameCount = 300;
+        video.scrubFrameStride = 1;
+      }
+      await mount(tester);
+      await markReleases(tester);
+
+      await tester.tap(find.byIcon(Icons.compare_arrows));
+      await pumpFrames(tester);
+      // Selected, and still nothing handed to a decoder.
+      expect(find.byIcon(Icons.alt_route), findsOneWidget);
+
+      platform.plays.clear();
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 20);
+      expect(platform.plays, isEmpty);
+      expect(find.byIcon(Icons.pause_circle), findsOneWidget);
+    });
+
     testWidgets('without stills it still plays, on the decoders',
         (tester) async {
       await mount(tester);
