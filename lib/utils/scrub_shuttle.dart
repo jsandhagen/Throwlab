@@ -64,13 +64,19 @@ class ScrubShuttle extends ChangeNotifier {
   bool get handoff => _handoff;
   bool _handoff = false;
 
+  /// Something other than a drag is driving the stills and wants them shown
+  /// — the comparison screen's loop plays them straight through rather than
+  /// running two video decoders at once.
+  bool get presenting => _presenting;
+  bool _presenting = false;
+
   /// Whether the still overlay should be covering the video right now.
   bool get overlayVisible =>
-      _frames != null && ((_scrubbing && _moved) || _handoff);
+      _frames != null && ((_scrubbing && _moved) || _handoff || _presenting);
 
   /// Something scrub-related is still in flight; used to hold off work that
   /// would compete with it (re-extracting stills, tearing the set down).
-  bool get busy => _scrubbing || _handoff || _ticker.isActive;
+  bool get busy => _scrubbing || _handoff || _presenting || _ticker.isActive;
 
   Timer? _handoffTimer;
   VoidCallback? _handoffWatch;
@@ -320,11 +326,40 @@ class ScrubShuttle extends ChangeNotifier {
   void release() {
     stopHandoff();
     if (_ticker.isActive) _ticker.stop();
-    if (!_scrubbing && !_handoff && !_moved) return;
+    if (!_scrubbing && !_handoff && !_moved && !_presenting) return;
     _scrubbing = false;
     _handoff = false;
     _moved = false;
+    _presenting = false;
     notifyListeners();
+  }
+
+  /// Puts the still overlay up and leaves it up for a caller that is driving
+  /// the frames itself. The decoder underneath is paused: the stills are the
+  /// picture now, which is the point — two of these clips will not decode
+  /// side by side.
+  void present() {
+    if (_frames == null || _presenting) return;
+    stopHandoff();
+    if (_ticker.isActive) _ticker.stop();
+    controller.pause();
+    _scrubbing = false;
+    _moved = false;
+    _handoff = false;
+    _presenting = true;
+    notifyListeners();
+  }
+
+  /// Ends a [present] on the still at [imageIndex], handing the picture back
+  /// to the decoder exactly the way the end of a scrub does — the still is
+  /// held until the video has actually arrived on that frame, so what the
+  /// loop stopped on is what stays on screen.
+  void handBack(int imageIndex) {
+    if (!_presenting) return;
+    _presenting = false;
+    _handoff = true;
+    notifyListeners();
+    _startVideoHandoff(imageIndex);
   }
 
   void _clearHandoff() {

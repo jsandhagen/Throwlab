@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/video_optimizer.dart';
+import '../utils/compare_loop.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/scrub_frames.dart';
 import '../utils/scrub_shuttle.dart';
@@ -149,6 +150,15 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       vsync: this,
       frames: _framesB,
     );
+    // The stills path, when both clips have frames to play: two 1440p
+    // decoders side by side is the thing a phone cannot be relied on to do,
+    // and the extracted frames are already the same picture. A clip filmed
+    // at a meet and not yet opened in the analyzer has none, and those two
+    // fall back to the decoders below.
+    final framesA = _framesA, framesB = _framesB;
+    if (framesA != null && framesB != null) {
+      _stills = CompareLoop(framesA: framesA, framesB: framesB, vsync: this);
+    }
     _drawA.addListener(_syncToolsFromA);
     _drawB.addListener(_syncToolsFromB);
     // Eagerly, like the shuttles': a screen closed without ever pressing
@@ -194,6 +204,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     _drawB.removeListener(_syncToolsFromB);
     _drawA.dispose();
     _drawB.dispose();
+    _stills?.dispose();
     _shuttleA.dispose();
     _shuttleB.dispose();
     _framesA?.dispose();
@@ -237,9 +248,11 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   // two unrelated instants side by side.
 
   /// The run-up and the flight the loop aims to include, before trimming to
-  /// what the clips actually hold.
-  static const _loopLead = Duration(milliseconds: 2000);
-  static const _loopTail = Duration(milliseconds: 1500);
+  /// what the clips actually hold. Taken from [CompareLoop] rather than
+  /// restated: the fallback below plays the same window off the decoders,
+  /// and two definitions of it would drift.
+  static const _loopLead = CompareLoop.lead;
+  static const _loopTail = CompareLoop.tail;
 
   static Duration _shorter(Duration a, Duration b) => a < b ? a : b;
 
@@ -260,6 +273,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   Duration get _loopWindow => _loopLeadIn + _loopFollowThrough;
 
+  /// The still-driven loop, or null when a clip has no extracted frames.
+  /// Nothing listens to it at screen level on purpose: the panes repaint off
+  /// [ScrubFrames.current] on their own, so only the transport's readout
+  /// rebuilds per tick (see [_linkedRow]) rather than the whole screen.
+  CompareLoop? _stills;
+
   late final Ticker _loopTicker;
 
   /// Clip time played since this pass through the window began, and the
@@ -278,6 +297,38 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       _controllerA.seekTo(_clampToDuration(_syncA - lead, _controllerA)),
       _controllerB.seekTo(_clampToDuration(_syncB - lead, _controllerB)),
     ]);
+  }
+
+  /// Plays the window off the extracted stills. Both panes raise their
+  /// overlay and the loop drives the frames behind it; the video decoders
+  /// sit paused underneath, which is the whole point.
+  void _playStills(CompareLoop stills) {
+    stills
+      ..speed = _speed
+      ..setClips(
+        syncA: _syncA,
+        syncB: _syncB,
+        durationA: _controllerA.value.duration,
+        durationB: _controllerB.value.duration,
+      );
+    _controllerA.pause();
+    _controllerB.pause();
+    _shuttleA.present();
+    _shuttleB.present();
+    stills.start();
+    setState(() {});
+  }
+
+  /// Hands the picture back to the video decoders on the frames the loop
+  /// stopped on, so pausing leaves the two throws where they were rather
+  /// than snapping back to wherever the players were parked.
+  void _stopStills() {
+    final stills = _stills;
+    if (stills == null || !stills.running) return;
+    final shown = stills.shownIndices;
+    stills.stop();
+    _shuttleA.handBack(shown.a);
+    _shuttleB.handBack(shown.b);
   }
 
   Future<void> _playLoop() async {
@@ -319,28 +370,43 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   void _stopLoop() {
     if (_loopTicker.isActive) _loopTicker.stop();
+    _stopStills();
   }
+
+  /// Either loop is running — the stills one when the clips have frames, the
+  /// decoder one when they don't.
+  bool get _playingLoop => _looping || (_stills?.running ?? false);
 
   /// Takes down any scrub still left over a pane before the clips run. The
   /// overlay holds the last still until the decoder has caught up, and a
   /// still is a frozen frame: left up over a video that has just started, it
   /// is that pane appearing to freeze for as long as the handoff lasts.
   void _uncoverVideo() {
+    _stills?.stop();
     _shuttleA.release();
     _shuttleB.release();
   }
 
   void _togglePlay() {
-    if (_controllerA.value.isPlaying || _controllerB.value.isPlaying) {
+    if (_controllerA.value.isPlaying ||
+        _controllerB.value.isPlaying ||
+        _playingLoop) {
       _stopLoop();
       _controllerA.pause();
       _controllerB.pause();
       setState(() {});
       return;
     }
-    // Both releases marked: play the same window around each, on a loop.
+    // Both releases marked: play the same window around each, on a loop —
+    // off the stills where the clips have them, since two of these clips
+    // will not decode side by side.
     if (_linked && _loopWindow > Duration.zero) {
-      _playLoop();
+      final stills = _stills;
+      if (stills != null) {
+        _playStills(stills);
+      } else {
+        _playLoop();
+      }
       return;
     }
     _uncoverVideo();
@@ -486,7 +552,24 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   /// Single scrubber shown while linked: drags both videos through their
   /// sync points on A's timeline.
+  /// Where the linked scrubber sits: the loop's own position while it is
+  /// playing the stills — the decoders are parked then, so theirs would sit
+  /// still — and the player's the rest of the time.
+  Duration get _linkedPosition {
+    final stills = _stills;
+    if (stills != null && stills.running) return stills.poses.a;
+    return _controllerA.value.position;
+  }
+
+  Widget _linkedSlider(int durationMs) => Slider(
+        value: _linkedPosition.inMilliseconds.clamp(0, durationMs).toDouble(),
+        max: durationMs == 0 ? 1 : durationMs.toDouble(),
+        onChanged: (ms) => _seekBoth(
+            snapToFrame(Duration(milliseconds: ms.round()), widget.videoA.fps)),
+      );
+
   Widget _linkedRow() {
+    final stills = _stills;
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: _controllerA,
       builder: (context, value, _) {
@@ -503,15 +586,14 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 children: [
                   SizedBox(
                     height: 24,
-                    child: Slider(
-                      value: value.position.inMilliseconds
-                          .clamp(0, durationMs)
-                          .toDouble(),
-                      max: durationMs == 0 ? 1 : durationMs.toDouble(),
-                      onChanged: (ms) => _seekBoth(snapToFrame(
-                          Duration(milliseconds: ms.round()),
-                          widget.videoA.fps)),
-                    ),
+                    // Only the slider follows the loop, so a routine running
+                    // at 60 fps repaints a thumb rather than the screen.
+                    child: stills == null
+                        ? _linkedSlider(durationMs)
+                        : AnimatedBuilder(
+                            animation: stills,
+                            builder: (context, _) => _linkedSlider(durationMs),
+                          ),
                   ),
                   // One wheel through both clips, on A's timeline.
                   _wheel(_shuttleA, widget.videoA, linked: true),
@@ -678,7 +760,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                         tooltip: _linked
                             ? 'Play both around the release, on a loop'
                             : 'Play both',
-                        icon: Icon(_controllerA.value.isPlaying
+                        icon: Icon(_controllerA.value.isPlaying || _playingLoop
                             ? Icons.pause_circle
                             : Icons.play_circle),
                         onPressed: _togglePlay,
@@ -708,6 +790,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                           setState(() => _speed = s);
                           _controllerA.setPlaybackSpeed(s);
                           _controllerB.setPlaybackSpeed(s);
+                          // The stills loop keeps its place across this: the
+                          // routine's legs are re-timed rather than restarted.
+                          _stills?.speed = s;
                         },
                       ),
                       const SizedBox(width: 16),

@@ -142,6 +142,30 @@ void main() {
     });
   });
 
+  Duration lastSeek(int playerId) =>
+      platform.seeks.lastWhere((seek) => seek.playerId == playerId).position;
+
+  /// Scrubs each clip somewhere different and marks it as the release,
+  /// which is what links the two.
+  Future<({Duration a, Duration b})> markReleases(WidgetTester tester) async {
+    await tester.drag(find.byType(ScrubWheel).first, const Offset(400, 0));
+    await pumpFrames(tester, 20);
+    final releaseA = lastSeek(1);
+    await tester.tap(find.text('Set release').first);
+    await pumpFrames(tester, 10);
+
+    await tester.drag(find.byType(ScrubWheel).last, const Offset(250, 0));
+    await pumpFrames(tester, 20);
+    final releaseB = lastSeek(2);
+    await tester.tap(find.text('Set release'));
+    await pumpFrames(tester, 10);
+
+    expect(releaseA, greaterThan(Duration.zero));
+    expect(releaseB, greaterThan(Duration.zero));
+    expect(releaseA, isNot(releaseB));
+    return (a: releaseA, b: releaseB);
+  }
+
   group('playing both at once', () {
     testWidgets('both clips are opened mixing with other audio',
         (tester) async {
@@ -161,6 +185,43 @@ void main() {
       expect(platform.volumes, {1: 0.0, 2: 0.0});
     });
 
+    testWidgets('with stills, the loop plays those and never the decoders',
+        (tester) async {
+      // Both clips have extracted frames, which is the normal case — they
+      // are made at import.
+      for (final video in [videoA, videoB]) {
+        video.scrubFramesDir = '${temp.path}/frames-${video.id}';
+        video.scrubFrameCount = 300;
+        video.scrubFrameStride = 1;
+      }
+      await mount(tester);
+      await markReleases(tester);
+
+      platform.plays.clear();
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 20);
+
+      // Nothing was asked to decode. Two 1440p players side by side is the
+      // thing that stalled; the stills are the picture instead.
+      expect(platform.plays, isEmpty);
+      // And the transport knows it is running, so the button says pause.
+      expect(find.byIcon(Icons.pause_circle), findsOneWidget);
+    });
+
+    testWidgets('without stills it still plays, on the decoders',
+        (tester) async {
+      await mount(tester);
+      await markReleases(tester);
+
+      platform.plays.clear();
+      await tester.tap(find.byIcon(Icons.play_circle));
+      await pumpFrames(tester, 10);
+
+      // A clip filmed at a meet and not yet opened in the analyzer has no
+      // frames to play, so the old path carries it.
+      expect(platform.plays.toSet(), {1, 2});
+    });
+
     testWidgets('play runs both before any release is marked', (tester) async {
       await mount(tester);
 
@@ -173,30 +234,6 @@ void main() {
   });
 
   group('the release loop', () {
-    Duration lastSeek(int playerId) =>
-        platform.seeks.lastWhere((seek) => seek.playerId == playerId).position;
-
-    /// Scrubs each clip somewhere different and marks it as the release,
-    /// which is what links the two.
-    Future<({Duration a, Duration b})> markReleases(WidgetTester tester) async {
-      await tester.drag(find.byType(ScrubWheel).first, const Offset(400, 0));
-      await pumpFrames(tester, 20);
-      final releaseA = lastSeek(1);
-      await tester.tap(find.text('Set release').first);
-      await pumpFrames(tester, 10);
-
-      await tester.drag(find.byType(ScrubWheel).last, const Offset(250, 0));
-      await pumpFrames(tester, 20);
-      final releaseB = lastSeek(2);
-      await tester.tap(find.text('Set release'));
-      await pumpFrames(tester, 10);
-
-      expect(releaseA, greaterThan(Duration.zero));
-      expect(releaseB, greaterThan(Duration.zero));
-      expect(releaseA, isNot(releaseB));
-      return (a: releaseA, b: releaseB);
-    }
-
     testWidgets('play starts both clips, the same run-up before each release',
         (tester) async {
       await mount(tester);
