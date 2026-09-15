@@ -49,6 +49,7 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/season_preview.dart \
                               tool/preview/analysis_preview.dart \
                               tool/preview/compare_preview.dart \
+                              tool/preview/comparison_preview.dart \
                               tool/preview/gold_preview.dart
 ```
 
@@ -101,7 +102,10 @@ strip put away on its tab — and the compare picker: both slots still empty,
 one filled, both filled and ready to open, the sheet as it opens off a
 throw, the same sheet off the event filter, and a search that found
 something and one that found nothing, all under a navigation bar, which is
-what the button at the foot of the sheet has to clear — and the gold itself: the medal at
+what the button at the foot of the sheet has to clear — and the comparison
+itself: the two panes across a landscape screen and up a narrow one, the
+mirror offered against each clip, and a mark on A before and after A is
+turned round — and the gold itself: the medal at
 every size the app pins it at, on a line of type and on a card's corner
 beside the frame, and then one big enough to see what was drawn. Open the
 PNGs to see exactly what the screen paints. **Re-run it
@@ -123,12 +127,14 @@ it rather than rolling your own:
   Test bindings fake out async work, so an image first resolved inside a pump
   never finishes decoding and the thumbnail paints empty.
 
-The analysis preview is the one that borrows from `test/`: it mounts the
-real screen on the widget tests' in-memory player, so the 'video' is a flat
-blue rectangle — which is the point, since what is being looked at is where
+The analysis and comparison previews are the ones that borrow from `test/`:
+they mount the real screen on the widget tests' in-memory player, so the
+'video' is a flat blue rectangle — which is the point, since what is being looked at is where
 the chrome sits over the frame and how much of it it costs. Its clip is
 stamped as already having scrub frames, so the screen never reaches for the
-ffmpeg and path_provider plugins that aren't behind a widget test.
+ffmpeg and path_provider plugins that aren't behind a widget test. A flat
+rectangle cannot show a mirror, so the comparison preview draws a stroke on
+a pane and then flips it: the ink is the only thing in there that moves.
 
 Sample throws and their thumbnails come from `sample_library.dart`, generated
 at run time (there is a tiny PNG encoder at the bottom of it), so no fixtures
@@ -702,6 +708,25 @@ like the app rather than a bare Material default.
   though: with nothing else of that event the sheet opens wide. A filter or
   a search that empties the list says which one did it and offers the one
   tap that undoes it.
+- Either clip in a comparison can be turned left-to-right, because two
+  throws are rarely filmed from the same side of the ring: a right-hander
+  seen from the left is the mirror of the same right-hander seen from the
+  right, so side by side the two turn away from each other and as ghosts
+  they cross. It is a way of looking rather than an edit — the file on disk
+  and the stored annotations are untouched. The picture turns over with a
+  `Transform` around the player and its scrub still together (one of them
+  flipped would swap the throw end for end at every scrub handoff), and the
+  marks turn with it through `DrawingCanvas(mirrored: ...)`, which reverses
+  the *geometry* in the painter rather than the layer. Reversing the layer
+  would set the two things the canvas paints as words — an angle's degrees
+  and a timer's clock — backwards. A touch on a mirrored pane is read at
+  1 - x, so a mark is stored against the clip's own frame and stays on the
+  shoulder it was drawn on when the flip comes back off. The control is a
+  tick against each clip, down in the transport beside the link rather than
+  up in the app bar: the bar already carries the fit and the mode, and a
+  fourth control there cut the title to 'Javelin:…' on a narrow phone,
+  while the transport wraps and so can never be the thing that runs off the
+  edge.
 - A modal bottom sheet is only safe at the top. `useSafeArea` insets the
   top and leaves the bottom to the sheet, which is right — a sheet runs to
   the bottom edge — but it means anything at the foot of one has to add

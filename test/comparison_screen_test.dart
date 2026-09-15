@@ -51,6 +51,32 @@ void main() {
   Size videoSizeOf(WidgetTester tester, int index) =>
       tester.getSize(find.byType(VideoPlayer).at(index));
 
+  /// The annotations painted over pane [index] (0 = A, 1 = B).
+  List<T> paneAnnotations<T extends Annotation>(
+      WidgetTester tester, int index) {
+    final paint = tester.widget<CustomPaint>(find.descendant(
+        of: find.byType(DrawingCanvas).at(index),
+        matching: find.byType(CustomPaint)));
+    return ((paint.painter as dynamic).annotations as List)
+        .whereType<T>()
+        .toList();
+  }
+
+  /// The rail starts collapsed here — the video area is already split
+  /// between two clips.
+  Future<void> openRail(WidgetTester tester) =>
+      tapRail(tester, find.byKey(const ValueKey('rail-collapse')));
+
+  /// A stroke across the middle of pane [index].
+  Future<void> drawInPane(WidgetTester tester, int index) async {
+    final pane = tester.getRect(find.byType(VideoPlayer).at(index));
+    await drawAlong(tester, [
+      pane.center - const Offset(40, 20),
+      pane.center,
+      pane.center + const Offset(40, 20),
+    ]);
+  }
+
   group('framing', () {
     testWidgets('fills the pane instead of letterboxing it', (tester) async {
       await mount(tester);
@@ -320,33 +346,111 @@ void main() {
     });
   });
 
+  group('mirroring', () {
+    /// Which way round the picture in pane [index] is drawn: 1 as filmed,
+    /// -1 reversed. The transform sits between the pane and the player, so
+    /// the nearest one above the player is the flip.
+    double facingOf(WidgetTester tester, int index) => tester
+        .widget<Transform>(find
+            .ancestor(
+                of: find.byType(VideoPlayer).at(index),
+                matching: find.byType(Transform))
+            .first)
+        .transform
+        .getColumn(0)
+        .x;
+
+    Future<void> mirrorClip(WidgetTester tester, String letter) async {
+      await tester.tap(find.byIcon(Icons.flip));
+      await pumpFrames(tester, 30);
+      // The item rather than its label: a bare Text has nothing to hit.
+      await tester.tap(find.ancestor(
+          of: find.text('Mirror $letter'),
+          matching: find.byType(CheckedPopupMenuItem<bool>)));
+      await pumpFrames(tester, 30);
+    }
+
+    testWidgets('both clips start the way they were filmed', (tester) async {
+      await mount(tester);
+      expect(facingOf(tester, 0), 1);
+      expect(facingOf(tester, 1), 1);
+    });
+
+    testWidgets('flipping one leaves the other facing as it was',
+        (tester) async {
+      // The whole point: a throw filmed from the far side turns round to
+      // face the same way as its pair, and the pair stays put.
+      await mount(tester);
+      await mirrorClip(tester, 'A');
+
+      expect(facingOf(tester, 0), -1);
+      expect(facingOf(tester, 1), 1);
+    });
+
+    testWidgets('each clip flips on its own, and back again', (tester) async {
+      await mount(tester);
+      await mirrorClip(tester, 'B');
+      expect(facingOf(tester, 0), 1);
+      expect(facingOf(tester, 1), -1);
+
+      await mirrorClip(tester, 'B');
+      expect(facingOf(tester, 1), 1);
+    });
+
+    testWidgets('a mark is stored against the frame, not the mirror',
+        (tester) async {
+      // Drawing on a reversed pane has to land on the shoulder under the
+      // finger, which is at 1 - x of the clip's own frame — otherwise the
+      // mark jumps across the athlete the moment the flip comes off.
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+
+      await drawInPane(tester, 0);
+      final asFilmed = paneAnnotations<PenStroke>(tester, 0).single.points;
+
+      await tapRail(tester, find.byIcon(Icons.undo));
+      await mirrorClip(tester, 'A');
+      await drawInPane(tester, 0);
+      final reversed = paneAnnotations<PenStroke>(tester, 0).single.points;
+
+      expect(reversed, hasLength(asFilmed.length));
+      for (var i = 0; i < asFilmed.length; i++) {
+        expect(reversed[i].dx, closeTo(1 - asFilmed[i].dx, 0.001));
+        // Only left and right turn over.
+        expect(reversed[i].dy, closeTo(asFilmed[i].dy, 0.001));
+      }
+    });
+
+    /// Whether pane [index] is painting its annotations reversed.
+    bool inkReversedIn(WidgetTester tester, int index) => (tester
+        .widget<CustomPaint>(find.descendant(
+            of: find.byType(DrawingCanvas).at(index),
+            matching: find.byType(CustomPaint)))
+        .painter as dynamic).mirrored as bool;
+
+    testWidgets('the flip is a way of looking, not an edit', (tester) async {
+      // The marks turn over with the picture — so they stay on the hip they
+      // were drawn on — but nothing stored is rewritten, which is what lets
+      // the flip come back off without the drawing drifting.
+      await mount(tester);
+      await openRail(tester);
+      await selectTool(tester, Icons.draw);
+      await drawInPane(tester, 0);
+      final drawn = [...paneAnnotations<PenStroke>(tester, 0).single.points];
+
+      await mirrorClip(tester, 'A');
+      expect(inkReversedIn(tester, 0), isTrue);
+      expect(inkReversedIn(tester, 1), isFalse);
+      expect(paneAnnotations<PenStroke>(tester, 0).single.points, drawn);
+
+      await mirrorClip(tester, 'A');
+      expect(inkReversedIn(tester, 0), isFalse);
+      expect(paneAnnotations<PenStroke>(tester, 0).single.points, drawn);
+    });
+  });
+
   group('drawing', () {
-    /// The annotations painted over pane [index] (0 = A, 1 = B).
-    List<T> paneAnnotations<T extends Annotation>(
-        WidgetTester tester, int index) {
-      final paint = tester.widget<CustomPaint>(find.descendant(
-          of: find.byType(DrawingCanvas).at(index),
-          matching: find.byType(CustomPaint)));
-      return ((paint.painter as dynamic).annotations as List)
-          .whereType<T>()
-          .toList();
-    }
-
-    /// The rail starts collapsed here — the video area is already split
-    /// between two clips.
-    Future<void> openRail(WidgetTester tester) =>
-        tapRail(tester, find.byKey(const ValueKey('rail-collapse')));
-
-    /// A stroke across the middle of pane [index].
-    Future<void> drawInPane(WidgetTester tester, int index) async {
-      final pane = tester.getRect(find.byType(VideoPlayer).at(index));
-      await drawAlong(tester, [
-        pane.center - const Offset(40, 20),
-        pane.center,
-        pane.center + const Offset(40, 20),
-      ]);
-    }
-
     testWidgets('a stroke lands on the pane it was drawn in', (tester) async {
       await mount(tester);
       await openRail(tester);

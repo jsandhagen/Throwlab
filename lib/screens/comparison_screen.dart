@@ -71,6 +71,21 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   /// down to a stamp, and the throw is what matters, not the sky above it.
   /// Each pane can be dragged to put the athlete where you want them.
   bool _fill = true;
+
+  /// Either clip shown left-to-right reversed.
+  ///
+  /// Two throws are rarely filmed from the same side of the ring, and a
+  /// right-hander seen from the left is the mirror image of the same
+  /// right-hander seen from the right: side by side they turn away from
+  /// each other, and laid over one another as ghosts they cross. Reversing
+  /// one puts both throws on the same axis, which is the only way the two
+  /// shapes can be read against each other. It reverses the picture and the
+  /// marks drawn on it, and nothing that is stored — the clip on disk and
+  /// the annotations are untouched, so it is a way of looking rather than
+  /// an edit.
+  bool _mirrorA = false;
+  bool _mirrorB = false;
+
   double _overlayOpacity = 0.5;
   double _speed = 0.5;
   bool _linked = false;
@@ -443,7 +458,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   }
 
   Widget _player(ScrubShuttle shuttle, DrawingController drawing,
-      {double opacity = 1}) {
+      {double opacity = 1, bool mirrored = false}) {
     final controller = shuttle.controller;
     if (controller.value.hasError) {
       return const Center(
@@ -459,6 +474,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
             shuttle: shuttle,
             drawing: drawing,
             fill: _fill,
+            mirrored: mirrored,
             videoOpacity: opacity,
             onDraw: () => _activateDrawing(drawing),
           )
@@ -626,6 +642,43 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     );
   }
 
+  /// The flip, offered as a tick against each clip.
+  ///
+  /// A menu of two rather than a button each, and down here with the link
+  /// rather than up in the app bar: the bar already carries the fit and the
+  /// mode, and a fourth control there cut the title down to 'Javelin:…' on
+  /// a narrow phone. It sits beside the link because that is the other
+  /// control about how the two clips stand to each other, and the transport
+  /// wraps, so it can never be the thing that runs off the edge.
+  Widget _mirrorMenu() => PopupMenuButton<bool>(
+        tooltip: 'Mirror a clip left to right',
+        icon: Icon(
+          Icons.flip,
+          color: _mirrorA || _mirrorB
+              ? Theme.of(context).colorScheme.primary
+              : null,
+        ),
+        onSelected: (isA) => setState(() {
+          if (isA) {
+            _mirrorA = !_mirrorA;
+          } else {
+            _mirrorB = !_mirrorB;
+          }
+        }),
+        itemBuilder: (context) => [
+          CheckedPopupMenuItem(
+            value: true,
+            checked: _mirrorA,
+            child: const Text('Mirror A'),
+          ),
+          CheckedPopupMenuItem(
+            value: false,
+            checked: _mirrorB,
+            child: const Text('Mirror B'),
+          ),
+        ],
+      );
+
   /// The two clips, side by side along the screen's long edge or stacked as
   /// a ghost overlay.
   Widget _panes(bool landscape) {
@@ -638,26 +691,31 @@ class _ComparisonScreenState extends State<ComparisonScreen>
           ? (landscape
               ? Row(
                   children: [
-                    Expanded(child: _player(_shuttleA, _drawA)),
+                    Expanded(child: _player(_shuttleA, _drawA,
+                        mirrored: _mirrorA)),
                     const VerticalDivider(width: 2),
-                    Expanded(child: _player(_shuttleB, _drawB)),
+                    Expanded(child: _player(_shuttleB, _drawB,
+                        mirrored: _mirrorB)),
                   ],
                 )
               : Column(
                   children: [
-                    Expanded(child: _player(_shuttleA, _drawA)),
+                    Expanded(child: _player(_shuttleA, _drawA,
+                        mirrored: _mirrorA)),
                     const Divider(height: 2),
-                    Expanded(child: _player(_shuttleB, _drawB)),
+                    Expanded(child: _player(_shuttleB, _drawB,
+                        mirrored: _mirrorB)),
                   ],
                 ))
           : Stack(
               alignment: Alignment.center,
               children: [
-                _player(_shuttleA, _drawA),
+                _player(_shuttleA, _drawA, mirrored: _mirrorA),
                 // The ghost fades the clip, not the marks drawn on it — an
                 // annotation you can barely see is no use for pointing
                 // something out.
-                _player(_shuttleB, _drawB, opacity: _overlayOpacity),
+                _player(_shuttleB, _drawB,
+                    opacity: _overlayOpacity, mirrored: _mirrorB),
               ],
             ),
     );
@@ -833,6 +891,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                         ),
                       ],
                       const SizedBox(width: 8),
+                      _mirrorMenu(),
+                      const SizedBox(width: 8),
                       SpeedMenuButton(
                         speed: _speed,
                         onChanged: (s) {
@@ -874,6 +934,7 @@ class _VideoPane extends StatefulWidget {
     required this.shuttle,
     required this.drawing,
     required this.fill,
+    this.mirrored = false,
     this.videoOpacity = 1,
     this.onDraw,
   });
@@ -890,6 +951,12 @@ class _VideoPane extends StatefulWidget {
 
   /// Cover the pane (cropping the overflow) rather than fit inside it.
   final bool fill;
+
+  /// Show the clip left-to-right reversed, so a throw filmed from the far
+  /// side of the ring faces the same way as the other one. The marks turn
+  /// over with the picture and a touch is read against the flipped frame,
+  /// so drawing on a mirrored pane works exactly as it does on a plain one.
+  final bool mirrored;
 
   /// Fades the clip (the ghost overlay), leaving the annotations solid.
   final double videoOpacity;
@@ -923,10 +990,17 @@ class _VideoPaneState extends State<_VideoPane> {
   /// A pane touch as a fraction of the clip's frame (0..1 on both axes), the
   /// space annotations are stored in so they stay put when the pane is
   /// resized, reframed or zoomed.
-  Offset _normalize(Offset local) => Offset(
-        (local.dx - _videoRect.left) / _videoRect.width,
-        (local.dy - _videoRect.top) / _videoRect.height,
-      );
+  Offset _normalize(Offset local) {
+    final x = (local.dx - _videoRect.left) / _videoRect.width;
+    return Offset(
+      // A mirrored pane shows the frame back to front, so the finger is
+      // over the point at 1 - x. Stored the right way round, which is what
+      // keeps a mark on the shoulder it was drawn on when the flip comes
+      // back off.
+      widget.mirrored ? 1 - x : x,
+      (local.dy - _videoRect.top) / _videoRect.height,
+    );
+  }
 
   bool get _drawingActive => widget.drawing.tool != DrawTool.none;
 
@@ -1047,12 +1121,21 @@ class _VideoPaneState extends State<_VideoPane> {
                     children: [
                       Opacity(
                         opacity: widget.videoOpacity,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            VideoPlayer(widget.controller),
-                            ScrubStill(shuttle: widget.shuttle),
-                          ],
+                        // The player and the scrub still turn over together:
+                        // they are the same picture handed over mid-drag, and
+                        // one of them flipped would swap the throw end for end
+                        // every time a scrub started.
+                        child: Transform(
+                          alignment: Alignment.center,
+                          transform: Matrix4.diagonal3Values(
+                              widget.mirrored ? -1.0 : 1.0, 1, 1),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              VideoPlayer(widget.controller),
+                              ScrubStill(shuttle: widget.shuttle),
+                            ],
+                          ),
                         ),
                       ),
                       // Rebuilt off this pane's own player, so a timer
@@ -1063,6 +1146,7 @@ class _VideoPaneState extends State<_VideoPane> {
                           controller: widget.drawing,
                           zoomScale: _zoom,
                           position: value.position,
+                          mirrored: widget.mirrored,
                         ),
                       ),
                     ],

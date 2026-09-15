@@ -407,9 +407,18 @@ class DrawingCanvas extends StatelessWidget {
     required this.controller,
     this.zoomScale = 1,
     this.position = Duration.zero,
+    this.mirrored = false,
   });
 
   final DrawingController controller;
+
+  /// Paint the marks left-to-right reversed, for a pane showing its clip
+  /// mirrored. Reversed here rather than by turning the whole layer over
+  /// with a [Transform]: an angle's degrees and a timer's clock are text,
+  /// and a mirrored layer would set both of them backwards. Nothing that is
+  /// stored moves — the annotations stay in the frame's own coordinates, so
+  /// flipping the pane back leaves every mark where it was drawn.
+  final bool mirrored;
 
   /// The stage's current zoom, so ink can be drawn at a damped weight
   /// instead of blowing up with the picture (see [inkScaleFor]).
@@ -434,8 +443,8 @@ class DrawingCanvas extends StatelessWidget {
         animation: controller,
         builder: (context, _) => CustomPaint(
           size: Size.infinite,
-          painter: _AnnotationPainter(
-              controller.annotations, zoomScale, position, labelStyle),
+          painter: _AnnotationPainter(controller.annotations, zoomScale,
+              position, labelStyle, mirrored),
         ),
       ),
     );
@@ -443,8 +452,8 @@ class DrawingCanvas extends StatelessWidget {
 }
 
 class _AnnotationPainter extends CustomPainter {
-  _AnnotationPainter(
-      this.annotations, this.zoomScale, this.position, this.labelStyle);
+  _AnnotationPainter(this.annotations, this.zoomScale, this.position,
+      this.labelStyle, this.mirrored);
 
   final List<Annotation> annotations;
   final double zoomScale;
@@ -454,8 +463,15 @@ class _AnnotationPainter extends CustomPainter {
   /// rather than ink: an angle's reading and a timer's.
   final TextStyle labelStyle;
 
-  Offset _denormalize(Offset point, Size size) =>
-      Offset(point.dx * size.width, point.dy * size.height);
+  /// Set on a pane showing its clip mirrored: every mark is placed against
+  /// the flipped picture, so it stays on the hand or the hip it was drawn
+  /// on. Only the geometry turns over — labels are painted the right way
+  /// round at the mirrored position.
+  final bool mirrored;
+
+  Offset _denormalize(Offset point, Size size) => Offset(
+      (mirrored ? 1 - point.dx : point.dx) * size.width,
+      point.dy * size.height);
 
   /// Canvas-space length that lands as [width] × the damped zoom on screen.
   double _ink(double width) => width * inkScaleFor(zoomScale) / zoomScale;
