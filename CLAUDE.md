@@ -100,7 +100,8 @@ shrinks them, with the session on top as a strip of stills and with that
 strip put away on its tab — and the compare picker: both slots still empty,
 one filled, both filled and ready to open, the sheet as it opens off a
 throw, the same sheet off the event filter, and a search that found
-something and one that found nothing — and the gold itself: the medal at
+something and one that found nothing, all under a navigation bar, which is
+what the button at the foot of the sheet has to clear — and the gold itself: the medal at
 every size the app pins it at, on a line of type and on a card's corner
 beside the frame, and then one big enough to see what was drawn. Open the
 PNGs to see exactly what the screen paints. **Re-run it
@@ -701,6 +702,14 @@ like the app rather than a bare Material default.
   though: with nothing else of that event the sheet opens wide. A filter or
   a search that empties the list says which one did it and offers the one
   tap that undoes it.
+- A modal bottom sheet is only safe at the top. `useSafeArea` insets the
+  top and leaves the bottom to the sheet, which is right — a sheet runs to
+  the bottom edge — but it means anything at the foot of one has to add
+  `MediaQuery.paddingOf(context).bottom` itself or Android draws its
+  navigation bar over it. The compare picker's Compare button is the one
+  that was half unreachable. The padding goes to zero on its own once the
+  keyboard is up, which is when the `viewInsets` padding above it takes
+  over.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs
   to `AppUpdater`, not to the screen that started it, and writes into a part

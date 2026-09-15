@@ -169,6 +169,26 @@ void main() {
       await pumpFrames(tester, 30);
     }
 
+    testWidgets('the Compare button clears the navigation bar',
+        (tester) async {
+      // A modal sheet's safe area only insets the top — it is meant to run
+      // to the bottom edge and pad its own contents — so on a phone with a
+      // navigation bar the button underneath the list was drawn behind it
+      // and the bottom half of it could not be pressed.
+      const bar = 48.0;
+      tester.view.padding = const FakeViewPadding(bottom: bar * 3);
+      tester.view.viewPadding = const FakeViewPadding(bottom: bar * 3);
+      addTearDown(tester.view.reset);
+      await openSheet(tester);
+
+      final screen = tester.getSize(find.byType(MaterialApp)).height;
+      // By predicate: `FilledButton.icon` builds a private subclass, which
+      // a plain type finder walks straight past.
+      final button = tester.getRect(
+          find.byWidgetPredicate((widget) => widget is FilledButton));
+      expect(button.bottom, lessThanOrEqualTo(screen - bar));
+    });
+
     testWidgets('lists every throw with its still frame', (tester) async {
       await openSheet(tester);
       expect(find.text('Pick two throws'), findsOneWidget);

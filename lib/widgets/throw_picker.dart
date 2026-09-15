@@ -265,6 +265,12 @@ class _ComparePickerSheetState extends State<_ComparePickerSheet> {
     final theme = Theme.of(context);
     final anchor = widget.anchor;
     final shown = _shown;
+    // `useSafeArea` on a modal sheet only insets the top — the sheet is
+    // meant to run to the bottom edge and pad its own contents — so on a
+    // phone with a navigation bar the Compare button sat underneath it,
+    // half of it unreachable. Zero once the keyboard is up, since the bar
+    // is behind the keyboard and the inset below already clears it.
+    final systemBar = MediaQuery.paddingOf(context).bottom;
     return Padding(
       // The search box is no use under the keyboard.
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -347,7 +353,7 @@ class _ComparePickerSheetState extends State<_ComparePickerSheet> {
               ),
             if (anchor == null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 12 + systemBar),
                 child: FilledButton.icon(
                   onPressed: _picks.length == 2
                       ? () => Navigator.pop(context, (_picks[0], _picks[1]))
@@ -361,7 +367,9 @@ class _ComparePickerSheetState extends State<_ComparePickerSheet> {
                 ),
               )
             else
-              const SizedBox(height: 8),
+              // Anchored, the list is the last thing in the sheet, so it is
+              // the last row that would go under the navigation bar.
+              SizedBox(height: 8 + systemBar),
           ],
         ),
       ),

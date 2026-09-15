@@ -38,6 +38,11 @@ void main() {
 
     tester.view.physicalSize = const Size(1080, 2280);
     tester.view.devicePixelRatio = 3;
+    // A 48dp navigation bar across the bottom, because that is the phone
+    // the sheet is read on: a modal's safe area only insets the top, so the
+    // bottom of it is drawn behind the bar unless the sheet pads for it.
+    tester.view.padding = const FakeViewPadding(bottom: 144);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 144);
     addTearDown(tester.view.reset);
     await warmImages(tester, thumbs);
 
