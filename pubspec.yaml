@@ -24,6 +24,11 @@ dependencies:
   # compile what CI builds. Bump both together or neither.
   flutter_foreground_task: ^9.2.2
   file_selector: ^1.1.0
+  # The QR encoder behind the link a meet is shared with. Pure Dart — no
+  # Gradle, no platform channel — so unlike a plugin it cannot break the
+  # APK build the way the note below describes. The painting is ours
+  # (QrPainter), so the same matrix can go on paper later.
+  qr: ^3.0.2
 
 dev_dependencies:
   flutter_test:

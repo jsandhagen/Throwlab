@@ -8,10 +8,10 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | Path | What lives there |
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, and `pdf_writer`/`meet_report` to put a results sheet back into one |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — a meet worked out for somebody watching it, and the page it is read on |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -50,8 +50,15 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/analysis_preview.dart \
                               tool/preview/compare_preview.dart \
                               tool/preview/comparison_preview.dart \
+                              tool/preview/share_preview.dart \
                               tool/preview/gold_preview.dart
 ```
+
+`share_preview` writes a second artifact beside its PNGs:
+`build/preview/spectator.html`, the real spectator page with a meet's feed
+baked in place of its fetch. A page whose whole job happens in a browser
+cannot be reviewed as a golden — open the file, and every tab and event chip
+works, because the page already holds the whole meet.
 
 The results sheet is reviewed the same way, except that the artifact is the
 PDF itself — it writes no golden and asserts nothing, because looking at the
@@ -752,6 +759,49 @@ like the app rather than a bare Material default.
   that was half unreachable. The padding goes to zero on its own once the
   keyboard is up, which is when the `viewInsets` padding above it takes
   over.
+- A meet can be followed by the people standing at it, and the phone is the
+  server. `MeetServer` binds a socket and hands out
+  `http://192.168.43.1:8080/M/<token>`; anyone on the same wifi — or on the
+  phone's own hotspot, which is the case that reliably works, since venue
+  wifi usually walls its clients off from each other — opens it in a
+  browser. Nothing is uploaded and no account exists, which is the only
+  shape of live sharing that survives a field with no signal on it. The
+  token is per share and unguessable, a wrong one 404s rather than 403s (a
+  link that has stopped being shared should look like one that never was),
+  and there is no route that writes: a spectator cannot enter a mark
+  because nothing on the server can.
+- The page is served the *answers*, never the rules. `meet_feed` runs
+  `MeetStandings`, `MeetFlight` and `MeetBoard` and hands over places, the
+  cut, the three an infield calls and the band of sector worth drawing,
+  with every mark already spelled through `formatDistance` — so the browser
+  knows nothing about countback, prelims or feet and inches, and cannot
+  become a second implementation of a competition that disagrees with the
+  coach's own screen. A series box carries the mark twice, in full and as
+  `short` without its unit, because that is the one place the app itself
+  drops it (`_AttemptBox`) and six boxes across a phone have no room.
+- The whole meet goes out, not the competition the coach is looking at. A
+  parent following the discus should not be dragged sideways every time the
+  coach walks to the javelin, and a page holding every competition switches
+  tab or event with no request at all — which is also what keeps it usable
+  when the phone wanders off the wifi. It says how old it is rather than
+  going blank. The server holds no copy: `MeetServer` reads the meet through
+  callbacks per request, so a mark entered between polls is simply there.
+- The results sheet is a route, not a second implementation:
+  `meetResultsPdf` is pure Dart over the meet and the record book, so it is
+  generated into the response. A spectator leaving early downloads the
+  afternoon on their way to the car park, with no signal anywhere near it.
+- The link is handed over by QR, because nobody types 192.168.43.1:8080 off
+  a screen in sunlight — and printed under it in full, because sometimes
+  they have to, which is why the token has no 0/O or 1/I in it. The code is
+  black on a white card, the one place the app breaks its own dark theme:
+  a dark-on-dark QR is one no camera will read. `QrPainter` holds the
+  matrix and snaps modules to whole pixels, since a code drawn on
+  fractional boundaries grows seams a camera reads as noise. Sharing is a
+  *doing* action and lives in the meet's app bar beside the sheet; reading
+  a heat sheet in and fixing the rounds happen once, before anybody throws,
+  and moved into the overflow — a fourth icon out there cost the meet its
+  own name, which ellipsized to 'County Cha...' on a phone.
+
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs
   to `AppUpdater`, not to the screen that started it, and writes into a part
