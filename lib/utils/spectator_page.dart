@@ -178,6 +178,27 @@ const String _page = r'''<!doctype html>
   .card.up { border-radius: 12px;
              box-shadow: inset 0 0 0 1.5px
                color-mix(in srgb, var(--tint) 80%, transparent); }
+  /* The live card alone is opaque, blended to exactly the tone of the
+     others rather than given a color of its own — the page's sector
+     backdrop runs behind it, and two sectors drawn over each other at
+     different angles are a picture of nothing. */
+  .card.solid { background: color-mix(in srgb, var(--surface) 45%, var(--bg)); }
+  /* The sector set into the card rather than run on from the header: a
+     picture of a sector and a list of names are two different things to
+     read, and the edge between them is what says so. */
+  .board { margin-top: 12px; border-radius: 10px; overflow: hidden;
+           background: var(--bg);
+           border: 1px solid color-mix(in srgb, var(--line) 40%, transparent); }
+  /* What the throw in the circle has to do, and what the coach's own
+     athlete is short of — the lines the app prints under its board, in
+     the colors it prints them in. */
+  .cap { font-size: 13px; font-weight: 600; margin: 12px 0 0; }
+  .cap + .cap { margin-top: 2px; }
+  .cap.tint { color: var(--tint); }
+  .cap.accent { color: var(--accent); }
+  .cap.body { color: var(--text); }
+  .up-rule { border-top: 1px solid color-mix(in srgb, var(--line) 50%,
+             transparent); margin-top: 8px; }
   /* The app's own header over the field: where the round has got to, how
      much of it has been thrown, and the three an infield calls out. */
   .round { display: flex; justify-content: space-between; align-items: baseline;
@@ -189,15 +210,26 @@ const String _page = r'''<!doctype html>
   .bar i { display: block; height: 100%; background: var(--tint); }
   .call { display: flex; align-items: baseline; gap: 10px; margin-top: 8px; }
   .call .lbl { font-size: 11px; letter-spacing: 0.6px; color: var(--dim);
-               min-width: 62px; }
+               min-width: 62px; white-space: nowrap; }
   .call.up .lbl { color: var(--tint); font-weight: 600; }
   .call .who { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap;
                text-overflow: ellipsis; }
   .call.up .who { color: var(--text); }
   .lead-rule { border-top: 1px solid color-mix(in srgb, var(--line) 40%,
                transparent); margin-top: 10px; }
+  /* An icon on a line of type, not a picture in a card: the rule above
+     lays every other svg out as a full-width block, which would put the
+     trophy on a line of its own above the word it belongs to. */
+  .ico { display: inline-block; width: 13px; height: 13px; flex: 0 0 auto; }
+  .call .lbl .ico { vertical-align: -2px; margin-right: 5px; }
+  /* When the coach's own throw, for a flight that isn't theirs. */
+  .later { display: flex; align-items: center; gap: 6px; font-size: 11px;
+           color: var(--accent); margin: 6px 0 0; }
+
 
   main svg, .card svg { display: block; width: 100%; height: auto; }
+  main svg.ico, .card svg.ico { display: inline-block; width: 13px;
+                                height: 13px; }
 
   /* No rules between rows: the app's table doesn't draw them, and a
      four-line standings cut into boxes reads as four things rather than
@@ -205,6 +237,17 @@ const String _page = r'''<!doctype html>
   .row { display: flex; align-items: baseline; gap: 10px; padding: 4px 0; }
   .pl { min-width: 22px; color: var(--dim); font-variant-numeric: tabular-nums;
         font-size: 13px; }
+  /* A medal outranks whose it is: the name beside it and the mark after
+     it both already carry that, so the podium keeps its own metal. All
+     three are struck bold here, unlike the chip on a field card — a place
+     in a table is two characters with nothing else on the line. */
+  .pl.m1, .pl.m2, .pl.m3 { font-weight: 700; }
+  .pl.mine { color: var(--tint); font-weight: 700; }
+  /* What the cut is, over the table: right-aligned and quiet before it is
+     made, in the theme's own accent once it is. */
+  .advance { text-align: right; font-size: 11px; color: var(--dim);
+             margin: 0 0 8px; }
+  .advance.made { color: var(--accent); }
   /* Where they come in the throwing order, which is what the field is read
      down — the place rides on the right beside the mark. */
   .ord { min-width: 18px; color: var(--dim); font-size: 12px;
@@ -234,9 +277,28 @@ const String _page = r'''<!doctype html>
   .m1 { color: var(--first); font-weight: 700; }
   .m2 { color: var(--second); font-weight: 600; }
   .m3 { color: var(--third); font-weight: 600; }
-  .cut-rule { border-top: 1px dashed var(--accent); margin: 8px 0 0;
-              padding-top: 6px; font-size: 11px; color: var(--accent);
-              letter-spacing: 0.8px; text-transform: uppercase; }
+  /* Two rules with the words between them, the way the app draws it. */
+  .cut-rule { display: flex; align-items: center; gap: 8px; margin: 6px 0;
+              font-size: 10px; color: var(--accent); }
+  .cut-rule::before, .cut-rule::after { content: ""; flex: 1;
+              border-top: 1px solid color-mix(in srgb, var(--accent) 50%,
+              transparent); }
+  .aside.needs { color: var(--accent); }
+
+  /* One athlete in the field: who and how they are doing across the top,
+     the series across the bottom. The embedded one lines its name up with
+     the header above it rather than stepping in from it. */
+  .entry.card { padding: 4px 4px 6px 10px; }
+  .entry.in { margin-top: 6px; }
+  .erow { display: flex; align-items: baseline; gap: 6px; }
+  .erow .nm { font-size: 14px; font-weight: 600; margin-right: auto; }
+  /* In the event's color when they are the one in the circle, which costs
+     nothing across a crowded row — the word 'up' would have come off
+     somebody's surname. */
+  .erow .nm.now { color: var(--tint); }
+  /* What they are standing on. The event's color for everyone here,
+     unlike the standings: this is the only distance on the row. */
+  .bm.big { font-size: 14px; font-weight: 700; color: var(--tint); }
   .heading { font-size: 11px; letter-spacing: 0.8px; color: var(--dim);
              text-transform: uppercase; margin: 16px 0 6px; }
 
@@ -258,7 +320,9 @@ const String _page = r'''<!doctype html>
               box-shadow: inset 0 0 0 1px var(--tint); }
   .box.out { opacity: 0.32; }
   /* Struck by the app itself and served as pixels — see MeetServer. */
-  .medal { height: 22px; width: auto; vertical-align: -6px; margin-right: 1px; }
+  /* 13px, the size the app pins it at beside a mark — a badge before it
+     is a picture, and the small one is the size that has to work. */
+  .medal { height: 13px; width: auto; vertical-align: -1px; }
 
 
   /* The results sheet sits where the app puts it — an action in the top
@@ -347,6 +411,20 @@ const String _page = r'''<!doctype html>
     svg.innerHTML = out.join("");
   }
 
+  /* The two Material icons the app's own header carries, traced at 13px
+     so they sit on a line of type rather than beside it: the trophy
+     against whoever is in front, and the clock against the flight the
+     coach's own athletes are waiting in. */
+  var TROPHY = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path fill="currentColor" d="M18 4V2H6v2H2v4a4 4 0 0 0 4 4h.4A6 6 0 0 0 ' +
+    '11 15.9V19H7v2h10v-2h-4v-3.1A6 6 0 0 0 17.6 12H18a4 4 0 0 0 4-4V4h-4zM4 ' +
+    '8V6h2v4a2 2 0 0 1-2-2zm12 2a4 4 0 0 1-8 0V4h8v6zm4-2a2 2 0 0 1-2 2V6h2v2z"/>' +
+    "</svg>";
+  var CLOCK = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' +
+    '<path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 ' +
+    '18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.1.8-1.3-4.5-2.6V7z"/>' +
+    "</svg>";
+
   /* ---- the implement, drawn the way EventGlyph draws it ------------- */
   function glyph(event, tint) {
     var s = 22, g;
@@ -387,27 +465,70 @@ const String _page = r'''<!doctype html>
   /* Portrait and filling its card, the way the app draws a board: a
      sector squashed into a landscape strip stacks the competition into an
      inch of it, which is the one thing a board is for. */
-  var W = 360, H = 372, TOP = 26, BOTTOM = 344, CX = W / 2;
-  var NEAR_HALF = 62, FAR_HALF = 158, SAG = 13;
+  /* The sector, laid out exactly as SectorBoard lays it out: the apex sits
+     below the box, at whatever distance makes the wedge span TAKE of the
+     width at its far edge, so a narrow sector (the javelin's) is drawn
+     narrower and both are real wedges with real arcs rather than a ladder
+     of straight lines across a trapezoid.
 
-  function yAt(f) { return BOTTOM - f * (BOTTOM - TOP); }
-  function halfAt(y) {
-    var t = (BOTTOM - y) / (BOTTOM - TOP);
-    return NEAR_HALF + t * (FAR_HALF - NEAR_HALF);
+     Room above the furthest line for its label, and below the nearest one
+     so it doesn't sit on the bottom edge — the app's own two pads. */
+  var TOP = 30, BOTTOM_PAD = 14, TAKE = 0.46;
+
+  /* The box the board is drawn in. The app gives it half the view — the
+     room under the tabs, not the whole window — never squarer than 0.75
+     of its own width and never taller than 1.15 of it, which is what
+     keeps the card underneath (the athlete in the circle and the six
+     boxes their mark goes in) under a thumb. */
+  function boardBox(w) {
+    var room = window.innerHeight - el("view").getBoundingClientRect().top;
+    return { w: w, h: Math.min(Math.max(room * 0.5, w * 0.75), w * 1.15) };
   }
-  /* An arc at a constant distance from the circle dips at the sector
-     lines: a point out at the edge is the same distance away but less far
-     up the page. Drawn as a quadratic through the middle of the band. */
-  function arc(f) {
-    var y = yAt(f), h = halfAt(y);
-    return "M " + (CX - h) + " " + (y + SAG) +
-           " Q " + CX + " " + (y - SAG) + " " + (CX + h) + " " + (y + SAG);
+
+  function geom(box, halfDeg) {
+    var half = (halfDeg || 17.46) * Math.PI / 180;
+    var apexFromTop = box.w * TAKE / Math.tan(half);
+    /* How far an arc drops from the middle of the sector to the lines
+       either side. The near edge has to sit that far off the bottom or the
+       closest mark of all is drawn as two stubs with its middle cut off. */
+    var rise = apexFromTop * (1 - Math.cos(half));
+    var floorY = box.h - BOTTOM_PAD - rise;
+    return { half: half, ax: box.w / 2, ay: TOP + apexFromTop, top: TOP,
+             floor: floorY, plot: floorY - TOP, w: box.w, h: box.h };
   }
-  function wedge() {
-    return "M " + (CX - NEAR_HALF) + " " + BOTTOM +
-           " L " + (CX - FAR_HALF) + " " + TOP +
-           " L " + (CX + FAR_HALF) + " " + TOP +
-           " L " + (CX + NEAR_HALF) + " " + BOTTOM + " Z";
+
+  /* Where a distance lands, to scale across the band — off the ends for a
+     mark outside it, which is answered at the edge rather than by moving
+     the mark. */
+  function yAt(g, f) { return g.top + (1 - f) * g.plot; }
+  function radiusAt(g, f) { return g.ay - yAt(g, f); }
+  /* The y a label sits at: level with the *ends* of its own arc rather
+     than with its middle, which is what makes a label read as belonging
+     to a line. */
+  function endY(g, r) { return g.ay - r * Math.cos(g.half); }
+
+  function arcOf(g, r) {
+    var a0 = -Math.PI / 2 - g.half, a1 = -Math.PI / 2 + g.half;
+    return "M " + (g.ax + r * Math.cos(a0)) + " " + (g.ay + r * Math.sin(a0)) +
+      " A " + r + " " + r + " 0 0 1 " +
+      (g.ax + r * Math.cos(a1)) + " " + (g.ay + r * Math.sin(a1));
+  }
+  function arc(g, f) { return arcOf(g, radiusAt(g, f)); }
+
+  /* The grass: out past the top of the box, because a wedge that stopped
+     at the furthest line would draw a seam across the card where the
+     grass ran out. */
+  function wedge(g) {
+    var brim = (g.ay + 2) * Math.sin(g.half);
+    return "M " + g.ax + " " + g.ay + " L " + (g.ax - brim) + " -2 L " +
+      (g.ax + brim) + " -2 Z";
+  }
+  /* A circle as a path, for taking one out of the box with an even-odd
+     fill — which is how the ground past the cut is shaded to its own arc. */
+  function disc(g, r) {
+    return "M " + (g.ax - r) + " " + g.ay + " a " + r + " " + r +
+      " 0 1 0 " + (2 * r) + " 0 a " + r + " " + r + " 0 1 0 " + (-2 * r) +
+      " 0 Z";
   }
   /* The flat tone a label is set in. The line itself takes the ramp — see
      the gradients in the board's own defs. */
@@ -422,37 +543,74 @@ const String _page = r'''<!doctype html>
      rather than draws one. */
   function metalOf(place) { return place <= 3 ? " m" + place : ""; }
 
-  function board(b) {
+  function board(b, c) {
     if (!b || !b.marks.length) {
       return '<p class="empty">Nothing on the board yet.</p>';
     }
-    var out = ['<svg viewBox="0 0 ' + W + ' ' + H +
+    /* Measured rather than assumed: the app sizes its board off the room
+       it is given, and a fixed viewBox would draw one shape of sector on
+       every phone. */
+    var box = boardBox(Math.max(el("view").clientWidth - 26, 240));
+    var g = geom(box, c.sector), W = box.w, H = box.h;
+    var out = ['<svg viewBox="0 0 ' + W + " " + H +
       '" role="img" aria-label="The competition on the sector">',
-      "<defs>/*METAL_DEFS*/</defs>"];
-    out.push('<path d="' + wedge() +
-      '" fill="rgba(0,0,0,0.22)" stroke="var(--line)" stroke-width="1"/>');
+      "<defs>/*METAL_DEFS*/",
+      '<linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">' +
+        '<stop offset="0" stop-color="var(--accent)" stop-opacity="0.10"/>' +
+        '<stop offset="1" stop-color="var(--accent)" stop-opacity="0.02"/>' +
+        "</linearGradient>",
+      '<clipPath id="wedge"><path d="' + wedge(g) + '"/></clipPath>',
+      "</defs>"];
 
-    /* Ground short of the cut, shaded to its own arc — a throw lands the
-       same distance out down the middle as it does by a sector line, so a
-       straight edge across the wedge would shade ground that is past the
-       cut at the sides. */
-    var cut = null;
-    b.marks.forEach(function (m) { if (m.line === "cut") cut = m; });
-    if (cut && cut.fraction > 0 && cut.fraction < 1) {
-      out.push('<path d="' + arc(cut.fraction) +
-        " L " + (CX + NEAR_HALF) + " " + BOTTOM +
-        " L " + (CX - NEAR_HALF) + " " + BOTTOM + ' Z" fill="rgba(0,0,0,0.34)"/>');
-    }
+    /* The grass: a wash between the sector lines, lighter the further
+       out, so the wedge has a body under the marks. */
+    out.push('<path d="' + wedge(g) + '" fill="url(#grass)"/>');
 
-    /* The marker lines carry no numbers of their own — the app's board
-       doesn't label them either, it says how far apart they are once, in
-       the corner. A number on every arc is five numbers competing with the
-       marks, which are what the board is for. */
+    /* The scale, drawn: a marker line every grid meters, the way a sector
+       is painted. They are what makes a gap on the board a distance
+       rather than a picture — and they carry no numbers of their own,
+       because the corner says how far apart they are once and a number on
+       every arc is five numbers competing with the marks. */
+    out.push('<g clip-path="url(#wedge)">');
     b.markerLines.forEach(function (meters) {
       var f = (meters - b.near) / (b.far - b.near);
       if (f < 0 || f > 1) return;
-      out.push('<path d="' + arc(f) +
-        '" fill="none" stroke="var(--line)" stroke-width="1"/>');
+      out.push('<path d="' + arc(g, f) +
+        '" fill="none" stroke="var(--line)" stroke-width="1" opacity="0.32"/>');
+    });
+
+    /* Past the cut is where a throw has to land, so it is drawn as a
+       place rather than as a line — and bounded by the cut's own arc, not
+       by a horizontal edge: a throw lands the same distance out down the
+       middle as by a sector line, and a straight edge would shade ground
+       that is short of the cut at the sides, which is exactly where a
+       place is lost. */
+    var cut = null;
+    b.marks.forEach(function (m) { if (m.line === "cut") cut = m; });
+    if (cut && cut.fraction <= 1) {
+      var r = g.ay - Math.min(yAt(g, cut.fraction), g.floor);
+      out.push('<path fill-rule="evenodd" fill="var(--accent)" ' +
+        'fill-opacity="0.07" d="M 0 -2 H ' + W + " V " + (H + 2) + " H 0 Z " +
+        disc(g, Math.max(r, 0)) + '"/>');
+    }
+    out.push("</g>");
+
+    /* The sector lines, out past the far edge of the band: they carry on
+       to the back of the field, and stopping them at the top of the box
+       would draw a room rather than a sector. */
+    [-1, 1].forEach(function (sign) {
+      var a = -Math.PI / 2 + sign * g.half, far = H * 3;
+      out.push('<path d="M ' + g.ax + " " + g.ay + " L " +
+        (g.ax + Math.cos(a) * far) + " " + (g.ay + Math.sin(a) * far) +
+        '" stroke="var(--line)" stroke-width="1.2" opacity="0.8"/>');
+    });
+
+    /* Everybody else in the competition: the spread of the field, with no
+       name on it. */
+    (b.others || []).forEach(function (f) {
+      if (f < 0 || f > 1) return;
+      out.push('<path d="' + arc(g, f) + '" fill="none" stroke="var(--dim)" ' +
+        'stroke-width="1" opacity="0.28"/>');
     });
 
     /* Labels are two pills at the edges of the box with the line running
@@ -461,36 +619,43 @@ const String _page = r'''<!doctype html>
        them — and one that had to slide grows a leader back to its own. */
     var labels = b.marks.map(function (m) {
       var f = Math.max(0, Math.min(1, m.fraction));
-      return { m: m, f: f, y: yAt(f) + SAG, want: yAt(f) + SAG };
-    }).sort(function (a, c) { return a.y - c.y; });
+      var y = m.off === "far" ? g.top + 5
+            : m.off === "near" ? g.floor
+            : endY(g, radiusAt(g, f));
+      return { m: m, f: f, y: y, want: y };
+    }).sort(function (a, c2) { return a.y - c2.y; });
     for (var i = 1; i < labels.length; i++) {
       if (labels[i].y - labels[i - 1].y < 24) labels[i].y = labels[i - 1].y + 24;
     }
 
     labels.forEach(function (L) {
-      var m = L.m, ink = INK[m.line] || "#c2ced4";
+      var m = L.m, ink = INK[m.line] || "var(--text)";
       if (!m.off) {
         /* A podium line is drawn in the metal itself rather than in its
            flat tone: an arc across the sector is the one thing here with
-           the room to show a ramp. */
+           the room to show a ramp. The leader's line and the one in the
+           circle are struck heavier, as the app strikes them. */
         var line = RAMPED[m.line] ? "url(#m-" + m.line + ")" : ink;
-        out.push('<path d="' + arc(L.f) + '" fill="none" stroke="' + line +
-          '" stroke-width="2"' +
-          (m.line === "cut" ? ' stroke-dasharray="6 5"' : "") + "/>");
+        var lead = m.line === "first" || m.line === "upNow";
+        out.push('<path d="' + arc(g, L.f) + '" fill="none" stroke="' + line +
+          '" stroke-width="' +
+          (m.line === "cut" ? 1.4 : lead ? 2.6 : 2) + '"' +
+          (m.line === "cut" ? ' stroke-dasharray="6 5" opacity="0.9"' : "") +
+          "/>");
         /* A marker at the middle of the line, for the athlete the board is
            being read for — it is how the app says which of these is theirs
            without spending a second color on it. */
         if (m.line === "upNow" || m.line === "mine") {
-          out.push('<circle cx="' + CX + '" cy="' + (yAt(L.f) - SAG / 2) +
+          out.push('<circle cx="' + g.ax + '" cy="' + yAt(g, L.f) +
             '" r="4" fill="' + ink + '"/>');
         }
       } else {
         /* Broken off the band: an arrow at the edge carrying its mark,
            rather than squashing the fight for second into an inch of
            sector to keep a runaway leader on the picture. */
-        var ay = m.off === "far" ? TOP + 6 : BOTTOM - 6;
-        out.push('<path d="M ' + (CX - 9) + " " + ay + " L " + CX + " " +
-          (ay + (m.off === "far" ? -10 : 10)) + " L " + (CX + 9) + " " + ay +
+        var ay = m.off === "far" ? g.top - 6 : g.floor + 6;
+        out.push('<path d="M ' + (g.ax - 9) + " " + ay + " L " + g.ax + " " +
+          (ay + (m.off === "far" ? -10 : 10)) + " L " + (g.ax + 9) + " " + ay +
           ' Z" fill="' + ink + '"/>');
       }
       out.push(pill(4, L.y, (m.label ? m.label + "  " : "") + m.name, ink, "start"));
@@ -500,12 +665,30 @@ const String _page = r'''<!doctype html>
           '" stroke="' + ink + '" stroke-width="1" opacity="0.5" fill="none"/>');
       }
     });
+    /* The scale, in words, in the bottom-left corner — where the app puts
+       it. The sector narrows towards its circle, so the bottom corners of
+       the box are empty at every zoom and nothing has to move to make room
+       for it. */
+    if (b.gridLabel) {
+      out.push('<text x="8" y="' + (H - 5) +
+        '" fill="var(--dim)" fill-opacity="0.7" font-size="10" ' +
+        'font-weight="600">' + esc(b.gridLabel) + "</text>");
+    }
     out.push("</svg>");
     return out.join("");
   }
 
+  /* Measured rather than counted: the app lays a label out with a real
+     text painter, and a width guessed at so many pixels a character
+     leaves a panel hanging off the end of every short one. */
+  var _ruler = document.createElement("canvas").getContext("2d");
+  function textWidth(text, size, weight) {
+    _ruler.font = weight + " " + size + 'px Barlow, system-ui, sans-serif';
+    return _ruler.measureText(String(text)).width;
+  }
+
   function pill(x, y, text, ink, anchor) {
-    var w = String(text).length * 7.6 + 14;
+    var w = textWidth(text, 13.5, 600) + 14;
     var rx = anchor === "end" ? x - w : x;
     /* A quiet panel under bold type, not a stroked box: the app's labels
        are read as the line's own name, and an outline round every one of
@@ -522,45 +705,71 @@ const String _page = r'''<!doctype html>
      and how much of it has been thrown, the three an infield calls out,
      and whoever is in front under a rule. */
   function header(c, withLeader) {
+    return '<div class="card">' + headerBody(c, withLeader) + "</div>";
+  }
+
+  /* The header without a card around it, because the live view puts it in
+     the same one as the board — which is what the app's own live card is:
+     the flight, the sector and the athlete in the circle, on one surface. */
+  function headerBody(c, withLeader) {
     var f = c.flight || {};
     var calls = (f.calls || []).map(function (r, i) {
       return row(r, i === 0);
     }).join("");
     var lead = withLeader && f.leading
-      ? '<div class="lead-rule"></div>' + row(f.leading, false)
+      ? '<div class="lead-rule"></div>' + row(f.leading, false, TROPHY)
       : "";
-    return '<div class="card"><div class="round"><b>' + esc(c.status) +
+    /* When the coach's own throw, for a flight that isn't theirs — the one
+       line that is any use to somebody waiting on a thrower who hasn't
+       been called in yet. */
+    var later = f.elsewhere
+      ? '<p class="later">' + CLOCK + esc(f.elsewhere) + "</p>"
+      : "";
+    return '<div class="round"><b>' + esc(c.status) +
       '</b><span class="sub">' + esc(f.thrownLabel || "") + "</span></div>" +
       '<div class="bar"><i style="width:' +
       Math.round((f.progress || 0) * 100) + '%"></i></div>' +
-      calls + lead +
+      calls + later + lead +
       (f.label ? '<div class="sub" style="margin-top:8px">' + esc(f.label) +
-        "</div>" : "") + "</div>";
+        "</div>" : "");
   }
 
   /* One call: what they are called, who they are, where they stand and
      what they are standing on. */
-  function row(r, up) {
+  function row(r, up, icon) {
     return '<div class="call' + (up ? " up" : "") + '"><span class="lbl">' +
-      esc(r.label) + '</span><span class="who">' + esc(r.name) + "</span>" +
+      (icon || "") + esc(r.label) + '</span><span class="who">' +
+      esc(r.name) + "</span>" +
       (r.mark ? '<span class="bm">' + esc(r.mark) + "</span>" : "") + "</div>";
   }
 
+  /* The app's live card is one surface: the flight above the sector, the
+     sector, what the throw in the circle has to do, and under a rule the
+     athlete about to take it — with the same six boxes as the field.
+     Opaque, unlike every other card here, because the page's own sector
+     backdrop runs behind it and two sectors drawn over each other at
+     different angles are a picture of nothing. */
   function liveView(c) {
-    /* No leader row here: the board below has the lead drawn across it,
-       and the app's live header leaves it off for that reason. */
-    return header(c, false) + '<div class="card">' + board(c.board) +
-      (c.board && c.board.gridLabel && c.board.marks.length
-        ? '<div class="sub" style="margin-top:6px">' + esc(c.board.gridLabel) +
-          "</div>"
-        : "") + "</div>";
+    /* No leader row: the board below has the lead drawn across it, and the
+       app's live header leaves it off for that reason. */
+    var cap = (c.caption || []).map(function (line) {
+      return '<p class="cap ' + esc(line.tone) + '">' + esc(line.text) + "</p>";
+    }).join("");
+    var up = null;
+    if (c.flight && c.flight.upOrder != null) {
+      c.places.forEach(function (p) {
+        if (p.order === c.flight.upOrder) up = p;
+      });
+    }
+    return '<div class="card solid">' + headerBody(c, false) +
+      '<div class="board">' + board(c.board, c) + "</div>" + cap +
+      (up ? '<div class="up-rule"></div>' + entryRow(c, up, true) : "") +
+      "</div>";
   }
 
   function seriesView(c) {
     var field = c.places.slice().sort(function (a, b) { return a.order - b.order; });
     var flighted = c.places.some(function (q) { return q.flight; });
-    var calls = (c.flight || {}).calls || [];
-    var up = calls.length ? calls[0].name : null;
     var out = [header(c, true)], flight = null;
     field.forEach(function (p) {
       var f = p.flight || 1;
@@ -568,22 +777,34 @@ const String _page = r'''<!doctype html>
         flight = f;
         out.push('<p class="heading">Flight ' + f + "</p>");
       }
-      var metal = p.best ? metalOf(p.place) : "";
-      var pb = p.series.some(function (a) { return a && a.pb; })
-        ? '<img class="medal" src="' + base + '/pb.png" alt="Personal best">'
-        : "";
-      /* The order they throw in down the left, the way the app reads a
-         field; the place rides on the right with the mark it was made on. */
-      out.push('<div class="card' + (p.name === up ? " up" : "") +
-        '"><div class="row"><span class="ord">' +
-        (p.order + 1) + '</span><span class="nm' + (p.tracked ? " mine" : "") +
-        '">' + esc(p.name) + "</span>" +
-        (p.best ? pb + '<span class="chip' + metal + '">' + esc(p.placeLabel) +
-          "</span>" : "") +
-        '<span class="bm' + (p.tracked ? " mine" : "") + '">' +
-        esc(p.best || "—") + "</span></div>" + boxes(c, p) + "</div>");
+      out.push(entryRow(c, p, false));
     });
     return out.join("") || '<p class="empty">Nobody entered yet.</p>';
+  }
+
+  /* One athlete in the field, as the app's own card draws them: who and
+     how they are doing on the top row, the series across the bottom one.
+     Embedded for the live card, which is already a surface — a card inside
+     a card reads as a mistake. */
+  function entryRow(c, p, embedded) {
+    var up = c.flight && p.order === c.flight.upOrder;
+    var metal = p.best ? metalOf(p.place) : "";
+    var pb = p.series.some(function (a) { return a && a.pb; })
+      ? '<img class="medal" src="' + base + '/pb.png" alt="Personal best">'
+      : "";
+    /* The order they throw in down the left, the way the app reads a
+       field; the place rides on the right with the mark it was made on,
+       and the medal between them, which is the order the app sets it in. */
+    return '<div class="entry' + (embedded ? " in" : " card") +
+      (up && !embedded ? " up" : "") + '"><div class="erow">' +
+      '<span class="ord">' + (p.order + 1) + "</span>" +
+      '<span class="nm' + (up ? " now" : p.tracked ? " mine" : "") + '">' +
+      esc(p.name) + "</span>" +
+      (p.best
+        ? '<span class="chip' + metal + '">' + esc(p.placeLabel) + "</span>" +
+          pb + '<span class="bm big">' + esc(p.best) + "</span>"
+        : "") +
+      "</div>" + boxes(c, p) + "</div>";
   }
 
   function boxes(c, p) {
@@ -609,24 +830,39 @@ const String _page = r'''<!doctype html>
     var rows = c.places.map(function (p, i) {
       var rule = "";
       var next = c.places[i + 1];
+      /* The cut where it falls, drawn the way the app draws it: the words
+         between two rules rather than a heading over the rest of the
+         field. Everything under it is out of the final as things stand. */
       if (c.cut.has && p.advancing && next && !next.advancing) {
-        rule = '<p class="cut-rule">' + (c.cut.made ? "Cut" : "Cut line") +
-          (c.cut.mark ? " · " + esc(c.cut.mark) : "") + "</p>";
+        rule = '<p class="cut-rule"><span>the cut</span></p>';
       }
       var metal = p.best ? metalOf(p.place) : "";
-      /* Only the coach's own carry the line underneath, like the app's
-         table: the rest of the field is here to be placed against. */
-      var aside = p.consistency
-        ? '<p class="aside">' + esc(p.consistency) + "</p>"
-        : "";
-      return '<div class="row"><span class="pl' + metal + '">' +
+      /* Only the coach's own carry the lines underneath, like the app's
+         table: the rest of the field is here to be placed against, and
+         what they need is not the coach's problem. */
+      var aside = (p.consistency
+        ? '<p class="aside">' + esc(p.consistency) + "</p>" : "") +
+        (p.needed
+          ? '<p class="aside needs">' + esc(p.needed) + "</p>" : "");
+      /* The place is struck in its metal; the mark is not. The app colors
+         a mark for whose it is — the coach's own in the event's color, the
+         rest of the field set back — and gilding the leader's would be
+         saying the same thing twice in the one row that already says it. */
+      return '<div class="row"><span class="pl' + metal +
+        (p.tracked && !metal ? " mine" : "") + '">' +
         (p.best ? esc(p.place) : "–") +
         '</span><span class="nm' + (p.tracked ? " mine" : "") + '">' +
         esc(p.name) + '</span><span class="bm' +
-        (p.tracked ? " mine" : "") + metal + '">' + esc(p.best || "—") +
+        (p.tracked ? " mine" : "") + '">' + esc(p.best || "—") +
         "</span></div>" + aside + rule;
     }).join("");
-    return rows ? '<div class="card">' + rows + "</div>"
+    /* What the cut is, over the table — a promise before it is made and a
+       fact after it, exactly as the app heads its own. */
+    var advance = c.cut.has
+      ? '<p class="advance' + (c.cut.made ? " made" : "") + '">' +
+        esc(c.cut.label) + "</p>"
+      : "";
+    return rows ? '<div class="card">' + advance + rows + "</div>"
                 : '<p class="empty">Nothing thrown yet.</p>';
   }
 
@@ -706,9 +942,14 @@ const String _page = r'''<!doctype html>
   });
 
   backdrop();
-  addEventListener("resize", function () {
-    slide(["live", "series", "standings"].indexOf(tab));
-  });
+  /* The board is measured off the room it has, so a turned phone redraws
+     it rather than stretching the one it drew in portrait. */
+  addEventListener("resize", function () { backdrop(); render(); });
+  /* And once Barlow has landed, so the labels are laid out to the type
+     they are actually set in rather than to the fallback's metrics. */
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function () { render(); });
+  }
   poll();
   setInterval(poll, 4000);
   setInterval(tickAge, 1000);

@@ -70,7 +70,7 @@ Meet _meet() {
     venue: 'Sportcity',
     rounds: 6,
     prelimRounds: 3,
-    advancing: 4,
+    advancing: 3,
     conditions: const MeetConditions(
       sky: MeetSky.overcast,
       temperature: 54,

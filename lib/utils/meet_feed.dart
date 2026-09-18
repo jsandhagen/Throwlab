@@ -2,6 +2,7 @@ import 'dart:ui' show Color;
 
 import '../models/meet.dart';
 import '../models/meet_board.dart';
+import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
@@ -60,6 +61,11 @@ Map<String, dynamic> competitionFeed(
     'id': competitionId(competition),
     'label': competition.label,
     'event': competition.event.name,
+    // Half the sector, in degrees. The board is drawn to the real angle
+    // for the event — a javelin sector is narrower than a discus one, and
+    // a board that drew them alike would be a picture of a wedge rather
+    // than of the field in front of somebody.
+    'sector': competition.event.sectorHalfAngleDeg,
     // The color this event wears everywhere else in the app, so a spectator
     // who has seen the coach's screen is looking at the same discus.
     'tint': _hex(eventColor(competition.event)),
@@ -69,14 +75,21 @@ Map<String, dynamic> competitionFeed(
     // card worth graying or not.
     'prelims': meet.prelimRounds,
     'status': flight.label,
-    'flight': _flight(flight, standings),
+    'flight': _flight(competition, flight, standings),
     'cut': {
       'advancing': meet.advancing,
       'has': standings.hasCut,
       'made': standings.cutMade,
+      // What the app writes over its own table: the cut as a promise
+      // before it is made, and as a fact afterwards.
+      'label': standings.cutMade
+          ? 'the final'
+          : 'top ${meet.advancing} advance',
       if (standings.cutMark != null)
         'mark': formatDistance(standings.cutMark!, _unitOfCut(standings)),
     },
+    // What the board's own caption says under it — see [_caption].
+    'caption': _caption(flight, standings),
     'places': [
       for (final place in standings.places)
         _place(meet, competition, place, standings, isPersonalBest),
@@ -98,7 +111,8 @@ String competitionId(MeetCompetition competition) =>
 /// is no order worth naming anybody in ([MeetFlight.hasOrder]) — a
 /// competition of one is an athlete taking six throws, and announcing that
 /// they are up says nothing.
-Map<String, dynamic> _flight(MeetFlight flight, MeetStandings standings) {
+Map<String, dynamic> _flight(
+    MeetCompetition competition, MeetFlight flight, MeetStandings standings) {
   Map<String, dynamic>? who(String label, MeetEntry? entry) {
     if (entry == null) return null;
     final place = standings.placeOf(entry.id);
@@ -128,6 +142,13 @@ Map<String, dynamic> _flight(MeetFlight flight, MeetStandings standings) {
     break;
   }
 
+  // Whose throw is next, order or no order — the athlete the live card is
+  // built around. Their place in the throwing order rather than their id,
+  // which is what the field is already keyed by on the wire.
+  final up = flight.next;
+  final upOrder =
+      up == null ? -1 : competition.entries.indexWhere((e) => e.id == up.id);
+
   return {
     if (flight.flightLabel.isNotEmpty) 'label': flight.flightLabel,
     'round': flight.round + 1,
@@ -150,8 +171,77 @@ Map<String, dynamic> _flight(MeetFlight flight, MeetStandings standings) {
     ],
     if (leading != null)
       'leading': who(flight.finished ? 'won by' : 'leading', leading.entry),
+    if (upOrder >= 0) 'upOrder': upOrder,
+    // 'Jakob throws in flight 3' — for a spectator watching a flight the
+    // coach's own athletes are not in yet. [MeetFlight] writes it, so the
+    // page and the screen say it in the same words.
+    if (flight.yoursLater != null) 'elsewhere': flight.yoursLater,
   };
 }
+
+/// The lines the app prints under its board, in the words and the colors
+/// it prints them in.
+///
+/// Every one of them is a question the competition answers and the browser
+/// cannot — what the throw in the circle has to beat, what the coach's own
+/// athlete is short of — so they are worked out here, next to the rules
+/// they come from, and handed over as sentences. The tone names which of
+/// the app's colors each is set in rather than a hex: the page already
+/// holds the palette, and a caption that carried its own would be the one
+/// place on it spelling a color of its own.
+List<Map<String, dynamic>> _caption(
+    MeetFlight flight, MeetStandings standings) {
+  final lines = <Map<String, dynamic>>[];
+  final leader = standings.places.isEmpty ? null : standings.places.first;
+  final up = flight.inTheCircle;
+  final mine = up == null ? null : standings.placeOf(up.id);
+
+  if (up == null || mine == null) {
+    // Nobody in the circle: the round is over, or the competition is.
+    if (leader != null && leader.best != null) {
+      lines.add({
+        'text': '${_named(leader.entry)} '
+            '${flight.finished ? 'won it on' : 'leads on'} '
+            '${formatDistance(leader.best!, _unitOf(leader))}',
+        'tone': 'body',
+      });
+    }
+  } else {
+    // The calls above have said who is up. This says what the throw has to
+    // do, and nothing at all when they are already leading it.
+    final toLead = standings.neededFor(up.id, place: 1);
+    if (toLead != null) {
+      lines.add({
+        'text': '${formatDistance(toLead, _unitOf(mine))} takes the lead',
+        'tone': 'tint',
+      });
+    }
+  }
+
+  if (!standings.cutMade) {
+    for (final place in standings.places) {
+      if (!place.entry.tracked) continue;
+      final needed = standings.neededToQualify(place.entry.id);
+      if (needed == null) continue;
+      lines.add({
+        'text': '${_named(place.entry)} needs '
+            '${formatDistance(needed, _unitOf(place))} to make the final',
+        'tone': 'accent',
+      });
+      break;
+    }
+  }
+  return lines;
+}
+
+String _named(MeetEntry entry) =>
+    entry.athlete.isEmpty ? 'Unassigned' : entry.athlete;
+
+/// The unit this athlete's competition is being measured in — theirs when
+/// they have a mark, meters until they do.
+DistanceUnit _unitOf(MeetPlace place) => place.series.bestRound == null
+    ? DistanceUnit.meters
+    : place.series.unitAt(place.series.bestRound!);
 
 Map<String, dynamic> _place(
   Meet meet,
@@ -190,6 +280,14 @@ Map<String, dynamic> _place(
     // which the row already gives.
     if (place.entry.tracked && _consistency(series) != null)
       'consistency': _consistency(series),
+    // And what they are short of, which is the other line the app's table
+    // prints under its own athletes. Only theirs, and only while the cut
+    // is still to be made: what the rest of the field needs is not the
+    // coach's problem, and once the final is drawn there is nothing left
+    // to need.
+    if (place.entry.tracked && !standings.cutMade)
+      if (standings.neededToQualify(place.entry.id) case final needed?)
+        'needed': 'needs ${formatDistance(needed, unit)} to make the final',
     'series': [
       for (var round = 0; round < meet.rounds; round++)
         _round(place, series, round, isPersonalBest),
@@ -260,6 +358,10 @@ Map<String, dynamic> _board(MeetBoard board) => {
       'gridLabel': '${_trim(board.grid)} m lines',
       'hasCut': board.hasCut,
       'markerLines': board.markerLines,
+      // Everybody else in the competition: the spread of the field, drawn
+      // with no name on it. Fractions rather than distances, since that is
+      // all a faint line needs.
+      'others': [for (final at in board.others) board.fractionOf(at)],
       'marks': [
         for (final mark in board.marks)
           {

@@ -1059,36 +1059,6 @@ class _FlightBody extends StatelessWidget {
   /// is saying it once too often.
   final bool showLeader;
 
-  /// When the coach's own athletes throw, for a flight that isn't theirs.
-  ///
-  /// A big field is thrown a flight at a time, so a coach can be standing
-  /// at a ring watching a competition none of their throwers is in yet.
-  /// The calls above name whoever is up, which is no use to them — this is
-  /// the line that is. Null while one of theirs is in the flight being
-  /// thrown, because then the cards below say it better.
-  static String? _yoursLater(MeetFlight flight) {
-    final current = flight.flight;
-    if (current == null) return null;
-    final field = flight.competition.entries;
-    if (field.any((entry) => entry.tracked && entry.flight == current)) {
-      return null;
-    }
-    var soonest = 0;
-    for (final entry in field) {
-      if (!entry.tracked || entry.flight <= current) continue;
-      if (soonest == 0 || entry.flight < soonest) soonest = entry.flight;
-    }
-    if (soonest == 0) return null;
-    final waiting = [
-      for (final entry in field)
-        if (entry.tracked && entry.flight == soonest) entry,
-    ];
-    final only = waiting.length == 1 ? waiting.single.athlete : '';
-    return only.isEmpty
-        ? 'Yours throw in flight $soonest'
-        : '$only throws in flight $soonest';
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1103,7 +1073,7 @@ class _FlightBody extends StatelessWidget {
     final front = !flight.hasOrder || standings.places.isEmpty
         ? null
         : standings.places.first;
-    final elsewhere = _yoursLater(flight);
+    final elsewhere = flight.yoursLater;
     // The leader is worth a line of their own only when they are not
     // already on one.
     final leader = !showLeader ||

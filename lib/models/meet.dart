@@ -967,4 +967,38 @@ class MeetFlight {
     }
     return 'Round ${round + 1} of $rounds';
   }
+
+  /// When the coach's own athletes throw, for a flight that isn't theirs.
+  ///
+  /// A big field is thrown a flight at a time, so a coach can be standing
+  /// at a ring watching a competition none of their throwers is in yet.
+  /// The calls name whoever is up, which is no use to them — this is the
+  /// line that is. Null while one of theirs is in the flight being thrown,
+  /// because then the cards below say it better.
+  ///
+  /// It lives here rather than on the screen because the spectator's page
+  /// says it too, and one sentence written twice is two sentences waiting
+  /// to disagree.
+  String? get yoursLater {
+    final current = flight;
+    if (current == null) return null;
+    final field = competition.entries;
+    if (field.any((entry) => entry.tracked && entry.flight == current)) {
+      return null;
+    }
+    var soonest = 0;
+    for (final entry in field) {
+      if (!entry.tracked || entry.flight <= current) continue;
+      if (soonest == 0 || entry.flight < soonest) soonest = entry.flight;
+    }
+    if (soonest == 0) return null;
+    final waiting = [
+      for (final entry in field)
+        if (entry.tracked && entry.flight == soonest) entry,
+    ];
+    final only = waiting.length == 1 ? waiting.single.athlete : '';
+    return only.isEmpty
+        ? 'Yours throw in flight $soonest'
+        : '$only throws in flight $soonest';
+  }
 }

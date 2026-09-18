@@ -69,6 +69,22 @@ read as the app, and the only way to know is to stand them side by side, at
 one size, on one competition. Every difference this feature has fixed was
 found that way and not by reading the CSS.
 
+Standing them side by side is its own step, because a browser is the only
+thing that can render the page:
+
+```sh
+node tool/preview/compare_share.js   # build/preview/compare_*.png
+```
+
+It opens `spectator.html` at the same 390 x 844, shoots each tab
+(`web_live`, `web_series`, `web_standings`) and composes each against the
+app's own — three files to open, one per view. It needs Playwright on the
+machine (`npm i -g playwright`; the browser is already installed, so never
+run `playwright install`), and it asserts nothing: looking at the three
+files is the review. The competition it prints has a cut in it on purpose,
+so the cut line and the heading over the table are drawn on both sides
+rather than being the parity nobody looked at.
+
 The results sheet is reviewed the same way, except that the artifact is the
 PDF itself — it writes no golden and asserts nothing, because looking at the
 file is the review:
@@ -814,7 +830,18 @@ like the app rather than a bare Material default.
   with every mark already spelled through `formatDistance` — so the browser
   knows nothing about countback, prelims or feet and inches, and cannot
   become a second implementation of a competition that disagrees with the
-  coach's own screen. A series box carries the mark twice, in full and as
+  coach's own screen. That extends to every *sentence* the app prints off
+  a rule: what the throw in the circle has to beat and what the coach's
+  athlete is short of (`caption`, each line tagged with which of the app's
+  colors it is set in rather than a hex, since the page already holds the
+  palette), what the cut is called over the table (`cut.label`), what a
+  row of it needs (`needed`), and when the coach's own throw in a flight
+  that isn't the one in the ring (`flight.elsewhere` — which is why
+  `yoursLater` lives on `MeetFlight` rather than on the screen that used
+  to own it: one sentence written twice is two sentences waiting to
+  disagree). `flight.upOrder` is who the live card is built around, given
+  as a place in the throwing order rather than an id, because the field is
+  already keyed by that on the wire. A series box carries the mark twice, in full and as
   `short` without its unit, because that is the one place the app itself
   drops it (`_AttemptBox`) and six boxes across a phone have no room. The
   server holds no copy of the competition: it reads the meet through
@@ -832,15 +859,40 @@ like the app rather than a bare Material default.
   code rather than from the screen, and it came back a blue app with
   opaque boxes, an F for a foul, a leader the live view never names and the
   field read down the wrong order. None of that was visible in a diff.
-  So the check is not reading the CSS — it is `share_preview` and the
-  side-by-side above, at one size, on one competition, looked at. Re-run
-  it and open the three `compare_*.png`.
+  So the check is not reading the CSS — it is `share_preview` and then
+  `compare_share.js`, at one size, on one competition, looked at. Re-run
+  both and open the three `compare_*.png`. It found all of this: a live
+  view that stopped at the board where the app's carries the caption and
+  the athlete in the circle, a translucent live card with the backdrop's
+  sector crossing the drawn one, a trapezoid where the app draws a cone,
+  a leader's mark gilded in a table that colors a mark for whose it is,
+  the medal at twice its size and on the wrong side of the placing, and
+  a cut the page drew as a heading where the app rules it across.
   Some things belong to one side only and that is fine: the coach's
   actions (the camera, the ruler, Add athlete, the round-entry sheet) can
   never be on a read-only page, and the page carries the meet's name, date,
   venue, conditions and how old it is because a spectator has no app around
   it for context. Say which in the commit rather than letting the two drift
   quietly.
+- The live view is one card, and it is the one card on the page that is
+  opaque. The app's is the flight above the sector, the sector, what the
+  throw in the circle has to do, and under a rule the athlete about to
+  take it with the same six boxes as the field — one surface, blended to
+  exactly the tone of the translucent ones rather than given a color of
+  its own, because the page's own sector backdrop runs behind it and two
+  sectors drawn over each other at different angles are a picture of
+  nothing. The board inside it is drawn by the same geometry
+  `SectorBoard` uses, ported rather than approximated: an apex below the
+  box at whatever distance makes the wedge take 0.46 of the width at its
+  far edge, real arcs struck around it, the sector's own half-angle off
+  the feed, the grass wash, the marker lines clipped to the wedge, the
+  ground past the cut shaded to the cut's own arc, and the scale in words
+  in the bottom-left corner. It is measured off the room it has — half the
+  view, clamped to its own width — so a turned phone redraws it rather
+  than stretching a fixed viewBox, and the labels are measured in a canvas
+  rather than counted in characters, because a width guessed at so many
+  pixels a character leaves a panel hanging off the end of every short
+  label.
 - The page is laid out as the app lays the same three views out, not as a
   web page about them. Its header card is the app's — the round, how much
   of it has been thrown, the bar under that, and the three an infield calls

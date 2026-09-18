@@ -208,6 +208,70 @@ void main() {
       expect(places.every((p) => p['throwsInFinal'] == true), isTrue);
     });
 
+    test('hands over the lines the app prints under its board', () {
+      final made = meet(rounds: 6, prelimRounds: 3, advancing: 2);
+      made.entries.addAll([
+        entry('e1', 'Ama', [MeetAttempt.untracked(50)],
+            order: 0, tracked: false),
+        entry('e2', 'Ben', [MeetAttempt.untracked(45)],
+            order: 1, tracked: false),
+        // The coach's own, third and out of the final as things stand.
+        entry('e3', 'Cal', [MeetAttempt.mark('m1')], order: 2),
+        entry('e4', 'Dee', const [], order: 3, tracked: false),
+      ]);
+      final feed = feedOf(made, [mark('m1', 'Cal', 40)]);
+      final caption = feed['caption'] as List;
+      // What the throw in the circle has to do, in the event's own color,
+      // and what the coach's athlete is short of, in the theme's.
+      expect(caption.first['text'], '50.01 m takes the lead');
+      expect(caption.first['tone'], 'tint');
+      expect(caption.last['text'], 'Cal needs 45.01 m to make the final');
+      expect(caption.last['tone'], 'accent');
+      // And on the row itself, which is where the standings say it.
+      final cal = (feed['places'] as List).firstWhere((p) => p['name'] == 'Cal');
+      expect(cal['needed'], 'needs 45.01 m to make the final');
+      // The rest of the field never carries it: what they need is not the
+      // coach's problem.
+      final ama = (feed['places'] as List).first;
+      expect(ama.containsKey('needed'), isFalse);
+      // What the cut is, over the table.
+      expect(feed['cut']['label'], 'top 2 advance');
+    });
+
+    test('names who is about to throw, and the sector they throw into', () {
+      final made = meet();
+      made.entries.addAll([
+        entry('e1', 'Ama', [MeetAttempt.mark('m1')], order: 0),
+        entry('e2', 'Ben', const [], order: 1),
+      ]);
+      final feed = feedOf(made, [mark('m1', 'Ama', 40)]);
+      // Where in the throwing order the live card's athlete sits, which is
+      // what the field is already keyed by on the wire.
+      expect(feed['flight']['upOrder'], 1);
+      expect((feed['places'] as List)
+          .firstWhere((p) => p['order'] == 1)['name'], 'Ben');
+      // Half the sector, so the board is drawn to the real angle for the
+      // event rather than to a wedge somebody picked.
+      expect(feed['sector'], closeTo(34.92 / 2, 0.001));
+      expect(feedOf(meet()..entries.addAll([
+            entry('j1', 'Ama', const [], event: ThrowEvent.javelin,
+                implementKg: 0.8),
+          ]), const [], event: ThrowEvent.javelin)['sector'],
+          closeTo(28.96 / 2, 0.001));
+    });
+
+    test('says when the coach’s own throw, for a flight that is not theirs',
+        () {
+      final made = meet();
+      made.entries.addAll([
+        entry('e1', 'Ama', const [], order: 0, flight: 1, tracked: false),
+        entry('e2', 'Ben', const [], order: 1, flight: 1, tracked: false),
+        entry('e3', 'Cal', const [], order: 2, flight: 2),
+      ]);
+      expect(feedOf(made, const [])['flight']['elsewhere'],
+          'Cal throws in flight 2');
+    });
+
     test('flags a personal best the way the record book does', () {
       final (made, results) = competition();
       final feed =
