@@ -63,7 +63,8 @@ every tab works, because the page already holds the whole competition.
 
 It also shoots the app's own three views of the same competition
 (`app_live`, `app_series`, `app_standings`) at the same 390 x 844 the page
-is reviewed at. That is the comparison that matters — the page is meant to
+is reviewed at — the two are changed in parallel, always, and this is how
+that is checked. That is the comparison that matters — the page is meant to
 read as the app, and the only way to know is to stand them side by side, at
 one size, on one competition. Every difference this feature has fixed was
 found that way and not by reading the CSS.
@@ -822,6 +823,24 @@ like the app rather than a bare Material default.
 - The whole competition goes out at once, so switching tab costs no request
   at all, and the page keeps working when the phone wanders off the wifi.
   It says how old it is rather than going blank.
+- **`MeetEventScreen` and `spectator_page` are two renderings of one
+  competition, and they are changed together or not at all.** Touching what
+  a view says or how it reads on either side — the header card and its
+  calls, the field card, the series boxes, the board, the standings, the
+  metals, the type, the spacing, a color — is a change to both, in the same
+  commit. They have already drifted once: the page was laid out from the
+  code rather than from the screen, and it came back a blue app with
+  opaque boxes, an F for a foul, a leader the live view never names and the
+  field read down the wrong order. None of that was visible in a diff.
+  So the check is not reading the CSS — it is `share_preview` and the
+  side-by-side above, at one size, on one competition, looked at. Re-run
+  it and open the three `compare_*.png`.
+  Some things belong to one side only and that is fine: the coach's
+  actions (the camera, the ruler, Add athlete, the round-entry sheet) can
+  never be on a read-only page, and the page carries the meet's name, date,
+  venue, conditions and how old it is because a spectator has no app around
+  it for context. Say which in the commit rather than letting the two drift
+  quietly.
 - The page is laid out as the app lays the same three views out, not as a
   web page about them. Its header card is the app's — the round, how much
   of it has been thrown, the bar under that, and the three an infield calls
