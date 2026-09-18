@@ -115,12 +115,17 @@ Map<String, dynamic> _flight(MeetFlight flight, MeetStandings standings) {
   // Whoever is in front. A competition that is over has a winner; one
   // still being thrown has somebody ahead, which is not the same thing and
   // shouldn't be written as though it were.
+  //
+  // Worth a line of their own only when they are not already on one: the
+  // leader standing in the circle is named once, at the top, exactly as
+  // the app's own header names them.
   MeetPlace? leading;
   for (final place in standings.places) {
-    if (place.best != null) {
-      leading = place;
-      break;
-    }
+    if (place.best == null) continue;
+    final called = [flight.inTheCircle, flight.onDeck, flight.inTheHole]
+        .any((entry) => entry?.id == place.entry.id);
+    if (!called) leading = place;
+    break;
   }
 
   return {

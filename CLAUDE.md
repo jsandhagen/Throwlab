@@ -824,8 +824,12 @@ like the app rather than a bare Material default.
   It says how old it is rather than going blank.
 - The page is laid out as the app lays the same three views out, not as a
   web page about them. Its header card is the app's — the round, how much
-  of it has been thrown, the bar under that, the three an infield calls and
-  whoever is in front under a rule — and the feed hands over the words
+  of it has been thrown, the bar under that, and the three an infield calls
+  out. Whoever is in front goes under a rule beneath them, but only on the
+  Series tab and only when they are not already one of the three: that is
+  `_FlightBody`'s own `showLeader` rule, and the live view leaves the
+  leader off because the board below already draws the lead across it. The
+  feed hands over the words
   (`thrownLabel`, `calls`, `leading`, `consistency`, `gridLabel`) rather
   than numbers for the browser to phrase. The field reads down the throwing
   order with the order number at the left and the place beside the mark on
@@ -860,11 +864,16 @@ like the app rather than a bare Material default.
   that starts it, so the theme stays `main.dart`'s to decide — the type is
   the bundled Barlow, served off the phone at `f/r.ttf` and `f/s.ttf`
   because there is no network at a track to fetch a font from, and the
-  chrome is the app's own: the two-cut silhouette of `angularShape`, the
-  segmented bar whose block leans at the sector's half-angle and squares up
-  against whichever end it has reached, the drawn `EventGlyph` in the
-  event's own color, and the sector backdrop the library and the meet stand
-  on. The podium's three metals are written into it out of `gold.dart` too
+  chrome is the app's own: the segmented bar wearing the two-cut silhouette
+  of `angularShape`, its block leaning at the sector's half-angle and
+  squaring up against whichever end it has reached, the drawn `EventGlyph`
+  in the event's own color, and the sector backdrop the library and the
+  meet stand on. The cards are *not* angular — the competition screen's are
+  plain `Card`s at the theme's 16px radius, and translucent
+  (`surfaceContainerHighest` at 45%) so the sector stands through them,
+  which is most of what made an opaque page read as a different app. The
+  athlete in the circle is edged in the event's color at 12px, as theirs
+  is. The podium's three metals are written into it out of `gold.dart` too
   — the flat tones as CSS variables for the places, and the five stops as
   SVG gradients for the board's own lines, which are the one thing on the
   page big enough to show a ramp. The page never spells a color of its own.
@@ -876,7 +885,8 @@ like the app rather than a bare Material default.
 - The results sheet is a route, not a second implementation:
   `meetResultsPdf` is pure Dart over the meet and the record book, so it is
   generated into the response — this competition's, with `only:` set from
-  the share. A spectator leaving early downloads the event on their way to
+  the share. It is offered where the app offers it, as an action in the top
+  right beside the title, rather than as a button at the foot of the page. A spectator leaving early downloads the event on their way to
   the car park, with no signal anywhere near it.
 - The link is handed over by QR, because nobody types 192.168.43.1:8080 off
   a screen in sunlight — and printed under it in full, because sometimes

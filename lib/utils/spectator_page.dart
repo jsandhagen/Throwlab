@@ -167,7 +167,17 @@ const String _page = r'''<!doctype html>
            border-bottom: 2px solid var(--accent);
            transition: left 240ms cubic-bezier(0.22, 1, 0.36, 1); }
 
-  .card { background: var(--surface); padding: 10px 12px; margin-bottom: 9px; }
+  /* Translucent, and rounded rather than cut: the competition screen's
+     cards are surfaceContainerHighest at 45%, so the sector stands through
+     them, and they take the theme's own 16px card radius. The angular
+     silhouette belongs to the segmented bar, not to these. */
+  .card { background: color-mix(in srgb, var(--surface) 45%, transparent);
+          border-radius: 16px; padding: 10px 12px; margin-bottom: 9px; }
+  /* The athlete in the circle is edged in the event's color, so a coach
+     looking down finds the row without reading a name. */
+  .card.up { border-radius: 12px;
+             box-shadow: inset 0 0 0 1.5px
+               color-mix(in srgb, var(--tint) 80%, transparent); }
   /* The app's own header over the field: where the round has got to, how
      much of it has been thrown, and the three an infield calls out. */
   .round { display: flex; justify-content: space-between; align-items: baseline;
@@ -249,13 +259,14 @@ const String _page = r'''<!doctype html>
   .box.out { opacity: 0.32; }
   /* Struck by the app itself and served as pixels — see MeetServer. */
   .medal { height: 22px; width: auto; vertical-align: -6px; margin-right: 1px; }
-  /* The athlete in the circle, marked the way the app marks their card. */
-  .card.up { box-shadow: inset 0 0 0 1px var(--tint); }
 
-  .downloads { display: flex; gap: 8px; margin: 18px 0 8px; }
-  .downloads a { flex: 1; text-align: center; text-decoration: none;
-                 padding: 12px 14px; font-size: 14px; font-weight: 500;
-                 background: var(--surface); color: var(--text); }
+
+  /* The results sheet sits where the app puts it — an action in the top
+     right, beside the title, not a button at the foot of the page. */
+  .title { position: relative; }
+  .sheet { margin-left: auto; flex: 0 0 auto; display: block; padding: 6px;
+           color: var(--dim); line-height: 0; }
+  .sheet svg { width: 22px; height: 22px; }
   .note { color: var(--dim); font-size: 12px; text-align: center; margin: 6px 0 0; }
   .empty { color: var(--dim); text-align: center; padding: 28px 10px; }
 </style>
@@ -263,7 +274,11 @@ const String _page = r'''<!doctype html>
 <body>
 <svg id="backdrop" preserveAspectRatio="none" aria-hidden="true"></svg>
 <header>
-  <div class="title"><span id="glyph"></span><h1 id="label">…</h1></div>
+  <div class="title"><span id="glyph"></span><h1 id="label">…</h1>
+    <a class="sheet" id="sheet" title="Results sheet" aria-label="Results sheet"><svg
+      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+      stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path
+      d="M14 3v5h5"/><path d="M9 13h6M9 17h4" stroke-linecap="round"/></svg></a></div>
   <div class="sub" id="meet"></div>
   <div class="sub" id="weather"></div>
   <div class="age" id="age"><i class="dot"></i><span id="ageText">connecting…</span></div>
@@ -275,7 +290,6 @@ const String _page = r'''<!doctype html>
   <button data-tab="standings" aria-pressed="false">Standings</button>
 </div>
 <main id="view"></main>
-<div class="downloads" id="downloads"></div>
 <p class="note">Live from the coach's phone. Nothing here is stored anywhere else.</p>
 
 <script>
@@ -507,15 +521,15 @@ const String _page = r'''<!doctype html>
   /* The app's own header over the field, on a card of its own: the round
      and how much of it has been thrown, the three an infield calls out,
      and whoever is in front under a rule. */
-  function header(c) {
+  function header(c, withLeader) {
     var f = c.flight || {};
     var calls = (f.calls || []).map(function (r, i) {
       return row(r, i === 0);
     }).join("");
-    var lead = f.leading
+    var lead = withLeader && f.leading
       ? '<div class="lead-rule"></div>' + row(f.leading, false)
       : "";
-    return '<div class="card angular"><div class="round"><b>' + esc(c.status) +
+    return '<div class="card"><div class="round"><b>' + esc(c.status) +
       '</b><span class="sub">' + esc(f.thrownLabel || "") + "</span></div>" +
       '<div class="bar"><i style="width:' +
       Math.round((f.progress || 0) * 100) + '%"></i></div>' +
@@ -533,7 +547,9 @@ const String _page = r'''<!doctype html>
   }
 
   function liveView(c) {
-    return header(c) + '<div class="card angular">' + board(c.board) +
+    /* No leader row here: the board below has the lead drawn across it,
+       and the app's live header leaves it off for that reason. */
+    return header(c, false) + '<div class="card">' + board(c.board) +
       (c.board && c.board.gridLabel && c.board.marks.length
         ? '<div class="sub" style="margin-top:6px">' + esc(c.board.gridLabel) +
           "</div>"
@@ -545,7 +561,7 @@ const String _page = r'''<!doctype html>
     var flighted = c.places.some(function (q) { return q.flight; });
     var calls = (c.flight || {}).calls || [];
     var up = calls.length ? calls[0].name : null;
-    var out = [header(c)], flight = null;
+    var out = [header(c, true)], flight = null;
     field.forEach(function (p) {
       var f = p.flight || 1;
       if (flighted && f !== flight) {
@@ -558,7 +574,7 @@ const String _page = r'''<!doctype html>
         : "";
       /* The order they throw in down the left, the way the app reads a
          field; the place rides on the right with the mark it was made on. */
-      out.push('<div class="card angular' + (p.name === up ? " up" : "") +
+      out.push('<div class="card' + (p.name === up ? " up" : "") +
         '"><div class="row"><span class="ord">' +
         (p.order + 1) + '</span><span class="nm' + (p.tracked ? " mine" : "") +
         '">' + esc(p.name) + "</span>" +
@@ -610,7 +626,7 @@ const String _page = r'''<!doctype html>
         (p.tracked ? " mine" : "") + metal + '">' + esc(p.best || "—") +
         "</span></div>" + aside + rule;
     }).join("");
-    return rows ? '<div class="card angular">' + rows + "</div>"
+    return rows ? '<div class="card">' + rows + "</div>"
                 : '<p class="empty">Nothing thrown yet.</p>';
   }
 
@@ -632,8 +648,7 @@ const String _page = r'''<!doctype html>
 
     el("view").innerHTML = tab === "live" ? liveView(data)
       : tab === "series" ? seriesView(data) : standingsView(data);
-    el("downloads").innerHTML =
-      '<a class="angular" href="' + base + '/results.pdf">Results sheet</a>';
+    el("sheet").setAttribute("href", base + "/results.pdf");
   }
 
   /* The block under the active section, leaning at the sector's own
