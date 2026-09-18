@@ -56,10 +56,17 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 
 `share_preview` writes a second artifact beside its PNGs:
 `build/preview/spectator.html`, the real spectator page with a competition's
-feed baked in place of its fetch, and Barlow copied in beside it so the type
-is the app's there too. A page whose whole job happens in a browser cannot be
-reviewed as a golden — open the file, and every tab works, because the page
-already holds the whole competition.
+feed baked in place of its fetch, and Barlow and the medal copied in beside
+it so the type and the badge are the app's there too. A page whose whole job
+happens in a browser cannot be reviewed as a golden — open the file, and
+every tab works, because the page already holds the whole competition.
+
+It also shoots the app's own three views of the same competition
+(`app_live`, `app_series`, `app_standings`) at the same 390 x 844 the page
+is reviewed at. That is the comparison that matters — the page is meant to
+read as the app, and the only way to know is to stand them side by side, at
+one size, on one competition. Every difference this feature has fixed was
+found that way and not by reading the CSS.
 
 The results sheet is reviewed the same way, except that the artifact is the
 PDF itself — it writes no golden and asserts nothing, because looking at the
@@ -815,6 +822,38 @@ like the app rather than a bare Material default.
 - The whole competition goes out at once, so switching tab costs no request
   at all, and the page keeps working when the phone wanders off the wifi.
   It says how old it is rather than going blank.
+- The page is laid out as the app lays the same three views out, not as a
+  web page about them. Its header card is the app's — the round, how much
+  of it has been thrown, the bar under that, the three an infield calls and
+  whoever is in front under a rule — and the feed hands over the words
+  (`thrownLabel`, `calls`, `leading`, `consistency`, `gridLabel`) rather
+  than numbers for the browser to phrase. The field reads down the throwing
+  order with the order number at the left and the place beside the mark on
+  the right; the series boxes are numbered and a foul is an X, because a
+  coach reading a series wants the round a mark came out of and an F is a
+  grade. The standings draw no rules between rows — the app's table doesn't,
+  and a four-line result cut into boxes reads as four things rather than one
+  competition. Only the coach's own athletes carry the averaging line under
+  them.
+- Two accents, and they are not the same one. `--tint` is the event's own
+  color, which is what the app's competition screen colors everything
+  *inside* its cards with; `--accent` is the theme's primary, which is what
+  the segmented bar is painted in. A page that used one for both read as a
+  blue app beside a green one.
+- The board is drawn portrait and fills its card, because a sector squashed
+  into a landscape strip stacks the competition into an inch of it — which
+  is the one thing a board is for. Its marker lines carry no numbers: the
+  app doesn't label them either, it says how far apart they are once in the
+  corner, and a number on every arc is five numbers competing with the
+  marks. A label is bold type on a quiet panel rather than a stroked box,
+  and the athlete the board is being read for carries a marker at the middle
+  of their line.
+- The personal-best medal is not ported to SVG. `medalPng` strikes it with
+  the app's own painter and `MeetServer` serves the pixels, because every
+  number in `_MedalPainter` is measured off a reference and a badge that is
+  nearly right is worse than none. The page pins it beside the place, which
+  is where the app pins it — so the best box keeps its own ring and a PB is
+  never said twice.
 - It is meant to read as ThrowLab rather than as a web page about ThrowLab,
   so `spectator_page` is not styled by hand. The palette is written out of
   the app's own `ColorScheme` — handed to `MeetServer.start` by the sheet

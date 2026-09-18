@@ -143,6 +143,10 @@ void main() {
       expect(places.first['bestRound'], 3);
       expect(places.first['fouls'], 1);
       expect(places.last['passes'], 1);
+      // The line the app writes under its own athletes, and only under
+      // them — the rest of the field is here to be placed against.
+      expect(places.first['consistency'], 'averaging 43.88 m from 2 · 1 foul');
+      expect(places.last.containsKey('consistency'), isFalse);
     });
 
     test('writes each mark in the unit it was measured in', () {
@@ -166,12 +170,20 @@ void main() {
         entry('e4', 'Dee', const [], order: 3),
       ]);
       final flight = feedOf(made, [mark('m1', 'Ama', 40)])['flight'];
-      expect(flight['up'], 'Ben');
-      expect(flight['onDeck'], 'Cal');
-      expect(flight['inTheHole'], 'Dee');
+      final calls = flight['calls'] as List;
+      expect(calls.map((c) => c['label']), ['up', 'on deck', 'in the hole']);
+      expect(calls.map((c) => c['name']), ['Ben', 'Cal', 'Dee']);
       expect(flight['round'], 1);
       expect(flight['thrown'], 1);
       expect(flight['fieldSize'], 4);
+      // The words the app's own header uses, rather than two numbers for
+      // the page to join up itself.
+      expect(flight['thrownLabel'], '1 of 4 thrown');
+      expect(flight['progress'], 0.25);
+      // Whoever is in front, with the mark they are in front on.
+      expect(flight['leading']['label'], 'leading');
+      expect(flight['leading']['name'], 'Ama');
+      expect(flight['leading']['mark'], '40.00 m');
     });
 
     test('says where the cut falls and who is still in it', () {
@@ -210,6 +222,9 @@ void main() {
       final board = feedOf(made, results)['board'];
       expect(board['far'] - board['near'], greaterThan(0));
       expect(board['markerLines'], isNotEmpty);
+      // What the app captions its own board with, so a gap can be read as
+      // a distance without arithmetic off the labels.
+      expect(board['gridLabel'], endsWith(' m lines'));
       final marks = board['marks'] as List;
       // The leader's line, labelled the way a board is read: the surname
       // and the school, never the initial.

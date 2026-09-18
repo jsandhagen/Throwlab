@@ -29,6 +29,7 @@ import 'package:throwlab/services/meet_server.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/utils/meet_feed.dart';
 import 'package:throwlab/utils/spectator_page.dart';
+import 'package:throwlab/widgets/gold.dart';
 
 import 'harness.dart';
 
@@ -141,7 +142,10 @@ void main() {
       'flutter.throwlab.meets': jsonEncode([_meet().toJson()]),
     });
 
-    tester.view.physicalSize = const Size(1080, 2280);
+    // The same 390 x 844 the spectator's page is reviewed at, so the two
+    // can be stood side by side and the differences are differences rather
+    // than a change of canvas.
+    tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
@@ -183,6 +187,19 @@ void main() {
     await pump();
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('$_out/share_meet_bar.png'));
+
+    // The app's own three views of this competition, for standing beside
+    // the page's three. This is the comparison that matters: the page is
+    // meant to read as the app, and the only way to know is to look at
+    // them together.
+    for (final view in ['Live', 'Series', 'Standings']) {
+      await tester.tap(find.text(view));
+      await settle(tester);
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('$_out/app_${view.toLowerCase()}.png'));
+    }
+    await tester.tap(find.text('Live'));
+    await settle(tester);
 
     // The sheet before anything is shared: what it is, and what it costs.
     await tester.tap(find.byTooltip('Follow along'));
@@ -246,6 +263,10 @@ void main() {
           .writeAsBytesSync(File('assets/fonts/Barlow-Regular.ttf').readAsBytesSync());
       File('${fonts.path}/s.ttf').writeAsBytesSync(
           File('assets/fonts/Barlow-SemiBold.ttf').readAsBytesSync());
+      // The medal the page pins on a personal best, struck by the app's own
+      // painter exactly as the server strikes it.
+      File('${folder.path}/pb.png')
+          .writeAsBytesSync(await medalPng(Medal.gold, size: 48));
       // ignore: avoid_print
       print('wrote ${file.path} (${file.lengthSync()} bytes)');
     });

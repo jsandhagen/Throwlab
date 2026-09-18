@@ -69,7 +69,7 @@ Map<String, dynamic> competitionFeed(
     // card worth graying or not.
     'prelims': meet.prelimRounds,
     'status': flight.label,
-    'flight': _flight(flight),
+    'flight': _flight(flight, standings),
     'cut': {
       'advancing': meet.advancing,
       'has': standings.hasCut,
@@ -92,20 +92,61 @@ String competitionId(MeetCompetition competition) =>
 
 /// Where the competition has got to, and the three an infield calls out.
 ///
-/// Names only — the page has no business with entry ids, and a call is read
-/// out loud rather than clicked on. Absent where there is no order worth
-/// naming anybody in ([MeetFlight.hasOrder]): a competition of one is an
-/// athlete taking six throws, and announcing that they are up says nothing.
-Map<String, dynamic> _flight(MeetFlight flight) => {
-      if (flight.flightLabel.isNotEmpty) 'label': flight.flightLabel,
-      'round': flight.round + 1,
-      'done': flight.finished,
-      'thrown': flight.thrown,
-      'fieldSize': flight.fieldSize,
-      if (flight.inTheCircle != null) 'up': flight.inTheCircle!.athlete,
-      if (flight.onDeck != null) 'onDeck': flight.onDeck!.athlete,
-      if (flight.inTheHole != null) 'inTheHole': flight.inTheHole!.athlete,
+/// The calls come through as rows rather than as bare names, because that
+/// is what the app's own header puts up: what they are called, who they
+/// are, where they stand and what they are standing on. Absent where there
+/// is no order worth naming anybody in ([MeetFlight.hasOrder]) — a
+/// competition of one is an athlete taking six throws, and announcing that
+/// they are up says nothing.
+Map<String, dynamic> _flight(MeetFlight flight, MeetStandings standings) {
+  Map<String, dynamic>? who(String label, MeetEntry? entry) {
+    if (entry == null) return null;
+    final place = standings.placeOf(entry.id);
+    final best = place?.best;
+    return {
+      'label': label,
+      'name': entry.athlete,
+      if (place != null && best != null) 'placeLabel': ordinalPlace(place.place),
+      if (place != null && best != null)
+        'mark': formatDistance(best, place.series.unit),
     };
+  }
+
+  // Whoever is in front. A competition that is over has a winner; one
+  // still being thrown has somebody ahead, which is not the same thing and
+  // shouldn't be written as though it were.
+  MeetPlace? leading;
+  for (final place in standings.places) {
+    if (place.best != null) {
+      leading = place;
+      break;
+    }
+  }
+
+  return {
+    if (flight.flightLabel.isNotEmpty) 'label': flight.flightLabel,
+    'round': flight.round + 1,
+    'done': flight.finished,
+    'thrown': flight.thrown,
+    'fieldSize': flight.fieldSize,
+    // The words the app's own header uses, rather than two numbers for the
+    // page to join up itself.
+    'thrownLabel': flight.finished
+        ? 'all in'
+        : '${flight.thrown} of ${flight.fieldSize} thrown',
+    'progress': flight.fieldSize == 0 ? 0.0 : flight.thrown / flight.fieldSize,
+    'calls': [
+      for (final call in [
+        who('up', flight.inTheCircle),
+        who('on deck', flight.onDeck),
+        who('in the hole', flight.inTheHole),
+      ])
+        if (call != null) call,
+    ],
+    if (leading != null)
+      'leading': who(flight.finished ? 'won by' : 'leading', leading.entry),
+  };
+}
 
 Map<String, dynamic> _place(
   Meet meet,
@@ -138,11 +179,31 @@ Map<String, dynamic> _place(
     if (series.average != null) 'average': formatDistance(series.average!, unit),
     'fouls': series.fouls,
     'passes': series.passes,
+    // 'averaging 42.13 m from 2 · 1 foul' — the coach's question rather
+    // than the competition's, and only for their own athletes, exactly as
+    // the app's own table asks it. A mean of one throw is that throw,
+    // which the row already gives.
+    if (place.entry.tracked && _consistency(series) != null)
+      'consistency': _consistency(series),
     'series': [
       for (var round = 0; round < meet.rounds; round++)
         _round(place, series, round, isPersonalBest),
     ],
   };
+}
+
+/// How the series is going as a whole, in the words the app's standings
+/// row says it in. Null before there is anything to say about it.
+String? _consistency(MeetSeries series) {
+  final marks = series.legalMarks.length;
+  final average = marks > 1 ? series.average : null;
+  final fouls = series.fouls;
+  if (average == null && fouls == 0) return null;
+  return [
+    if (average != null)
+      'averaging ${formatDistance(average, series.unit)} from $marks',
+    if (fouls > 0) '$fouls foul${fouls == 1 ? '' : 's'}',
+  ].join(' · ');
 }
 
 /// One box of a series: what became of the round, and the mark if it stood.
@@ -188,6 +249,10 @@ Map<String, dynamic> _board(MeetBoard board) => {
       'near': board.near,
       'far': board.far,
       'grid': board.grid,
+      // '2 m lines' — what the app writes in the corner of its own board,
+      // so a gap can be read as a distance without doing arithmetic off
+      // the labels.
+      'gridLabel': '${_trim(board.grid)} m lines',
       'hasCut': board.hasCut,
       'markerLines': board.markerLines,
       'marks': [
@@ -219,6 +284,12 @@ DistanceUnit _unitOfCut(MeetStandings standings) {
   }
   return unit;
 }
+
+/// '2' rather than '2.0', and '0.5' kept — the board's rungs are round
+/// numbers and a trailing zero on one reads as precision it hasn't got.
+String _trim(double meters) => meters == meters.roundToDouble()
+    ? meters.toStringAsFixed(0)
+    : meters.toString();
 
 String _hex(Color color) =>
     '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';

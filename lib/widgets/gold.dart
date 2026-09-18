@@ -8,6 +8,8 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -203,6 +205,26 @@ class PersonalBestMedal extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PlaceMedal(
       medal: Medal.gold, size: size, label: 'Personal best');
+}
+
+/// The medal as a PNG, struck by the same painter the app pins on a card.
+///
+/// For the spectator's page, which cannot run a `CustomPainter` — and where
+/// porting this geometry to SVG would give something nearly right, which on
+/// a badge measured off a reference is worse than nothing. The phone draws
+/// it and serves the pixels.
+Future<Uint8List> medalPng(Medal medal, {int size = 48}) async {
+  final recorder = ui.PictureRecorder();
+  final height = (size * _MedalPainter.aspect).round();
+  _MedalPainter(medal).paint(
+      Canvas(recorder), Size(size.toDouble(), height.toDouble()));
+  final image = await recorder.endRecording().toImage(size, height);
+  try {
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    return data!.buffer.asUint8List();
+  } finally {
+    image.dispose();
+  }
 }
 
 class _MedalPainter extends CustomPainter {
