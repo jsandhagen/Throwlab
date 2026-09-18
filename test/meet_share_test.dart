@@ -102,7 +102,7 @@ void main() {
           {DateTime? at,
           bool Function(ThrowResult)? isPersonalBest,
           ThrowEvent? event,
-          String? following}) =>
+          List<String>? following}) =>
       competitionFeed(made, only(made, event), results,
           at: at, isPersonalBest: isPersonalBest, following: following);
 
@@ -310,7 +310,7 @@ void main() {
       for (final place in places) {
         expect(place['mine'], place['tracked']);
       }
-      // And every row carries the key a spectator would follow it by.
+      // And every row carries the key a spectator would tick it by.
       expect(places.map((p) => p['key']), containsAll(['e1', 'e2']));
     });
 
@@ -334,8 +334,10 @@ void main() {
           'Cal needs 50.01 m to make the final');
 
       // The same competition, read by somebody who came to watch Ben.
-      final feed = feedOf(made, results, following: 'e2');
-      expect(feed['following'], {'key': 'e2', 'name': 'Ben'});
+      final feed = feedOf(made, results, following: ['e2']);
+      expect(feed['following'], [
+        {'key': 'e2', 'name': 'Ben'}
+      ]);
       final places = feed['places'] as List;
       final ben = places.firstWhere((p) => p['name'] == 'Ben');
       final cal = places.firstWhere((p) => p['name'] == 'Cal');
@@ -374,7 +376,7 @@ void main() {
       final plain = feedOf(made, const [])['board']['marks'] as List;
       expect(plain.map((m) => m['line']), isNot(contains('mine')));
 
-      final marks = feedOf(made, const [], following: 'e4')['board']['marks']
+      final marks = feedOf(made, const [], following: ['e4'])['board']['marks']
           as List;
       final mine = marks.firstWhere((m) => m['line'] == 'mine');
       // Named the way a board names one, and labelled with the place they
@@ -383,9 +385,51 @@ void main() {
       expect(mine['label'], '4th');
     });
 
+    test('follows as many of the field as somebody ticked', () {
+      final made = meet();
+      made.entries.addAll([
+        entry('e1', 'Ama', [MeetAttempt.untracked(50)],
+            order: 0, tracked: false),
+        entry('e2', 'Ben', [MeetAttempt.untracked(49)],
+            order: 1, tracked: false),
+        entry('e3', 'Cal', [MeetAttempt.untracked(48)],
+            order: 2, tracked: false),
+        entry('e4', 'Dee', [MeetAttempt.untracked(47)],
+            order: 3, tracked: false),
+        entry('e5', 'Eve', [MeetAttempt.untracked(46)],
+            order: 4, tracked: false),
+      ]);
+      // A parent with two in the field, and a club's supporter with four:
+      // one is not the case this is built for, and the coach's own 'yours'
+      // was never one athlete either.
+      final feed = feedOf(made, const [], following: ['e4', 'e5']);
+      expect(feed['following'], [
+        {'key': 'e4', 'name': 'Dee'},
+        {'key': 'e5', 'name': 'Eve'},
+      ]);
+      final places = feed['places'] as List;
+      expect(
+          places.where((p) => p['mine'] == true).map((p) => p['name']),
+          ['Dee', 'Eve']);
+      // A line each on the board, the way a coach's board draws a line for
+      // each of theirs.
+      final marks = feed['board']['marks'] as List;
+      expect(marks.where((m) => m['line'] == 'mine').map((m) => m['name']),
+          ['Dee', 'Eve']);
+      // Echoed back in the order the field is read down, whatever order
+      // the boxes were ticked in.
+      expect(feedOf(made, const [], following: ['e5', 'e4'])['following'],
+          feed['following']);
+      // And anybody the competition no longer holds is simply left out,
+      // which leaves the rest of the ticks alone.
+      expect(feedOf(made, const [], following: ['e4', 'eGone'])['following'], [
+        {'key': 'e4', 'name': 'Dee'}
+      ]);
+    });
+
     test('drops a choice the competition no longer holds', () {
       final (made, results) = competition();
-      final feed = feedOf(made, results, following: 'e404');
+      final feed = feedOf(made, results, following: ['e404']);
       // Somebody taken off the meet is nobody to follow. The answer comes
       // back without one, which is what tells the page to stop asking —
       // and it reads as the coach's own again in the meantime.
@@ -406,11 +450,11 @@ void main() {
       // and it is the same sentence, off [MeetFlight].
       expect(feedOf(made, const [])['flight']['elsewhere'],
           'Cal throws in flight 2');
-      expect(feedOf(made, const [], following: 'e4')['flight']['elsewhere'],
+      expect(feedOf(made, const [], following: ['e4'])['flight']['elsewhere'],
           'Dee throws in flight 3');
-      // Nothing at all while the one being followed is in the ring's own
-      // flight, because the cards below say it better.
-      expect(feedOf(made, const [], following: 'e2')['flight']
+      // Nothing at all while one of the ones being followed is in the
+      // ring's own flight, because the cards below say it better.
+      expect(feedOf(made, const [], following: ['e2', 'e4'])['flight']
           .containsKey('elsewhere'), isFalse);
     });
 
@@ -605,12 +649,21 @@ void main() {
       // the poll, and the phone works this one answer out around it.
       final watching =
           jsonDecode(utf8.decode((await get('/state?f=e2')).bytes));
-      expect(watching['following']['name'], 'N. Achebe (Croydon)');
+      expect(watching['following'], [
+        {'key': 'e2', 'name': 'N. Achebe (Croydon)'}
+      ]);
       final places = watching['places'] as List;
       expect(places.firstWhere((p) => p['name'] == 'N. Achebe (Croydon)')
           ['mine'], isTrue);
       expect(places.firstWhere((p) => p['name'] == 'Jakob Sandhagen')['mine'],
           isFalse);
+
+      // Several of them, comma-separated, because somebody at a ring is as
+      // likely to have two in the field as one.
+      final both =
+          jsonDecode(utf8.decode((await get('/state?f=e1,e2')).bytes));
+      expect((both['following'] as List).map((f) => f['key']), ['e1', 'e2']);
+      expect((both['places'] as List).every((p) => p['mine'] == true), isTrue);
 
       // And a key this competition doesn't hold is simply nobody.
       final gone = jsonDecode(utf8.decode((await get('/state?f=eGone')).bytes));
@@ -626,7 +679,8 @@ void main() {
       // two people on one link are never served each other's board.
       final theirs = await get('/state?f=e2', etag: tag);
       expect(theirs.status, 200);
-      expect(jsonDecode(utf8.decode(theirs.bytes))['following']['key'], 'e2');
+      expect(jsonDecode(utf8.decode(theirs.bytes))['following'].first['key'],
+          'e2');
     });
 
     test('writes this competition’s results sheet and no other', () async {

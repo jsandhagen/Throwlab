@@ -60,8 +60,9 @@ feed baked in place of its fetch, and Barlow and the medal copied in beside
 it so the type and the badge are the app's there too. A page whose whole job
 happens in a browser cannot be reviewed as a golden — open the file, and
 every tab works, and so does the question it opens with, because the page
-holds the whole competition worked out for each athlete somebody might be
-standing there to watch.
+holds the whole competition worked out for every set of athletes somebody
+might be standing there to watch — every subset of the field, which is why
+the discus it prints is five deep and not thirty.
 
 It also shoots the app's own three views of the same competition
 (`app_live`, `app_series`, `app_standings`) at the same 390 x 844 the page
@@ -81,11 +82,13 @@ node tool/preview/compare_share.js   # build/preview/compare_*.png
 It opens `spectator.html` at the same 390 x 844, answers the question it
 opens with (that state is shot first, as `web_asking`), shoots each tab
 (`web_live`, `web_series`, `web_standings`) and composes each against the
-app's own — three files to open, one per view. Then it picks an athlete
-nobody on the phone is tracking and shoots `web_following`: the board's
-own line, the caption and the emphasis down the field should all have
-moved to them. Those two have no app side to stand beside, so they are
-files to open rather than a fourth pair. It needs Playwright on the
+app's own — three files to open, one per view. Then it ticks two athletes
+nobody on the phone is tracking — the one in the circle and the one under
+the cut — and shoots the sheet with its boxes ticked (`web_picking`) and
+what it leaves behind (`web_following`): a line each on the board, the
+caption and the emphasis down the field all moved to them. Those three
+have no app side to stand beside, so they are files to open rather than a
+fourth pair. It needs Playwright on the
 machine (`npm i -g playwright`; the browser is already installed, so never
 run `playwright install`), and it asserts nothing: looking at the three
 files is the review. The competition it prints has a cut in it on purpose,
@@ -859,32 +862,45 @@ like the app rather than a bare Material default.
   It says how old it is rather than going blank.
 - The page asks who the person reading it is there for, and that is the one
   question it has of its own. Everything the app says about 'yours' — the
-  line on the board and the run of the competition the band is hung on,
+  lines on the board and the run of the competition the band is hung on,
   what is needed to make the final, the averaging line under a standing,
   which flight yours are still waiting in — is said about
   `MeetEntry.tracked`, because the phone belongs to the coach. Somebody
-  handed the link at a ring came to watch one thrower, who is usually
-  somebody else's and is nobody at all on that phone. So the page asks on
-  the way in, sends the answer up with every poll (`?f=<entry id>`), and
-  `competitionFeed` works the same sentences out around that athlete
-  instead — `MeetBoard(following:)` for the line and the band,
+  handed the link at a ring came to watch their own, who are usually
+  somebody else's and are nobody at all on that phone. So the page asks on
+  the way in, sends the answer up with every poll (`?f=<ids>`), and
+  `competitionFeed` works the same sentences out around those athletes
+  instead — `MeetBoard(following:)` for the lines and the band,
   `MeetFlight.laterFor` for the flight, `mine` on each place for the
   emphasis and the two asides. Not one new sentence anywhere: the question
   changes who they are about and not a word of them, which is what keeps
   the two renderings one competition. Unanswered, the feed is the coach's
   own screen exactly as before, which is the state the parity check is run
   in.
+  A set, never one athlete. A parent has two throwing and a club's
+  supporter four, and the coach's own 'yours' was a whole roster from the
+  start — so it is asked as the field with a box against every name, read
+  down the throwing order and ruled off at the flights the way a heat
+  sheet is ticked through, and everything downstream takes them as a set:
+  a line each on the board, the best-placed of them where the band is
+  hung, ticked down the field and the standings, and the first of them in
+  the caption, exactly as the app does with several of the coach's own. A
+  tick turns its own row over rather than repainting the panel, because a
+  field long enough to scroll must not jump back to the top under the
+  finger that ticked somebody halfway down it — and the list closes on
+  Done rather than on the first tick, since there may be two of them.
   By entry id, never by a place in the throwing order: the order is redrawn
   for the final and shifts under everybody below an athlete entered late,
-  and a parent must not be quietly handed somebody else's daughter. An id
-  the competition no longer holds comes back with no `following` on it, and
-  the page drops the choice rather than following a ghost. The choice is
+  and a parent must not be quietly handed somebody else's daughter.
+  Anybody the competition no longer holds is left out of the `following`
+  it echoes back, and the page drops them and keeps the rest rather than
+  following a ghost. The choice is
   remembered per share (`throwlab.watch.<token>`), so it is asked once at
   the discus and again at the javelin, and a browser that refuses storage
   is simply asked every time — a worse page and a working one. Nothing is
   registered on the phone: the choice rides on a GET and is spent on that
-  one answer, two people on one link follow two athletes, and there is
-  still no route that writes.
+  one answer, two people on one link follow two different sets, and there
+  is still no route that writes.
 - **`MeetEventScreen` and `spectator_page` are two renderings of one
   competition, and they are changed together or not at all.** Touching what
   a view says or how it reads on either side — the header card and its
@@ -907,8 +923,9 @@ like the app rather than a bare Material default.
   actions (the camera, the ruler, Add athlete, the round-entry sheet) can
   never be on a read-only page, and the page carries the meet's name, date,
   venue, conditions, how old it is and its own question about who is being
-  followed, because a spectator has no app around it for context and the
-  coach's phone already knows whose athletes are theirs. Say which in the commit rather than letting the two drift
+  followed — the field with a box against every name — because a spectator
+  has no app around it for context and the coach's phone already knows
+  whose athletes are theirs. Say which in the commit rather than letting the two drift
   quietly.
 - The live view is one card, and it is the one card on the page that is
   opaque. The app's is the flight above the sector, the sector, what the

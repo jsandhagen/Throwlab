@@ -110,22 +110,26 @@ class MeetBoard {
   /// and it is kept whatever the next throw does.
   ///
   /// [following] is whose board it is, for a reader who is not the coach.
-  /// A spectator handed the link at the ring is there for one athlete, and
-  /// that athlete is usually somebody else's — so the line drawn as
-  /// [BoardLine.mine], and the run of the competition the band is hung on,
-  /// follow them instead of the coach's own. Null is the coach's own
-  /// screen, which is every board inside the app.
+  /// A spectator handed the link at the ring is there for their own
+  /// athletes, who are usually somebody else's on the phone — so the lines
+  /// drawn as [BoardLine.mine], and the run of the competition the band is
+  /// hung on, follow them instead of the coach's own. Empty is the coach's
+  /// own screen, which is every board inside the app.
   factory MeetBoard(
     MeetStandings standings, {
     MeetEntry? inTheCircle,
     double? span,
-    MeetEntry? following,
+    Iterable<MeetEntry>? following,
   }) {
-    // Whose board this is. One athlete when somebody is following one, and
-    // the coach's whole roster otherwise — a coach reads the board for all
-    // of theirs at once, and a spectator for the one they came to watch.
+    // Whose board this is: the athletes somebody is following, and the
+    // coach's whole roster when nobody has said. A set either way — a
+    // coach reads the board for all of theirs at once, and so does a
+    // parent with two of them in the field.
+    final watched = {
+      for (final entry in following ?? const <MeetEntry>[]) entry.id,
+    };
     bool isMine(MeetEntry entry) =>
-        following == null ? entry.tracked : entry.id == following.id;
+        watched.isEmpty ? entry.tracked : watched.contains(entry.id);
 
     final placed = [
       for (final place in standings.places)

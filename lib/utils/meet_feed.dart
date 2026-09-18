@@ -39,30 +39,40 @@ import '../widgets/throw_picker.dart';
 /// about [MeetEntry.tracked]. A spectator handed the link at a ring is
 /// there for one athlete, who is usually not the coach's, so the page asks
 /// the same questions about theirs instead. The page says nothing new: it
-/// says the same sentences about somebody else. Null is the feed as the
+/// says the same sentences about somebody else. Empty is the feed as the
 /// coach's own screen reads it, which is what a spectator gets until they
 /// have chosen.
+///
+/// Several of them, because one is not the case worth building for: a
+/// parent has two throwing, a club's supporter is watching four, and the
+/// coach's own screen has always said 'yours' about a whole roster rather
+/// than about one athlete. So it is a set, exactly as [MeetEntry.tracked]
+/// is a set, and everything downstream takes them the same way — a line
+/// each on the board, ticked down the field, the first of them in the
+/// caption.
 Map<String, dynamic> competitionFeed(
   Meet meet,
   MeetCompetition competition,
   Iterable<ThrowResult> results, {
   DateTime? at,
   bool Function(ThrowResult result)? isPersonalBest,
-  String? following,
+  Iterable<String>? following,
 }) {
   final held = results.toList();
-  // An entry that has left the field — taken off the meet, or the whole
-  // competition re-entered — is nobody to follow. The feed simply comes
-  // back without one, which is what tells the page to stop asking for it.
-  final followed = followedEntry(competition, following);
+  // Anybody who has left the field — taken off the meet, or the whole
+  // competition entered again — is nobody to follow. They simply come back
+  // missing, which is what tells the page to stop asking for them.
+  final followed = followedEntries(competition, following);
+  final watched = {for (final entry in followed) entry.id};
   bool mine(MeetEntry entry) =>
-      followed == null ? entry.tracked : entry.id == followed.id;
+      watched.isEmpty ? entry.tracked : watched.contains(entry.id);
   final standings = MeetStandings(competition, held,
       advancing: meet.advancing, prelimRounds: meet.prelimRounds);
   final flight =
       MeetFlight(competition, rounds: meet.rounds, standings: standings);
   final board = MeetBoard(standings,
       inTheCircle: flight.inTheCircle, following: followed);
+
 
   return {
     'meet': meet.name.isEmpty ? 'Meet' : meet.name,
@@ -94,11 +104,13 @@ Map<String, dynamic> competitionFeed(
     // card worth graying or not.
     'prelims': meet.prelimRounds,
     'status': flight.label,
-    if (followed != null)
-      // Echoed back so the page knows the phone found who it asked for.
-      // A choice the competition no longer holds comes back missing, and
-      // the page drops it rather than following a ghost.
-      'following': {'key': followed.id, 'name': followed.athlete},
+    if (followed.isNotEmpty)
+      // Echoed back so the page knows which of the ones it asked for the
+      // phone found. Anybody the competition no longer holds is missing
+      // from it, and the page drops them rather than following a ghost.
+      'following': [
+        for (final entry in followed) {'key': entry.id, 'name': entry.athlete},
+      ],
     'flight': _flight(competition, flight, standings, mine),
     'cut': {
       'advancing': meet.advancing,
@@ -127,20 +139,28 @@ Map<String, dynamic> competitionFeed(
 String competitionId(MeetCompetition competition) =>
     '${competition.event.name}:${competition.implementKg}';
 
-/// Who [following] names in this competition, or null for nobody and for
-/// somebody who is no longer in it.
+/// Who [following] names in this competition, in the order the field is
+/// read down. Empty for nobody, and anybody the competition no longer
+/// holds is simply left out.
 ///
-/// An entry id rather than a place in the throwing order, which is how
+/// Entry ids rather than places in the throwing order, which is how
 /// everything else about the field is keyed on the wire: the order is
 /// redrawn for the final and shifts under every athlete below one entered
 /// late, and a spectator who came to watch a daughter must not be quietly
 /// handed somebody else's.
-MeetEntry? followedEntry(MeetCompetition competition, String? following) {
-  if (following == null || following.isEmpty) return null;
-  for (final entry in competition.entries) {
-    if (entry.id == following) return entry;
-  }
-  return null;
+///
+/// Read by walking the field once against a set rather than by looking
+/// each name up in turn, so a link asked for a thousand ids costs the
+/// field and not the asking.
+List<MeetEntry> followedEntries(
+    MeetCompetition competition, Iterable<String>? following) {
+  if (following == null) return const [];
+  final wanted = following.where((id) => id.isNotEmpty).toSet();
+  if (wanted.isEmpty) return const [];
+  return [
+    for (final entry in competition.entries)
+      if (wanted.contains(entry.id)) entry,
+  ];
 }
 
 /// Where the competition has got to, and the three an infield calls out.

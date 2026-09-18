@@ -150,43 +150,70 @@ const String _page = r'''<!doctype html>
   .age.stale .dot, .age.stale { color: var(--bad); }
   .age.stale .dot { background: var(--bad); }
 
-  /* Who the page is being read for. A spectator is at the ring for one
-     athlete, so the page asks which — once, on the way in, and quietly
-     from then on as a chip in the header. The app has no twin for this:
-     the phone belongs to the coach, and the coach's own athletes are
+  /* Who the page is being read for. A spectator is at the ring for their
+     own athletes, so the page asks which — once, on the way in, and
+     quietly from then on as a chip in the header. The app has no twin for
+     this: the phone belongs to the coach, and the coach's own athletes are
      already the answer there. */
   .watch { margin-top: 10px; }
   .watch .who { display: inline-flex; align-items: center; gap: 8px;
+                max-width: 100%;
                 border: 1px solid color-mix(in srgb, var(--accent) 45%,
                 transparent);
                 background: color-mix(in srgb, var(--surface) 40%, transparent);
                 color: var(--dim); font: inherit; font-size: 12px;
                 border-radius: 999px; padding: 5px 12px; cursor: pointer; }
-  .watch .who b { font-weight: 600; color: var(--accent); }
-  .watch .who .chev { color: var(--dim); font-size: 11px; opacity: 0.8; }
+  .watch .who b { font-weight: 600; color: var(--accent); min-width: 0;
+                  overflow: hidden; text-overflow: ellipsis;
+                  white-space: nowrap; }
+  .watch .who .chev { color: var(--dim); font-size: 11px; opacity: 0.8;
+                      flex: 0 0 auto; }
   /* The same translucent card as everything else on the page — this is a
      question about the competition, not a dialog over it, and a scrim
      over the board would hide the thing somebody opened the link for. */
   .picker { background: color-mix(in srgb, var(--surface) 45%, transparent);
-            border-radius: 16px; padding: 10px 12px; }
+            border-radius: 16px; padding: 10px 4px 10px 12px; }
   .picker .ask { margin: 0; font-size: 13px; font-weight: 600; }
-  .picker .why { margin: 2px 0 8px; font-size: 11px; color: var(--dim); }
-  /* Names as pills rather than rows: a field is a dozen short names, and
-     a dozen full-width rows is a page of its own before the board. */
-  .names { display: flex; flex-wrap: wrap; gap: 6px; max-height: 40vh;
-           overflow: auto; }
-  .names button { border: 1px solid color-mix(in srgb, var(--line) 70%,
-                  transparent); background: transparent; color: var(--text);
-                  font: inherit; font-size: 12px; border-radius: 999px;
-                  padding: 8px 12px; cursor: pointer; display: inline-flex;
-                  align-items: baseline; gap: 5px; }
-  .names button.on { border-color: var(--accent); color: var(--accent);
-                     font-weight: 600; }
-  .names .fl { font-size: 10px; color: var(--dim); }
-  .picker .plain { margin-top: 8px; padding: 4px 0; border: 0;
-                   background: none; color: var(--dim); font: inherit;
-                   font-size: 12px; text-decoration: underline;
-                   cursor: pointer; }
+  .picker .why { margin: 2px 0 6px; font-size: 11px; color: var(--dim); }
+  /* The field as the sheet it was read off: down the throwing order, a
+     checkbox against each name and ruled off at the flights, which is how
+     the app's own heat sheet is ticked through. Rows rather than pills,
+     because a row is what a name is read on and a checkbox is a thing that
+     has a line of its own — and because nobody is at a ring for exactly
+     one athlete: a parent has two throwing and a club's supporter four. */
+  .names { max-height: 46vh; overflow: auto; padding-right: 8px; }
+  .names .pick { display: flex; align-items: center; gap: 10px; width: 100%;
+                 border: 0; background: transparent; color: var(--text);
+                 font: inherit; font-size: 13px; text-align: left;
+                 padding: 7px 4px; cursor: pointer; border-radius: 8px; }
+  .names .pick .nm { flex: 1; min-width: 0; overflow: hidden;
+                     text-overflow: ellipsis; white-space: nowrap;
+                     color: var(--dim); }
+  .names .pick.on .nm { color: var(--text); font-weight: 600; }
+  .names .pick.on { background: color-mix(in srgb, var(--accent) 12%,
+                    transparent); }
+  /* The box drawn rather than an <input>: a browser's own checkbox is the
+     one control on this page that would arrive in somebody else's colors. */
+  .tick { position: relative; flex: 0 0 auto; width: 17px; height: 17px;
+          border-radius: 4px; border: 1.5px solid var(--dim); }
+  .pick.on .tick { background: var(--accent); border-color: var(--accent); }
+  .pick.on .tick::after { content: ""; position: absolute; left: 5px;
+                          top: 1px; width: 4px; height: 9px;
+                          border: solid var(--bg); border-width: 0 2px 2px 0;
+                          transform: rotate(45deg); }
+  /* Ticking is a decision, so the way out of the list is a button rather
+     than a tap somewhere else — and the way out with nobody ticked is
+     spelled out beside it, since an empty list read as 'not yet answered'
+     would ask again on the next poll. */
+  .picker .foot { display: flex; align-items: center; gap: 12px;
+                  margin: 8px 8px 0 0; }
+  .picker .plain { padding: 4px 0; border: 0; background: none;
+                   color: var(--dim); font: inherit; font-size: 12px;
+                   text-decoration: underline; cursor: pointer; }
+  .picker .done { margin-left: auto; border: 0; border-radius: 999px;
+                  background: var(--accent); color: var(--bg); font: inherit;
+                  font-size: 12px; font-weight: 600; padding: 7px 18px;
+                  cursor: pointer; }
 
   /* The app's own segmented bar: one surface with a slanted block under the
      active section and leaning dividers between the rest. The lean is the
@@ -418,26 +445,40 @@ const String _page = r'''<!doctype html>
   var lastAt = 0, failed = 0;
 
   /* Who this browser is here to watch, and whether it has been asked.
-     The phone knows nothing about it: the choice rides on the poll as a
-     query parameter, so two people on one link follow two athletes and
-     the server still holds no spectator and no route that writes.
+     A list, because nobody is at a ring for exactly one athlete — the
+     phone's own 'yours' is a whole roster too. The phone knows nothing
+     about it: the choice rides on the poll as a query parameter, so two
+     people on one link watch two different sets and the server still
+     holds no spectator and no route that writes.
 
      Kept per share — one token, one competition — so a parent handed a
      second link at the next ring is asked again rather than inheriting
      the discus answer. In a browser that refuses storage the question is
      simply asked each time, which is a worse page and a working one. */
   var STORE = "throwlab.watch." + (base.split("/").pop() || "page");
-  var follow = null, asked = false;
+  var follow = [], asked = false;
   try {
     var held = localStorage.getItem(STORE);
-    if (held !== null) { asked = true; follow = held === "-" ? null : held; }
+    if (held !== null) { asked = true; follow = held === "-" ? [] : held.split(","); }
   } catch (_) { /* private window. Ask, and forget. */ }
   /* Open on the way in, and only then: the question is worth one screen
      of somebody's attention once, and nothing after that. */
   var picking = !asked;
+  /* What the panel was last painted from, so a poll landing every four
+     seconds doesn't rebuild an open list under the thumb scrolling it —
+     see render(). */
+  var painted = null;
 
   function remember() {
-    try { localStorage.setItem(STORE, follow || "-"); } catch (_) { /* as above */ }
+    try {
+      localStorage.setItem(STORE, follow.length ? follow.join(",") : "-");
+    } catch (_) { /* as above */ }
+  }
+
+  /* What the watch panel is showing: the question or the chip, and the
+     answer so far. Repainted only when this changes — see render(). */
+  function watchSig() {
+    return (picking ? "open" : "shut") + "|" + follow.join(",");
   }
 
   function esc(s) {
@@ -987,34 +1028,56 @@ const String _page = r'''<!doctype html>
      between, and a field of one is a page about that athlete already. */
   function watchView() {
     if (!data) return "";
+    /* Down the throwing order, which is the order a heat sheet prints a
+       field in and the order the Series tab reads it in. */
     var field = (data.places || []).slice()
       .sort(function (a, b) { return a.order - b.order; });
     if (field.length < 2) return "";
+    /* Read off the field rather than off what the phone last confirmed, so
+       a tick shows the moment it is made instead of a poll later. */
+    var names = [];
+    field.forEach(function (p) {
+      if (follow.indexOf(p.key) >= 0) names.push(p.name);
+    });
+
     if (!picking) {
-      /* Read off the field rather than off what the phone last confirmed,
-         so the chip carries the name the moment it is tapped instead of a
-         poll later. */
-      var who = "";
-      field.forEach(function (p) { if (follow && p.key === follow) who = p.name; });
-      /* 'Follow an athlete' is the whole invitation and needs nothing
+      /* 'Follow your athletes' is the whole invitation and needs nothing
          after it; a name does, or there is no way to tell the chip is
-         still a control. */
+         still a control. Two names in full, and a count past that: a chip
+         is one line of a header, and four surnames with their schools
+         after them is not one line. */
+      var who = names.length === 0 ? ""
+        : names.length === 1 ? names[0]
+        : names[0] + " and " + (names.length - 1) +
+          (names.length === 2 ? " other" : " others");
       return '<button class="who" data-open aria-expanded="false">' +
         (who ? "Watching <b>" + esc(who) + '</b><span class="chev">change' +
-          "</span>" : "Follow an athlete") + "</button>";
+          "</span>" : "Follow your athletes") + "</button>";
     }
-    var names = field.map(function (p) {
-      var on = follow === p.key;
-      return '<button data-key="' + esc(p.key) + '" aria-pressed="' + on +
-        '"' + (on ? ' class="on"' : "") + ">" + esc(p.name) +
-        (p.flight ? '<span class="fl">flight ' + p.flight + "</span>" : "") +
-        "</button>";
-    }).join("");
+
+    /* The field with a box against every name, ruled off where the flights
+       are — the sheet, ticked. Several at once, because a parent with two
+       throwing should not have to choose between them. */
+    var rows = [], flight = null;
+    var flighted = field.some(function (p) { return p.flight; });
+    field.forEach(function (p) {
+      var f = p.flight || 1;
+      if (flighted && f !== flight) {
+        flight = f;
+        rows.push('<p class="heading">Flight ' + f + "</p>");
+      }
+      var on = follow.indexOf(p.key) >= 0;
+      rows.push('<button class="pick' + (on ? " on" : "") + '" data-key="' +
+        esc(p.key) + '" role="checkbox" aria-checked="' + on + '">' +
+        '<span class="tick"></span><span class="ord">' + (p.order + 1) +
+        '</span><span class="nm">' + esc(p.name) + "</span></button>");
+    });
     return '<div class="picker"><p class="ask">Who are you here to watch?</p>' +
       '<p class="why">The board, the cut and the calls follow them.</p>' +
-      '<div class="names">' + names + "</div>" +
-      '<button class="plain" data-key="">' +
-      (follow ? "Stop following" : "Just the competition") + "</button></div>";
+      '<div class="names" role="group">' + rows.join("") + "</div>" +
+      '<div class="foot"><button class="plain" data-clear>' +
+      (names.length ? "Stop following" : "Just the competition") +
+      '</button><button class="done" data-done>Done</button></div></div>';
   }
 
   /* ---- painting ----------------------------------------------------- */
@@ -1026,11 +1089,14 @@ const String _page = r'''<!doctype html>
     el("meet").textContent =
       [data.meet, data.date, data.venue].filter(Boolean).join(" · ");
     el("weather").textContent = data.conditions || "";
-    /* Left alone while the list is open: a poll lands every four seconds,
-       and a field long enough to scroll must not jump back to the top
-       under the thumb that was scrolling it. */
-    if (!picking || !el("watch").querySelector(".picker")) {
+    /* Repainted when the question or the answer has changed, and left
+       alone otherwise: a poll lands every four seconds, and a field long
+       enough to scroll must not jump back to the top under the thumb that
+       is scrolling it. A tick changes the signature, so the box fills
+       under the finger that made it. */
+    if (!picking || watchSig() !== painted) {
       el("watch").innerHTML = watchView();
+      painted = watchSig();
     }
 
     slide(["live", "series", "standings"].indexOf(tab));
@@ -1081,7 +1147,8 @@ const String _page = r'''<!doctype html>
     /* Who is being followed goes with the ask: the phone works the board,
        the cut and the calls out around them and hands back the answers,
        exactly as it does for the coach's own on their own screen. */
-    var at = base + "/state" + (follow ? "?f=" + encodeURIComponent(follow) : "");
+    var at = base + "/state" +
+      (follow.length ? "?f=" + follow.map(encodeURIComponent).join(",") : "");
     fetch(at, { headers: headers, cache: "no-store" })
       .then(function (r) {
         if (r.status === 304) { failed = 0; lastAt = Date.now(); return null; }
@@ -1094,10 +1161,14 @@ const String _page = r'''<!doctype html>
         lastAt = Date.now();
         if (!fresh) return;
         /* Following somebody the competition no longer holds — taken off
-           the meet, or the whole field entered again. The phone answers
-           without them, and the page stops asking rather than following a
-           ghost. */
-        if (follow && !fresh.following) { follow = null; remember(); }
+           the meet, or the whole field entered again. They come back
+           missing from the answer, and the page drops them rather than
+           going on asking for a ghost. The rest are untouched. */
+        if (follow.length) {
+          var live = (fresh.following || []).map(function (f) { return f.key; });
+          var kept = follow.filter(function (k) { return live.indexOf(k) >= 0; });
+          if (kept.length !== follow.length) { follow = kept; remember(); }
+        }
         data = fresh;
         render();
       })
@@ -1105,22 +1176,57 @@ const String _page = r'''<!doctype html>
       .then(tickAge);
   }
 
-  /* The picker. A choice repaints the chip at once and asks the phone for
-     the same competition read the other way round — the board and the
-     captions come back with the next answer, a moment later. */
+  /* The picker. A tick fills at once and asks the phone for the same
+     competition read for whoever is ticked now — the board and the
+     captions come back with the next answer, a moment later, while the
+     list is still open. The list closes on Done rather than on the first
+     tick, because there may be two of them in the field. */
   el("watch").addEventListener("click", function (e) {
     var b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.open !== undefined) { picking = true; render(); return; }
+    if (b.dataset.done !== undefined) {
+      /* Answered, even with nobody ticked: an empty list read as 'not yet
+         asked' would put the question back up on the next visit. */
+      asked = true;
+      picking = false;
+      remember();
+      render();
+      return;
+    }
+    /* The tag belongs to the answer we were being given, and either of
+       these asks a different question. */
+    if (b.dataset.clear !== undefined) {
+      follow = [];
+      asked = true;
+      picking = false;
+      remember();
+      etag = null;
+      render();
+      poll();
+      return;
+    }
     if (b.dataset.key === undefined) return;
-    follow = b.dataset.key || null;
+
+    var at = follow.indexOf(b.dataset.key);
+    if (at < 0) follow.push(b.dataset.key);
+    else follow.splice(at, 1);
     asked = true;
-    picking = false;
     remember();
-    /* The tag belongs to the answer we were being given, and we have just
-       asked a different question. */
+    /* The row is turned over where it stands rather than by repainting the
+       panel around it: a field long enough to scroll would otherwise jump
+       back to the top under the finger that has just ticked somebody
+       halfway down it. */
+    var on = at < 0;
+    b.className = "pick" + (on ? " on" : "");
+    b.setAttribute("aria-checked", String(on));
+    var out = el("watch").querySelector(".plain");
+    if (out) {
+      out.textContent =
+        follow.length ? "Stop following" : "Just the competition";
+    }
+    painted = watchSig();
     etag = null;
-    render();
     poll();
   });
 

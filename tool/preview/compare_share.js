@@ -9,11 +9,12 @@
 // this one opens that page in a browser at the same 390 x 844, shoots each
 // tab, and composes the pairs into build/preview/compare_*.png.
 //
-// It also shoots the two states the page has of its own: the question it
-// opens with (web_asking.png) and the competition read for one athlete
+// It also shoots the three states the page has of its own: the question it
+// opens with (web_asking.png), the field with two of its boxes ticked
+// (web_picking.png) and the competition read for those two
 // (web_following.png). Those have no app side to stand beside — the phone
 // belongs to the coach, whose own athletes are already the answer — so they
-// are two more files to open rather than a fourth pair.
+// are three more files to open rather than a fourth pair.
 //
 // It exists because the screen and the page are two renderings of one
 // competition and drift between them is invisible in a diff — every
@@ -80,11 +81,12 @@ const views = ['live', 'series', 'standings'];
 
   // The page opens by asking who the reader is here to watch — the one
   // thing on it the app has no twin for, since the phone belongs to the
-  // coach. Shot on its own, then answered: the three views below are the
-  // parity comparison and have to be the page as everybody reads it.
+  // coach. Shot on its own, then answered with nobody: the three views
+  // below are the parity comparison and have to be the page as everybody
+  // reads it.
   await page.screenshot({ path: `${out}web_asking.png` });
   console.log('wrote build/preview/web_asking.png');
-  await page.click('#watch button[data-key=""]');
+  await page.click('#watch button[data-clear]');
   await page.waitForTimeout(350);
 
   for (const view of views) {
@@ -93,16 +95,26 @@ const views = ['live', 'series', 'standings'];
     await page.screenshot({ path: `${out}web_${view}.png` });
   }
 
-  // And the page read for one athlete: the last name in the field, who is
-  // nobody's on the coach's phone. The board's own line, the caption and
-  // the emphasis down the field should all have moved to them — which is
-  // the whole of the feature, and is looked at rather than asserted.
+  // And the page read for two athletes, neither of them the coach's: the
+  // sheet with the boxes ticked (web_picking), and what it leaves behind
+  // (web_following) — a line each on the board, the caption and the
+  // emphasis down the field moved to them, and the chip in the header
+  // naming them. That is the whole of the feature, and it is looked at
+  // rather than asserted.
   await page.click('button[data-tab="live"]');
   await page.click('#watch button[data-open]');
   await page.waitForTimeout(250);
-  const names = await page.$$('#watch .names button');
+  // The last two down the order: the one in the circle and the one under
+  // the cut that nothing else on the board would draw.
+  const names = await page.$$('#watch .names button.pick');
   await names[names.length - 1].click();
+  await page.waitForTimeout(400);
+  await names[names.length - 2].click();
   await page.waitForTimeout(600);
+  await page.screenshot({ path: `${out}web_picking.png` });
+  console.log('wrote build/preview/web_picking.png');
+  await page.click('#watch button[data-done]');
+  await page.waitForTimeout(500);
   await page.screenshot({ path: `${out}web_following.png` });
   console.log('wrote build/preview/web_following.png');
 
