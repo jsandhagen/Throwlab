@@ -242,7 +242,7 @@ like the app rather than a bare Material default.
   ignored those would be wrong. Marks live under their own storage key, so
   a corrupt mark list costs the marks and never the clips.
 - The gold is drawn, not tinted: `gold.dart` holds one narrow metal ramp
-  shared by `GoldEdgePainter` (the card's frame) and `FirstPlaceMedal` (the
+  shared by `GoldEdgePainter` (the card's frame) and `PlaceMedal` (the
   star-cutout medal), so the two read as the same metal. Keep the ramp
   narrow — a wide one makes a convincing coin and a blotchy frame.
   The medal is a badge before it is a picture: it is pinned at 13 px beside
@@ -260,6 +260,26 @@ like the app rather than a bare Material default.
   invented, so change them together or not at all. The star is a hole
   rather than a lighter shape, which is what keeps it a medal at 13 px
   instead of a yellow blob with a smudge in it.
+  There are three of them. `Medal` names the podium's metals together —
+  gold, silver and bronze, the same five stops and the same light from the
+  same corner, so three lines across a sector read as three medals rather
+  than as a yellow, a gray and a brown. `medalFor(place)` is the one place
+  a placing turns into a metal, and it returns null off the podium, which
+  is most of a field. Each carries both a `ramp`, for something with the
+  room to show a gradient (the board's lines, a medal's disc), and a
+  `flat` mid tone, for type — five stops across two digits is a muddy two
+  digits.
+  The disc means two different things and so has two names: `PlaceMedal`
+  for a placing in the competition in front of you, `PersonalBestMedal`
+  for a mark against an athlete's own record book. Same painter, different
+  metal and a different thing read out loud, because a screen reader has
+  no context to tell them apart.
+  Silver is the weak one and knows it: its flat tone sits close to the
+  dark theme's own body gray, so a place set in silver alone can read as
+  unstyled type. Everywhere a place is struck, weight carries what hue
+  cannot — gold bold, silver and bronze semibold, the rest of the field
+  medium — and the field around them is set back so a metal has something
+  dimmer than itself to stand against.
 - A training note is a list of typed blocks (`NoteBlockKind`), not a
   document: heading, paragraph, bullet, numbered, checklist, picture with a
   caption. Emphasis is markers in the text (`**bold**`, `*italic*`,
@@ -805,7 +825,12 @@ like the app rather than a bare Material default.
   segmented bar whose block leans at the sector's half-angle and squares up
   against whichever end it has reached, the drawn `EventGlyph` in the
   event's own color, and the sector backdrop the library and the meet stand
-  on. Two weights, not the app's four: a page this size only sets body and
+  on. The podium's three metals are written into it out of `gold.dart` too
+  — the flat tones as CSS variables for the places, and the five stops as
+  SVG gradients for the board's own lines, which are the one thing on the
+  page big enough to show a ramp. The page never spells a color of its own.
+  A placing is the bare number in the standings and the ordinal on a field
+  card, which is how the app's own two lists count. Two weights, not the app's four: a page this size only sets body and
   emphasis, and each file is a quarter-megabyte of somebody's wifi. The
   font is the one thing here worth a browser cache; the state is sent
   `no-store` so it never lands in a spectator's history.
