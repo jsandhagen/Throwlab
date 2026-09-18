@@ -1,10 +1,14 @@
+import 'dart:ui' show Color;
+
 import '../models/meet.dart';
 import '../models/meet_board.dart';
 import '../models/throw_video.dart';
 import '../widgets/throw_card.dart';
+import '../widgets/throw_picker.dart';
 
-/// A meet as somebody watching it needs it: the standings, the series and
-/// the board, worked out here and handed over as numbers and words.
+/// One competition as somebody watching it needs it: the standings, the
+/// series and the board, worked out here and handed over as numbers and
+/// words.
 ///
 /// This is what a spectator's browser is served, and it is deliberately
 /// *derived* rather than raw. The rules a competition is read by — who is
@@ -15,24 +19,33 @@ import '../widgets/throw_card.dart';
 /// with the coach's own screen. So the page is handed the answers and draws
 /// them. It knows nothing about countback, prelims or feet and inches.
 ///
-/// The whole meet goes out, not the competition the coach happens to be
-/// looking at. A parent following the discus should not be dragged sideways
-/// every time the coach walks to the javelin, and a page holding every
-/// competition can switch between them without asking for anything.
+/// One competition, not the meet. A link is handed out at a ring by
+/// somebody standing at it, and what the people there are watching is the
+/// discus — not the javelin two hours later, and not the rest of the day's
+/// field, who are somebody else's athletes and have not agreed to be on
+/// anybody's phone. The meet is around it as context: its name, the day,
+/// and what the weather was doing.
 ///
 /// Marks are already written the way they were measured — the unit a throw
 /// was entered in, through [formatDistance], the one place that is decided
 /// — so a sheet reading '191-08' and a board reading '191-08' can never
 /// become the same throw in two notations.
-Map<String, dynamic> meetFeed(
+Map<String, dynamic> competitionFeed(
   Meet meet,
+  MeetCompetition competition,
   Iterable<ThrowResult> results, {
   DateTime? at,
   bool Function(ThrowResult result)? isPersonalBest,
 }) {
   final held = results.toList();
+  final standings = MeetStandings(competition, held,
+      advancing: meet.advancing, prelimRounds: meet.prelimRounds);
+  final flight =
+      MeetFlight(competition, rounds: meet.rounds, standings: standings);
+  final board = MeetBoard(standings, inTheCircle: flight.inTheCircle);
+
   return {
-    'name': meet.name.isEmpty ? 'Meet' : meet.name,
+    'meet': meet.name.isEmpty ? 'Meet' : meet.name,
     'date': longThrowDate(meet.date),
     if (meet.venue.isNotEmpty) 'venue': meet.venue,
     if (meet.conditions.isNotEmpty)
@@ -44,35 +57,16 @@ Map<String, dynamic> meetFeed(
     // has wandered off the wifi is owed the truth about how old the board
     // in front of them is.
     'asOf': (at ?? DateTime.now()).toUtc().toIso8601String(),
-    'competitions': [
-      for (final competition in MeetCompetition.of(meet))
-        _competition(meet, competition, held, isPersonalBest),
-    ],
-  };
-}
-
-Map<String, dynamic> _competition(
-  Meet meet,
-  MeetCompetition competition,
-  List<ThrowResult> results,
-  bool Function(ThrowResult result)? isPersonalBest,
-) {
-  final standings = MeetStandings(competition, results,
-      advancing: meet.advancing, prelimRounds: meet.prelimRounds);
-  final flight =
-      MeetFlight(competition, rounds: meet.rounds, standings: standings);
-  final board = MeetBoard(standings, inTheCircle: flight.inTheCircle);
-
-  return {
-    // Stable across polls and across rounds, so the page can keep a
-    // spectator on the event they chose while the meet moves underneath.
-    'id': '${competition.event.name}:${competition.implementKg}',
+    'id': competitionId(competition),
     'label': competition.label,
     'event': competition.event.name,
+    // The color this event wears everywhere else in the app, so a spectator
+    // who has seen the coach's screen is looking at the same discus.
+    'tint': _hex(eventColor(competition.event)),
     'rounds': meet.rounds,
-    // How many rounds everybody throws before the cut. Equal to 'rounds'
-    // in a competition with no cut, which is what makes the last boxes of
-    // a card worth graying or not.
+    // How many rounds everybody throws before the cut. Equal to 'rounds' in
+    // a competition with no cut, which is what makes the last boxes of a
+    // card worth graying or not.
     'prelims': meet.prelimRounds,
     'status': flight.label,
     'flight': _flight(flight),
@@ -81,7 +75,7 @@ Map<String, dynamic> _competition(
       'has': standings.hasCut,
       'made': standings.cutMade,
       if (standings.cutMark != null)
-        'mark': formatDistance(standings.cutMark!, _unitOfMark(standings)),
+        'mark': formatDistance(standings.cutMark!, _unitOfCut(standings)),
     },
     'places': [
       for (final place in standings.places)
@@ -90,6 +84,11 @@ Map<String, dynamic> _competition(
     'board': _board(board),
   };
 }
+
+/// How a competition is named on the wire — the event and the weight it is
+/// thrown at, which is exactly what makes it its own contest.
+String competitionId(MeetCompetition competition) =>
+    '${competition.event.name}:${competition.implementKg}';
 
 /// Where the competition has got to, and the three an infield calls out.
 ///
@@ -120,10 +119,10 @@ Map<String, dynamic> _place(
   return {
     'place': place.place,
     'placeLabel': ordinalPlace(place.place),
-    // Where they come in the throwing order. The places arrive ranked,
-    // and the field is read the other way round as the round works down
-    // it — one list, sorted twice, rather than the same athletes sent
-    // twice over.
+    // Where they come in the throwing order. The places arrive ranked, and
+    // the field is read the other way round as the round works down it —
+    // one list, sorted twice, rather than the same athletes sent twice
+    // over.
     'order': competition.entries.indexWhere((e) => e.id == place.entry.id),
     // The meet's own spelling, which is what the heat sheet said and what
     // the announcer will call. A nickname is the coach's shorthand for
@@ -136,8 +135,7 @@ Map<String, dynamic> _place(
     'throwsInFinal': standings.throwsInFinal(place.entry.id),
     if (place.best != null) 'best': formatDistance(place.best!, unit),
     if (series.bestRound != null) 'bestRound': series.bestRound! + 1,
-    if (series.average != null)
-      'average': formatDistance(series.average!, unit),
+    if (series.average != null) 'average': formatDistance(series.average!, unit),
     'fouls': series.fouls,
     'passes': series.passes,
     'series': [
@@ -181,11 +179,11 @@ Map<String, dynamic>? _round(
 
 /// The board as coordinates, with the arithmetic already done.
 ///
-/// [MeetBoard] has picked the band and the scale; all that is left is
-/// where each line falls across it, which is [MeetBoard.fractionOf]. A
-/// mark the band broke off comes through with a fraction outside 0..1 and
-/// says which edge it went off, so the drawing can pin it there with an
-/// arrow instead of pretending it is on the sector.
+/// [MeetBoard] has picked the band and the scale; all that is left is where
+/// each line falls across it, which is [MeetBoard.fractionOf]. A mark the
+/// band broke off comes through with a fraction outside 0..1 and says which
+/// edge it went off, so the drawing can pin it there with an arrow instead
+/// of pretending it is on the sector.
 Map<String, dynamic> _board(MeetBoard board) => {
       'near': board.near,
       'far': board.far,
@@ -210,7 +208,7 @@ Map<String, dynamic> _board(MeetBoard board) => {
 /// What unit to write the cut in. It belongs to a place rather than to a
 /// person, so it takes the unit of whoever is standing on it — the same
 /// mark, read back the way it was measured.
-DistanceUnit _unitOfMark(MeetStandings standings) {
+DistanceUnit _unitOfCut(MeetStandings standings) {
   // The *last* qualifying place, the way [MeetStandings.cutMark] reads it —
   // not the first. The leader may have been measured in meters at a meet
   // where the athlete on the cut was taped in feet.
@@ -221,3 +219,6 @@ DistanceUnit _unitOfMark(MeetStandings standings) {
   }
   return unit;
 }
+
+String _hex(Color color) =>
+    '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';

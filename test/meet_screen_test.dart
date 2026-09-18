@@ -776,13 +776,9 @@ void main() {
   });
 
   group('the meet format', () {
-    /// Opens the meet's own settings, which live in the app bar's overflow
-    /// with the heat sheet — the two things done once, before anybody
-    /// throws, and out of the way of the sheet and the share link.
+    /// Opens the meet's own settings, off the app bar.
     Future<void> openSettings(WidgetTester tester) async {
-      await tester.tap(find.byTooltip('Set up this meet'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Meet settings'));
+      await tester.tap(find.byTooltip('Meet settings'));
       await tester.pumpAndSettle();
     }
 

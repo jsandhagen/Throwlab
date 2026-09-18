@@ -20,6 +20,7 @@ import '../widgets/event_glyph.dart';
 import '../widgets/gold.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/sector_board.dart';
+import '../widgets/share_meet.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
@@ -178,6 +179,11 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
             advancing: meet.advancing, prelimRounds: meet.prelimRounds);
         final flight =
             MeetFlight(competition, rounds: meet.rounds, standings: standings);
+        // Softly, like the meets: a screen that offers to share still
+        // paints in a test with nothing but the competition.
+        final sharing = meetServerOf(context)
+                ?.sharing(meet.id, widget.event, widget.implementKg) ??
+            false;
 
         return Scaffold(
           appBar: AppBar(
@@ -203,6 +209,18 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               ],
             ),
             actions: [
+              IconButton(
+                tooltip: 'Follow along',
+                // Lit while the phone is serving this ring, because a coach
+                // who has walked to the next one has no other way to tell
+                // that it still is.
+                icon: Icon(sharing
+                    ? Icons.wifi_tethering
+                    : Icons.wifi_tethering_outlined),
+                color: sharing ? accent : null,
+                onPressed: () => showShareCompetition(context,
+                    meet: meet, competition: competition),
+              ),
               IconButton(
                 tooltip: 'Results sheet',
                 icon: const Icon(Icons.picture_as_pdf_outlined),

@@ -3,8 +3,11 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ColorScheme;
+import 'package:flutter/services.dart' show rootBundle;
 
 import '../models/meet.dart';
+import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../utils/meet_feed.dart';
 import '../utils/meet_report.dart';
@@ -16,9 +19,15 @@ import 'results_sheet.dart';
 /// The phone is the server. There is no hosting, no account and nothing
 /// uploaded: this binds a socket, and anyone on the same wifi — or on the
 /// phone's own hotspot, which is the case that actually works at a track —
-/// opens the link in a browser and follows the meet. It is the only shape
-/// of live sharing that survives a field with no signal on it, which is
-/// most of them, and it is the reason the fonts are bundled too.
+/// opens the link in a browser and follows the competition. It is the only
+/// shape of live sharing that survives a field with no signal on it, which
+/// is most of them, and it is the reason the fonts are bundled too.
+///
+/// A share is one competition, not the meet. A link is handed over at a
+/// ring by somebody standing at it, and the rest of the day's field are
+/// other people's athletes who never agreed to be on anybody's phone — so
+/// the discus link serves the discus and 404s everything else. A coach with
+/// two rings going shares each, and gets a link for each.
 ///
 /// Read-only by construction. There is no route that writes anything, so a
 /// spectator cannot enter a mark, and nothing here touches the meet or the
@@ -41,15 +50,19 @@ class MeetServer extends ChangeNotifier {
   /// that reads two ways.
   static const _alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
 
-  HttpServer? _server;
-  String? _meetId;
-  String? _token;
-  String? _url;
-  String? _error;
+  /// The two weights the page asks for. The app bundles four; a page this
+  /// size only ever sets body and emphasis, and each file is a quarter of a
+  /// megabyte over somebody's wifi.
+  static const _fonts = {
+    'r.ttf': 'assets/fonts/Barlow-Regular.ttf',
+    's.ttf': 'assets/fonts/Barlow-SemiBold.ttf',
+  };
 
-  Meet? Function()? _meet;
-  List<ThrowResult> Function()? _results;
-  bool Function(ThrowResult)? _isPersonalBest;
+  HttpServer? _server;
+  String? _error;
+  ColorScheme? _scheme;
+
+  final Map<String, _Share> _byToken = {};
 
   /// How the server opens its socket. Swapped out in a test, which has no
   /// business binding a real port on whatever machine CI runs on.
@@ -62,56 +75,108 @@ class MeetServer extends ChangeNotifier {
   @visibleForTesting
   static Future<String?> Function() lanAddress = _findLanAddress;
 
-  bool get isSharing => _server != null;
+  /// Where the page's typeface comes from. Swapped out in a test, which
+  /// runs without an asset bundle behind it.
+  @visibleForTesting
+  static Future<Uint8List> Function(String asset) loadFont = (asset) async =>
+      (await rootBundle.load(asset)).buffer.asUint8List();
 
-  /// Which meet is being shared, so a screen can tell whether it is this
-  /// one — sharing is per meet, and a coach at two in a weekend should not
-  /// see the other one's link over this one's field.
-  String? get meetId => _meetId;
+  /// Whether anything at all is being served.
+  bool get isSharing => _byToken.isNotEmpty;
 
-  /// What to put on the QR and in somebody's hand.
-  String? get url => _url;
+  /// How many competitions are being shared, for a screen that wants to say
+  /// so without naming them.
+  int get shareCount => _byToken.length;
 
   /// Non-null when the socket wouldn't open. Sharing is an extra; a phone
   /// that refuses to bind still runs the meet exactly as before.
   String? get error => _error;
 
-  /// The link spelled for somebody to act on rather than to look at:
+  /// The link for one competition, or null when it isn't being shared.
+  String? urlFor(String meetId, ThrowEvent event, double implementKg) =>
+      _find(meetId, event, implementKg)?.url;
+
+  /// The same link spelled for somebody to act on rather than to look at:
   /// all capitals, which is what a QR is scanned from and what gets read
   /// out when it won't scan. Scheme and host are case-insensitive and the
   /// path is uppercase already, so this is the same link.
   ///
-  /// It does not make the code any smaller — the encoder we use writes
-  /// byte mode whatever the characters are, and QR's tighter alphanumeric
-  /// mode has no '#' in its charset anyway, which the relay link will
-  /// need. Short is what keeps the code fat here, not case.
-  String? get qrPayload => _url?.toUpperCase();
+  /// It does not make the code any smaller — the encoder we use writes byte
+  /// mode whatever the characters are, and QR's tighter alphanumeric mode
+  /// has no '#' in its charset anyway, which a relay link would need. Short
+  /// is what keeps the code fat here, not case.
+  String? qrFor(String meetId, ThrowEvent event, double implementKg) =>
+      urlFor(meetId, event, implementKg)?.toUpperCase();
 
-  /// Starts sharing [meetId]. Returns whether the socket opened.
+  bool sharing(String meetId, ThrowEvent event, double implementKg) =>
+      _find(meetId, event, implementKg) != null;
+
+  _Share? _find(String meetId, ThrowEvent event, double implementKg) {
+    for (final share in _byToken.values) {
+      if (share.meetId == meetId &&
+          share.event == event &&
+          share.implementKg == implementKg) {
+        return share;
+      }
+    }
+    return null;
+  }
+
+  /// Starts sharing one competition. Returns whether it is now being
+  /// served. Sharing the same one twice keeps the link it already has, so a
+  /// coach reopening the sheet is handed the same QR the stand already
+  /// scanned.
   ///
-  /// The three callbacks are how it reads the meet — live, per request, so
+  /// The callbacks are how it reads the meet — live, per request, so
   /// nothing here can go stale or hold a copy of the competition that
-  /// disagrees with the screen.
+  /// disagrees with the screen. [scheme] is the app's own, which is what
+  /// paints the page in the app's colors rather than in guessed ones.
   Future<bool> start({
     required String meetId,
+    required ThrowEvent event,
+    required double implementKg,
+    required ColorScheme scheme,
     required Meet? Function() meet,
     required List<ThrowResult> Function() results,
     bool Function(ThrowResult)? isPersonalBest,
   }) async {
-    await stop();
-    _meet = meet;
-    _results = results;
-    _isPersonalBest = isPersonalBest;
-    _meetId = meetId;
-    _token = _newToken();
+    _scheme = scheme;
+    final already = _find(meetId, event, implementKg);
+    if (already != null) return true;
 
+    if (_server == null && !await _open()) return false;
+    final host = await lanAddress();
+    if (host == null) {
+      if (_byToken.isEmpty) await stopAll();
+      _fail('This phone is not on a network. Turn on wifi or a hotspot.');
+      return false;
+    }
+
+    final token = _newToken();
+    _byToken[token] = _Share(
+      token: token,
+      url: 'http://$host:${_server!.port}/M/$token',
+      meetId: meetId,
+      event: event,
+      implementKg: implementKg,
+      meet: meet,
+      results: results,
+      isPersonalBest: isPersonalBest,
+    );
+    _error = null;
+    notifyListeners();
+    return true;
+  }
+
+  /// Opens the socket, trying each port in turn. The listener is attached
+  /// once and serves every share.
+  Future<bool> _open() async {
     for (final port in _ports) {
       try {
         _server = await bind(port);
         break;
       } on SocketException {
-        // Something else has it. Try the next one, and let the last
-        // failure be the one reported.
+        // Something else has it. Try the next one down the list.
         continue;
       } catch (e) {
         _fail('$e');
@@ -123,34 +188,35 @@ class MeetServer extends ChangeNotifier {
       _fail('No port would open.');
       return false;
     }
-
-    final host = await lanAddress();
-    if (host == null) {
-      await stop();
-      _fail('This phone is not on a network. Turn on wifi or a hotspot.');
-      return false;
-    }
-
-    _url = 'http://$host:${server.port}/M/$_token';
-    _error = null;
     server.listen(_handle, onError: (_) {
-      // A dead socket is a stopped share; say so rather than leaving a
-      // link on screen that nothing is answering.
-      stop();
+      // A dead socket is a stopped share; say so rather than leaving links
+      // on screen that nothing is answering.
+      stopAll();
     });
-    notifyListeners();
     return true;
   }
 
-  Future<void> stop() async {
+  /// Stops sharing one competition, and closes the socket with the last of
+  /// them — a port held open for nothing is a port held open.
+  Future<void> stop(String meetId, ThrowEvent event, double implementKg) async {
+    final share = _find(meetId, event, implementKg);
+    if (share == null) return;
+    _byToken.remove(share.token);
+    if (_byToken.isEmpty) {
+      await _close();
+    }
+    notifyListeners();
+  }
+
+  Future<void> stopAll() async {
+    _byToken.clear();
+    await _close();
+    notifyListeners();
+  }
+
+  Future<void> _close() async {
     final server = _server;
     _server = null;
-    _meetId = null;
-    _token = null;
-    _url = null;
-    _meet = null;
-    _results = null;
-    _isPersonalBest = null;
     if (server != null) {
       try {
         await server.close(force: true);
@@ -158,14 +224,10 @@ class MeetServer extends ChangeNotifier {
         // Already gone.
       }
     }
-    notifyListeners();
   }
 
   void _fail(String message) {
     _error = message;
-    _url = null;
-    _meetId = null;
-    _token = null;
     notifyListeners();
   }
 
@@ -175,6 +237,7 @@ class MeetServer extends ChangeNotifier {
     // disposed notifier is nobody's problem.
     _server?.close(force: true);
     _server = null;
+    _byToken.clear();
     super.dispose();
   }
 
@@ -215,7 +278,7 @@ class MeetServer extends ChangeNotifier {
 
   Future<void> _handle(HttpRequest request) async {
     final response = request.response;
-    // Nothing here is for a crawler, and a meet's field is a list of
+    // Nothing here is for a crawler, and a competition's field is a list of
     // names. Belt and braces on a LAN, and the right habit anyway.
     response.headers.set('X-Robots-Tag', 'noindex, nofollow');
     response.headers.set('Referrer-Policy', 'no-referrer');
@@ -228,10 +291,9 @@ class MeetServer extends ChangeNotifier {
       // /M/<token>[/...] and nothing else exists. A wrong or missing token
       // is a 404 rather than a 403: a link that has stopped being shared
       // should look like a link that was never there.
-      if (segments.length < 2 ||
-          segments[0] != 'M' ||
-          _token == null ||
-          segments[1] != _token) {
+      final share =
+          segments.length >= 2 && segments[0] == 'M' ? _byToken[segments[1]] : null;
+      if (share == null) {
         await _plain(response, HttpStatus.notFound, 'Nothing here.');
         return;
       }
@@ -240,9 +302,11 @@ class MeetServer extends ChangeNotifier {
         case '':
           await _page(response);
         case 'state':
-          await _state(request, response);
+          await _state(request, response, share);
         case 'results.pdf':
-          await _sheet(request, response);
+          await _sheet(response, share);
+        case 'f':
+          await _font(response, segments.length > 3 ? segments[3] : '');
         default:
           await _plain(response, HttpStatus.notFound, 'Nothing here.');
       }
@@ -258,30 +322,56 @@ class MeetServer extends ChangeNotifier {
   Future<void> _page(HttpResponse response) async {
     response.statusCode = HttpStatus.ok;
     response.headers.contentType = ContentType.html;
-    // Small enough not to be worth a caching story, and it changes when
-    // the app updates, which a spectator's browser has no way to know.
+    // Small enough not to be worth a caching story, and it changes when the
+    // app updates, which a spectator's browser has no way to know.
     response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    response.write(spectatorPage);
+    response.write(spectatorPage(_scheme ?? const ColorScheme.dark()));
     await response.close();
   }
 
-  Future<void> _state(HttpRequest request, HttpResponse response) async {
-    final meet = _meet?.call();
-    if (meet == null) {
-      await _plain(response, HttpStatus.notFound, 'That meet is gone.');
+  /// Barlow, off the phone. The one thing on this page worth a browser
+  /// cache: it is a quarter of a megabyte that never changes, and a
+  /// spectator who reloads on flaky wifi should not fetch it twice.
+  Future<void> _font(HttpResponse response, String name) async {
+    final asset = _fonts[name];
+    if (asset == null) {
+      await _plain(response, HttpStatus.notFound, 'Nothing here.');
       return;
     }
-    final feed = meetFeed(
-      meet,
-      _results?.call() ?? const [],
-      isPersonalBest: _isPersonalBest,
+    Uint8List bytes;
+    try {
+      bytes = await loadFont(asset);
+    } catch (_) {
+      // No bundle behind us. The page names a system fallback for exactly
+      // this, so it is still perfectly readable.
+      await _plain(response, HttpStatus.notFound, 'No font here.');
+      return;
+    }
+    response.statusCode = HttpStatus.ok;
+    response.headers.contentType = ContentType('font', 'ttf');
+    response.headers.set(HttpHeaders.cacheControlHeader, 'max-age=86400');
+    response.add(bytes);
+    await response.close();
+  }
+
+  Future<void> _state(
+      HttpRequest request, HttpResponse response, _Share share) async {
+    final competition = share.competition();
+    if (competition == null) {
+      await _plain(response, HttpStatus.notFound, 'That competition is gone.');
+      return;
+    }
+    final feed = competitionFeed(
+      share.meet()!,
+      competition,
+      share.results(),
+      isPersonalBest: share.isPersonalBest,
     );
     // The clock in 'asOf' moves every second, so the tag is taken over the
     // competition without it: a quiet round between throws should cost a
     // 304 and not 15 KB, and the page's own clock is allowed to be as old
     // as the last thing that actually happened.
     final tag = '"${_fingerprint(jsonEncode({...feed}..remove('asOf')))}"';
-    final body = jsonEncode(feed);
     if (request.headers.value(HttpHeaders.ifNoneMatchHeader) == tag) {
       response.statusCode = HttpStatus.notModified;
       response.headers.set(HttpHeaders.etagHeader, tag);
@@ -292,42 +382,31 @@ class MeetServer extends ChangeNotifier {
     response.headers.contentType = ContentType.json;
     response.headers.set(HttpHeaders.etagHeader, tag);
     response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    response.write(body);
+    response.write(jsonEncode(feed));
     await response.close();
   }
 
-  /// The results sheet, written on demand — the same PDF the coach's own
-  /// share button produces, because it is the same call. [meetResultsPdf]
-  /// is pure Dart over the meet and the record book, so there is nothing
-  /// to stage on disk first.
-  Future<void> _sheet(HttpRequest request, HttpResponse response) async {
-    final meet = _meet?.call();
-    if (meet == null) {
-      await _plain(response, HttpStatus.notFound, 'That meet is gone.');
+  /// This competition's results sheet, written on demand — the same PDF the
+  /// coach's own share button produces, because it is the same call.
+  /// [meetResultsPdf] is pure Dart over the meet and the record book, so
+  /// there is nothing to stage on disk first.
+  ///
+  /// This competition's and no other: the link was handed out at one ring.
+  Future<void> _sheet(HttpResponse response, _Share share) async {
+    final competition = share.competition();
+    final meet = share.meet();
+    if (competition == null || meet == null) {
+      await _plain(response, HttpStatus.notFound, 'That competition is gone.');
       return;
     }
-    final wanted = request.uri.queryParameters['event'];
-    MeetCompetition? only;
-    if (wanted != null) {
-      for (final competition in MeetCompetition.of(meet)) {
-        if ('${competition.event.name}:${competition.implementKg}' == wanted) {
-          only = competition;
-          break;
-        }
-      }
-      if (only == null) {
-        await _plain(response, HttpStatus.notFound, 'No such event.');
-        return;
-      }
-    }
-    final bytes = meetResultsPdf(meet, _results?.call() ?? const [], only: only);
+    final bytes = meetResultsPdf(meet, share.results(), only: competition);
     response.statusCode = HttpStatus.ok;
     response.headers.contentType = ContentType('application', 'pdf');
     // Safe to quote unescaped: ResultsSheet.fileName has already stripped
-    // the name to what a file system will take, which is a subset of what
-    // a header will.
+    // the name to what a file system will take, which is a subset of what a
+    // header will.
     response.headers.set('content-disposition',
-        'attachment; filename="${ResultsSheet.fileName(meet, only)}"');
+        'attachment; filename="${ResultsSheet.fileName(meet, competition)}"');
     response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
     response.add(bytes);
     await response.close();
@@ -353,5 +432,43 @@ class MeetServer extends ChangeNotifier {
       hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
     }
     return hash.toRadixString(36);
+  }
+}
+
+/// One competition being served, and how to read it.
+class _Share {
+  const _Share({
+    required this.token,
+    required this.url,
+    required this.meetId,
+    required this.event,
+    required this.implementKg,
+    required this.meet,
+    required this.results,
+    this.isPersonalBest,
+  });
+
+  final String token;
+  final String url;
+  final String meetId;
+  final ThrowEvent event;
+  final double implementKg;
+
+  final Meet? Function() meet;
+  final List<ThrowResult> Function() results;
+  final bool Function(ThrowResult)? isPersonalBest;
+
+  /// The competition as it stands, looked up fresh: an athlete entered
+  /// between one poll and the next is in the field by the second one.
+  /// Null once the meet — or everybody in this event — has gone.
+  MeetCompetition? competition() {
+    final held = meet();
+    if (held == null) return null;
+    for (final competition in MeetCompetition.of(held)) {
+      if (competition.event == event && competition.implementKg == implementKg) {
+        return competition;
+      }
+    }
+    return null;
   }
 }

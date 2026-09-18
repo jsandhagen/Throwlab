@@ -3,12 +3,12 @@
 //
 //   flutter test --update-goldens tool/preview/share_preview.dart
 //
-// Two artifacts. The PNGs are the app's own side of it: the meet screen with
-// the share action in its app bar (off and lit), and the sheet in both
-// states. The third is build/preview/spectator.html — the real page with a
-// real meet's feed baked into it, which is the only honest way to review a
-// page whose whole job happens in a browser. Open it; every tab and every
-// event chip works, because the page already holds the whole meet.
+// Two artifacts. The PNGs are the app's own side of it: the competition
+// screen with the share action in its app bar (off and lit), and the sheet
+// in both states. The other is build/preview/spectator.html — the real page
+// with a real competition's feed baked into it, which is the only honest
+// way to review a page whose whole job happens in a browser. Open it; every
+// tab works, because the page already holds the whole competition.
 
 import 'dart:convert';
 import 'dart:io';
@@ -23,13 +23,12 @@ import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
-import 'package:throwlab/screens/meet_screen.dart';
+import 'package:throwlab/screens/meet_event_screen.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/meet_server.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/utils/meet_feed.dart';
 import 'package:throwlab/utils/spectator_page.dart';
-import 'package:throwlab/widgets/share_meet.dart';
 
 import 'harness.dart';
 
@@ -153,11 +152,13 @@ void main() {
 
     // A real socket, on the loopback, reading a plausible address back: the
     // sheet has to show the link a coach would actually be handed.
+    // ignore: invalid_use_of_visible_for_testing_member
     MeetServer.bind =
         (port) => HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    // ignore: invalid_use_of_visible_for_testing_member
     MeetServer.lanAddress = () async => '192.168.43.1';
     final server = MeetServer();
-    addTearDown(server.stop);
+    addTearDown(server.stopAll);
 
     Future<void> pump() async {
       await tester.pumpWidget(
@@ -169,16 +170,16 @@ void main() {
           ],
           child: MaterialApp(
             theme: ThrowLabApp.theme,
-            home: const MeetScreen(meetId: 'k1'),
+            home: const MeetEventScreen(
+                meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
           ),
         ),
       );
       await settle(tester);
     }
 
-    // The meet with a fourth action in its app bar. The one to look at here
-    // is the title: four icons and a two-line title is exactly the crowding
-    // that cut the comparison screen's title to 'Javelin:…'.
+    // The competition, with the share action beside the sheet in its app
+    // bar — the two things a coach reaches for at a ring.
     await pump();
     await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('$_out/share_meet_bar.png'));
@@ -194,6 +195,9 @@ void main() {
     await tester.runAsync(() async {
       await server.start(
         meetId: 'k1',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        scheme: ThrowLabApp.theme.colorScheme,
         meet: () => meets.byId('k1'),
         results: () => library.results,
         isPersonalBest: library.isPersonalBest,
@@ -215,7 +219,12 @@ void main() {
     // state, so the only way to look at one off a track is to hand it a
     // meet's feed instead of a fetch — the page itself is untouched.
     await tester.runAsync(() async {
-      final feed = jsonEncode(meetFeed(meets.byId('k1')!, library.results,
+      final made = meets.byId('k1')!;
+      final feed = jsonEncode(competitionFeed(
+          made,
+          MeetCompetition.of(made)
+              .firstWhere((c) => c.event == ThrowEvent.discus),
+          library.results,
           at: DateTime.utc(2026, 6, 13, 14, 32),
           isPersonalBest: library.isPersonalBest));
       final stub = '<script>window.fetch=function(){'
@@ -225,8 +234,18 @@ void main() {
       final folder = Directory('build/preview');
       if (!folder.existsSync()) folder.createSync(recursive: true);
       final file = File('${folder.path}/spectator.html');
-      await file
-          .writeAsString(spectatorPage.replaceFirst('<script>', '$stub<script>'));
+      // The page as the app paints it, in the app's own colors — and with
+      // Barlow pointed at the files beside it rather than at the phone,
+      // since there is no server behind a file:// page.
+      final page = spectatorPage(ThrowLabApp.theme.colorScheme)
+          .replaceFirst('<script>', '$stub<script>');
+      await file.writeAsString(page);
+      final fonts = Directory('${folder.path}/f');
+      if (!fonts.existsSync()) fonts.createSync(recursive: true);
+      File('${fonts.path}/r.ttf')
+          .writeAsBytesSync(File('assets/fonts/Barlow-Regular.ttf').readAsBytesSync());
+      File('${fonts.path}/s.ttf').writeAsBytesSync(
+          File('assets/fonts/Barlow-SemiBold.ttf').readAsBytesSync());
       // ignore: avoid_print
       print('wrote ${file.path} (${file.lengthSync()} bytes)');
     });

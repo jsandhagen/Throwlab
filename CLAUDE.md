@@ -11,7 +11,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — a meet worked out for somebody watching it, and the page it is read on |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on |
 | `test/` | Unit and widget tests — what CI runs |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -55,10 +55,11 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
-`build/preview/spectator.html`, the real spectator page with a meet's feed
-baked in place of its fetch. A page whose whole job happens in a browser
-cannot be reviewed as a golden — open the file, and every tab and event chip
-works, because the page already holds the whole meet.
+`build/preview/spectator.html`, the real spectator page with a competition's
+feed baked in place of its fetch, and Barlow copied in beside it so the type
+is the app's there too. A page whose whole job happens in a browser cannot be
+reviewed as a golden — open the file, and every tab works, because the page
+already holds the whole competition.
 
 The results sheet is reviewed the same way, except that the artifact is the
 PDF itself — it writes no golden and asserts nothing, because looking at the
@@ -759,8 +760,8 @@ like the app rather than a bare Material default.
   that was half unreachable. The padding goes to zero on its own once the
   keyboard is up, which is when the `viewInsets` padding above it takes
   over.
-- A meet can be followed by the people standing at it, and the phone is the
-  server. `MeetServer` binds a socket and hands out
+- A competition can be followed by the people standing at it, and the phone
+  is the server. `MeetServer` binds a socket and hands out
   `http://192.168.43.1:8080/M/<token>`; anyone on the same wifi — or on the
   phone's own hotspot, which is the case that reliably works, since venue
   wifi usually walls its clients off from each other — opens it in a
@@ -770,7 +771,16 @@ like the app rather than a bare Material default.
   link that has stopped being shared should look like one that never was),
   and there is no route that writes: a spectator cannot enter a mark
   because nothing on the server can.
-- The page is served the *answers*, never the rules. `meet_feed` runs
+- One ring, one link. A share is a `MeetCompetition`, never the meet: the
+  link is handed over at a sector by somebody standing at it, and what the
+  people there are watching is the discus — not the javelin two hours
+  later, and not the rest of the day's field, who are other people's
+  athletes and never agreed to be on anybody's phone. The discus link
+  serves the discus and 404s everything else, including its own meet's
+  other events and their results sheets. A coach with two rings going
+  shares each and gets a link for each; the server holds a token per
+  competition on one socket, and closes it with the last of them.
+- The page is served the *answers*, never the rules. `competitionFeed` runs
   `MeetStandings`, `MeetFlight` and `MeetBoard` and hands over places, the
   cut, the three an infield calls and the band of sector worth drawing,
   with every mark already spelled through `formatDistance` — so the browser
@@ -778,29 +788,43 @@ like the app rather than a bare Material default.
   become a second implementation of a competition that disagrees with the
   coach's own screen. A series box carries the mark twice, in full and as
   `short` without its unit, because that is the one place the app itself
-  drops it (`_AttemptBox`) and six boxes across a phone have no room.
-- The whole meet goes out, not the competition the coach is looking at. A
-  parent following the discus should not be dragged sideways every time the
-  coach walks to the javelin, and a page holding every competition switches
-  tab or event with no request at all — which is also what keeps it usable
-  when the phone wanders off the wifi. It says how old it is rather than
-  going blank. The server holds no copy: `MeetServer` reads the meet through
-  callbacks per request, so a mark entered between polls is simply there.
+  drops it (`_AttemptBox`) and six boxes across a phone have no room. The
+  server holds no copy of the competition: it reads the meet through
+  callbacks per request, so a mark entered between polls — or an athlete
+  entered after the link went out — is simply there on the next one.
+- The whole competition goes out at once, so switching tab costs no request
+  at all, and the page keeps working when the phone wanders off the wifi.
+  It says how old it is rather than going blank.
+- It is meant to read as ThrowLab rather than as a web page about ThrowLab,
+  so `spectator_page` is not styled by hand. The palette is written out of
+  the app's own `ColorScheme` — handed to `MeetServer.start` by the sheet
+  that starts it, so the theme stays `main.dart`'s to decide — the type is
+  the bundled Barlow, served off the phone at `f/r.ttf` and `f/s.ttf`
+  because there is no network at a track to fetch a font from, and the
+  chrome is the app's own: the two-cut silhouette of `angularShape`, the
+  segmented bar whose block leans at the sector's half-angle and squares up
+  against whichever end it has reached, the drawn `EventGlyph` in the
+  event's own color, and the sector backdrop the library and the meet stand
+  on. Two weights, not the app's four: a page this size only sets body and
+  emphasis, and each file is a quarter-megabyte of somebody's wifi. The
+  font is the one thing here worth a browser cache; the state is sent
+  `no-store` so it never lands in a spectator's history.
 - The results sheet is a route, not a second implementation:
   `meetResultsPdf` is pure Dart over the meet and the record book, so it is
-  generated into the response. A spectator leaving early downloads the
-  afternoon on their way to the car park, with no signal anywhere near it.
+  generated into the response — this competition's, with `only:` set from
+  the share. A spectator leaving early downloads the event on their way to
+  the car park, with no signal anywhere near it.
 - The link is handed over by QR, because nobody types 192.168.43.1:8080 off
   a screen in sunlight — and printed under it in full, because sometimes
   they have to, which is why the token has no 0/O or 1/I in it. The code is
   black on a white card, the one place the app breaks its own dark theme:
   a dark-on-dark QR is one no camera will read. `QrPainter` holds the
   matrix and snaps modules to whole pixels, since a code drawn on
-  fractional boundaries grows seams a camera reads as noise. Sharing is a
-  *doing* action and lives in the meet's app bar beside the sheet; reading
-  a heat sheet in and fixing the rounds happen once, before anybody throws,
-  and moved into the overflow — a fourth icon out there cost the meet its
-  own name, which ellipsized to 'County Cha...' on a phone.
+  fractional boundaries grows seams a camera reads as noise. It is offered
+  from `MeetEventScreen`'s app bar beside that event's results sheet — the
+  two things a coach reaches for standing at a ring — and the action is lit
+  in the event's color while the phone is serving it, because a coach who
+  has walked to the next ring has no other way to tell that it still is.
 
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs

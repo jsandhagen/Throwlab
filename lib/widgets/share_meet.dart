@@ -7,26 +7,38 @@ import '../models/meet.dart';
 import '../services/meet_library.dart';
 import '../services/meet_server.dart';
 import '../services/video_library.dart';
+import 'throw_picker.dart';
 
-/// Handing the meet to the people standing at it.
+/// Handing one competition to the people standing at it.
+///
+/// One ring, one link. The link is handed over at a sector by somebody
+/// standing at it, and what the people there are watching is the discus —
+/// not the javelin two hours later, and not the rest of the day's field,
+/// who are other people's athletes and never agreed to be on anybody's
+/// phone. A coach with two rings going shares each and gets a link for
+/// each.
 ///
 /// The link is the phone's own address, so the sheet is mostly about the
 /// one thing a coach has to know for it to work: everybody has to be on the
 /// same network. That is why the wording names the hotspot — a track's
-/// guest wifi usually walls its clients off from each other, and the phone's
-/// own hotspot never does.
+/// guest wifi usually walls its clients off from each other, and the
+/// phone's own hotspot never does.
 ///
 /// A QR because nobody is typing 192.168.43.1:8080 off a screen in
 /// sunlight, and the link in full underneath because sometimes they have
 /// to.
-Future<void> showShareMeet(BuildContext context, {required Meet meet}) {
+Future<void> showShareCompetition(
+  BuildContext context, {
+  required Meet meet,
+  required MeetCompetition competition,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     // Insets the top and leaves the bottom to the sheet, which is why the
     // body adds the navigation bar's own padding itself.
     useSafeArea: true,
-    builder: (context) => _ShareMeetSheet(meet: meet),
+    builder: (context) => _ShareSheet(meet: meet, competition: competition),
   );
 }
 
@@ -41,24 +53,31 @@ MeetServer? meetServerOf(BuildContext context, {bool listen = true}) {
   }
 }
 
-class _ShareMeetSheet extends StatefulWidget {
-  const _ShareMeetSheet({required this.meet});
+class _ShareSheet extends StatefulWidget {
+  const _ShareSheet({required this.meet, required this.competition});
 
   final Meet meet;
+  final MeetCompetition competition;
 
   @override
-  State<_ShareMeetSheet> createState() => _ShareMeetSheetState();
+  State<_ShareSheet> createState() => _ShareSheetState();
 }
 
-class _ShareMeetSheetState extends State<_ShareMeetSheet> {
+class _ShareSheetState extends State<_ShareSheet> {
   bool _working = false;
 
   Future<void> _start(MeetServer server) async {
     final meets = context.read<MeetLibrary>();
     final library = context.read<VideoLibrary>();
+    // The app's own colors, handed over so the page paints in them rather
+    // than in ones matched by eye. The theme stays main.dart's to decide.
+    final scheme = Theme.of(context).colorScheme;
     setState(() => _working = true);
     await server.start(
       meetId: widget.meet.id,
+      event: widget.competition.event,
+      implementKg: widget.competition.implementKg,
+      scheme: scheme,
       // Read live, per request. The server holds no copy of the
       // competition, so a mark entered between polls is simply there.
       meet: () => meets.byId(widget.meet.id),
@@ -70,7 +89,8 @@ class _ShareMeetSheetState extends State<_ShareMeetSheet> {
 
   Future<void> _stop(MeetServer server) async {
     setState(() => _working = true);
-    await server.stop();
+    await server.stop(widget.meet.id, widget.competition.event,
+        widget.competition.implementKg);
     if (mounted) setState(() => _working = false);
   }
 
@@ -79,8 +99,8 @@ class _ShareMeetSheetState extends State<_ShareMeetSheet> {
     final theme = Theme.of(context);
     final server = meetServerOf(context);
     final sharing = server != null &&
-        server.isSharing &&
-        server.meetId == widget.meet.id;
+        server.sharing(widget.meet.id, widget.competition.event,
+            widget.competition.implementKg);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -101,12 +121,18 @@ class _ShareMeetSheetState extends State<_ShareMeetSheet> {
             ),
           ),
           Text('Follow along', style: theme.textTheme.titleLarge),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
+          // Which ring this link is for. A coach with two going has two
+          // links, and the sheet has to say which one is in their hand.
+          Text(widget.competition.label,
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(color: eventColor(widget.competition.event))),
+          const SizedBox(height: 8),
           Text(
             sharing
                 ? 'Scan this, or type it in. Everybody has to be on this '
                     'wifi — or on this phone’s hotspot, which always works.'
-                : 'Puts this meet on a page anyone here can open in a '
+                : 'Puts this event on a page anyone here can open in a '
                     'browser: the board, the field and the results sheet, '
                     'updating as you enter it. Nothing is uploaded — the '
                     'phone itself is the server, so it works with no signal.',
@@ -119,7 +145,10 @@ class _ShareMeetSheetState extends State<_ShareMeetSheet> {
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.error))
           else if (sharing)
-            _Sharing(server: server)
+            _Sharing(
+                server: server,
+                meet: widget.meet,
+                competition: widget.competition)
           else ...[
             if (server.error != null) ...[
               Text(server.error!,
@@ -148,14 +177,21 @@ class _ShareMeetSheetState extends State<_ShareMeetSheet> {
 }
 
 class _Sharing extends StatelessWidget {
-  const _Sharing({required this.server});
+  const _Sharing({
+    required this.server,
+    required this.meet,
+    required this.competition,
+  });
 
   final MeetServer server;
+  final Meet meet;
+  final MeetCompetition competition;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final url = server.url ?? '';
+    final url =
+        server.urlFor(meet.id, competition.event, competition.implementKg) ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -171,7 +207,10 @@ class _Sharing extends StatelessWidget {
             ),
             child: CustomPaint(
               size: const Size.square(232),
-              painter: QrPainter(server.qrPayload ?? url),
+              painter: QrPainter(
+                  server.qrFor(meet.id, competition.event,
+                          competition.implementKg) ??
+                      url),
             ),
           ),
         ),

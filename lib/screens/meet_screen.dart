@@ -10,15 +10,10 @@ import '../widgets/conditions_sheet.dart';
 import '../widgets/entry_dialog.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/sector_art.dart';
-import '../widgets/share_meet.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'heat_sheet_import_screen.dart';
 import 'meet_event_screen.dart';
-
-/// What the meet's overflow holds: the two things done once, before
-/// anybody throws.
-enum _MeetAction { heatSheet, settings }
 
 /// One meet: the events being contested at it, and the state each of them
 /// is in.
@@ -74,10 +69,6 @@ class MeetScreen extends StatelessWidget {
         }
         final theme = Theme.of(context);
         final competitions = MeetCompetition.of(meet);
-        final server = meetServerOf(context);
-        final sharing = server != null &&
-            server.isSharing &&
-            server.meetId == meet.id;
         return Scaffold(
           appBar: AppBar(
             title: Column(
@@ -102,47 +93,14 @@ class MeetScreen extends StatelessWidget {
                     meet: meet, results: library.results, sharer: shareResults),
               ),
               IconButton(
-                tooltip: 'Follow along',
-                // Lit while the phone is serving, because a coach who has
-                // walked to the next ring has no other way to tell that it
-                // still is.
-                icon: Icon(sharing
-                    ? Icons.wifi_tethering
-                    : Icons.wifi_tethering_outlined),
-                color: sharing ? theme.colorScheme.primary : null,
-                onPressed: () => showShareMeet(context, meet: meet),
+                tooltip: 'Import a heat sheet',
+                icon: const Icon(Icons.upload_file_outlined),
+                onPressed: () => _importSheet(context, meet),
               ),
-              // Setting a meet up and running one are different afternoons.
-              // The sheet and the link are reached for over and over while
-              // the throwing is on; reading a heat sheet in and fixing the
-              // rounds happen once, before any of it — and a fourth icon
-              // out here costs the meet's own name, which ellipsized to
-              // 'County Cha...' on a phone.
-              PopupMenuButton<_MeetAction>(
-                tooltip: 'Set up this meet',
+              IconButton(
+                tooltip: 'Meet settings',
                 icon: const Icon(Icons.more_horiz),
-                onSelected: (action) => switch (action) {
-                  _MeetAction.heatSheet => _importSheet(context, meet),
-                  _MeetAction.settings => _editMeet(context, meets, meet),
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(
-                    value: _MeetAction.heatSheet,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.upload_file_outlined),
-                      title: Text('Import a heat sheet'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _MeetAction.settings,
-                    child: ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.tune),
-                      title: Text('Meet settings'),
-                    ),
-                  ),
-                ],
+                onPressed: () => _editMeet(context, meets, meet),
               ),
             ],
           ),
