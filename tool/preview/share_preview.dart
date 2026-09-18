@@ -8,7 +8,9 @@
 // in both states. The other is build/preview/spectator.html — the real page
 // with a real competition's feed baked into it, which is the only honest
 // way to review a page whose whole job happens in a browser. Open it; every
-// tab works, because the page already holds the whole competition.
+// tab works and so does the question it opens with, because the page holds
+// the whole competition worked out for each athlete somebody might be
+// standing there to watch.
 
 import 'dart:convert';
 import 'dart:io';
@@ -237,17 +239,33 @@ void main() {
     // meet's feed instead of a fetch — the page itself is untouched.
     await tester.runAsync(() async {
       final made = meets.byId('k1')!;
-      final feed = jsonEncode(competitionFeed(
-          made,
-          MeetCompetition.of(made)
-              .firstWhere((c) => c.event == ThrowEvent.discus),
-          library.results,
-          at: DateTime.utc(2026, 6, 13, 14, 32),
-          isPersonalBest: library.isPersonalBest));
-      final stub = '<script>window.fetch=function(){'
+      final discus = MeetCompetition.of(made)
+          .firstWhere((c) => c.event == ThrowEvent.discus);
+      Map<String, dynamic> feedFor(String? following) => competitionFeed(
+            made,
+            discus,
+            library.results,
+            at: DateTime.utc(2026, 6, 13, 14, 32),
+            isPersonalBest: library.isPersonalBest,
+            following: following,
+          );
+      // One answer per athlete somebody could be here to watch, plus the
+      // one for nobody. The page asks who on the way in and sends the
+      // answer up with its poll, so a single baked feed would have left the
+      // question working and nothing behind it — and what wants looking at
+      // is precisely what the board does once it is answered.
+      final feeds = jsonEncode({
+        '': feedFor(null),
+        for (final entry in discus.entries) entry.id: feedFor(entry.id),
+      });
+      final stub = '<script>var FEEDS=$feeds;\n'
+          'window.fetch=function(at){'
+          'var m=/[?&]f=([^&]*)/.exec(String(at));'
+          'var who=m?decodeURIComponent(m[1]):"";'
           'return Promise.resolve({ok:true,status:200,'
           'headers:{get:function(){return null;}},'
-          'json:function(){return Promise.resolve($feed);}});};</script>\n';
+          'json:function(){return Promise.resolve(FEEDS[who]||FEEDS[""]);}});'
+          '};</script>\n';
       final folder = Directory('build/preview');
       if (!folder.existsSync()) folder.createSync(recursive: true);
       final file = File('${folder.path}/spectator.html');

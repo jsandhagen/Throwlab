@@ -32,7 +32,11 @@ import 'results_sheet.dart';
 ///
 /// Read-only by construction. There is no route that writes anything, so a
 /// spectator cannot enter a mark, and nothing here touches the meet or the
-/// record book except to read what is already there.
+/// record book except to read what is already there. That holds for the
+/// one thing a spectator does say — which athlete they are here to watch —
+/// because it rides on the poll as a query parameter and is worked out
+/// into that one answer. Nobody is registered, two people on one link
+/// follow two athletes, and the phone still holds nothing about either.
 ///
 /// The meet is read through the callbacks handed to [start] rather than
 /// copied, so every request answers with the competition as it stands. A
@@ -382,16 +386,25 @@ class MeetServer extends ChangeNotifier {
       await _plain(response, HttpStatus.notFound, 'That competition is gone.');
       return;
     }
+    // Who this browser is watching, if they have said. A query parameter
+    // on a GET rather than anything stored here: the server holds no
+    // spectator, two people on one link follow two different athletes, and
+    // there is still no route that writes.
     final feed = competitionFeed(
       share.meet()!,
       competition,
       share.results(),
       isPersonalBest: share.isPersonalBest,
+      following: request.uri.queryParameters['f'],
     );
     // The clock in 'asOf' moves every second, so the tag is taken over the
     // competition without it: a quiet round between throws should cost a
     // 304 and not 15 KB, and the page's own clock is allowed to be as old
     // as the last thing that actually happened.
+    //
+    // It is taken over the answer rather than over the competition, so two
+    // spectators following two athletes are never handed each other's
+    // board off one tag.
     final tag = '"${_fingerprint(jsonEncode({...feed}..remove('asOf')))}"';
     if (request.headers.value(HttpHeaders.ifNoneMatchHeader) == tag) {
       response.statusCode = HttpStatus.notModified;

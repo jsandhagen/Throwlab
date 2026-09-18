@@ -16,8 +16,9 @@ enum BoardLine {
   /// The athlete in the circle, when they are not already on the podium.
   upNow,
 
-  /// One of the coach's own, when they are not already on the board for
-  /// some other reason. A coach opens this to see their athlete against the
+  /// The athlete whose board it is — one of the coach's own, or the one a
+  /// spectator is following — when they are not already on the board for
+  /// some other reason. A board is opened to see that athlete against the
   /// cut, and an athlete who is neither winning it nor in the circle is
   /// exactly the one that question is about.
   mine,
@@ -107,11 +108,25 @@ class MeetBoard {
   /// shallowest one off [boardSpans] that holds every line, which is what
   /// the board opens at; a coach who has zoomed passes the span they chose
   /// and it is kept whatever the next throw does.
+  ///
+  /// [following] is whose board it is, for a reader who is not the coach.
+  /// A spectator handed the link at the ring is there for one athlete, and
+  /// that athlete is usually somebody else's — so the line drawn as
+  /// [BoardLine.mine], and the run of the competition the band is hung on,
+  /// follow them instead of the coach's own. Null is the coach's own
+  /// screen, which is every board inside the app.
   factory MeetBoard(
     MeetStandings standings, {
     MeetEntry? inTheCircle,
     double? span,
+    MeetEntry? following,
   }) {
+    // Whose board this is. One athlete when somebody is following one, and
+    // the coach's whole roster otherwise — a coach reads the board for all
+    // of theirs at once, and a spectator for the one they came to watch.
+    bool isMine(MeetEntry entry) =>
+        following == null ? entry.tracked : entry.id == following.id;
+
     final placed = [
       for (final place in standings.places)
         if (place.best != null) place,
@@ -179,12 +194,12 @@ class MeetBoard {
       add(BoardLine.upNow, mine);
     }
 
-    // Then the coach's own, wherever they are standing. This is the line
-    // the board is usually being opened for: a rival leading it is context,
-    // and an athlete of theirs a centimeter outside the cut is the whole
-    // question.
+    // Then whoever's board this is, wherever they are standing. This is
+    // the line the board is being opened for: somebody else leading it is
+    // context, and the athlete you came to watch a centimeter outside the
+    // cut is the whole question.
     for (final place in placed) {
-      if (!place.entry.tracked || place.best == null) continue;
+      if (!isMine(place.entry) || place.best == null) continue;
       if (drawn.contains(place.best)) continue;
       add(BoardLine.mine, place);
     }
@@ -196,14 +211,17 @@ class MeetBoard {
     // decide it squeezed into the top inch, which is the thing this board
     // exists to stop.
     // What the band is hung on when it can't hold every line: the athlete
-    // in the circle, else the coach's own best-placed. Nobody, at a board
-    // with neither, and it hangs on whichever stretch of the competition
-    // has the most of it in it.
+    // in the circle, else the best-placed of whoever's board this is.
+    // Nobody, at a board with neither, and it hangs on whichever stretch
+    // of the competition has the most of it in it.
+    //
+    // Best-placed rather than furthest: they are the same athlete, since
+    // [placed] arrives ranked on the mark each is standing on.
     final focus = marks
-        .where((mark) => mark.line == BoardLine.upNow)
-        .followedBy(marks.where((mark) => mark.tracked))
-        .firstOrNull
-        ?.distance;
+            .where((mark) => mark.line == BoardLine.upNow)
+            .firstOrNull
+            ?.distance ??
+        placed.where((place) => isMine(place.entry)).firstOrNull?.best;
 
     final at = [for (final mark in marks) mark.distance]..sort();
     final band = span == null

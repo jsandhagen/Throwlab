@@ -9,6 +9,12 @@
 // this one opens that page in a browser at the same 390 x 844, shoots each
 // tab, and composes the pairs into build/preview/compare_*.png.
 //
+// It also shoots the two states the page has of its own: the question it
+// opens with (web_asking.png) and the competition read for one athlete
+// (web_following.png). Those have no app side to stand beside — the phone
+// belongs to the coach, whose own athletes are already the answer — so they
+// are two more files to open rather than a fourth pair.
+//
 // It exists because the screen and the page are two renderings of one
 // competition and drift between them is invisible in a diff — every
 // difference this feature has fixed was found by looking at these three
@@ -71,11 +77,34 @@ const views = ['live', 'series', 'standings'];
 
   await page.goto('file://' + out + 'spectator.html');
   await page.waitForTimeout(1200);
+
+  // The page opens by asking who the reader is here to watch — the one
+  // thing on it the app has no twin for, since the phone belongs to the
+  // coach. Shot on its own, then answered: the three views below are the
+  // parity comparison and have to be the page as everybody reads it.
+  await page.screenshot({ path: `${out}web_asking.png` });
+  console.log('wrote build/preview/web_asking.png');
+  await page.click('#watch button[data-key=""]');
+  await page.waitForTimeout(350);
+
   for (const view of views) {
     await page.click(`button[data-tab="${view}"]`);
     await page.waitForTimeout(350);
     await page.screenshot({ path: `${out}web_${view}.png` });
   }
+
+  // And the page read for one athlete: the last name in the field, who is
+  // nobody's on the coach's phone. The board's own line, the caption and
+  // the emphasis down the field should all have moved to them — which is
+  // the whole of the feature, and is looked at rather than asserted.
+  await page.click('button[data-tab="live"]');
+  await page.click('#watch button[data-open]');
+  await page.waitForTimeout(250);
+  const names = await page.$$('#watch .names button');
+  await names[names.length - 1].click();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${out}web_following.png` });
+  console.log('wrote build/preview/web_following.png');
 
   // Composed in a browser rather than with an image library, because the
   // browser is already open and the app has no image dependency to add one

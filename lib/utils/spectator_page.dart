@@ -24,6 +24,16 @@ import '../widgets/sector_art.dart';
 /// arrive decided from `competitionFeed` — the page lays out answers. That
 /// is what keeps it from becoming a second, disagreeing implementation of a
 /// competition, and it is why switching tabs costs no request at all.
+///
+/// The one thing it asks for itself is who the reader is here for. A coach
+/// reading the app is reading it for their own athletes, and every 'yours'
+/// on their screen means that; somebody handed this link at a ring came to
+/// watch one thrower, who is usually somebody else's. So the page asks, on
+/// the way in, and sends the answer up with each poll — and the phone works
+/// the board, the cut, the calls and the captions out around that athlete
+/// instead. The page still says only what it is told: the question changes
+/// who the sentences are about and not a word of them, and unanswered it is
+/// the coach's own screen exactly as before.
 String spectatorPage(ColorScheme scheme) {
   String hex(Color color) =>
       '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
@@ -140,6 +150,44 @@ const String _page = r'''<!doctype html>
   .age.stale .dot, .age.stale { color: var(--bad); }
   .age.stale .dot { background: var(--bad); }
 
+  /* Who the page is being read for. A spectator is at the ring for one
+     athlete, so the page asks which — once, on the way in, and quietly
+     from then on as a chip in the header. The app has no twin for this:
+     the phone belongs to the coach, and the coach's own athletes are
+     already the answer there. */
+  .watch { margin-top: 10px; }
+  .watch .who { display: inline-flex; align-items: center; gap: 8px;
+                border: 1px solid color-mix(in srgb, var(--accent) 45%,
+                transparent);
+                background: color-mix(in srgb, var(--surface) 40%, transparent);
+                color: var(--dim); font: inherit; font-size: 12px;
+                border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  .watch .who b { font-weight: 600; color: var(--accent); }
+  .watch .who .chev { color: var(--dim); font-size: 11px; opacity: 0.8; }
+  /* The same translucent card as everything else on the page — this is a
+     question about the competition, not a dialog over it, and a scrim
+     over the board would hide the thing somebody opened the link for. */
+  .picker { background: color-mix(in srgb, var(--surface) 45%, transparent);
+            border-radius: 16px; padding: 10px 12px; }
+  .picker .ask { margin: 0; font-size: 13px; font-weight: 600; }
+  .picker .why { margin: 2px 0 8px; font-size: 11px; color: var(--dim); }
+  /* Names as pills rather than rows: a field is a dozen short names, and
+     a dozen full-width rows is a page of its own before the board. */
+  .names { display: flex; flex-wrap: wrap; gap: 6px; max-height: 40vh;
+           overflow: auto; }
+  .names button { border: 1px solid color-mix(in srgb, var(--line) 70%,
+                  transparent); background: transparent; color: var(--text);
+                  font: inherit; font-size: 12px; border-radius: 999px;
+                  padding: 8px 12px; cursor: pointer; display: inline-flex;
+                  align-items: baseline; gap: 5px; }
+  .names button.on { border-color: var(--accent); color: var(--accent);
+                     font-weight: 600; }
+  .names .fl { font-size: 10px; color: var(--dim); }
+  .picker .plain { margin-top: 8px; padding: 4px 0; border: 0;
+                   background: none; color: var(--dim); font: inherit;
+                   font-size: 12px; text-decoration: underline;
+                   cursor: pointer; }
+
   /* The app's own segmented bar: one surface with a slanted block under the
      active section and leaning dividers between the rest. The lean is the
      sector's half-angle, so the header leans the way the sector opens. */
@@ -189,9 +237,9 @@ const String _page = r'''<!doctype html>
   .board { margin-top: 12px; border-radius: 10px; overflow: hidden;
            background: var(--bg);
            border: 1px solid color-mix(in srgb, var(--line) 40%, transparent); }
-  /* What the throw in the circle has to do, and what the coach's own
-     athlete is short of — the lines the app prints under its board, in
-     the colors it prints them in. */
+  /* What the throw in the circle has to do, and what the athlete this page
+     is being read for is short of — the lines the app prints under its
+     board, in the colors it prints them in. */
   .cap { font-size: 13px; font-weight: 600; margin: 12px 0 0; }
   .cap + .cap { margin-top: 2px; }
   .cap.tint { color: var(--tint); }
@@ -222,7 +270,8 @@ const String _page = r'''<!doctype html>
      trophy on a line of its own above the word it belongs to. */
   .ico { display: inline-block; width: 13px; height: 13px; flex: 0 0 auto; }
   .call .lbl .ico { vertical-align: -2px; margin-right: 5px; }
-  /* When the coach's own throw, for a flight that isn't theirs. */
+  /* When the athlete being followed throws, for a flight that isn't
+     theirs. */
   .later { display: flex; align-items: center; gap: 6px; font-size: 11px;
            color: var(--accent); margin: 6px 0 0; }
 
@@ -257,10 +306,10 @@ const String _page = r'''<!doctype html>
   .aside { color: var(--dim); font-size: 11px; margin: -3px 0 3px;
            padding-left: 32px; }
   /* Set back the way the app's own table sets the field back: the rest of
-     the competition is here to be placed against, not read. The coach's
-     own athlete is the one the eye should find, and a metal has to have
-     something dimmer than itself to stand against — silver against bright
-     type is not silver, it is type. */
+     the competition is here to be placed against, not read. The athlete
+     the page is being read for is the one the eye should find, and a metal
+     has to have something dimmer than itself to stand against — silver
+     against bright type is not silver, it is type. */
   .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
         white-space: nowrap; color: var(--dim); }
   .nm.mine { color: var(--text); font-weight: 600; }
@@ -346,6 +395,7 @@ const String _page = r'''<!doctype html>
   <div class="sub" id="meet"></div>
   <div class="sub" id="weather"></div>
   <div class="age" id="age"><i class="dot"></i><span id="ageText">connecting…</span></div>
+  <div class="watch" id="watch"></div>
 </header>
 <div class="tabs angular" id="tabs">
   <div id="block"></div>
@@ -366,6 +416,29 @@ const String _page = r'''<!doctype html>
   var base = location.pathname.replace(/\/[^\/]*\.html$/, "").replace(/\/$/, "");
   var data = null, tab = "live", etag = null;
   var lastAt = 0, failed = 0;
+
+  /* Who this browser is here to watch, and whether it has been asked.
+     The phone knows nothing about it: the choice rides on the poll as a
+     query parameter, so two people on one link follow two athletes and
+     the server still holds no spectator and no route that writes.
+
+     Kept per share — one token, one competition — so a parent handed a
+     second link at the next ring is asked again rather than inheriting
+     the discus answer. In a browser that refuses storage the question is
+     simply asked each time, which is a worse page and a working one. */
+  var STORE = "throwlab.watch." + (base.split("/").pop() || "page");
+  var follow = null, asked = false;
+  try {
+    var held = localStorage.getItem(STORE);
+    if (held !== null) { asked = true; follow = held === "-" ? null : held; }
+  } catch (_) { /* private window. Ask, and forget. */ }
+  /* Open on the way in, and only then: the question is worth one screen
+     of somebody's attention once, and nothing after that. */
+  var picking = !asked;
+
+  function remember() {
+    try { localStorage.setItem(STORE, follow || "-"); } catch (_) { /* as above */ }
+  }
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -572,9 +645,9 @@ const String _page = r'''<!doctype html>
   }
   /* The flat tone a label is set in. The line itself takes the ramp — see
      the gradients in the board's own defs. */
-  /* The same color for the athlete in the circle and the coach's own: it
-     is the same athlete's line either way, and which of them is in the
-     ring is said by the marker on it. */
+  /* The same color for the athlete in the circle and the one being read
+     for: it is the same athlete's line either way, and which of them is in
+     the ring is said by the marker on it. */
   var INK = { first: "var(--first)", second: "var(--second)",
               third: "var(--third)", cut: "var(--dim)",
               upNow: "var(--tint)", mine: "var(--tint)" };
@@ -838,7 +911,7 @@ const String _page = r'''<!doctype html>
     return '<div class="entry' + (embedded ? " in" : " card") +
       (up && !embedded ? " up" : "") + '"><div class="erow">' +
       '<span class="ord">' + (p.order + 1) + "</span>" +
-      '<span class="nm' + (up ? " now" : p.tracked ? " mine" : "") + '">' +
+      '<span class="nm' + (up ? " now" : p.mine ? " mine" : "") + '">' +
       esc(p.name) + "</span>" +
       (p.best
         ? '<span class="chip' + metal + '">' + esc(p.placeLabel) + "</span>" +
@@ -877,9 +950,10 @@ const String _page = r'''<!doctype html>
         rule = '<p class="cut-rule"><span>the cut</span></p>';
       }
       var metal = p.best ? metalOf(p.place) : "";
-      /* Only the coach's own carry the lines underneath, like the app's
-         table: the rest of the field is here to be placed against, and
-         what they need is not the coach's problem. */
+      /* Only the athlete this page is being read for carries the lines
+         underneath, like the app's table: the rest of the field is here to
+         be placed against, and what they need is not the reader's
+         problem. */
       var aside = (p.consistency
         ? '<p class="aside">' + esc(p.consistency) + "</p>" : "") +
         (p.needed
@@ -889,11 +963,11 @@ const String _page = r'''<!doctype html>
          rest of the field set back — and gilding the leader's would be
          saying the same thing twice in the one row that already says it. */
       return '<div class="row"><span class="pl' + metal +
-        (p.tracked && !metal ? " mine" : "") + '">' +
+        (p.mine && !metal ? " mine" : "") + '">' +
         (p.best ? esc(p.place) : "–") +
-        '</span><span class="nm' + (p.tracked ? " mine" : "") + '">' +
+        '</span><span class="nm' + (p.mine ? " mine" : "") + '">' +
         esc(p.name) + '</span><span class="bm' +
-        (p.tracked ? " mine" : "") + '">' + esc(p.best || "—") +
+        (p.mine ? " mine" : "") + '">' + esc(p.best || "—") +
         "</span></div>" + aside + rule;
     }).join("");
     /* What the cut is, over the table — a promise before it is made and a
@@ -906,6 +980,43 @@ const String _page = r'''<!doctype html>
                 : '<p class="empty">Nothing thrown yet.</p>';
   }
 
+  /* Who the page is being read for: the question on the way in, and the
+     chip it becomes once it has been answered.
+
+     Nothing at all in a competition of one — there is nobody to choose
+     between, and a field of one is a page about that athlete already. */
+  function watchView() {
+    if (!data) return "";
+    var field = (data.places || []).slice()
+      .sort(function (a, b) { return a.order - b.order; });
+    if (field.length < 2) return "";
+    if (!picking) {
+      /* Read off the field rather than off what the phone last confirmed,
+         so the chip carries the name the moment it is tapped instead of a
+         poll later. */
+      var who = "";
+      field.forEach(function (p) { if (follow && p.key === follow) who = p.name; });
+      /* 'Follow an athlete' is the whole invitation and needs nothing
+         after it; a name does, or there is no way to tell the chip is
+         still a control. */
+      return '<button class="who" data-open aria-expanded="false">' +
+        (who ? "Watching <b>" + esc(who) + '</b><span class="chev">change' +
+          "</span>" : "Follow an athlete") + "</button>";
+    }
+    var names = field.map(function (p) {
+      var on = follow === p.key;
+      return '<button data-key="' + esc(p.key) + '" aria-pressed="' + on +
+        '"' + (on ? ' class="on"' : "") + ">" + esc(p.name) +
+        (p.flight ? '<span class="fl">flight ' + p.flight + "</span>" : "") +
+        "</button>";
+    }).join("");
+    return '<div class="picker"><p class="ask">Who are you here to watch?</p>' +
+      '<p class="why">The board, the cut and the calls follow them.</p>' +
+      '<div class="names">' + names + "</div>" +
+      '<button class="plain" data-key="">' +
+      (follow ? "Stop following" : "Just the competition") + "</button></div>";
+  }
+
   /* ---- painting ----------------------------------------------------- */
   function render() {
     if (!data) return;
@@ -915,6 +1026,12 @@ const String _page = r'''<!doctype html>
     el("meet").textContent =
       [data.meet, data.date, data.venue].filter(Boolean).join(" · ");
     el("weather").textContent = data.conditions || "";
+    /* Left alone while the list is open: a poll lands every four seconds,
+       and a field long enough to scroll must not jump back to the top
+       under the thumb that was scrolling it. */
+    if (!picking || !el("watch").querySelector(".picker")) {
+      el("watch").innerHTML = watchView();
+    }
 
     slide(["live", "series", "standings"].indexOf(tab));
     Array.prototype.forEach.call(el("tabs").querySelectorAll("button"),
@@ -961,7 +1078,11 @@ const String _page = r'''<!doctype html>
      history, and a 304 is still worth having between rounds. */
   function poll() {
     var headers = etag ? { "If-None-Match": etag } : {};
-    fetch(base + "/state", { headers: headers, cache: "no-store" })
+    /* Who is being followed goes with the ask: the phone works the board,
+       the cut and the calls out around them and hands back the answers,
+       exactly as it does for the coach's own on their own screen. */
+    var at = base + "/state" + (follow ? "?f=" + encodeURIComponent(follow) : "");
+    fetch(at, { headers: headers, cache: "no-store" })
       .then(function (r) {
         if (r.status === 304) { failed = 0; lastAt = Date.now(); return null; }
         if (!r.ok) throw new Error(r.status);
@@ -971,11 +1092,37 @@ const String _page = r'''<!doctype html>
       .then(function (fresh) {
         failed = 0;
         lastAt = Date.now();
-        if (fresh) { data = fresh; render(); }
+        if (!fresh) return;
+        /* Following somebody the competition no longer holds — taken off
+           the meet, or the whole field entered again. The phone answers
+           without them, and the page stops asking rather than following a
+           ghost. */
+        if (follow && !fresh.following) { follow = null; remember(); }
+        data = fresh;
+        render();
       })
       .catch(function () { failed++; })
       .then(tickAge);
   }
+
+  /* The picker. A choice repaints the chip at once and asks the phone for
+     the same competition read the other way round — the board and the
+     captions come back with the next answer, a moment later. */
+  el("watch").addEventListener("click", function (e) {
+    var b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.open !== undefined) { picking = true; render(); return; }
+    if (b.dataset.key === undefined) return;
+    follow = b.dataset.key || null;
+    asked = true;
+    picking = false;
+    remember();
+    /* The tag belongs to the answer we were being given, and we have just
+       asked a different question. */
+    etag = null;
+    render();
+    poll();
+  });
 
   el("tabs").addEventListener("click", function (e) {
     var b = e.target.closest("button[data-tab]");

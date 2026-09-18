@@ -59,7 +59,9 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 feed baked in place of its fetch, and Barlow and the medal copied in beside
 it so the type and the badge are the app's there too. A page whose whole job
 happens in a browser cannot be reviewed as a golden — open the file, and
-every tab works, because the page already holds the whole competition.
+every tab works, and so does the question it opens with, because the page
+holds the whole competition worked out for each athlete somebody might be
+standing there to watch.
 
 It also shoots the app's own three views of the same competition
 (`app_live`, `app_series`, `app_standings`) at the same 390 x 844 the page
@@ -76,9 +78,14 @@ thing that can render the page:
 node tool/preview/compare_share.js   # build/preview/compare_*.png
 ```
 
-It opens `spectator.html` at the same 390 x 844, shoots each tab
+It opens `spectator.html` at the same 390 x 844, answers the question it
+opens with (that state is shot first, as `web_asking`), shoots each tab
 (`web_live`, `web_series`, `web_standings`) and composes each against the
-app's own — three files to open, one per view. It needs Playwright on the
+app's own — three files to open, one per view. Then it picks an athlete
+nobody on the phone is tracking and shoots `web_following`: the board's
+own line, the caption and the emphasis down the field should all have
+moved to them. Those two have no app side to stand beside, so they are
+files to open rather than a fourth pair. It needs Playwright on the
 machine (`npm i -g playwright`; the browser is already installed, so never
 run `playwright install`), and it asserts nothing: looking at the three
 files is the review. The competition it prints has a cut in it on purpose,
@@ -850,6 +857,34 @@ like the app rather than a bare Material default.
 - The whole competition goes out at once, so switching tab costs no request
   at all, and the page keeps working when the phone wanders off the wifi.
   It says how old it is rather than going blank.
+- The page asks who the person reading it is there for, and that is the one
+  question it has of its own. Everything the app says about 'yours' — the
+  line on the board and the run of the competition the band is hung on,
+  what is needed to make the final, the averaging line under a standing,
+  which flight yours are still waiting in — is said about
+  `MeetEntry.tracked`, because the phone belongs to the coach. Somebody
+  handed the link at a ring came to watch one thrower, who is usually
+  somebody else's and is nobody at all on that phone. So the page asks on
+  the way in, sends the answer up with every poll (`?f=<entry id>`), and
+  `competitionFeed` works the same sentences out around that athlete
+  instead — `MeetBoard(following:)` for the line and the band,
+  `MeetFlight.laterFor` for the flight, `mine` on each place for the
+  emphasis and the two asides. Not one new sentence anywhere: the question
+  changes who they are about and not a word of them, which is what keeps
+  the two renderings one competition. Unanswered, the feed is the coach's
+  own screen exactly as before, which is the state the parity check is run
+  in.
+  By entry id, never by a place in the throwing order: the order is redrawn
+  for the final and shifts under everybody below an athlete entered late,
+  and a parent must not be quietly handed somebody else's daughter. An id
+  the competition no longer holds comes back with no `following` on it, and
+  the page drops the choice rather than following a ghost. The choice is
+  remembered per share (`throwlab.watch.<token>`), so it is asked once at
+  the discus and again at the javelin, and a browser that refuses storage
+  is simply asked every time — a worse page and a working one. Nothing is
+  registered on the phone: the choice rides on a GET and is spent on that
+  one answer, two people on one link follow two athletes, and there is
+  still no route that writes.
 - **`MeetEventScreen` and `spectator_page` are two renderings of one
   competition, and they are changed together or not at all.** Touching what
   a view says or how it reads on either side — the header card and its
@@ -871,8 +906,9 @@ like the app rather than a bare Material default.
   Some things belong to one side only and that is fine: the coach's
   actions (the camera, the ruler, Add athlete, the round-entry sheet) can
   never be on a read-only page, and the page carries the meet's name, date,
-  venue, conditions and how old it is because a spectator has no app around
-  it for context. Say which in the commit rather than letting the two drift
+  venue, conditions, how old it is and its own question about who is being
+  followed, because a spectator has no app around it for context and the
+  coach's phone already knows whose athletes are theirs. Say which in the commit rather than letting the two drift
   quietly.
 - The live view is one card, and it is the one card on the page that is
   opaque. The app's is the flight above the sector, the sector, what the
