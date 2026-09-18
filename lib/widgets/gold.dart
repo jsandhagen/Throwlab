@@ -58,6 +58,45 @@ const thirdPlaceBronze = Color(0xFFCB8A5B);
 Shader silverShader(Rect bounds) => _ramp(_silverMetal, bounds);
 Shader bronzeShader(Rect bounds) => _ramp(_bronzeMetal, bounds);
 
+/// The three metals a podium is struck in, as one thing.
+///
+/// The ramps were here already — the board has drawn its three lines with
+/// them since it was written. This names them together so everywhere else
+/// that puts a place on screen can reach the same metal, rather than each
+/// picking a yellow, a gray and a brown of its own.
+enum Medal {
+  gold(personalBestGold, _metal),
+  silver(secondPlaceSilver, _silverMetal),
+  bronze(thirdPlaceBronze, _bronzeMetal);
+
+  const Medal(this.flat, this.ramp);
+
+  /// The mid tone, for text and small marks. A five-stop gradient across
+  /// two digits of a place number is a muddy two digits; the flat tone is
+  /// the same metal and stays legible, which is the rule the board already
+  /// follows for the type beside its lines.
+  final Color flat;
+
+  /// The five stops, for something big enough to show them.
+  final List<Color> ramp;
+
+  Shader shader(Rect bounds) => _ramp(ramp, bounds);
+}
+
+/// The five stops every metal is spread across, shared so the three read as
+/// the same strike. Exposed because the spectator's page has to lay the
+/// same ramp down in CSS.
+const List<double> metalStops = _metalStops;
+
+/// The metal a place is struck in — null for a place off the podium, which
+/// is most of a field and wears the plain type the rest of the row does.
+Medal? medalFor(int place) => switch (place) {
+      1 => Medal.gold,
+      2 => Medal.silver,
+      3 => Medal.bronze,
+      _ => null,
+    };
+
 Shader _ramp(List<Color> metal, Rect bounds) => LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
@@ -119,29 +158,57 @@ class GoldEdgePainter extends CustomPainter {
 /// asymmetry is the whole read: a ribbon has a front and a back and is
 /// folded through itself, and two straps leaning symmetrically into each
 /// other are a V, which is a letter.
-class FirstPlaceMedal extends StatelessWidget {
-  const FirstPlaceMedal({super.key, this.size = 20});
+class PlaceMedal extends StatelessWidget {
+  const PlaceMedal({
+    super.key,
+    required this.medal,
+    this.size = 20,
+    this.label,
+  });
+
+  /// Which of the three it is struck in.
+  final Medal medal;
 
   /// Width — which is the disc's diameter. The ribbon puts a little more
   /// height on top, so a badge is sized by how big its disc should be and
   /// the straps follow.
   final double size;
 
+  /// What it is marking, read out loud. The same disc means a placing in a
+  /// competition and a personal best in the library, and a screen reader
+  /// has no context to tell them apart — so whoever pins it says.
+  final String? label;
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Personal best',
+      label: label ?? '${medal.name} medal',
       child: SizedBox(
         width: size,
         height: size * _MedalPainter.aspect,
-        child: const CustomPaint(painter: _MedalPainter()),
+        child: CustomPaint(painter: _MedalPainter(medal)),
       ),
     );
   }
 }
 
+/// The gold a personal best wears. The same disc as a first place, named
+/// apart because it means something else: a best is against the athlete's
+/// own record book, a placing is against the field in front of them.
+class PersonalBestMedal extends StatelessWidget {
+  const PersonalBestMedal({super.key, this.size = 20});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => PlaceMedal(
+      medal: Medal.gold, size: size, label: 'Personal best');
+}
+
 class _MedalPainter extends CustomPainter {
-  const _MedalPainter();
+  const _MedalPainter(this.metal);
+
+  final Medal metal;
 
   /// The ribbon, as fractions of the disc's diameter: how tall it stands,
   /// how much air is under it, how wide it is across the top, and how far
@@ -179,7 +246,7 @@ class _MedalPainter extends CustomPainter {
     // leaning slot splits it into a long piece cut off square and a short
     // one running out to a point. See the class comment for why it is
     // lopsided; the numbers are measured, not invented.
-    final ribbon = Paint()..shader = goldShader(bounds);
+    final ribbon = Paint()..shader = metal.shader(bounds);
     final foot = w * _ribbon;
     final band = Path()
       ..addPolygon([
@@ -217,7 +284,7 @@ class _MedalPainter extends CustomPainter {
         radius,
         Paint()
           ..shader =
-              goldShader(Rect.fromCircle(center: center, radius: radius)),
+              metal.shader(Rect.fromCircle(center: center, radius: radius)),
       )
       ..drawPath(
         _star(center, radius * 0.58),
@@ -244,5 +311,5 @@ class _MedalPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MedalPainter old) => false;
+  bool shouldRepaint(_MedalPainter old) => old.metal != metal;
 }

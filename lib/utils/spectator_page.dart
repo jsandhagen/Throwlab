@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/gold.dart';
 import '../widgets/sector_art.dart';
 
 /// The page a spectator gets, served whole by `MeetServer`.
@@ -39,7 +40,31 @@ String spectatorPage(ColorScheme scheme) {
     'accent': hex(scheme.primary),
     'bad': hex(scheme.error),
   };
+  // The podium's three metals, written out of `gold.dart` rather than
+  // matched by eye: the flat mid tone for type, and the five stops for the
+  // lines on the board, which are big enough to show a ramp. Same stops,
+  // same light from the same corner as the app strikes them with.
+  // Single-quoted attributes on purpose: these defs are injected into a
+  // JavaScript string literal, and a double quote would close it.
+  String stops(Medal medal) => [
+        for (var i = 0; i < medal.ramp.length; i++)
+          "<stop offset='${metalStops[i]}' stop-color='${hex(medal.ramp[i])}'/>",
+      ].join();
+  final metals = {
+    'first': Medal.gold,
+    'second': Medal.silver,
+    'third': Medal.bronze,
+  };
   return _page
+      .replaceFirst('/*METALS*/', [
+        for (final entry in metals.entries)
+          '--${entry.key}: ${hex(entry.value.flat)};',
+      ].join(' '))
+      .replaceFirst('/*METAL_DEFS*/', [
+        for (final entry in metals.entries)
+          "<linearGradient id='m-${entry.key}' x1='0' y1='0' x2='1' y2='1'>"
+              "${stops(entry.value)}</linearGradient>",
+      ].join())
       .replaceFirst('/*PALETTE*/', [
         for (final entry in palette.entries) '--${entry.key}: ${entry.value};',
       ].join(' '))
@@ -68,7 +93,7 @@ const String _page = r'''<!doctype html>
     font-family: Barlow; font-style: normal; font-weight: 600;
     font-display: swap; src: url("f/s.ttf") format("truetype");
   }
-  :root { /*PALETTE*/ --gold: #e8c468; --pad: 16px; --lean: /*LEAN*/deg; }
+  :root { /*PALETTE*/ /*METALS*/ --pad: 16px; --lean: /*LEAN*/deg; }
   * { box-sizing: border-box; }
   /* The color goes on the page itself, not on the body: a body with its
      own background paints over the sector standing behind it. */
@@ -155,11 +180,27 @@ const String _page = r'''<!doctype html>
   .row:first-child { border-top: 0; }
   .pl { min-width: 34px; color: var(--dim); font-variant-numeric: tabular-nums;
         font-size: 13px; }
+  /* Set back the way the app's own table sets the field back: the rest of
+     the competition is here to be placed against, not read. The coach's
+     own athlete is the one the eye should find, and a metal has to have
+     something dimmer than itself to stand against — silver against bright
+     type is not silver, it is type. */
   .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-        white-space: nowrap; }
-  .nm.mine { color: var(--accent); }
-  .bm { font-variant-numeric: tabular-nums; font-weight: 600; }
-  .gold { color: var(--gold); }
+        white-space: nowrap; color: var(--dim); }
+  .nm.mine { color: var(--text); font-weight: 600; }
+  .bm { font-variant-numeric: tabular-nums; font-weight: 600;
+        color: var(--dim); }
+  .bm.mine { color: var(--accent); }
+  /* A place is struck in its own metal, the same three the app's board
+     draws its lines with. Flat, not a ramp: five stops across two digits
+     is a muddy two digits, which is the rule the app follows too. */
+  /* Weight as well as hue, the way the app's own place chip does it.
+     Silver sits close to the dark theme's body gray, so on its own it
+     would read as no color at all — the weight is what separates second
+     from fourth. */
+  .m1 { color: var(--first); font-weight: 700; }
+  .m2 { color: var(--second); font-weight: 600; }
+  .m3 { color: var(--third); font-weight: 600; }
   .cut-rule { border-top: 1px dashed var(--accent); margin: 8px 0 0;
               padding-top: 6px; font-size: 11px; color: var(--accent);
               letter-spacing: 0.8px; text-transform: uppercase; }
@@ -177,9 +218,9 @@ const String _page = r'''<!doctype html>
   .box.pass { color: var(--dim); }
   .box.best { background: color-mix(in srgb, var(--accent) 18%, var(--raised));
               font-weight: 600; }
-  .box.pb { box-shadow: inset 0 0 0 1px var(--gold); }
+  .box.pb { box-shadow: inset 0 0 0 1px var(--first); }
   .box.out { opacity: 0.32; }
-  .tag { font-size: 10px; color: var(--gold); letter-spacing: 0.5px; }
+  .tag { font-size: 10px; color: var(--first); letter-spacing: 0.5px; }
 
   .downloads { display: flex; gap: 8px; margin: 18px 0 8px; }
   .downloads a { flex: 1; text-align: center; text-decoration: none;
@@ -318,15 +359,23 @@ const String _page = r'''<!doctype html>
            " L " + (CX + FAR_HALF) + " " + TOP +
            " L " + (CX + NEAR_HALF) + " " + BOTTOM + " Z";
   }
-  var INK = { first: "#e8c468", second: "#c2ced4", third: "#c08457",
-              cut: "var(--accent)", upNow: "var(--accent)", mine: "var(--accent)" };
+  /* The flat tone a label is set in. The line itself takes the ramp — see
+     the gradients in the board's own defs. */
+  var INK = { first: "var(--first)", second: "var(--second)",
+              third: "var(--third)", cut: "var(--accent)",
+              upNow: "var(--accent)", mine: "var(--accent)" };
+  var RAMPED = { first: 1, second: 1, third: 1 };
+  /* Which of the three a place wears, for the type that carries a placing
+     rather than draws one. */
+  function metalOf(place) { return place <= 3 ? " m" + place : ""; }
 
   function board(b) {
     if (!b || !b.marks.length) {
       return '<p class="empty">Nothing on the board yet.</p>';
     }
     var out = ['<svg viewBox="0 0 ' + W + ' ' + H +
-      '" role="img" aria-label="The competition on the sector">'];
+      '" role="img" aria-label="The competition on the sector">',
+      "<defs>/*METAL_DEFS*/</defs>"];
     out.push('<path d="' + wedge() +
       '" fill="rgba(0,0,0,0.22)" stroke="var(--line)" stroke-width="1"/>');
 
@@ -371,7 +420,11 @@ const String _page = r'''<!doctype html>
     labels.forEach(function (L) {
       var m = L.m, ink = INK[m.line] || "#c2ced4";
       if (!m.off) {
-        out.push('<path d="' + arc(L.f) + '" fill="none" stroke="' + ink +
+        /* A podium line is drawn in the metal itself rather than in its
+           flat tone: an arc across the sector is the one thing here with
+           the room to show a ramp. */
+        var line = RAMPED[m.line] ? "url(#m-" + m.line + ")" : ink;
+        out.push('<path d="' + arc(L.f) + '" fill="none" stroke="' + line +
           '" stroke-width="2"' +
           (m.line === "cut" ? ' stroke-dasharray="6 5"' : "") + "/>");
       } else {
@@ -437,8 +490,8 @@ const String _page = r'''<!doctype html>
       out.push('<div class="card angular"><div class="row"><span class="pl">' +
         esc(p.placeLabel) + '</span><span class="nm' + (p.tracked ? " mine" : "") +
         '">' + esc(p.name) + '</span><span class="bm' +
-        (p.place === 1 ? " gold" : "") + '">' + esc(p.best || "—") + "</span></div>" +
-        boxes(c, p) + "</div>");
+        (p.tracked ? " mine" : "") + (p.best ? metalOf(p.place) : "") + '">' +
+        esc(p.best || "—") + "</span></div>" + boxes(c, p) + "</div>");
     });
     return out.join("") || '<p class="empty">Nobody entered yet.</p>';
   }
@@ -467,10 +520,13 @@ const String _page = r'''<!doctype html>
         rule = '<p class="cut-rule">' + (c.cut.made ? "Cut" : "Cut line") +
           (c.cut.mark ? " · " + esc(c.cut.mark) : "") + "</p>";
       }
-      return '<div class="row"><span class="pl">' + esc(p.placeLabel) +
-        '</span><span class="nm' + (p.tracked ? " mine" : "") + '">' + esc(p.name) +
-        '</span><span class="bm' + (p.place === 1 ? " gold" : "") + '">' +
-        esc(p.best || "—") + "</span></div>" + rule;
+      var metal = p.best ? metalOf(p.place) : "";
+      return '<div class="row"><span class="pl' + metal + '">' +
+        (p.best ? esc(p.place) : "–") +
+        '</span><span class="nm' + (p.tracked ? " mine" : "") + '">' +
+        esc(p.name) + '</span><span class="bm' +
+        (p.tracked ? " mine" : "") + metal + '">' + esc(p.best || "—") +
+        "</span></div>" + rule;
     }).join("");
     return rows ? '<div class="card angular">' + rows + "</div>"
                 : '<p class="empty">Nothing thrown yet.</p>';

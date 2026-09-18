@@ -1577,11 +1577,16 @@ class _EntryCard extends StatelessWidget {
   Widget _placeChip(ThemeData theme) {
     final standing = place?.best == null ? null : place!.place;
     if (standing == null) return const SizedBox.shrink();
+    final medal = medalFor(standing);
     return Text(
       ordinalPlace(standing),
       style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: standing == 1 ? FontWeight.w700 : FontWeight.w500),
+          color: medal?.flat ?? theme.colorScheme.onSurfaceVariant,
+          fontWeight: switch (medal) {
+            Medal.gold => FontWeight.w700,
+            Medal.silver || Medal.bronze => FontWeight.w600,
+            null => FontWeight.w500,
+          }),
     );
   }
 
@@ -1600,7 +1605,7 @@ class _EntryCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (isPb) ...[
-          const FirstPlaceMedal(size: 13),
+          const PersonalBestMedal(size: 13),
           const SizedBox(width: 4),
         ],
         Text(
@@ -1972,6 +1977,9 @@ class _PlaceRow extends StatelessWidget {
     final scheme = theme.colorScheme;
     final mine = place.entry.tracked;
     final best = place.best;
+    // Nothing to place somebody on, nothing to strike: an athlete with no
+    // mark yet is not third, they are yet to throw.
+    final medal = best == null ? null : medalFor(place.place);
     final unit = place.series.bestRound == null
         ? DistanceUnit.meters
         : place.series.unitAt(place.series.bestRound!);
@@ -1986,9 +1994,16 @@ class _PlaceRow extends StatelessWidget {
                 width: 24,
                 child: Text(
                   best == null ? '–' : '${place.place}',
+                  // The podium is struck in its own metal, the same three
+                  // the board draws its lines with. It does not cost the
+                  // coach's own athlete anything: the name beside it and
+                  // the mark after it both already carry that.
                   style: theme.textTheme.labelLarge?.copyWith(
-                      color: mine ? accent : scheme.onSurfaceVariant,
-                      fontWeight: mine ? FontWeight.w700 : FontWeight.w500),
+                      color: medal?.flat ??
+                          (mine ? accent : scheme.onSurfaceVariant),
+                      fontWeight: medal != null || mine
+                          ? FontWeight.w700
+                          : FontWeight.w500),
                 ),
               ),
               Expanded(

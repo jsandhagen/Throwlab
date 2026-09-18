@@ -222,7 +222,7 @@ class ThrowCard extends StatelessWidget {
                 const Positioned(
                   right: 8,
                   top: 6,
-                  child: FirstPlaceMedal(size: 20),
+                  child: PersonalBestMedal(size: 20),
                 ),
               // Last, so the metal is stroked over the scrims and the wash
               // rather than under them.

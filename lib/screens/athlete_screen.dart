@@ -1286,7 +1286,7 @@ class _OutingTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   if (outing.won) ...[
-                    const FirstPlaceMedal(size: 13),
+                    const PersonalBestMedal(size: 13),
                     const SizedBox(width: 6),
                   ],
                   Text(
@@ -1465,7 +1465,7 @@ class _BestTile extends StatelessWidget {
                     height: 50,
                     child: best.isFilmed
                         ? ThrowThumbnail(best.video!, width: 76, height: 50)
-                        : const Center(child: FirstPlaceMedal(size: 28)),
+                        : const Center(child: PersonalBestMedal(size: 28)),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1618,7 +1618,7 @@ class _MarkTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (isPersonalBest) const FirstPlaceMedal(size: 16),
+              if (isPersonalBest) const PersonalBestMedal(size: 16),
               const SizedBox(width: 6),
               Text(
                 formatDistance(mark.distance, mark.distanceUnit),

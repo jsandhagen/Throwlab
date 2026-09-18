@@ -150,7 +150,7 @@ void main() {
       await library.update(ana[1]);
       await mountHome(tester, width: 1000);
 
-      expect(find.byType(FirstPlaceMedal), findsOneWidget);
+      expect(find.byType(PersonalBestMedal), findsOneWidget);
       final gold = tester
           .widgetList<ThrowCard>(find.byType(ThrowCard))
           .where((card) => card.isPersonalBest);
@@ -164,7 +164,7 @@ void main() {
       await library.update(loose);
       await mountHome(tester, width: 1000);
 
-      expect(find.byType(FirstPlaceMedal), findsNothing);
+      expect(find.byType(PersonalBestMedal), findsNothing);
       expect(find.text('99.99 m'), findsOneWidget);
     });
 
@@ -216,7 +216,7 @@ void main() {
       await mountHome(tester);
       await search(tester, 'Ana');
 
-      expect(find.byType(FirstPlaceMedal), findsOneWidget);
+      expect(find.byType(PersonalBestMedal), findsOneWidget);
     });
   });
 

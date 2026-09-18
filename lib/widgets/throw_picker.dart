@@ -491,7 +491,7 @@ class _ComparePickerSheetState extends State<_ComparePickerSheet> {
           if (widget.bests.contains(video.id))
             const Padding(
               padding: EdgeInsets.only(left: 6),
-              child: FirstPlaceMedal(size: 14),
+              child: PersonalBestMedal(size: 14),
             ),
         ],
       ),

@@ -127,7 +127,7 @@ void main() {
     expect(cards.map((card) => card.video.id), ['far', 'near', 'unmeasured']);
     expect(cards.map((card) => card.isPersonalBest), [true, false, false]);
     // The medal is the card's; the bests section is all marks already.
-    expect(find.byType(FirstPlaceMedal), findsOneWidget);
+    expect(find.byType(PersonalBestMedal), findsOneWidget);
   });
 
   testWidgets('says how to start tracking bests when nothing is measured',
@@ -136,7 +136,7 @@ void main() {
     await mountProfile(tester);
 
     expect(find.textContaining('No distances yet'), findsOneWidget);
-    expect(find.byType(FirstPlaceMedal), findsNothing);
+    expect(find.byType(PersonalBestMedal), findsNothing);
     expect(find.byType(ThrowCard), findsOneWidget);
   });
 

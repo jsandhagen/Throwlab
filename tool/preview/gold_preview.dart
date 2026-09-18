@@ -27,7 +27,7 @@ const _sizes = [13.0, 14.0, 16.0, 20.0, 28.0, 34.0];
 void main() {
   testWidgets('the gold', (tester) async {
     await loadPreviewFonts();
-    tester.view.physicalSize = const Size(1080, 1640);
+    tester.view.physicalSize = const Size(1080, 2000);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
 
@@ -46,23 +46,58 @@ void main() {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       for (final size in _sizes) ...[
-                        FirstPlaceMedal(size: size),
+                        PersonalBestMedal(size: size),
                         const SizedBox(width: 16),
                       ],
                     ],
                   ),
                   const SizedBox(height: 22),
+                  // The three of a podium, struck the same way — the thing
+                  // to look at is whether they read as one set of medals
+                  // rather than a yellow, a gray and a brown.
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (final medal in Medal.values) ...[
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PlaceMedal(medal: medal, size: 34),
+                            const SizedBox(height: 6),
+                            // And the flat tone beside it, which is what a
+                            // place is actually set in — silver is the one
+                            // to check, since it sits close to the theme's
+                            // own body gray.
+                            Text(
+                              switch (medal) {
+                                Medal.gold => '1st',
+                                Medal.silver => '2nd',
+                                Medal.bronze => '3rd',
+                              },
+                              style: theme.textTheme.labelLarge
+                                  ?.copyWith(color: medal.flat),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 20),
+                      ],
+                      Text('4th',
+                          style: theme.textTheme.labelLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
                   // On a line of type, which is how it is nearly always seen.
                   Row(
                     children: [
-                      const FirstPlaceMedal(size: 16),
+                      const PersonalBestMedal(size: 16),
                       const SizedBox(width: 6),
                       Text('58.44 m',
                           style: theme.textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: personalBestGold)),
                       const SizedBox(width: 16),
-                      const FirstPlaceMedal(size: 13),
+                      const PersonalBestMedal(size: 13),
                       const SizedBox(width: 6),
                       Text('1st of 3', style: theme.textTheme.labelMedium),
                     ],
@@ -87,13 +122,13 @@ void main() {
                         const Positioned(
                           right: 8,
                           top: 6,
-                          child: FirstPlaceMedal(size: 20),
+                          child: PersonalBestMedal(size: 20),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 26),
-                  const Center(child: FirstPlaceMedal(size: 130)),
+                  const Center(child: PersonalBestMedal(size: 130)),
                 ],
               ),
             ),
