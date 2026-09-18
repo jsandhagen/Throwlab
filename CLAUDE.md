@@ -939,7 +939,13 @@ like the app rather than a bare Material default.
   of `angularShape`, its block leaning at the sector's half-angle and
   squaring up against whichever end it has reached, the drawn `EventGlyph`
   in the event's own color, and the sector backdrop the library and the
-  meet stand on. The cards are *not* angular — the competition screen's are
+  meet stand on — `SectorBackdropPainter`'s own geometry rather than an
+  impression of it, drawn at the viewport's real size and from the top of
+  the segmented bar down, because the app paints it into the body under
+  its app bar and it is the shape of *that* box which sets the bearing the
+  wedge crosses the screen on. A fixed viewBox stretched to fill the phone
+  was the version that did not line up: the sector came out a couple of
+  degrees off and its arcs came out as ellipses. The cards are *not* angular — the competition screen's are
   plain `Card`s at the theme's 16px radius, and translucent
   (`surfaceContainerHighest` at 45%) so the sector stands through them,
   which is most of what made an opaque page read as a different app. The

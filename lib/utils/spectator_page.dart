@@ -378,8 +378,30 @@ const String _page = r'''<!doctype html>
   /* The same backdrop the library and the meet stand on: the apex off the
      bottom-left, the sector opening to the top-right corner, and arcs that
      stay between its two lines. */
+  /* The sector the app stands on, painted the way SectorBackdropPainter
+     paints it: the throwing circle just off the bottom-left corner, its
+     distance arcs sweeping diagonally across the screen, and the two
+     sector lines cutting through them. Faint by design — texture, not a
+     diagram.
+
+     Drawn at the viewport's own size rather than into a fixed viewBox. The
+     element is stretched to fill the screen, so a box of some other shape
+     came out with the wedge at the wrong angle and the arcs as ellipses —
+     a sector nobody has ever thrown into. */
   function backdrop() {
-    var w = 400, h = 700, ax = -w * 0.16, ay = h * 1.12;
+    var svg = el("backdrop");
+    var w = svg.clientWidth || window.innerWidth;
+    var full = svg.clientHeight || window.innerHeight;
+    /* Not the whole viewport: the app paints this into the body under its
+       app bar, and the box the sector is laid out in is what decides the
+       bearing from the corner. So it starts where the app's does — just
+       above the segmented bar, which is the first thing in both bodies —
+       and the two wedges cross the screen at the same angle instead of a
+       couple of degrees apart. */
+    var top = Math.max(el("tabs").getBoundingClientRect().top - 8, 0);
+    var h = full - top;
+    /* Close enough to the corner that the arcs actually curve. */
+    var ax = -w * 0.16, ay = h * 1.12;
     var cx = w * 1.04, cy = -h * 0.04;
     var bearing = Math.atan2(cy - ay, cx - ax);
     var half = (34.92 / 2) * Math.PI / 180;
@@ -387,28 +409,46 @@ const String _page = r'''<!doctype html>
     function edge(a, r) {
       return [ax + Math.cos(a) * r, ay + Math.sin(a) * r];
     }
-    var out = ['<defs><radialGradient id="wash">' +
+    /* The app strokes all three of these through one gradient across the
+       box, bottom-left to top-right, fading to a third of itself — so the
+       art is strongest at the circle and nearly gone by the far corner. */
+    function fade(id, alpha) {
+      return '<linearGradient id="' + id + '" gradientUnits="userSpaceOnUse"' +
+        ' x1="0" y1="' + h + '" x2="' + w + '" y2="0">' +
+        '<stop offset="0" stop-color="var(--accent)" stop-opacity="' +
+        alpha + '"/><stop offset="1" stop-color="var(--accent)" ' +
+        'stop-opacity="' + (alpha * 0.3) + '"/></linearGradient>';
+    }
+    var out = ["<defs>" +
+      '<radialGradient id="wash">' +
       '<stop offset="0" stop-color="var(--accent)" stop-opacity="0.07"/>' +
       '<stop offset="1" stop-color="var(--accent)" stop-opacity="0"/>' +
-      "</radialGradient></defs>"];
+      "</radialGradient>" +
+      fade("bArc", 0.24) + fade("bLine", 0.3) + fade("bRing", 0.34) +
+      "</defs>"];
+    /* A wash at the circle end, so the corner has depth behind the lines. */
     out.push('<circle cx="' + ax + '" cy="' + ay + '" r="' + h * 0.85 +
       '" fill="url(#wash)"/>');
-    [-half, half].forEach(function (a) {
-      var p = edge(bearing + a, reach);
-      out.push('<path d="M ' + ax + " " + ay + " L " + p[0] + " " + p[1] +
-        '" stroke="var(--accent)" stroke-opacity="0.16" stroke-width="1.4" fill="none"/>');
-    });
-    /* Arcs at a few depths, drawn only across the wedge. */
-    [0.42, 0.62, 0.82, 1.0].forEach(function (t) {
-      var r = reach * t;
+    /* Distance arcs, drawn only between the sector lines: an arc outside
+       them is a line that doesn't exist on a throwing field. */
+    for (var i = 1; i <= 7; i++) {
+      var r = reach * (0.1 + i * 0.15);
       var a = edge(bearing - half, r), b = edge(bearing + half, r);
       out.push('<path d="M ' + a[0] + " " + a[1] + " A " + r + " " + r +
         " 0 0 1 " + b[0] + " " + b[1] +
-        '" stroke="var(--accent)" stroke-opacity="0.09" stroke-width="1" fill="none"/>');
+        '" stroke="url(#bArc)" stroke-width="1" fill="none"/>');
+    }
+    [-1, 1].forEach(function (sign) {
+      var p = edge(bearing + sign * half, reach * 1.2);
+      out.push('<path d="M ' + ax + " " + ay + " L " + p[0] + " " + p[1] +
+        '" stroke="url(#bLine)" stroke-width="1.2" fill="none"/>');
     });
-    var svg = el("backdrop");
-    svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-    svg.innerHTML = out.join("");
+    /* The circle itself, mostly off-screen at the corner. */
+    out.push('<circle cx="' + ax + '" cy="' + ay + '" r="' + w * 0.16 +
+      '" stroke="url(#bRing)" stroke-width="1.4" fill="none"/>');
+    svg.setAttribute("viewBox", "0 0 " + w + " " + full);
+    svg.innerHTML = '<g transform="translate(0,' + top + ')">' +
+      out.join("") + "</g>";
   }
 
   /* The two Material icons the app's own header carries, traced at 13px
@@ -885,6 +925,9 @@ const String _page = r'''<!doctype html>
     el("view").innerHTML = tab === "live" ? liveView(data)
       : tab === "series" ? seriesView(data) : standingsView(data);
     el("sheet").setAttribute("href", base + "/results.pdf");
+    /* The sector is laid out from where the bar sits, and the bar does not
+       sit anywhere until the header above it has its meet on it. */
+    backdrop();
   }
 
   /* The block under the active section, leaning at the sector's own
@@ -944,7 +987,7 @@ const String _page = r'''<!doctype html>
   backdrop();
   /* The board is measured off the room it has, so a turned phone redraws
      it rather than stretching the one it drew in portrait. */
-  addEventListener("resize", function () { backdrop(); render(); });
+  addEventListener("resize", render);
   /* And once Barlow has landed, so the labels are laid out to the type
      they are actually set in rather than to the fallback's metrics. */
   if (document.fonts && document.fonts.ready) {
