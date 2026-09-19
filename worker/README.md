@@ -1,4 +1,4 @@
-# throwlab-share
+# throwlab — the share relay
 
 The relay a competition is shared through.
 
