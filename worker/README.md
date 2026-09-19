@@ -72,6 +72,8 @@ right is worse than none.
 
 ## What is not here yet
 
-The app still serves on the LAN; nothing pushes to this. Wiring the phone
-to it, and choosing what a coach sees when the push cannot get through, is
-the next step.
+`MeetRelay` pushes here and the share sheet hands out the link. What this
+cannot yet do is carry a competition worked out around whoever is reading
+it — one feed is held and handed to everybody — so the page's own question
+about who somebody came to watch is turned off on this path. See ROADMAP,
+Phase 9; the measurements are written down there.

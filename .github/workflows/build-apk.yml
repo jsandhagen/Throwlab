@@ -82,7 +82,17 @@ jobs:
         run: dart run flutter_launcher_icons
       # The run number becomes the APK's build number; the same number is
       # published as version.txt so installed apps can detect newer builds.
-      - run: flutter build apk --release --build-number=${{ github.run_number }}
+      #
+      # THROWLAB_RELAY is the hostname every share link is built on, baked
+      # in here because it is a property of the build and not of a meet — a
+      # coach must never be typing a URL, and a wrong one fails at a ring
+      # with a stand watching. Not a secret: it is printed under every QR
+      # code the app hands out. A build that names none says so on the share
+      # sheet rather than guessing, which is what a local `flutter run` gets.
+      - run: |
+          flutter build apk --release \
+            --build-number=${{ github.run_number }} \
+            --dart-define=THROWLAB_RELAY=https://throwlab.jakobscottsandhagen.workers.dev
       # If minification ever sneaks back in, plugin class names get obfuscated
       # and the startup hang returns; fail the build instead of shipping it.
       - name: Verify plugin classes survived unminified

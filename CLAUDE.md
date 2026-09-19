@@ -829,6 +829,15 @@ like the app rather than a bare Material default.
   that was half unreachable. The padding goes to zero on its own once the
   keyboard is up, which is when the `viewInsets` padding above it takes
   over.
+- The share link is a public one, and the hostname it is built on is baked
+  into the build: `--dart-define=THROWLAB_RELAY=...`, set in
+  `.github/workflows/build-apk.yml` beside the build number. It is a
+  property of the build rather than of a meet — a coach must never be
+  typing a URL, and a wrong one fails at a ring with a stand watching — and
+  it is not a secret, since it is printed under every QR the app hands out.
+  A build that names none cannot share and says so on the sheet rather than
+  guessing at a hostname, which is what a local `flutter run` gets and why
+  sharing is dead in a debug build unless the define is passed.
 - A competition can be followed by the people standing at it, and the phone
   is the server. `MeetServer` binds a socket and hands out
   `http://192.168.43.1:8080/M/<token>`; anyone on the same wifi — or on the
