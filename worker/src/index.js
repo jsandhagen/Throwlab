@@ -40,10 +40,15 @@ export default {
     const stub = env.COMPETITION.get(id);
 
     // The route travels as a search parameter so the object does not have
-    // to re-parse a path it has no other use for.
+    // to re-parse a path it has no other use for. Set rather than
+    // assigned, because the page's own question rides in the query string
+    // beside it — `?f=` is who the person reading came to watch, and
+    // wiping it here is wiping the one thing on a request that the
+    // competition is worked out around. A `route` of a spectator's own is
+    // overwritten, which is the point of setting it last.
     const inner = new URL(url);
     inner.pathname = '/';
-    inner.search = `?route=${encodeURIComponent(rest.join('/'))}`;
+    inner.searchParams.set('route', rest.join('/'));
     return stub.fetch(new Request(inner, request));
   },
 };

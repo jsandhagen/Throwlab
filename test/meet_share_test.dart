@@ -590,6 +590,185 @@ void main() {
     });
   });
 
+  group('a followed set, over the relay', () {
+    ShareSource sourceOf(Meet made, List<ThrowResult> results) => ShareSource(
+          meetId: made.id,
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          meet: () => made,
+          results: () => results,
+        );
+
+    /// A field big enough for a set to be a part of, rather than most of
+    /// it: one of the coach's own and three other people's.
+    (Meet, List<ThrowResult>) wideField() {
+      final made = meet();
+      made.entries.addAll([
+        entry('e1', 'Jakob Sandhagen',
+            [MeetAttempt.mark('m1'), MeetAttempt.mark('m2')], order: 0),
+        entry('e2', 'N. Achebe (Croydon)', [MeetAttempt.untracked(49.10)],
+            order: 1, tracked: false),
+        entry('e3', 'Ama Boateng (Sale)', [MeetAttempt.untracked(44.30)],
+            order: 2, tracked: false),
+        entry('e4', 'Rosa Duarte (Wirral)', [MeetAttempt.untracked(38.90)],
+            order: 3, tracked: false),
+      ]);
+      return (
+        made,
+        [
+          mark('m1', 'Jakob Sandhagen', 46.55),
+          mark('m2', 'Jakob Sandhagen', 44.02),
+        ]
+      );
+    }
+
+    test('names one question one way however it was ticked', () {
+      expect(followingKey(['e3', 'e1']), 'e1,e3');
+      expect(followingKey(['e1', 'e3']), 'e1,e3');
+      expect(followingKey([' e1 ', 'e1', '', 'e3']), 'e1,e3');
+      expect(followingKey([]), isEmpty);
+      // A link written by hand rather than ticked out of a field.
+      expect(followingKey([List.filled(80, 'x').join()]), isEmpty);
+      expect(
+          followingKey([for (var i = 0; i < 40; i++) 'e$i']).split(',').length,
+          maxFollowed);
+    });
+
+    test('answers a set as exactly what it adds to the coach\'s reading', () {
+      final (made, results) = wideField();
+      final at = DateTime.utc(2026, 6, 13, 14);
+      final packaged =
+          sourceOf(made, results).packaged(at: at, following: [['e3']])!;
+      final overlay = packaged.overlays.single;
+      final read = feedOf(made, results, at: at, following: ['e3']);
+
+      expect(overlay.key, 'e3');
+      // The base is the coach's own reading, untouched — the page that
+      // asks nothing is handed the competition it always was.
+      expect(packaged.base.feed, feedOf(made, results, at: at));
+
+      // Every top-level key that moved is in the delta, and every one that
+      // did not is absent from it. That is what makes applying it at the
+      // other end the same competition as working it out here.
+      final set = (overlay.delta['set'] as Map?) ?? const {};
+      for (final key in read.keys) {
+        if (key == 'places') continue;
+        final moved = jsonEncode(packaged.base.feed[key]) != jsonEncode(read[key]);
+        expect(set.containsKey(key), moved, reason: key);
+      }
+      final rows = (overlay.delta['places'] as Map?) ?? const {};
+      final before = packaged.base.feed['places'] as List;
+      final after = read['places'] as List;
+      for (var i = 0; i < after.length; i++) {
+        final moved = jsonEncode(before[i]) != jsonEncode(after[i]);
+        expect(rows.containsKey('$i'), moved, reason: 'place $i');
+      }
+    });
+
+    test('sends the rows the set moves and not the field', () {
+      final (made, results) = wideField();
+      final packaged = sourceOf(made, results)
+          .packaged(at: DateTime.utc(2026), following: [['e3']])!;
+      final rows = packaged.overlays.single.delta['places'] as Map;
+
+      // Following somebody takes the emphasis off the coach's own and puts
+      // it on them. Nobody else in the field is any different, so a field
+      // of four sends two rows rather than four — the coach's own, second
+      // on 46.55, and Boateng, third on 44.30. Read in standings order,
+      // which is the order the places arrive in.
+      expect(rows.keys.toSet(), {'1', '2'});
+      expect((packaged.base.feed['places'] as List), hasLength(4));
+    });
+
+    test('sends a row as the fields that moved, not as the row again', () {
+      final (made, results) = wideField();
+      final packaged = sourceOf(made, results)
+          .packaged(at: DateTime.utc(2026), following: [['e3']])!;
+      final rows = packaged.overlays.single.delta['places'] as Map;
+
+      // Whose a row is, and the two lines that hang off that: the
+      // averaging line under the coach's own, and what they need to
+      // qualify. The name, the place, the series and the rest are the same
+      // row whoever is reading it, and are not sent again to say so.
+      expect((rows['2'] as Map)['set'], contains('mine'));
+      expect((rows['2'] as Map)['set'], isNot(contains('name')));
+      expect((rows['2'] as Map)['set'], isNot(contains('series')));
+      // And the two lines that only ever appear under whoever's board it
+      // is come off the row that stopped being theirs.
+      expect((rows['1'] as Map)['set'], {'mine': false});
+      expect((rows['1'] as Map)['drop'], ['consistency']);
+      // Which is most of the point: a row is five hundred bytes and this
+      // is a few dozen.
+      expect(jsonEncode(rows['1']).length, lessThan(100));
+    });
+
+    test('takes every reading at one instant, so the clock is never in it',
+        () {
+      final (made, results) = wideField();
+      final packaged = sourceOf(made, results)
+          .packaged(at: DateTime.utc(2026), following: [['e3']])!;
+
+      expect((packaged.overlays.single.delta['set'] as Map?) ?? const {},
+          isNot(contains('asOf')));
+    });
+
+    test('fingerprints what the browser will be holding', () {
+      final (made, results) = wideField();
+      final at = DateTime.utc(2026);
+      final packaged =
+          sourceOf(made, results).packaged(at: at, following: [['e2', 'e3']])!;
+
+      // The composition, not the difference: the relay hands this straight
+      // out as an entity tag, and what is on the other end of it is the
+      // competition read for that set.
+      expect(packaged.overlays.single.fingerprint,
+          SharePayload(feedOf(made, results, at: at, following: ['e2', 'e3']))
+              .fingerprint);
+      expect(packaged.overlays.single.fingerprint,
+          isNot(packaged.base.fingerprint));
+    });
+
+    test('answers two spectators who ticked one set once', () {
+      final (made, results) = wideField();
+      final packaged = sourceOf(made, results).packaged(
+          at: DateTime.utc(2026),
+          following: [
+            ['e3', 'e2'],
+            ['e2', 'e3'],
+          ]);
+
+      expect(packaged!.overlays, hasLength(1));
+      expect(packaged.overlays.single.key, 'e2,e3');
+    });
+
+    test('has nothing to add for somebody the field no longer holds', () {
+      final (made, results) = wideField();
+      final packaged = sourceOf(made, results)
+          .packaged(at: DateTime.utc(2026), following: [['gone']])!;
+
+      // The competition is the competition. Nothing is echoed back under
+      // `following`, which is what tells the page to stop asking for them
+      // rather than to go on following a ghost.
+      expect(packaged.overlays.single.delta, isEmpty);
+      expect(packaged.base.feed, isNot(contains('following')));
+    });
+
+    test('sends the field whole if it ever moved underneath a reading', () {
+      // It cannot, taken at one instant off one competition — but a patch
+      // against a list of another length would be worse than the bytes.
+      final delta = feedDelta(
+        {'places': [1, 2, 3]},
+        {'places': [1, 2]},
+      );
+      expect(delta['set'], {'places': [1, 2]});
+      expect(delta, isNot(contains('places')));
+    });
+
+    test('says what a key stopped carrying', () {
+      expect(feedDelta({'a': 1, 'b': 2}, {'a': 1}), {'drop': ['b']});
+    });
+  });
+
   group('the server', () {
     late Future<HttpServer> Function(int) realBind;
     late Future<String?> Function() realAddress;

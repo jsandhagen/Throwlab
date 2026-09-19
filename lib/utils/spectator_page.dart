@@ -41,18 +41,16 @@ import '../widgets/sector_art.dart';
 /// the second would be telling somebody something untrue about a field of
 /// other people's children.
 ///
-/// [asksWhoYouFollow] is whether the page may put its own question up.
-///
-/// It can only be answered by something that will work the competition out
-/// again around whoever was ticked, which is the phone. Served off the
-/// phone that is exactly what happens. Pushed to the relay, one feed is
-/// held and handed to everybody, so the question would be asked, ticked,
-/// and quietly do nothing — a control that looks broken, which is worse
-/// than a page that never offered it. Off until the relay can carry a
-/// followed set (ROADMAP, Phase 9).
+/// The question is asked the same way whichever is carrying it, because it
+/// can only be answered by the thing that works the competition out, and
+/// that is the phone either way. Served off its own socket the phone reads
+/// the set off the request and answers it there and then; pushed to the
+/// relay, the relay writes the set down, hands it back on the next push,
+/// and holds the answer that comes up with it. Neither is visible from
+/// here: the page sends `?f=` and is handed a competition, and one code
+/// path is the only thing that keeps the two from drifting.
 String spectatorPage(
   ColorScheme scheme, {
-  bool asksWhoYouFollow = true,
   bool servedByPhone = true,
 }) {
   String hex(Color color) =>
@@ -93,7 +91,6 @@ String spectatorPage(
                   'anywhere else.'
               : "Live from the coach's phone. Held only while the "
                   'competition is on, and not kept afterwards.')
-      .replaceFirst('/*ASKS*/', asksWhoYouFollow ? 'true' : 'false')
       .replaceFirst('/*METALS*/', [
         for (final entry in metals.entries)
           '--${entry.key}: ${hex(entry.value.flat)};',
@@ -484,8 +481,6 @@ const String _page = r'''<!doctype html>
      the discus answer. In a browser that refuses storage the question is
      simply asked each time, which is a worse page and a working one. */
   var STORE = "throwlab.watch." + (base.split("/").pop() || "page");
-  /* Whether this page is allowed to ask at all — see spectatorPage(). */
-  var ASKS = /*ASKS*/;
   var follow = [], asked = false;
   try {
     var held = localStorage.getItem(STORE);
@@ -493,7 +488,7 @@ const String _page = r'''<!doctype html>
   } catch (_) { /* private window. Ask, and forget. */ }
   /* Open on the way in, and only then: the question is worth one screen
      of somebody's attention once, and nothing after that. */
-  var picking = ASKS && !asked;
+  var picking = !asked;
   /* What the panel was last painted from, so a poll landing every four
      seconds doesn't rebuild an open list under the thumb scrolling it —
      see render(). */
@@ -1104,7 +1099,7 @@ const String _page = r'''<!doctype html>
      Nothing at all in a competition of one — there is nobody to choose
      between, and a field of one is a page about that athlete already. */
   function watchView() {
-    if (!ASKS || !data) return "";
+    if (!data) return "";
     /* Down the throwing order, which is the order a heat sheet prints a
        field in and the order the Series tab reads it in. */
     var field = (data.places || []).slice()

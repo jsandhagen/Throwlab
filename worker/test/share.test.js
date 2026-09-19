@@ -233,3 +233,183 @@ describe('retention', () => {
     expect(second).toBeGreaterThan(first);
   });
 });
+
+/**
+ * Following a set of athletes, which is the one question a spectator's
+ * browser asks of its own.
+ *
+ * Answering it means working the competition out again around whoever was
+ * ticked, and that only ever happens on the phone. So this half is a
+ * post box: it writes down the sets being asked for, hands them back to
+ * the phone, and files what comes up against the set that asked. Nothing
+ * here knows what a cut is.
+ */
+describe('following a set', () => {
+  /** A competition with a field in it, which is what a set is picked out of. */
+  const field = (fingerprint = 'base1') => ({
+    fingerprint,
+    feed: {
+      meet: 'County Champs',
+      asOf: '2026-06-13T14:00:00.000Z',
+      caption: [{ text: 'Achebe leads on 51.20 m', tone: 'body' }],
+      places: [
+        { place: 1, key: 'e1', name: 'Achebe', mine: false },
+        { place: 2, key: 'e2', name: 'Sandhagen', mine: false },
+        { place: 3, key: 'e3', name: 'Okonkwo', mine: false },
+      ],
+    },
+  });
+
+  /** What the phone pushes back for a set: what it adds to the base. */
+  const answerFor = (key, fingerprint) => ({
+    [key]: {
+      fingerprint,
+      delta: {
+        set: {
+          caption: [{ text: 'Sandhagen needs 48.00 m to make the final', tone: 'accent' }],
+          following: [{ key: 'e2', name: 'Sandhagen' }],
+        },
+        // A row by the fields that moved, not the row over again: `mine`
+        // turning over is a handful of bytes where the row is five hundred.
+        places: { 1: { set: { mine: true }, drop: ['place'] } },
+      },
+    },
+  });
+
+  const wanted = (key = KEY) =>
+    call(`/M/${TOKEN}/wanted`, { headers: key ? { authorization: `Bearer ${key}` } : {} });
+
+  beforeEach(async () => {
+    await push(field());
+  });
+
+  it('writes down the set a poll asked for and tells the phone', async () => {
+    await call(`/M/${TOKEN}/state?f=e2`);
+
+    // On the route the phone asks on between rounds...
+    const asked = await (await wanted()).json();
+    expect(asked.wanted).toContain('e2');
+    expect(asked.reading).toBe(true);
+    // ...and on the answer to the push it was making anyway.
+    expect((await (await push(field('base2'))).json()).wanted).toContain('e2');
+  });
+
+  it('files one question under one name however it was asked', async () => {
+    await call(`/M/${TOKEN}/state?f=e3,e1`);
+    await call(`/M/${TOKEN}/state?f=e1,e3`);
+    await call(`/M/${TOKEN}/state?f=e1,,e3,e1`);
+
+    // Sorted and deduplicated at both ends, so two spectators who ticked
+    // the same two names in a different order are answered once.
+    const held = (await (await wanted()).json()).wanted;
+    expect(held.filter((key) => key.includes('e1') || key.includes('e3')))
+      .toEqual(['e1,e3']);
+  });
+
+  it('keeps the tick alive while the answer is still coming', async () => {
+    const answer = await call(`/M/${TOKEN}/state?f=e2`);
+    const read = await answer.json();
+
+    // The competition is still the competition — nobody has worked it out
+    // around e2 yet. What it carries is the echo, because the page drops
+    // anybody the answer comes back without and would otherwise untick the
+    // name under the finger that ticked it.
+    expect(read.following).toEqual([{ key: 'e2', name: 'Sandhagen' }]);
+    expect(read.places[1].mine).toBe(false);
+    // And a tag of its own, so the board changes the moment it arrives.
+    expect(answer.headers.get('etag')).not.toBe('"base1"');
+  });
+
+  it('hands over the answer once the phone has pushed it', async () => {
+    await call(`/M/${TOKEN}/state?f=e2`);
+    await push({ ...field('base2'), overlays: answerFor('e2', 'mine2') });
+
+    const answer = await call(`/M/${TOKEN}/state?f=e2`);
+    const read = await answer.json();
+    expect(read.places[1].mine).toBe(true);
+    expect(read.places[1].name).toBe('Sandhagen');
+    expect(read.places[1]).not.toHaveProperty('place');
+    expect(read.caption[0].tone).toBe('accent');
+    expect(read.following).toEqual([{ key: 'e2', name: 'Sandhagen' }]);
+    // Untouched where the set makes no difference: this is one competition
+    // read two ways, not two competitions.
+    expect(read.meet).toBe('County Champs');
+    expect(read.places[0]).toEqual({ place: 1, key: 'e1', name: 'Achebe', mine: false });
+
+    // Tagged with the fingerprint the phone took over the composition, so
+    // a quiet round costs a 304 on this board rather than on the coach's.
+    expect(answer.headers.get('etag')).toBe('"mine2"');
+    const again = await call(`/M/${TOKEN}/state?f=e2`, {
+      headers: { 'if-none-match': '"mine2"' },
+    });
+    expect(again.status).toBe(304);
+  });
+
+  it('leaves the coach\'s own reading exactly as it was', async () => {
+    await push({ ...field('base2'), overlays: answerFor('e2', 'mine2') });
+
+    const answer = await call(`/M/${TOKEN}/state`);
+    expect(answer.headers.get('etag')).toBe('"base2"');
+    expect((await answer.json()).places[1].mine).toBe(false);
+  });
+
+  it('stops serving a set the phone has stopped answering', async () => {
+    await push({ ...field('base2'), overlays: answerFor('e2', 'mine2') });
+    expect((await call(`/M/${TOKEN}/state?f=e2`)).headers.get('etag')).toBe('"mine2"');
+
+    // The push carries the whole of what the phone stands behind, so an
+    // answer left out of one is an answer withdrawn.
+    await push({ ...field('base3'), overlays: {} });
+    const answer = await call(`/M/${TOKEN}/state?f=e2`);
+    expect(answer.headers.get('etag')).not.toBe('"mine2"');
+    expect((await answer.json()).places[1].mine).toBe(false);
+  });
+
+  it('never holds an answer over a feed it was not taken from', async () => {
+    await push({ ...field('base2'), overlays: answerFor('e2', 'mine2') });
+    expect((await call(`/M/${TOKEN}/state?f=e2`)).headers.get('etag')).toBe('"mine2"');
+
+    // An overlay is a subtraction from the feed directly above it — its
+    // rows are that field, at that instant, by position. A push that says
+    // nothing about them is a feed with no answers yet, not a feed to go
+    // on applying the last one to.
+    await push(field('base3'));
+    const answer = await call(`/M/${TOKEN}/state?f=e2`);
+    expect(answer.headers.get('etag')).not.toBe('"mine2"');
+    expect((await answer.json()).places[1]).toHaveProperty('place');
+  });
+
+  it('will not hand the followed sets to somebody holding the link', async () => {
+    await call(`/M/${TOKEN}/state?f=e2`);
+    // The link reads the competition. Who at this meet somebody cared
+    // enough to tick is the coach's business and takes the key that writes.
+    expect((await wanted(null)).status).toBe(401);
+    expect((await wanted('some-other-key')).status).toBe(409);
+  });
+
+  it('bounds what a query string can leave behind', async () => {
+    const many = Array.from({ length: 40 }, (_, i) => `e${i}`);
+    await call(`/M/${TOKEN}/state?f=${many.join(',')}`);
+    await call(`/M/${TOKEN}/state?f=${'x'.repeat(200)}`);
+    for (let i = 0; i < 20; i++) await call(`/M/${TOKEN}/state?f=q${i}`);
+
+    const held = (await (await wanted()).json()).wanted;
+    // A bounded number of sets, each naming a bounded number of athletes,
+    // and nothing at all for an id no entry could have.
+    expect(held.length).toBeLessThanOrEqual(12);
+    expect(held.some((key) => key.includes('x'.repeat(200)))).toBe(false);
+    const biggest = held.reduce((most, key) => Math.max(most, key.split(',').length), 0);
+    expect(biggest).toBeLessThanOrEqual(32);
+  });
+
+  it('refuses an answer it could never find again', async () => {
+    await push({
+      ...field('base2'),
+      // Not the canonical spelling of its own set, so no poll would ever
+      // look for it under this name.
+      overlays: { 'e3,e1': { fingerprint: 'nope', delta: {} }, ...answerFor('e2', 'mine2') },
+    });
+    expect((await call(`/M/${TOKEN}/state?f=e1,e3`)).headers.get('etag')).not.toBe('"nope"');
+    expect((await call(`/M/${TOKEN}/state?f=e2`)).headers.get('etag')).toBe('"mine2"');
+  });
+});

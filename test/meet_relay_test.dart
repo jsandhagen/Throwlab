@@ -54,22 +54,46 @@ void main() {
 
   /// A relay that records what it was handed and answers however it is
   /// told to.
+  ///
+  /// The two routes are kept apart, because they are two different
+  /// questions: `/state` is this phone saying what it knows, and `/wanted`
+  /// is it asking who at the ring is being followed. A test about what
+  /// gets pushed should not count the asking, which runs on its own clock.
+  ///
+  /// [watching] is what the relay says is being asked of it — the sets a
+  /// spectator has ticked, as the page would have sent them. [asks] is
+  /// handed in by the tests that care what the asking route was called
+  /// with, so the rest are not made to name a list they never look at.
   ({MeetRelay relay, List<http.Request> pushes}) relayThat(
     int Function(int call) answers, {
     String on = base,
     Duration settle = const Duration(milliseconds: 5),
     Duration retry = const Duration(milliseconds: 20),
+    Duration lively = const Duration(milliseconds: 20),
+    List<String> Function()? watching,
+    bool reading = false,
+    List<http.Request>? asks,
   }) {
     final pushes = <http.Request>[];
+    Map<String, dynamic> asking() =>
+        {'wanted': watching?.call() ?? const <String>[], 'reading': reading};
     final client = MockClient((request) async {
+      if (request.url.path.endsWith('/wanted')) {
+        asks?.add(request);
+        return http.Response(jsonEncode({'ok': true, ...asking()}), 200);
+      }
       pushes.add(request);
       final status = answers(pushes.length);
       return http.Response(
-          status == 200 ? '{"ok":true}' : 'no', status);
+          status == 200 ? jsonEncode({'ok': true, ...asking()}) : 'no', status);
     });
     return (
       relay: MeetRelay(
-          base: on, client: client, settle: settle, retry: retry),
+          base: on,
+          client: client,
+          settle: settle,
+          retry: retry,
+          lively: lively),
       pushes: pushes,
     );
   }
@@ -300,6 +324,118 @@ void main() {
       // link that is not this phone's must not go on being offered.
       expect(relay.isSharing, isFalse);
       expect(relay.error, contains('already in use'));
+    });
+  });
+
+  group('who is being followed', () {
+    /// The same discus with a rival in it, so a set can be a part of the
+    /// field rather than the whole of it.
+    (Meet, List<ThrowResult>) withRival() {
+      final (made, results) = competition();
+      final rival = MeetEntry(
+        id: 'e2',
+        athlete: 'N. Achebe (Croydon)',
+        event: ThrowEvent.discus,
+        implementKg: 1,
+        tracked: false,
+        order: 1,
+      );
+      rival.setAttempt(0, MeetAttempt.untracked(49.1));
+      made.entries.add(rival);
+      return (made, results);
+    }
+
+    Map<String, dynamic> overlaysOf(http.Request request) =>
+        (bodyOf(request)['overlays'] as Map).cast<String, dynamic>();
+
+    test('works the competition out again for whoever the relay names',
+        () async {
+      final (:relay, :pushes) =
+          relayThat((_) => 200, watching: () => ['e2']);
+      final (meet, results) = withRival();
+
+      await share(relay, meet, results);
+
+      // Two hops, and two by construction: the sets being followed come
+      // back on the answer to a push, so the first push is what learns of
+      // this one and the second is what answers it.
+      expect(pushes, hasLength(2));
+      expect(overlaysOf(pushes.first), isEmpty);
+      final answer = overlaysOf(pushes[1])['e2'] as Map;
+      expect(answer['fingerprint'], isNotEmpty);
+
+      // What it adds to the feed above, rather than a competition of its
+      // own: the rows the set moves, and the board hung on them.
+      final delta = answer['delta'] as Map;
+      // Both rows move: the rival takes the emphasis and the coach's own
+      // athlete loses it. Nobody else in the field is any different.
+      expect((delta['places'] as Map).keys, ['0', '1']);
+      expect(delta['set'], contains('following'));
+      expect(delta['set'], contains('board'));
+      expect(jsonEncode(delta).length,
+          lessThan(jsonEncode(bodyOf(pushes[1])['feed']).length));
+    });
+
+    test('answers a name ticked while nobody is throwing', () async {
+      var asked = <String>[];
+      final asks = <http.Request>[];
+      final (:relay, :pushes) = relayThat((_) => 200,
+          watching: () => asked, reading: true, asks: asks);
+      final (meet, results) = withRival();
+      await share(relay, meet, results);
+      expect(pushes, hasLength(1));
+
+      // A spectator ticks a name while the field is walking back from the
+      // sector. Nothing has been thrown, so nothing is going to be pushed
+      // — the asking route is the other way the question arrives.
+      asked = ['e2'];
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(asks, isNotEmpty);
+      expect(asks.first.url.toString(), endsWith('/wanted'));
+      // Behind the write key: who somebody cared enough to tick is the
+      // coach's business, not the link's.
+      expect(asks.first.headers['authorization'], isNotNull);
+      expect(pushes.length, greaterThan(1));
+      expect(overlaysOf(pushes.last), contains('e2'));
+    });
+
+    test('stops working out a set nobody is asking for any more', () async {
+      var asked = <String>['e2'];
+      final changes = _Changes();
+      final (:relay, :pushes) =
+          relayThat((_) => 200, watching: () => asked, reading: true);
+      final (meet, results) = withRival();
+      await share(relay, meet, results, changes: changes);
+      expect(overlaysOf(pushes.last), contains('e2'));
+
+      // The stand has gone home, and then somebody throws. Nothing is
+      // uploaded to withdraw an answer on its own — a set nobody is asking
+      // for costs nothing where it sits — but the next push carries the
+      // whole of what this phone stands behind, and it is no longer in it.
+      asked = <String>[];
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      results.add(mark('m2', 48.02));
+      meet.entries.first.setAttempt(1, MeetAttempt.mark('m2'));
+      changes.bump();
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+
+      expect(overlaysOf(pushes.last), isEmpty);
+    });
+
+    test('keeps asking nobody, and pushing nothing, for a quiet link',
+        () async {
+      final asks = <http.Request>[];
+      final (:relay, :pushes) = relayThat((_) => 200, asks: asks);
+      final (meet, results) = withRival();
+      await share(relay, meet, results);
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      // Nothing thrown and nobody following: the asking costs its few
+      // hundred bytes and the competition is not sent again.
+      expect(pushes, hasLength(1));
+      expect(asks, isNotEmpty);
     });
   });
 

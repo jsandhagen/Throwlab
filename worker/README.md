@@ -20,10 +20,43 @@ own `location.pathname`:
 | --- | --- |
 | `GET /M/<token>` | the page, as the app generated it |
 | `GET /M/<token>/state` | the competition, with the app's own ETag |
+| `GET /M/<token>/state?f=<ids>` | the same competition, read for those athletes |
 | `GET /M/<token>/results.pdf` | the sheet, once one has been pushed |
 | `GET /M/<token>/f/r.ttf`, `/f/s.ttf` | Barlow, staged from `assets/fonts/` |
 | `GET /M/<token>/pb.png` | the personal-best medal, struck by the app |
+| `GET /M/<token>/wanted` | which sets are being followed — for the phone, behind the write key |
 | `PUT /M/<token>/state` | the phone pushing — the only route that writes |
+
+## The one question that comes from the stand
+
+A spectator is asked on the way in who they came to watch, and everything
+the competition says about 'yours' is then said about them. That is the one
+thing here that cannot simply be held and handed back: answering it means
+working the competition out again around a different set of athletes, and
+the only thing that does that is the phone.
+
+So this is a post box rather than an answer.
+
+1. A poll arrives with `?f=`. The set is normalized — sorted, deduplicated,
+   capped — and written down under that name. It is the one place a
+   stranger with the link puts anything into storage, so it is a bounded
+   number of bounded strings and they age out once nobody is asking.
+2. The phone is told. On the answer to its next push, which is the hop it
+   was making anyway, and on `GET /wanted` for the rounds where nothing is
+   thrown and there would be no push to carry them.
+3. The phone answers each set with an *overlay* — what that reading adds to
+   the base feed: the keys that moved, `places` by the row, and a row by
+   its fields. On a field of 16 that is under a kilobyte and a half, where
+   the same answer sent whole would be the feed again per set per round.
+4. A poll for a set we hold an answer for gets the base with that overlay
+   applied, tagged with the fingerprint the phone took over the
+   composition. One we do not gets the base with the asked-for names echoed
+   back under `following`, so the tick survives the poll that made it and
+   the board becomes theirs a push later.
+
+`applyDelta` is the whole of what happens here, and it is arithmetic on
+data that arrived already decided. It is still true that nothing in this
+directory knows what a countback is.
 
 ## Two credentials, because there is now a route that writes
 

@@ -104,17 +104,15 @@ Checked items are implemented (at least in a first version). The phases are a su
       the question and the screen does not, so what is missing is where a
       coach answers it, not what the answer does. Tracked stays the default,
       since it is right until somebody says otherwise.
-- [ ] Carry a followed set over the relay. The phone pushes one feed and
-      `worker/` serves it to everybody, so a competition worked out around
-      whoever is reading it is the one thing the relay cannot do as built.
-      Measured on a field of 16: only `places` and `board` move, 3 places of
-      16 and only their `mine` and `consistency` — well under a kilobyte per
-      athlete. So the shape is a base feed plus a per-athlete overlay, and
-      the page applies the one it is following rather than working anything
-      out. A *set* is the open part: the band hangs on the best placed of
-      them and every one of them gets a line, so overlays do not simply
-      compose, and whatever composes them must not become a second
-      implementation of the competition living in JavaScript.
+- [x] Carry a followed set over the relay — a base feed plus an overlay
+      per *set*, which is what the open part turned out to need: the band
+      hangs on the best placed of them and each of them gets a line, so
+      per-athlete overlays never would have composed. Which sets exist is
+      the thing only the stand knows, so the relay writes down every `?f=`
+      it is polled with and hands them back to the phone (on the answer to
+      a push, and on `/wanted` for the rounds where nothing is thrown); the
+      phone answers each and the relay applies it on the way out. Measured
+      on a field of 16, an answer is 0.6–1.2 KB against a 9.5 KB feed.
 - [ ] Saved coaching cue library (reusable text annotations)
 - [ ] Session management (date, conditions, location)
 - [ ] Wind speed/direction logging

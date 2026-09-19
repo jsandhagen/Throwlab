@@ -925,6 +925,39 @@ like the app rather than a bare Material default.
   registered on the phone: the choice rides on a GET and is spent on that
   one answer, two people on one link follow two different sets, and there
   is still no route that writes.
+  Over the relay, the question is asked exactly the same way and answered
+  by exactly the same phone — the page has one code path and cannot tell
+  which is carrying it. What changes is *when*. Serving its own socket, the
+  phone reads `?f=` off the request and works the competition out again
+  inside it; pushed to a relay, there is one feed held for everybody and no
+  phone at the far end to ask. So the relay is a post box: a poll carrying
+  `?f=` has its set written down (`wanted`, capped and aged out, since the
+  keys arrive off a query string), the sets go back to the phone on the
+  answer to its next push — and on `/wanted`, behind the write key, for the
+  rounds where nothing is thrown and there is no push to carry them — and
+  the phone answers each with an overlay the relay files under that set and
+  applies on the way out. A set it has not been answered for yet is served
+  the coach's own reading with the `following` echo put back, so the tick
+  survives the poll it was made on and the board becomes theirs a push
+  later rather than unticking under the finger.
+  Answered as a *delta*, not as a competition of its own: the keys that
+  moved, `places` by the row, and a row by its fields. Measured on a field
+  of sixteen, following three athletes moves `following`, `board`, a
+  caption, and `mine` plus the two lines that hang off it on four rows —
+  1.2 KB against a 9.5 KB feed, where the same answer sent whole would be
+  the feed again per set, per round, on a coach's cellular connection.
+  `feedDelta` is the subtraction and `applyDelta` in the worker is the only
+  other half; the page is served the composition and never learns it was in
+  two pieces. What the relay does with it is arithmetic on data that
+  arrived already decided — it still knows nothing about countback, prelims
+  or feet and inches, which is the whole rule this feature is written
+  under.
+  A set is what makes the overlay the right shape and a per-athlete answer
+  the wrong one: the band hangs on the best placed of them and each of them
+  gets a line, so two answers do not compose into the answer for the pair.
+  Working that out in the browser would have been the second implementation
+  of a competition all of this exists to avoid — so the phone is asked the
+  question it can answer, and the relay only has to remember who asked.
 - **`MeetEventScreen` and `spectator_page` are two renderings of one
   competition, and they are changed together or not at all.** Touching what
   a view says or how it reads on either side — the header card and its

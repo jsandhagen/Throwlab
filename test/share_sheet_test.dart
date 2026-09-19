@@ -154,19 +154,24 @@ void main() {
       // Through the relay it did, and a page that went on promising
       // otherwise would be telling a spectator something untrue about a
       // field of other people's children.
-      final relayed = spectatorPage(const ColorScheme.dark(),
-          servedByPhone: false, asksWhoYouFollow: false);
+      final relayed =
+          spectatorPage(const ColorScheme.dark(), servedByPhone: false);
       expect(relayed, isNot(contains('Nothing here is stored anywhere else')));
       expect(relayed, contains('not kept afterwards'));
     });
 
-    test('asks who you are watching only where it can be answered', () {
-      // The phone works the competition out again around whoever is
-      // ticked; the relay holds one feed for everybody, so the question
-      // would be asked, ticked, and quietly do nothing.
-      expect(spectatorPage(const ColorScheme.dark()), contains('var ASKS = true;'));
-      expect(spectatorPage(const ColorScheme.dark(), asksWhoYouFollow: false),
-          contains('var ASKS = false;'));
+    test('asks who you are watching whichever is carrying it', () {
+      // One page, one code path. The phone answers the set off the request
+      // it arrived on and the relay holds an answer per set pushed at it,
+      // and neither is a difference the page can see — so the question is
+      // put up the same way either way.
+      for (final page in [
+        spectatorPage(const ColorScheme.dark()),
+        spectatorPage(const ColorScheme.dark(), servedByPhone: false),
+      ]) {
+        expect(page, contains('Who are you here to watch?'));
+        expect(page, contains('?f='));
+      }
     });
   });
 }

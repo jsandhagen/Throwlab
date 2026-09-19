@@ -100,6 +100,48 @@ class ShareSource {
         at: at, isPersonalBest: isPersonalBest, following: following));
   }
 
+  /// The competition packaged for the coach's own reading, and again for
+  /// every set of athletes somebody standing at the ring has asked to
+  /// follow.
+  ///
+  /// This is the shape a relay needs and a socket never did. Serving the
+  /// competition itself, there is a request to read the question off and
+  /// an answer to send straight back down it, so a spectator's set costs
+  /// one more [payload] on the spot. Pushing it, there is one feed held
+  /// for everybody — so the sets have to be answered in advance, which
+  /// means knowing which ones are being asked ([MeetRelay] gets them back
+  /// off the relay) and sending each answer as what it adds to the base
+  /// rather than as a competition of its own.
+  ///
+  /// Every reading is taken at one instant, which is what lets the deltas
+  /// hold nothing but the difference the set makes: two feeds worked out a
+  /// second apart would differ on `asOf` as well, and the clock is the one
+  /// thing in here that moves without anybody throwing.
+  ({SharePayload base, List<FeedOverlay> overlays})? packaged({
+    DateTime? at,
+    Iterable<Iterable<String>> following = const [],
+  }) {
+    final now = at ?? DateTime.now();
+    final base = payload(at: now);
+    if (base == null) return null;
+    final overlays = <FeedOverlay>[];
+    final answered = <String>{};
+    for (final set in following) {
+      final key = followingKey(set);
+      // Two spectators who ticked the same two names in a different order
+      // are asking one question, and are answered once.
+      if (key.isEmpty || !answered.add(key)) continue;
+      final read = payload(at: now, following: key.split(','));
+      if (read == null) continue;
+      overlays.add(FeedOverlay(
+        key: key,
+        fingerprint: read.fingerprint,
+        delta: feedDelta(base.feed, read.feed),
+      ));
+    }
+    return (base: base, overlays: overlays);
+  }
+
   MeetCompetition? _within(Meet held) {
     for (final competition in MeetCompetition.of(held)) {
       if (competition.event == event && competition.implementKg == implementKg) {
@@ -122,4 +164,153 @@ String fnv1a(String body) {
     hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
   }
   return hash.toRadixString(36);
+}
+
+/// How many athletes one answer may be about.
+///
+/// A whole field is a legitimate tick — a club's supporter really is there
+/// for everybody — and past that it is somebody asking a phone at a track
+/// to work the competition out a thousand ways. The page ticks names out
+/// of a field, so this only ever bites on a link somebody has written by
+/// hand.
+const maxFollowed = 32;
+
+/// The canonical name for a set of athletes somebody is following.
+///
+/// Sorted, deduplicated and capped, because the set is what an answer is
+/// filed under at both ends: the relay records it under this when a poll
+/// asks for it, and the phone answers under this when it is told. Two
+/// spectators who ticked the same two names in a different order are
+/// asking one question, and a key that disagreed across the wire would be
+/// a competition worked out and then never found again.
+///
+/// Empty for nobody, which is the coach's own reading — the base feed, and
+/// no overlay at all.
+String followingKey(Iterable<String> ids) {
+  final wanted = <String>{};
+  for (final id in ids) {
+    final trimmed = id.trim();
+    // An id is an entry id. Anything longer than one is somebody writing
+    // the query by hand, and it is filed under nothing.
+    if (trimmed.isEmpty || trimmed.length > 64) continue;
+    wanted.add(trimmed);
+  }
+  final sorted = wanted.toList()..sort();
+  return sorted.take(maxFollowed).join(',');
+}
+
+/// One set's answer, as what it adds to the base feed.
+///
+/// Not a feed of its own: the phone holds a competition for the coach and
+/// the same competition for every set being watched at the ring, and they
+/// differ in a few rows and a board. Pushing each one whole would be the
+/// base feed again per spectator, over a coach's cellular connection,
+/// every round.
+class FeedOverlay {
+  const FeedOverlay({
+    required this.key,
+    required this.fingerprint,
+    required this.delta,
+  });
+
+  /// The set this answers, as [followingKey] spells it.
+  final String key;
+
+  /// The fingerprint of the *composed* feed — the base with this applied —
+  /// so the relay can hand it straight out as an entity tag and a
+  /// spectator between rounds costs a 304 rather than the competition.
+  /// Taken over the composed feed and not over the delta, because what a
+  /// browser is holding is the composition.
+  final String fingerprint;
+
+  /// See [feedDelta].
+  final Map<String, dynamic> delta;
+
+  Map<String, dynamic> toJson() => {
+        'fingerprint': fingerprint,
+        'delta': delta,
+      };
+}
+
+/// What one reading of a competition adds to another.
+///
+/// Shaped to the feed rather than general, because the difference a
+/// followed set makes is a measured thing and not an arbitrary one. On a
+/// field of sixteen it is `following`, `board` and a handful of rows of
+/// `places` — and inside a row, the two or three fields that hang off
+/// whose it is: `mine`, the averaging line, and what they need to qualify.
+/// Everything else is the competition, which is the same competition
+/// whoever is reading it.
+///
+/// So: a map is sent as the keys that moved, `places` is sent by the row,
+/// and a row is sent the same way a map is. Sending a row whole was the
+/// first shape of this and cost five hundred bytes to say `mine` had
+/// turned over; a list is still replaced whole, because the one list
+/// inside a row is a series and a series does not care who is watching it.
+///
+/// This knows the *shape* of what [competitionFeed] writes and nothing
+/// whatever about a competition — it never has to, since both sides of the
+/// subtraction were worked out by the rules already.
+///
+/// The counterpart lives in the relay, which applies it. There is no third
+/// copy: the page is served the composition and cannot tell it was ever in
+/// two pieces, which is what keeps one code path behind the phone's own
+/// socket and behind the relay.
+Map<String, dynamic> feedDelta(
+    Map<String, dynamic> base, Map<String, dynamic> next) {
+  final delta = _mapDelta(base, next, except: 'places') ?? <String, dynamic>{};
+
+  final rows = <String, dynamic>{};
+  final before = base['places'] as List? ?? const [];
+  final after = next['places'] as List? ?? const [];
+  if (before.length != after.length) {
+    // The field itself moved between the two readings, which it cannot
+    // when they are taken at one instant off one competition. Sending it
+    // whole is the honest answer to something that should not happen
+    // rather than a patch against a list of another length.
+    (delta['set'] ??= <String, dynamic>{})['places'] = after;
+  } else {
+    for (var i = 0; i < after.length; i++) {
+      final row = _mapDelta(
+          before[i] as Map<String, dynamic>, after[i] as Map<String, dynamic>);
+      if (row != null) rows['$i'] = row;
+    }
+  }
+  if (rows.isNotEmpty) delta['places'] = rows;
+  return delta;
+}
+
+/// The keys one map added, changed or stopped carrying, or null where it
+/// carries the same as the other.
+///
+/// Values are whole: a nested map or a list is replaced rather than
+/// subtracted again. What is nested in a feed is a board, a caption and a
+/// series, and each of those either is the same or is different all the
+/// way through — there is nothing in here that would be paid back for the
+/// recursion.
+Map<String, dynamic>? _mapDelta(
+    Map<String, dynamic> base, Map<String, dynamic> next,
+    {String? except}) {
+  // Deep equality by the encoding both ends compare on anyway. Every value
+  // in here came out of one builder in one pass, so two equal readings
+  // encode identically.
+  bool same(Object? a, Object? b) => jsonEncode(a) == jsonEncode(b);
+
+  final set = <String, dynamic>{};
+  final drop = <String>[];
+  for (final entry in next.entries) {
+    if (entry.key == except) continue;
+    if (!base.containsKey(entry.key) || !same(base[entry.key], entry.value)) {
+      set[entry.key] = entry.value;
+    }
+  }
+  for (final key in base.keys) {
+    if (key == except || next.containsKey(key)) continue;
+    drop.add(key);
+  }
+  if (set.isEmpty && drop.isEmpty) return null;
+  return {
+    if (set.isNotEmpty) 'set': set,
+    if (drop.isNotEmpty) 'drop': drop,
+  };
 }
