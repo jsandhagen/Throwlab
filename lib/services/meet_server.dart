@@ -8,6 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../models/meet.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../utils/app_logo.dart';
 import '../utils/meet_report.dart';
 import '../utils/share_payload.dart';
 import '../utils/spectator_page.dart';
@@ -425,7 +426,8 @@ class MeetServer extends ChangeNotifier {
       await _plain(response, HttpStatus.notFound, 'That competition is gone.');
       return;
     }
-    final bytes = meetResultsPdf(meet, share.source.results(), only: competition);
+    final bytes = meetResultsPdf(meet, share.source.results(),
+        only: competition, logo: await sheetLogo());
     response.statusCode = HttpStatus.ok;
     response.headers.contentType = ContentType('application', 'pdf');
     // Safe to quote unescaped: ResultsSheet.fileName has already stripped

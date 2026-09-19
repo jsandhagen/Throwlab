@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/meet.dart';
 import '../models/throw_video.dart';
+import '../utils/app_logo.dart';
 import '../utils/meet_report.dart';
 
 /// Gets a meet's results off the phone.
@@ -24,7 +25,8 @@ class ResultsSheet {
     MeetCompetition? only,
   }) async {
     try {
-      final bytes = meetResultsPdf(meet, results, only: only);
+      final bytes =
+          meetResultsPdf(meet, results, only: only, logo: await sheetLogo());
       final docs = await getApplicationDocumentsDirectory();
       final folder = Directory('${docs.path}/results');
       if (!folder.existsSync()) folder.createSync(recursive: true);

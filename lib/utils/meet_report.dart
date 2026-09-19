@@ -28,6 +28,7 @@ Uint8List meetResultsPdf(
   Iterable<ThrowResult> results, {
   MeetCompetition? only,
   DateTime? printedOn,
+  PdfImage? logo,
 }) {
   final printed = printedOn ?? DateTime.now();
   final sheet = PdfSheet(
@@ -42,8 +43,19 @@ Uint8List meetResultsPdf(
     ].join('  ·  '),
   );
 
-  sheet.line((meet.name.isEmpty ? 'Meet' : meet.name).toUpperCase(),
-      size: 15, face: PdfFace.bold, spacing: 18);
+  // The app's own mark in the corner, out of the flow: a results sheet is
+  // printed, pinned up and photographed, and the one on the board beside
+  // three others should say whose it is without being read.
+  if (logo != null) sheet.badge(logo, size: _badge);
+  sheet.line(
+      _fit((meet.name.isEmpty ? 'Meet' : meet.name).toUpperCase(),
+          // The name is the one line on the sheet wide enough to reach the
+          // corner, so it is cut to what is left beside the mark rather
+          // than run under it.
+          sheet.columnsBeside(15, logo == null ? 0 : _badge + 10)),
+      size: 15,
+      face: PdfFace.bold,
+      spacing: 18);
   sheet.line(
     [
       longThrowDate(meet.date),
@@ -471,6 +483,11 @@ const _flag = 3;
 /// As much of a name as a sheet will set before cutting it. Long enough for
 /// a double-barrelled surname and the club after it.
 const _widestName = 34;
+
+/// How far across the corner the app's own mark is set, in points. Small
+/// enough to be a letterhead and not an illustration: a results sheet is
+/// about what everybody threw.
+const _badge = 40.0;
 
 /// One line of the table, every column where the header said it would be.
 ///

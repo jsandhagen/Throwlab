@@ -790,6 +790,28 @@ like the app rather than a bare Material default.
   the sheet, and named at the foot of it with what it beat. Only a tracked
   athlete can hold one, which falls out for free, because the rest of the
   field's distances never reach the library to be ranked.
+- The app's own mark goes in the sheet's top corner, out of the flow of the
+  text — a letterhead, because a sheet is printed and pinned to a board
+  beside three others and should say whose it is without being read.
+  `PdfSheet.badge` places it and writes nothing else, so a report handed
+  none is laid out byte for byte as it was; the meet's name is the one line
+  wide enough to reach the corner, and is cut to what is left beside it
+  (`columnsBeside`) rather than run under it.
+  Pixels, not a drawing. `sheetLogo` has the engine decode
+  `assets/icon/logo.png` at the size a sheet draws it and `PdfImage` embeds
+  what it got — the same rule the personal-best medal is served under, for
+  the same reason: every number in a mark somebody designed is measured off
+  a reference, and one redrawn out of PDF operators until it looked about
+  right would be nearly the logo. It is decoded once per process and asked
+  for softly: no bundle or a decode that failed is a sheet without its
+  logo, never a sheet a coach is waiting on. A PDF keeps color and alpha in
+  two images, so it goes over as `/DeviceRGB` with a `/DeviceGray` `/SMask`
+  beside it — line art on nothing, and painted as opaque pixels it would
+  arrive as a white card with a drawing on it. Straight rather than
+  premultiplied alpha, or every stroke gets a dark fringe. It is the one
+  stream on the sheet that is deflated, because it is the one that is not a
+  few kilobytes of text; `pdf_text` skips it on the way back, which is what
+  `_isContent` has always been for.
 - Comparing two throws is one picker, opened two ways. `pickThrowsToCompare`
   returns the pair in the order the comparison lays them out — A is the left
   pane in landscape, the top one in portrait, and the clip the linked scrub

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 /// Writes a small PDF: pages of fixed-width text, with rules between them.
@@ -14,9 +15,10 @@ import 'dart:typed_data';
 /// meet program in the world is printed in. One consequence worth knowing:
 /// a line is measured by counting characters, so [columnsAt] is exact.
 ///
-/// The streams are left uncompressed. A meet's results are a few kilobytes
-/// of text, and an uncompressed file is one anybody — this app's own reader
-/// included — can open without an inflater.
+/// The text streams are left uncompressed. A meet's results are a few
+/// kilobytes of text, and an uncompressed file is one anybody — this app's
+/// own reader included — can open without an inflater. A picture is the
+/// exception and is deflated, because a picture is not a few kilobytes.
 class PdfSheet {
   PdfSheet({
     this.width = 612,
@@ -44,6 +46,7 @@ class PdfSheet {
   static const _advance = 0.6;
 
   final List<StringBuffer> _pages = [];
+  final List<PdfImage> _images = [];
   late StringBuffer _page;
   late double _y;
 
@@ -123,6 +126,28 @@ class PdfSheet {
 
   void gap([double points = 6]) => _y -= points;
 
+  /// Puts a picture in the top outside corner of the page being written,
+  /// out of the flow of the text.
+  ///
+  /// Out of the flow because that is what a letterhead is: the sheet is a
+  /// column of results and the mark on it is beside them, not a row of
+  /// them. It writes nothing and moves nothing, so a report that never
+  /// passes one is laid out exactly as it was.
+  void badge(PdfImage image, {double size = 34, double above = 10}) {
+    final id = _images.length;
+    _images.add(image);
+    final wide = size * image.width / image.height;
+    final top = height - margin + above;
+    _page.write('q ${_n(wide)} 0 0 ${_n(size)} ${_n(width - margin - wide)} '
+        '${_n(top - size)} cm /Im$id Do Q\n');
+  }
+
+  /// How many characters of [size] a line has left beside a badge of
+  /// [width] points, which is what keeps a long meet's name from running
+  /// under the mark in the corner.
+  int columnsBeside(double size, double badge) =>
+      ((width - margin * 2 - badge) / (size * _advance)).floor();
+
   /// Starts the next page, unless this one is still blank — a report that
   /// breaks before each section should not open on an empty sheet.
   void pageBreak() {
@@ -144,6 +169,12 @@ class PdfSheet {
     write('%PDF-1.4\n');
     final pageIds = [for (var i = 0; i < _pages.length; i++) 3 + i * 2];
     final fontBase = 3 + _pages.length * 2;
+    final imageBase = fontBase + PdfFace.values.length;
+    // A picture and the alpha that cuts it out, which is two objects each.
+    final xobjects = [
+      for (var i = 0; i < _images.length; i++)
+        '/Im$i ${imageBase + i * 2} 0 R'
+    ].join(' ');
 
     object(1, '<< /Type /Catalog /Pages 2 0 R >>');
     object(
@@ -161,7 +192,11 @@ class PdfSheet {
           '${[
             for (var f = 0; f < PdfFace.values.length; f++)
               '/${PdfFace.values[f].resource} ${fontBase + f} 0 R'
-          ].join(' ')} >> >> '
+          ].join(' ')} >>'
+          // Named on every page rather than only the one that draws them:
+          // a resource a page does not use costs a reference, and working
+          // out which page a badge landed on costs a second list.
+          '${xobjects.isEmpty ? '' : ' /XObject << $xobjects >>'} >> '
           '/Contents $contentId 0 R >>');
       final stream = _pages[i].toString();
       offsets[contentId] = buffer.length;
@@ -178,9 +213,41 @@ class PdfSheet {
           '/Encoding /WinAnsiEncoding >>');
     }
 
+    // The pictures. Deflated, because a picture is the one thing on this
+    // sheet that is not a few kilobytes of text — and the reader at the
+    // other end skips a stream it cannot read as operators anyway, so
+    // nothing is lost by compressing the one stream that is not.
+    for (var i = 0; i < _images.length; i++) {
+      final image = _images[i];
+      final id = imageBase + i * 2;
+      void stream(int at, String header, List<int> bytes) {
+        offsets[at] = buffer.length;
+        write('$at 0 obj\n<< $header /Filter /FlateDecode '
+            '/Length ${bytes.length} >>\nstream\n');
+        buffer.add(bytes);
+        write('\nendstream\nendobj\n');
+      }
+
+      stream(
+          id,
+          '/Type /XObject /Subtype /Image /Width ${image.width} '
+          '/Height ${image.height} /ColorSpace /DeviceRGB '
+          '/BitsPerComponent 8 /SMask ${id + 1} 0 R',
+          _deflate(image._color));
+      // The alpha, as its own grayscale image. A logo is line art on
+      // nothing, and painted as opaque pixels it would arrive as a white
+      // card with the drawing on it.
+      stream(
+          id + 1,
+          '/Type /XObject /Subtype /Image /Width ${image.width} '
+          '/Height ${image.height} /ColorSpace /DeviceGray '
+          '/BitsPerComponent 8',
+          _deflate(image._alpha));
+    }
+
     // The cross-reference table: one twenty-byte row per object, in order,
     // and the free head that every PDF starts its table with.
-    final count = fontBase + PdfFace.values.length;
+    final count = imageBase + _images.length * 2;
     final start = buffer.length;
     write('xref\n0 $count\n0000000000 65535 f \n');
     for (var id = 1; id < count; id++) {
@@ -190,6 +257,8 @@ class PdfSheet {
         'startxref\n$start\n%%EOF\n');
     return buffer.toBytes();
   }
+
+  static List<int> _deflate(List<int> bytes) => ZLibEncoder().convert(bytes);
 
   void _newPage() {
     _page = StringBuffer();
@@ -353,4 +422,44 @@ enum PdfFace {
   /// One of the fourteen faces every reader is required to have, so nothing
   /// has to be embedded.
   final String baseFont;
+}
+
+/// A picture to put on a sheet, as pixels.
+///
+/// Pixels rather than a drawing, for the same reason the personal-best
+/// medal is struck by the app's own painter and served as a PNG: every
+/// number in a mark somebody designed is measured off a reference, and one
+/// re-drawn out of PDF operators until it looked about right would be
+/// nearly the logo. So the engine decodes the asset and this embeds what it
+/// got, and there is nothing in between to be nearly right.
+///
+/// Straight RGBA, eight bits a channel, rows from the top — which is what
+/// `toByteData(format: rawRgba)` hands over and what a PDF image wants.
+class PdfImage {
+  PdfImage({required this.width, required this.height, required this.rgba})
+      : assert(rgba.length == width * height * 4);
+
+  final int width;
+  final int height;
+  final Uint8List rgba;
+
+  /// The color, without the alpha. A PDF keeps the two apart: the image is
+  /// what is painted and the alpha is a second image saying where.
+  Uint8List get _color {
+    final out = Uint8List(width * height * 3);
+    for (var i = 0, at = 0; i < rgba.length; i += 4) {
+      out[at++] = rgba[i];
+      out[at++] = rgba[i + 1];
+      out[at++] = rgba[i + 2];
+    }
+    return out;
+  }
+
+  Uint8List get _alpha {
+    final out = Uint8List(width * height);
+    for (var i = 0, at = 0; i < rgba.length; i += 4) {
+      out[at++] = rgba[i + 3];
+    }
+    return out;
+  }
 }

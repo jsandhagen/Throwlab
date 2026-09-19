@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import '../models/meet.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../utils/app_logo.dart';
 import '../utils/meet_report.dart';
 import '../utils/share_payload.dart';
 import '../utils/spectator_page.dart';
@@ -400,7 +401,7 @@ class MeetRelay extends ChangeNotifier {
           for (final overlay in packaged.overlays) overlay.key: overlay.toJson(),
         },
         ...await _statics(share, whole: whole),
-        ..._sheet(share),
+        ...await _sheet(share),
       };
       final answer = await _client.put(
         Uri.parse('${share.url}/state'),
@@ -487,14 +488,14 @@ class MeetRelay extends ChangeNotifier {
   /// with the competition — it is a few kilobytes against the feed's
   /// fifteen, and it means a spectator leaving at the fourth round leaves
   /// with the fourth round on it.
-  Map<String, dynamic> _sheet(_Share share) {
+  Future<Map<String, dynamic>> _sheet(_Share share) async {
     final meet = share.source.meet();
     final competition = share.source.competition();
     if (meet == null || competition == null) return const {};
     try {
       return {
-        'pdf': base64Encode(
-            meetResultsPdf(meet, share.source.results(), only: competition)),
+        'pdf': base64Encode(meetResultsPdf(meet, share.source.results(),
+            only: competition, logo: await sheetLogo())),
         'sheetName': ResultsSheet.fileName(meet, competition),
       };
     } catch (_) {

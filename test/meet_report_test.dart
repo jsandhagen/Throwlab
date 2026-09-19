@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:throwlab/models/meet.dart';
@@ -8,6 +11,7 @@ import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/utils/meet_report.dart';
 import 'package:throwlab/services/results_sheet.dart';
 import 'package:throwlab/utils/pdf_text.dart';
+import 'package:throwlab/utils/pdf_writer.dart';
 
 /// A meet's results as a sheet somebody can hand out.
 ///
@@ -57,6 +61,66 @@ void main() {
   String read(Meet made, List<ThrowResult> results, {MeetCompetition? only}) =>
       pdfText(meetResultsPdf(made, results,
           only: only, printedOn: DateTime(2026, 6, 14)))!;
+
+  /// A picture with an alpha in it, as the engine would hand one over. Two
+  /// pixels: one solid, one clear, which is enough to prove the color and
+  /// the mask go over as two images and come back apart.
+  PdfImage swatch() => PdfImage(
+        width: 2,
+        height: 1,
+        rgba: Uint8List.fromList([79, 195, 247, 255, 79, 195, 247, 0]),
+      );
+
+  group('the mark in the corner', () {
+    test('goes over as a picture with its alpha beside it', () {
+      final raw = latin1.decode(meetResultsPdf(meet(), const [], logo: swatch()),
+          allowInvalid: true);
+      expect(raw, contains('/Subtype /Image'));
+      expect(raw, contains('/ColorSpace /DeviceRGB'));
+      // Line art on nothing. Painted as opaque pixels the logo would
+      // arrive as a white card with a drawing on it.
+      expect(raw, contains('/ColorSpace /DeviceGray'));
+      expect(raw, contains('/SMask'));
+      expect(raw, contains('/XObject << /Im0'));
+      expect(raw, contains('/Im0 Do'));
+    });
+
+    test('leaves a sheet nobody handed one exactly as it was', () {
+      final bare = meetResultsPdf(meet(), const []);
+      expect(latin1.decode(bare, allowInvalid: true), isNot(contains('/XObject')));
+      // Byte for byte, in fact: the badge writes nothing and moves nothing.
+      expect(meetResultsPdf(meet(), const []), bare);
+    });
+
+    test('does not stop the sheet being read', () {
+      final made = meet();
+      made.entries.add(entry('e1', 'Ana Diaz', [MeetAttempt.mark('m1')]));
+      final text = pdfText(meetResultsPdf(made, [mark('m1', 'Ana Diaz', 44.90)],
+          printedOn: DateTime(2026, 6, 14), logo: swatch()));
+      // A deflated picture is not a content stream and the reader knows it.
+      expect(text, isNotNull);
+      expect(text, contains('COUNTY CHAMPS'));
+      expect(text, contains('Ana Diaz'));
+    });
+
+    test('cuts a long name rather than running it under the mark', () {
+      final long = Meet(
+        id: 'k2',
+        name: 'The Exceedingly Long Invitational Championships Of The County',
+        date: DateTime(2026, 6, 13),
+        rounds: 6,
+        prelimRounds: 6,
+        advancing: 99,
+      );
+      final beside = pdfText(meetResultsPdf(long, const [],
+          printedOn: DateTime(2026, 6, 14), logo: swatch()))!;
+      final alone = pdfText(
+          meetResultsPdf(long, const [], printedOn: DateTime(2026, 6, 14)))!;
+      expect(beside, contains('THE EXCEEDINGLY LONG'));
+      // The badge takes width off the one line wide enough to reach it.
+      expect(beside.length, lessThan(alone.length));
+    });
+  });
 
   test('is a PDF a reader can open', () {
     final bytes = meetResultsPdf(meet(), const []);

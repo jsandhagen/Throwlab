@@ -16,6 +16,7 @@ import 'package:throwlab/models/meet_conditions.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
+import 'package:throwlab/utils/app_logo.dart';
 import 'package:throwlab/utils/meet_report.dart';
 
 const _out = 'build/preview';
@@ -26,7 +27,7 @@ final _date = DateTime(2026, 6, 13);
 /// two flights, and a javelin where the coach's own athlete put out the
 /// furthest throw of her life.
 void main() {
-  test('results sheet', () async {
+  testWidgets('results sheet', (tester) async {
     final results = <ThrowResult>[];
     var id = 0;
 
@@ -171,12 +172,18 @@ void main() {
       }
     }
 
-    final bytes =
-        meetResultsPdf(meet, results, printedOn: DateTime(2026, 6, 13, 17, 40));
-    await Directory(_out).create(recursive: true);
-    final file = File('$_out/results_sheet.pdf');
-    await file.writeAsBytes(bytes);
-    // ignore: avoid_print
-    print('wrote ${file.path} (${bytes.length} bytes)');
+    // All of it through runAsync: decoding the asset goes through the
+    // engine and writing the file goes to disk, and a test binding fakes
+    // out the async that would otherwise finish either — the same reason
+    // `warmImages` exists in the preview harness.
+    await tester.runAsync(() async {
+      final bytes = meetResultsPdf(meet, results,
+          printedOn: DateTime(2026, 6, 13, 17, 40), logo: await sheetLogo());
+      await Directory(_out).create(recursive: true);
+      final file = File('$_out/results_sheet.pdf');
+      await file.writeAsBytes(bytes);
+      // ignore: avoid_print
+      print('wrote ${file.path} (${bytes.length} bytes)');
+    });
   });
 }
