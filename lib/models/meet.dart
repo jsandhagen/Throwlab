@@ -979,22 +979,31 @@ class MeetFlight {
   /// It lives here rather than on the screen because the spectator's page
   /// says it too, and one sentence written twice is two sentences waiting
   /// to disagree.
-  String? get yoursLater {
+  String? get yoursLater => laterFor((entry) => entry.tracked);
+
+  /// The same sentence for somebody else's athletes: [yoursLater], asked
+  /// about whoever [mine] says the reader is here for.
+  ///
+  /// A spectator handed the link at the ring is waiting on one thrower,
+  /// and it is as likely to be in flight 3 as the coach's own are — so the
+  /// page asks this about the athlete they chose rather than about the
+  /// roster on the phone. One sentence, two readers.
+  String? laterFor(bool Function(MeetEntry entry) mine) {
     final current = flight;
     if (current == null) return null;
     final field = competition.entries;
-    if (field.any((entry) => entry.tracked && entry.flight == current)) {
+    if (field.any((entry) => mine(entry) && entry.flight == current)) {
       return null;
     }
     var soonest = 0;
     for (final entry in field) {
-      if (!entry.tracked || entry.flight <= current) continue;
+      if (!mine(entry) || entry.flight <= current) continue;
       if (soonest == 0 || entry.flight < soonest) soonest = entry.flight;
     }
     if (soonest == 0) return null;
     final waiting = [
       for (final entry in field)
-        if (entry.tracked && entry.flight == soonest) entry,
+        if (mine(entry) && entry.flight == soonest) entry,
     ];
     final only = waiting.length == 1 ? waiting.single.athlete : '';
     return only.isEmpty

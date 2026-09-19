@@ -16,8 +16,9 @@ enum BoardLine {
   /// The athlete in the circle, when they are not already on the podium.
   upNow,
 
-  /// One of the coach's own, when they are not already on the board for
-  /// some other reason. A coach opens this to see their athlete against the
+  /// The athlete whose board it is — one of the coach's own, or the one a
+  /// spectator is following — when they are not already on the board for
+  /// some other reason. A board is opened to see that athlete against the
   /// cut, and an athlete who is neither winning it nor in the circle is
   /// exactly the one that question is about.
   mine,
@@ -107,11 +108,29 @@ class MeetBoard {
   /// shallowest one off [boardSpans] that holds every line, which is what
   /// the board opens at; a coach who has zoomed passes the span they chose
   /// and it is kept whatever the next throw does.
+  ///
+  /// [following] is whose board it is, for a reader who is not the coach.
+  /// A spectator handed the link at the ring is there for their own
+  /// athletes, who are usually somebody else's on the phone — so the lines
+  /// drawn as [BoardLine.mine], and the run of the competition the band is
+  /// hung on, follow them instead of the coach's own. Empty is the coach's
+  /// own screen, which is every board inside the app.
   factory MeetBoard(
     MeetStandings standings, {
     MeetEntry? inTheCircle,
     double? span,
+    Iterable<MeetEntry>? following,
   }) {
+    // Whose board this is: the athletes somebody is following, and the
+    // coach's whole roster when nobody has said. A set either way — a
+    // coach reads the board for all of theirs at once, and so does a
+    // parent with two of them in the field.
+    final watched = {
+      for (final entry in following ?? const <MeetEntry>[]) entry.id,
+    };
+    bool isMine(MeetEntry entry) =>
+        watched.isEmpty ? entry.tracked : watched.contains(entry.id);
+
     final placed = [
       for (final place in standings.places)
         if (place.best != null) place,
@@ -179,12 +198,12 @@ class MeetBoard {
       add(BoardLine.upNow, mine);
     }
 
-    // Then the coach's own, wherever they are standing. This is the line
-    // the board is usually being opened for: a rival leading it is context,
-    // and an athlete of theirs a centimeter outside the cut is the whole
-    // question.
+    // Then whoever's board this is, wherever they are standing. This is
+    // the line the board is being opened for: somebody else leading it is
+    // context, and the athlete you came to watch a centimeter outside the
+    // cut is the whole question.
     for (final place in placed) {
-      if (!place.entry.tracked || place.best == null) continue;
+      if (!isMine(place.entry) || place.best == null) continue;
       if (drawn.contains(place.best)) continue;
       add(BoardLine.mine, place);
     }
@@ -196,14 +215,17 @@ class MeetBoard {
     // decide it squeezed into the top inch, which is the thing this board
     // exists to stop.
     // What the band is hung on when it can't hold every line: the athlete
-    // in the circle, else the coach's own best-placed. Nobody, at a board
-    // with neither, and it hangs on whichever stretch of the competition
-    // has the most of it in it.
+    // in the circle, else the best-placed of whoever's board this is.
+    // Nobody, at a board with neither, and it hangs on whichever stretch
+    // of the competition has the most of it in it.
+    //
+    // Best-placed rather than furthest: they are the same athlete, since
+    // [placed] arrives ranked on the mark each is standing on.
     final focus = marks
-        .where((mark) => mark.line == BoardLine.upNow)
-        .followedBy(marks.where((mark) => mark.tracked))
-        .firstOrNull
-        ?.distance;
+            .where((mark) => mark.line == BoardLine.upNow)
+            .firstOrNull
+            ?.distance ??
+        placed.where((place) => isMine(place.entry)).firstOrNull?.best;
 
     final at = [for (final mark in marks) mark.distance]..sort();
     final band = span == null
@@ -225,8 +247,31 @@ class MeetBoard {
           place.best!,
     ]..sort((a, b) => b.compareTo(a));
 
+    // What survives being outside the band. A board that has broken is
+    // drawing one close run of the competition; everything past the gap is
+    // a label pinned to its edge, and every one of those costs a row of
+    // the picture the board exists to draw. So only the ones that answer
+    // something the band cannot get one: the lead, the cut, and whoever
+    // the board is being read for.
+    //
+    // Second and third, a long way up, are not those. They are a list —
+    // and the standings are the list. A leader five meters clear is worth
+    // an arrow and the silver behind him is not, which is the same
+    // judgement that broke the band in the first place.
+    //
+    // The cut is a place on the sector rather than a line of its own: it
+    // gets no line when somebody is already standing exactly on it, and
+    // dropping that somebody would take the cut off the board with them.
+    final shown = [
+      for (final mark in marks)
+        if ((mark.distance >= lowest && mark.distance <= highest) ||
+            _worthTheEdge(mark.line) ||
+            (standings.hasCut && mark.distance == cutMark))
+          mark,
+    ];
+
     return MeetBoard._(
-      marks: marks,
+      marks: shown,
       others: others,
       near: lowest,
       far: highest,
@@ -277,8 +322,8 @@ class MeetBoard {
   double get span => far - near;
 
   /// Whether every line drawn is inside the band. False once a coach has
-  /// zoomed past the spread of the competition, which the board says at its
-  /// edges rather than by quietly dropping a mark.
+  /// zoomed past the spread of the competition, which the board says at
+  /// its edges rather than by quietly dropping the marks that matter.
   bool get holdsEveryMark =>
       marks.every((mark) => mark.distance >= near && mark.distance <= far);
 
@@ -305,6 +350,18 @@ class MeetBoard {
     return out;
   }
 }
+
+/// Whether a mark the band could not hold is still worth pinning to the
+/// board's edge.
+///
+/// The lead, because that is what the competition is; the cut, because
+/// that is what a throw has to beat; and the athletes the board is being
+/// read for, because a board that lost them is no board at all — the same
+/// reason a zoom is not allowed to lose them either.
+bool _worthTheEdge(BoardLine line) => switch (line) {
+  BoardLine.first || BoardLine.cut || BoardLine.upNow || BoardLine.mine => true,
+  BoardLine.second || BoardLine.third => false,
+};
 
 /// The depths the band can be drawn at, in meters — what zooming steps
 /// through, shallowest first.

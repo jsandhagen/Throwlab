@@ -60,7 +60,10 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 feed baked in place of its fetch, and Barlow and the medal copied in beside
 it so the type and the badge are the app's there too. A page whose whole job
 happens in a browser cannot be reviewed as a golden — open the file, and
-every tab works, because the page already holds the whole competition.
+every tab works, and so does the question it opens with, because the page
+holds the whole competition worked out for every set of athletes somebody
+might be standing there to watch — every subset of the field, which is why
+the discus it prints is five deep and not thirty.
 
 It also shoots the app's own three views of the same competition
 (`app_live`, `app_series`, `app_standings`) at the same 390 x 844 the page
@@ -77,9 +80,16 @@ thing that can render the page:
 node tool/preview/compare_share.js   # build/preview/compare_*.png
 ```
 
-It opens `spectator.html` at the same 390 x 844, shoots each tab
+It opens `spectator.html` at the same 390 x 844, answers the question it
+opens with (that state is shot first, as `web_asking`), shoots each tab
 (`web_live`, `web_series`, `web_standings`) and composes each against the
-app's own — three files to open, one per view. It needs Playwright on the
+app's own — three files to open, one per view. Then it ticks two athletes
+nobody on the phone is tracking — the one in the circle and the one under
+the cut — and shoots the sheet with its boxes ticked (`web_picking`) and
+what it leaves behind (`web_following`): a line each on the board, the
+caption and the emphasis down the field all moved to them. Those three
+have no app side to stand beside, so they are files to open rather than a
+fourth pair. It needs Playwright on the
 machine (`npm i -g playwright`; the browser is already installed, so never
 run `playwright install`), and it asserts nothing: looking at the three
 files is the review. The competition it prints has a cut in it on purpose,
@@ -599,9 +609,18 @@ like the app rather than a bare Material default.
   going deeper picks up another mark. When one doesn't, the board *breaks*
   rather than zooming out: it keeps the run of the competition around the
   athlete it belongs to (whoever is in the circle, else the coach's own) and
-  draws whatever is outside as an arrow off the edge carrying its mark and
+  draws what is outside as an arrow off the edge carrying its mark and
   how far out it landed — a leader five meters clear is worth an arrow, not
-  worth squashing the fight for second into an inch of sector. The band's
+  worth squashing the fight for second into an inch of sector.
+  Not all of it, though: a line pinned to the edge costs a row of the
+  picture the board exists to draw, so only the ones the band cannot
+  answer for get one — the lead, the cut, and whoever the board is being
+  read for (`_worthTheEdge`). Second and third, a long way up, are a list,
+  and the standings are the list; four labels stacked at one edge is four
+  rows spent saying 'there are people up there'. The exception is the
+  athlete standing exactly on the cut, who is kept whatever their place:
+  the cut gets no line of its own when somebody is already on it, so
+  dropping them would take the cut off the board with them. The band's
   edges snap to the marker lines so it moves a line at a time instead of
   sliding under every throw. The ground past the cut is shaded to its own
   arc rather than to a horizontal edge: a throw lands the same distance out
@@ -617,8 +636,13 @@ like the app rather than a bare Material default.
   at one, the mark at the other — with the line running between them, and
   they sit level with the ends of their own arc rather than with its middle,
   which is what makes a label read as belonging to a line. A mark the band
-  broke off has no line to leave room for, so it gets one solid pill and the
-  arrow. The name is `MeetBoardMark.boardName`: the surname and whatever the
+  broke off has no line to leave room for, so it gets one solid pill — the
+  name at one end and the mark at the other, the backdrop at full weight
+  where the pair are translucent — with the arrow and how far out it
+  landed riding outside it. That arrow hangs past the pill, so an edge
+  label is given room for it on both sides when the labels are stacked
+  clear of each other: the lead and the cut can be off the same edge at
+  once, which is exactly the board that has broken. The name is `MeetBoardMark.boardName`: the surname and whatever the
   sheet put in brackets after it, never the initial — 'Achebe (Croydon)'.
   A program spells a name for somebody who knows nobody; a board is read by
   somebody watching the competition, and the initial is a third of the width
@@ -851,6 +875,47 @@ like the app rather than a bare Material default.
 - The whole competition goes out at once, so switching tab costs no request
   at all, and the page keeps working when the phone wanders off the wifi.
   It says how old it is rather than going blank.
+- The page asks who the person reading it is there for, and that is the one
+  question it has of its own. Everything the app says about 'yours' — the
+  lines on the board and the run of the competition the band is hung on,
+  what is needed to make the final, the averaging line under a standing,
+  which flight yours are still waiting in — is said about
+  `MeetEntry.tracked`, because the phone belongs to the coach. Somebody
+  handed the link at a ring came to watch their own, who are usually
+  somebody else's and are nobody at all on that phone. So the page asks on
+  the way in, sends the answer up with every poll (`?f=<ids>`), and
+  `competitionFeed` works the same sentences out around those athletes
+  instead — `MeetBoard(following:)` for the lines and the band,
+  `MeetFlight.laterFor` for the flight, `mine` on each place for the
+  emphasis and the two asides. Not one new sentence anywhere: the question
+  changes who they are about and not a word of them, which is what keeps
+  the two renderings one competition. Unanswered, the feed is the coach's
+  own screen exactly as before, which is the state the parity check is run
+  in.
+  A set, never one athlete. A parent has two throwing and a club's
+  supporter four, and the coach's own 'yours' was a whole roster from the
+  start — so it is asked as the field with a box against every name, read
+  down the throwing order and ruled off at the flights the way a heat
+  sheet is ticked through, and everything downstream takes them as a set:
+  a line each on the board, the best-placed of them where the band is
+  hung, ticked down the field and the standings, and the first of them in
+  the caption, exactly as the app does with several of the coach's own. A
+  tick turns its own row over rather than repainting the panel, because a
+  field long enough to scroll must not jump back to the top under the
+  finger that ticked somebody halfway down it — and the list closes on
+  Done rather than on the first tick, since there may be two of them.
+  By entry id, never by a place in the throwing order: the order is redrawn
+  for the final and shifts under everybody below an athlete entered late,
+  and a parent must not be quietly handed somebody else's daughter.
+  Anybody the competition no longer holds is left out of the `following`
+  it echoes back, and the page drops them and keeps the rest rather than
+  following a ghost. The choice is
+  remembered per share (`throwlab.watch.<token>`), so it is asked once at
+  the discus and again at the javelin, and a browser that refuses storage
+  is simply asked every time — a worse page and a working one. Nothing is
+  registered on the phone: the choice rides on a GET and is spent on that
+  one answer, two people on one link follow two different sets, and there
+  is still no route that writes.
 - **`MeetEventScreen` and `spectator_page` are two renderings of one
   competition, and they are changed together or not at all.** Touching what
   a view says or how it reads on either side — the header card and its
@@ -872,8 +937,10 @@ like the app rather than a bare Material default.
   Some things belong to one side only and that is fine: the coach's
   actions (the camera, the ruler, Add athlete, the round-entry sheet) can
   never be on a read-only page, and the page carries the meet's name, date,
-  venue, conditions and how old it is because a spectator has no app around
-  it for context. Say which in the commit rather than letting the two drift
+  venue, conditions, how old it is and its own question about who is being
+  followed — the field with a box against every name — because a spectator
+  has no app around it for context and the coach's phone already knows
+  whose athletes are theirs. Say which in the commit rather than letting the two drift
   quietly.
 - The live view is one card, and it is the one card on the page that is
   opaque. The app's is the flight above the sector, the sector, what the

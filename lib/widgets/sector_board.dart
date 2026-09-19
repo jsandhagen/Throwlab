@@ -117,6 +117,13 @@ class _SectorBoardPainter extends CustomPainter {
   /// Enough for two chips not to touch.
   static const _clearance = 10.0;
 
+  /// And the extra a label pinned to the edge wants, for the arrow and the
+  /// gap that ride outside its pill. Both the lead and the cut can be off
+  /// the same edge at once — that is the board that has broken — and
+  /// without this the second one's arrow is drawn through the first one's
+  /// pill.
+  static const _arrowRoom = 11.0;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (board.isEmpty) return;
@@ -288,9 +295,13 @@ class _SectorBoardPainter extends CustomPainter {
         < 0 => floorY,
         _ => yOf(mark.distance),
       };
-      final y = math.max(anchor, ceiling);
+      // An arrow hangs outside its own pill, so an edge label is given the
+      // room on both sides rather than only under it: which way it points
+      // depends on which edge it went out of.
+      final room = _inBand(mark) ? 0.0 : _arrowRoom;
+      final y = math.max(anchor, ceiling + room);
       rows.add(y);
-      ceiling = y + gap;
+      ceiling = y + gap + room;
     }
     // Stacking them can push the last one off the bottom; lifting the whole
     // set keeps the gaps and loses only the padding under it.

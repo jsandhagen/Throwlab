@@ -85,13 +85,19 @@ class ShareSource {
 
   /// The competition packaged, or null when there is no longer one to
   /// package.
-  SharePayload? payload({DateTime? at}) {
+  ///
+  /// [following] is who the person reading it came to watch, by entry id.
+  /// The answer is worked out around them rather than around the coach's
+  /// own, so it is part of what is packaged — and part of what the
+  /// fingerprint is taken over, since two spectators following two
+  /// athletes must never be handed each other's board off one tag.
+  SharePayload? payload({DateTime? at, Iterable<String>? following}) {
     final held = meet();
     if (held == null) return null;
     final competition = _within(held);
     if (competition == null) return null;
     return SharePayload(competitionFeed(held, competition, results(),
-        at: at, isPersonalBest: isPersonalBest));
+        at: at, isPersonalBest: isPersonalBest, following: following));
   }
 
   MeetCompetition? _within(Meet held) {

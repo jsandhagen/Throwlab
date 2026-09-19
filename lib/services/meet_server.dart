@@ -31,7 +31,12 @@ import 'results_sheet.dart';
 ///
 /// Read-only by construction. There is no route that writes anything, so a
 /// spectator cannot enter a mark, and nothing here touches the meet or the
-/// record book except to read what is already there.
+/// record book except to read what is already there. That holds for the
+/// one thing a spectator does say — which athletes they are here to watch
+/// — because it rides on the poll as a query parameter and is worked out
+/// into that one answer. Nobody is registered, two people on one link
+/// follow two different sets of athletes, and the phone holds nothing
+/// about either.
 ///
 /// The meet is read through the callbacks handed to [start] rather than
 /// copied, so every request answers with the competition as it stands. A
@@ -374,11 +379,22 @@ class MeetServer extends ChangeNotifier {
 
   Future<void> _state(
       HttpRequest request, HttpResponse response, _Share share) async {
-    final payload = share.source.payload();
+    // Who this browser is watching, if they have said — a comma-separated
+    // run of entry ids, because somebody at a ring is as likely to have
+    // two in the field as one. A query parameter on a GET rather than
+    // anything stored here: the server holds no spectator, two people on
+    // one link watch two different sets of athletes, and there is still no
+    // route that writes.
+    final payload = share.source.payload(
+        following: (request.uri.queryParameters['f'] ?? '').split(','));
     if (payload == null) {
       await _plain(response, HttpStatus.notFound, 'That competition is gone.');
       return;
     }
+    // Taken over the answer rather than over the competition, so two
+    // spectators following two athletes are never handed each other's
+    // board off one tag — and without 'asOf', whose clock moves every
+    // second, so a quiet round between throws costs a 304 and not 15 KB.
     final tag = payload.etag;
     if (request.headers.value(HttpHeaders.ifNoneMatchHeader) == tag) {
       response.statusCode = HttpStatus.notModified;

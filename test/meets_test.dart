@@ -1273,6 +1273,47 @@ void main() {
       expect(board.fractionOf(21.50), greaterThan(1));
     });
 
+    /// A podium a long way clear, a cut under it, and one of the coach's
+    /// own left behind — the board that has to break.
+    MeetBoard broken({required int advancing}) => MeetBoard(table(
+          field([
+            ('Runaway', 44.90, false),
+            ('B', 44.70, false),
+            ('C', 44.50, false),
+            ('D', 44.30, false),
+            ('Ana Diaz', 31.20, true),
+          ]),
+          advancing: advancing,
+        ));
+
+    test('pins the lead and the cut to the edge, and nothing else', () {
+      final board = broken(advancing: 4);
+      // The board is drawn where she is standing, so the rest are outside
+      // it. What is pinned to the edge is what the band cannot answer:
+      // where the lead is, and where the cut is.
+      expect(board.fractionOf(31.20), inInclusiveRange(0, 1));
+      final off = [
+        for (final mark in board.marks)
+          if (board.fractionOf(mark.distance) > 1) mark.line,
+      ];
+      expect(off, [BoardLine.first, BoardLine.cut]);
+      // Second and third, thirteen meters up, are a list — and the
+      // standings are the list. Four labels stacked at one edge is four
+      // rows of a picture that exists to draw the one run it can hold.
+      expect(off, isNot(contains(BoardLine.second)));
+      expect(off, isNot(contains(BoardLine.third)));
+      expect(board.holdsEveryMark, isFalse);
+    });
+
+    test('keeps whoever is standing on the cut when it breaks', () {
+      // Cut at three, which is C's own mark — so there is no line of its
+      // own to keep, and dropping third would take the cut off the board
+      // with them.
+      final board = broken(advancing: 3);
+      expect(board.marks.map((m) => m.distance), contains(44.50));
+      expect(board.marks.map((m) => m.distance), isNot(contains(44.70)));
+    });
+
     test('keeps the band on the athlete it belongs to when it breaks', () {
       final competition = field([
         ('A', 44.90, false),
