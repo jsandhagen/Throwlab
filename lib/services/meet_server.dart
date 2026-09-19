@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -9,8 +8,8 @@ import 'package:flutter/services.dart' show rootBundle;
 import '../models/meet.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
-import '../utils/meet_feed.dart';
 import '../utils/meet_report.dart';
+import '../utils/share_payload.dart';
 import '../utils/spectator_page.dart';
 import '../widgets/gold.dart';
 import 'results_sheet.dart';
@@ -114,11 +113,7 @@ class MeetServer extends ChangeNotifier {
 
   _Share? _find(String meetId, ThrowEvent event, double implementKg) {
     for (final share in _byToken.values) {
-      if (share.meetId == meetId &&
-          share.event == event &&
-          share.implementKg == implementKg) {
-        return share;
-      }
+      if (share.source.covers(meetId, event, implementKg)) return share;
     }
     return null;
   }
@@ -157,12 +152,14 @@ class MeetServer extends ChangeNotifier {
     _byToken[token] = _Share(
       token: token,
       url: 'http://$host:${_server!.port}/M/$token',
-      meetId: meetId,
-      event: event,
-      implementKg: implementKg,
-      meet: meet,
-      results: results,
-      isPersonalBest: isPersonalBest,
+      source: ShareSource(
+        meetId: meetId,
+        event: event,
+        implementKg: implementKg,
+        meet: meet,
+        results: results,
+        isPersonalBest: isPersonalBest,
+      ),
     );
     _error = null;
     notifyListeners();
@@ -377,22 +374,12 @@ class MeetServer extends ChangeNotifier {
 
   Future<void> _state(
       HttpRequest request, HttpResponse response, _Share share) async {
-    final competition = share.competition();
-    if (competition == null) {
+    final payload = share.source.payload();
+    if (payload == null) {
       await _plain(response, HttpStatus.notFound, 'That competition is gone.');
       return;
     }
-    final feed = competitionFeed(
-      share.meet()!,
-      competition,
-      share.results(),
-      isPersonalBest: share.isPersonalBest,
-    );
-    // The clock in 'asOf' moves every second, so the tag is taken over the
-    // competition without it: a quiet round between throws should cost a
-    // 304 and not 15 KB, and the page's own clock is allowed to be as old
-    // as the last thing that actually happened.
-    final tag = '"${_fingerprint(jsonEncode({...feed}..remove('asOf')))}"';
+    final tag = payload.etag;
     if (request.headers.value(HttpHeaders.ifNoneMatchHeader) == tag) {
       response.statusCode = HttpStatus.notModified;
       response.headers.set(HttpHeaders.etagHeader, tag);
@@ -403,7 +390,7 @@ class MeetServer extends ChangeNotifier {
     response.headers.contentType = ContentType.json;
     response.headers.set(HttpHeaders.etagHeader, tag);
     response.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    response.write(jsonEncode(feed));
+    response.write(payload.encode());
     await response.close();
   }
 
@@ -414,13 +401,13 @@ class MeetServer extends ChangeNotifier {
   ///
   /// This competition's and no other: the link was handed out at one ring.
   Future<void> _sheet(HttpResponse response, _Share share) async {
-    final competition = share.competition();
-    final meet = share.meet();
+    final competition = share.source.competition();
+    final meet = share.source.meet();
     if (competition == null || meet == null) {
       await _plain(response, HttpStatus.notFound, 'That competition is gone.');
       return;
     }
-    final bytes = meetResultsPdf(meet, share.results(), only: competition);
+    final bytes = meetResultsPdf(meet, share.source.results(), only: competition);
     response.statusCode = HttpStatus.ok;
     response.headers.contentType = ContentType('application', 'pdf');
     // Safe to quote unescaped: ResultsSheet.fileName has already stripped
@@ -439,57 +426,18 @@ class MeetServer extends ChangeNotifier {
     response.write(body);
     await response.close();
   }
-
-  /// A cheap, stable hash for the ETag — FNV-1a, which is a few lines
-  /// rather than a dependency. A collision costs one stale poll of a board
-  /// that is about to be polled again, which is the right price for not
-  /// pulling in a hashing library to compare two strings.
-  static String _fingerprint(String body) {
-    var hash = 0xcbf29ce484222325;
-    for (final unit in utf8.encode(body)) {
-      hash ^= unit;
-      // Kept inside 64 bits by hand: Dart's ints are 64-bit and signed, and
-      // the multiply is allowed to overflow, which is what FNV expects.
-      hash = (hash * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF;
-    }
-    return hash.toRadixString(36);
-  }
 }
 
-/// One competition being served, and how to read it.
+/// One competition being served: the link it answers on, and how to read
+/// the meet behind it.
 class _Share {
   const _Share({
     required this.token,
     required this.url,
-    required this.meetId,
-    required this.event,
-    required this.implementKg,
-    required this.meet,
-    required this.results,
-    this.isPersonalBest,
+    required this.source,
   });
 
   final String token;
   final String url;
-  final String meetId;
-  final ThrowEvent event;
-  final double implementKg;
-
-  final Meet? Function() meet;
-  final List<ThrowResult> Function() results;
-  final bool Function(ThrowResult)? isPersonalBest;
-
-  /// The competition as it stands, looked up fresh: an athlete entered
-  /// between one poll and the next is in the field by the second one.
-  /// Null once the meet — or everybody in this event — has gone.
-  MeetCompetition? competition() {
-    final held = meet();
-    if (held == null) return null;
-    for (final competition in MeetCompetition.of(held)) {
-      if (competition.event == event && competition.implementKg == implementKg) {
-        return competition;
-      }
-    }
-    return null;
-  }
+  final ShareSource source;
 }

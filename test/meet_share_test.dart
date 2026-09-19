@@ -12,6 +12,7 @@ import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/services/meet_server.dart';
 import 'package:throwlab/utils/meet_feed.dart';
 import 'package:throwlab/utils/pdf_text.dart';
+import 'package:throwlab/utils/share_payload.dart';
 
 /// Sharing a competition with the people standing at it.
 ///
@@ -310,6 +311,99 @@ void main() {
       expect(feed['label'], 'Javelin · 800 g');
       // The discus field is somebody else's business, and never appears.
       expect(jsonEncode(feed), isNot(contains('Ama')));
+    });
+  });
+
+  /// One competition packaged, and the fingerprint that says whether it has
+  /// moved.
+  ///
+  /// The fingerprint has two jobs, and they have to be the same answer: a
+  /// server spends it on an ETag so a quiet round costs a 304, and the
+  /// publisher pushing at a relay spends it on whether there is anything
+  /// worth uploading at all. A hash that moved on its own clock would turn
+  /// a competition standing still into a push every few seconds.
+  group('the payload', () {
+    ShareSource sourceOf(Meet made, List<ThrowResult> results) => ShareSource(
+          meetId: made.id,
+          event: ThrowEvent.discus,
+          implementKg: 1,
+          meet: () => made,
+          results: () => results,
+        );
+
+    test('carries the same competition the feed works out', () {
+      final (made, results) = competition();
+      final payload = sourceOf(made, results).payload(at: DateTime.utc(2026))!;
+
+      expect(payload.feed, feedOf(made, results, at: DateTime.utc(2026)));
+      expect(jsonDecode(payload.encode()), payload.feed);
+      expect(payload.etag, '"${payload.fingerprint}"');
+    });
+
+    test('holds its fingerprint still while the clock runs', () {
+      final (made, results) = competition();
+      final source = sourceOf(made, results);
+
+      final early = source.payload(at: DateTime.utc(2026, 6, 13, 14))!;
+      final later = source.payload(at: DateTime.utc(2026, 6, 13, 15))!;
+
+      expect(later.feed['asOf'], isNot(early.feed['asOf']));
+      expect(later.fingerprint, early.fingerprint);
+    });
+
+    test('moves its fingerprint the moment a mark is entered', () {
+      final (made, results) = competition();
+      final source = sourceOf(made, results);
+      final before = source.payload(at: DateTime.utc(2026))!;
+
+      results.add(mark('m3', 'Jakob Sandhagen', 48.02));
+      made.entries.first.setAttempt(3, MeetAttempt.mark('m3'));
+
+      expect(source.payload(at: DateTime.utc(2026))!.fingerprint,
+          isNot(before.fingerprint));
+    });
+
+    test('reads the competition live rather than holding a copy', () {
+      final (made, results) = competition();
+      final source = sourceOf(made, results);
+      source.payload();
+
+      made.entries.add(entry('e3', 'Ama Boateng', [MeetAttempt.untracked(39.5)],
+          order: 2, tracked: false));
+
+      expect(jsonEncode(source.payload()!.feed), contains('Boateng'));
+    });
+
+    test('has nothing to package once the competition is gone', () {
+      final (made, results) = competition();
+
+      expect(sourceOf(made, results).payload(), isNotNull);
+      // The meet itself gone — a share outliving the meet it was handed out
+      // for is a link with nothing behind it, not a crash.
+      expect(
+          ShareSource(
+            meetId: made.id,
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            meet: () => null,
+            results: () => results,
+          ).payload(),
+          isNull);
+      // And the meet still there with nobody left in this event.
+      made.entries.clear();
+      expect(sourceOf(made, results).payload(), isNull);
+    });
+
+    test('knows which competition it is the share for', () {
+      final (made, results) = competition();
+      final source = sourceOf(made, results);
+
+      expect(source.covers(made.id, ThrowEvent.discus, 1), isTrue);
+      // A weight is a competition of its own: a best is per implement, and
+      // so is the contest an athlete is placed in.
+      expect(source.covers(made.id, ThrowEvent.discus, 1.6), isFalse);
+      expect(source.covers(made.id, ThrowEvent.javelin, 1), isFalse);
+      expect(source.covers('another', ThrowEvent.discus, 1), isFalse);
     });
   });
 
