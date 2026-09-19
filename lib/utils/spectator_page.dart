@@ -768,9 +768,11 @@ const String _page = r'''<!doctype html>
     });
 
     /* Labels are two pills at the edges of the box with the line running
-       between them, level with the ends of their own arc. Only the labels
-       move to avoid each other — the lines stay where the throws put
-       them — and one that had to slide grows a leader back to its own. */
+       between them, level with the ends of their own arc — and one solid
+       pill for a mark the band broke off, which has no line to leave room
+       for. Only the labels move to avoid each other — the lines stay where
+       the throws put them — and one that had to slide grows a leader back
+       to its own. */
     var labels = b.marks.map(function (m) {
       var f = Math.max(0, Math.min(1, m.fraction));
       var y = m.off === "far" ? g.top + 5
@@ -779,7 +781,15 @@ const String _page = r'''<!doctype html>
       return { m: m, f: f, y: y, want: y };
     }).sort(function (a, c2) { return a.y - c2.y; });
     for (var i = 1; i < labels.length; i++) {
-      if (labels[i].y - labels[i - 1].y < 24) labels[i].y = labels[i - 1].y + 24;
+      /* An arrow hangs outside its own pill, so a label pinned to an edge
+         is given the room for it — the lead and the cut can both be off
+         the same edge at once, which is the board that has broken, and
+         without this the second one's arrow is drawn through the first
+         one's pill. The app's own layout leaves the same room. */
+      var room = 24 + (labels[i].m.out || labels[i - 1].m.out ? 11 : 0);
+      if (labels[i].y - labels[i - 1].y < room) {
+        labels[i].y = labels[i - 1].y + room;
+      }
     }
 
     labels.forEach(function (L) {
@@ -803,16 +813,18 @@ const String _page = r'''<!doctype html>
           out.push('<circle cx="' + g.ax + '" cy="' + yAt(g, L.f) +
             '" r="4" fill="' + ink + '"/>');
         }
-      } else {
-        /* Broken off the band: an arrow at the edge carrying its mark,
-           rather than squashing the fight for second into an inch of
-           sector to keep a runaway leader on the picture. */
-        var ay = m.off === "far" ? g.top - 6 : g.floor + 6;
-        out.push('<path d="M ' + (g.ax - 9) + " " + ay + " L " + g.ax + " " +
-          (ay + (m.off === "far" ? -10 : 10)) + " L " + (g.ax + 9) + " " + ay +
-          ' Z" fill="' + ink + '"/>');
       }
-      out.push(pill(4, L.y, (m.label ? m.label + "  " : "") + m.name, ink, "start"));
+      var named = (m.label ? m.label + "  " : "") + m.name;
+      if (m.off) {
+        /* Broken off the band: pinned to the edge it went out of, rather
+           than squashing the run of the competition the board is drawing
+           into an inch of sector to keep a runaway leader on the picture.
+           Only the lines worth that get here — the lead, the cut and
+           whoever the board is being read for; see MeetBoard. */
+        out.push(edgeLabel(g, W, L.y, named, m, ink));
+        return;
+      }
+      out.push(pill(4, L.y, named, ink, "start"));
       out.push(pill(W - 4, L.y, m.mark, ink, "end"));
       if (Math.abs(L.y - L.want) > 1.5) {
         out.push('<path d="M 96 ' + L.y + " L 120 " + L.want +
@@ -839,6 +851,41 @@ const String _page = r'''<!doctype html>
   function textWidth(text, size, weight) {
     _ruler.font = weight + " " + size + 'px Barlow, system-ui, sans-serif';
     return _ruler.measureText(String(text)).width;
+  }
+
+  /* A mark the band broke off, drawn the way the app draws one: a single
+     solid pill carrying the name and the mark, with an arrow that way and
+     how far that way it is. One pill rather than the usual two, because
+     there is no line running between them to leave room for and a gap
+     there would say there was — solid is what makes it read as a marker
+     rather than as a throw that landed on this stretch of sector. */
+  function edgeLabel(g, W, y, text, m, ink) {
+    var top = y - 11, far = m.off === "far";
+    /* Solid, where the two pills are translucent — the app strikes this
+       one at the backdrop's full weight for the same reason it runs the
+       rect the whole way across. */
+    var out = ['<g><rect x="4" y="' + top + '" width="' + (W - 8) +
+      '" height="22" rx="4" fill="var(--bg)"/>' +
+      '<text x="11" y="' + (y + 5) + '" fill="' + ink +
+      '" font-size="13.5" font-weight="600">' + esc(text) + "</text>" +
+      '<text x="' + (W - 11) + '" y="' + (y + 5) + '" fill="' + ink +
+      '" font-size="13.5" font-weight="600" text-anchor="end">' +
+      esc(m.mark) + "</text></g>"];
+    if (!m.out) return out.join("");
+    /* Drawn rather than typed: an arrow is not in every font, and a
+       missing glyph is a box. */
+    var w = textWidth(m.out, 10, 600);
+    var tip = far ? top - 10 : top + 32;
+    var base = far ? top - 2 : top + 24;
+    var ax = W / 2 - w / 2 - 9;
+    out.push('<path d="M ' + ax + " " + tip + " L " + (ax - 4.5) + " " + base +
+      " L " + (ax + 4.5) + " " + base + ' Z" fill="' + ink +
+      '" fill-opacity="0.85"/>');
+    out.push('<text x="' + (W / 2 - w / 2 + 4) + '" y="' +
+      ((tip + base) / 2 + 3.5) + '" fill="' + ink +
+      '" fill-opacity="0.85" font-size="10" font-weight="600">' +
+      esc(m.out) + "</text>");
+    return out.join("");
   }
 
   function pill(x, y, text, ink, anchor) {

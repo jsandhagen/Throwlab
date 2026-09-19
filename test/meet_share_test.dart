@@ -298,6 +298,30 @@ void main() {
       expect(first['name'], 'Sandhagen');
       expect(first['mark'], '46.55 m');
       expect(first['fraction'], inInclusiveRange(0, 1));
+      // Nothing is off this board, so nothing carries an edge.
+      expect(marks.every((m) => !m.containsKey('off')), isTrue);
+    });
+
+    test('says how far out a mark the band broke off landed', () {
+      final made = meet();
+      made.entries.addAll([
+        entry('e1', 'Runaway', [MeetAttempt.untracked(60)],
+            order: 0, tracked: false),
+        entry('e2', 'Mine', [MeetAttempt.mark('m1')], order: 1),
+        entry('e3', 'Rival', [MeetAttempt.untracked(40.4)],
+            order: 2, tracked: false),
+      ]);
+      final board =
+          feedOf(made, [mark('m1', 'Mine', 40.2)])['board'] as Map;
+      final runaway = (board['marks'] as List)
+          .firstWhere((m) => m['name'] == 'Runaway');
+      // Off the far edge, with how far past it — a distance, so it is
+      // spelled here rather than subtracted in a browser. The page draws
+      // an arrow that way and prints this beside it.
+      expect(runaway['off'], 'far');
+      expect(runaway['out'], endsWith(' m'));
+      expect(double.parse((runaway['out'] as String).split(' ').first),
+          closeTo(60 - (board['far'] as double), 0.005));
     });
 
     test('names the coach’s own as the page’s until somebody chooses', () {

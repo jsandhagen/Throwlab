@@ -247,8 +247,31 @@ class MeetBoard {
           place.best!,
     ]..sort((a, b) => b.compareTo(a));
 
+    // What survives being outside the band. A board that has broken is
+    // drawing one close run of the competition; everything past the gap is
+    // a label pinned to its edge, and every one of those costs a row of
+    // the picture the board exists to draw. So only the ones that answer
+    // something the band cannot get one: the lead, the cut, and whoever
+    // the board is being read for.
+    //
+    // Second and third, a long way up, are not those. They are a list —
+    // and the standings are the list. A leader five meters clear is worth
+    // an arrow and the silver behind him is not, which is the same
+    // judgement that broke the band in the first place.
+    //
+    // The cut is a place on the sector rather than a line of its own: it
+    // gets no line when somebody is already standing exactly on it, and
+    // dropping that somebody would take the cut off the board with them.
+    final shown = [
+      for (final mark in marks)
+        if ((mark.distance >= lowest && mark.distance <= highest) ||
+            _worthTheEdge(mark.line) ||
+            (standings.hasCut && mark.distance == cutMark))
+          mark,
+    ];
+
     return MeetBoard._(
-      marks: marks,
+      marks: shown,
       others: others,
       near: lowest,
       far: highest,
@@ -299,8 +322,8 @@ class MeetBoard {
   double get span => far - near;
 
   /// Whether every line drawn is inside the band. False once a coach has
-  /// zoomed past the spread of the competition, which the board says at its
-  /// edges rather than by quietly dropping a mark.
+  /// zoomed past the spread of the competition, which the board says at
+  /// its edges rather than by quietly dropping the marks that matter.
   bool get holdsEveryMark =>
       marks.every((mark) => mark.distance >= near && mark.distance <= far);
 
@@ -327,6 +350,18 @@ class MeetBoard {
     return out;
   }
 }
+
+/// Whether a mark the band could not hold is still worth pinning to the
+/// board's edge.
+///
+/// The lead, because that is what the competition is; the cut, because
+/// that is what a throw has to beat; and the athletes the board is being
+/// read for, because a board that lost them is no board at all — the same
+/// reason a zoom is not allowed to lose them either.
+bool _worthTheEdge(BoardLine line) => switch (line) {
+  BoardLine.first || BoardLine.cut || BoardLine.upNow || BoardLine.mine => true,
+  BoardLine.second || BoardLine.third => false,
+};
 
 /// The depths the band can be drawn at, in meters — what zooming steps
 /// through, shallowest first.

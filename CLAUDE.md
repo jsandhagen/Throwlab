@@ -608,9 +608,18 @@ like the app rather than a bare Material default.
   going deeper picks up another mark. When one doesn't, the board *breaks*
   rather than zooming out: it keeps the run of the competition around the
   athlete it belongs to (whoever is in the circle, else the coach's own) and
-  draws whatever is outside as an arrow off the edge carrying its mark and
+  draws what is outside as an arrow off the edge carrying its mark and
   how far out it landed — a leader five meters clear is worth an arrow, not
-  worth squashing the fight for second into an inch of sector. The band's
+  worth squashing the fight for second into an inch of sector.
+  Not all of it, though: a line pinned to the edge costs a row of the
+  picture the board exists to draw, so only the ones the band cannot
+  answer for get one — the lead, the cut, and whoever the board is being
+  read for (`_worthTheEdge`). Second and third, a long way up, are a list,
+  and the standings are the list; four labels stacked at one edge is four
+  rows spent saying 'there are people up there'. The exception is the
+  athlete standing exactly on the cut, who is kept whatever their place:
+  the cut gets no line of its own when somebody is already on it, so
+  dropping them would take the cut off the board with them. The band's
   edges snap to the marker lines so it moves a line at a time instead of
   sliding under every throw. The ground past the cut is shaded to its own
   arc rather than to a horizontal edge: a throw lands the same distance out
@@ -626,8 +635,13 @@ like the app rather than a bare Material default.
   at one, the mark at the other — with the line running between them, and
   they sit level with the ends of their own arc rather than with its middle,
   which is what makes a label read as belonging to a line. A mark the band
-  broke off has no line to leave room for, so it gets one solid pill and the
-  arrow. The name is `MeetBoardMark.boardName`: the surname and whatever the
+  broke off has no line to leave room for, so it gets one solid pill — the
+  name at one end and the mark at the other, the backdrop at full weight
+  where the pair are translucent — with the arrow and how far out it
+  landed riding outside it. That arrow hangs past the pill, so an edge
+  label is given room for it on both sides when the labels are stacked
+  clear of each other: the lead and the cut can be off the same edge at
+  once, which is exactly the board that has broken. The name is `MeetBoardMark.boardName`: the surname and whatever the
   sheet put in brackets after it, never the initial — 'Achebe (Croydon)'.
   A program spells a name for somebody who knows nobody; a board is read by
   somebody watching the competition, and the initial is a third of the width

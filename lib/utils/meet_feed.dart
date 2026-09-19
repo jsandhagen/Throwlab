@@ -440,8 +440,18 @@ Map<String, dynamic> _board(MeetBoard board) => {
             'mark': formatDistance(mark.distance, mark.unit),
             'tracked': mark.tracked,
             'fraction': board.fractionOf(mark.distance),
-            if (board.fractionOf(mark.distance) > 1) 'off': 'far',
-            if (board.fractionOf(mark.distance) < 0) 'off': 'near',
+            if (board.fractionOf(mark.distance) > 1) ...{
+              'off': 'far',
+              // How far past the edge it landed, which is the whole of
+              // what an arrow says — and a distance, so it is spelled
+              // here in the unit the mark was measured in rather than
+              // subtracted in a browser.
+              'out': formatDistance(mark.distance - board.far, mark.unit),
+            },
+            if (board.fractionOf(mark.distance) < 0) ...{
+              'off': 'near',
+              'out': formatDistance(board.near - mark.distance, mark.unit),
+            },
           },
       ],
     };
