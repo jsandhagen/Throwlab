@@ -94,6 +94,27 @@ Checked items are implemented (at least in a first version). The phases are a su
 ## Phase 9 — Coach tools
 
 - [x] Training notes per athlete — headings, lists, checklists, pictures with captions
+- [ ] Follow a set of athletes on the coach's own screen, the way the page
+      already lets a spectator. `MeetEventScreen` reads 'yours' off
+      `MeetEntry.tracked`, which is the whole roster and cannot be narrowed:
+      a coach standing at a ring with four in the field wants the board hung
+      on the two still in the cut, and at the next ring wants the other two.
+      `competitionFeed(following:)` and `MeetBoard(following:)` already take
+      a set and already work the same sentences out around it — the page asks
+      the question and the screen does not, so what is missing is where a
+      coach answers it, not what the answer does. Tracked stays the default,
+      since it is right until somebody says otherwise.
+- [ ] Carry a followed set over the relay. The phone pushes one feed and
+      `worker/` serves it to everybody, so a competition worked out around
+      whoever is reading it is the one thing the relay cannot do as built.
+      Measured on a field of 16: only `places` and `board` move, 3 places of
+      16 and only their `mine` and `consistency` — well under a kilobyte per
+      athlete. So the shape is a base feed plus a per-athlete overlay, and
+      the page applies the one it is following rather than working anything
+      out. A *set* is the open part: the band hangs on the best placed of
+      them and every one of them gets a line, so overlays do not simply
+      compose, and whatever composes them must not become a second
+      implementation of the competition living in JavaScript.
 - [ ] Saved coaching cue library (reusable text annotations)
 - [ ] Session management (date, conditions, location)
 - [ ] Wind speed/direction logging
