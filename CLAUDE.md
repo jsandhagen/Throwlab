@@ -648,6 +648,19 @@ like the app rather than a bare Material default.
   already answered. Only the labels move to avoid each other — the lines
   stay where the throws put them, and a label that had to slide grows a
   leader back to its own line.
+  Both renderings stack them the same way or neither can be looked at
+  against the other: down a running ceiling, furthest first, each label
+  kept clear of the one above it and one pinned to an edge given the room
+  its arrow needs on *both* sides rather than only under it — the lead and
+  the cut can be off the same edge at once, which is the board that has
+  broken. Every line is drawn before any label, too: a line drawn after one
+  cuts straight through it, which is why `SectorBoard` makes two passes and
+  why `spectator_page` does. The page had neither, and it took a
+  competition with the cut broken off the far edge to show it —
+  `web_following`, where a followed athlete's arc was painted across the
+  pill of the athlete standing on the cut. Those three followed states are
+  the ones with no app counterpart to stand beside, which is how it went
+  unseen.
 - A label on the board is two pills at the edges of the box — place and name
   at one, the mark at the other — with the line running between them, and
   they sit level with the ends of their own arc rather than with its middle,

@@ -653,6 +653,12 @@ const String _page = r'''<!doctype html>
      Room above the furthest line for its label, and below the nearest one
      so it doesn't sit on the bottom edge — the app's own two pads. */
   var TOP = 30, BOTTOM_PAD = 14, TAKE = 0.46;
+  /* One row of labels, and the extra a label pinned to an edge wants for
+     the arrow that rides outside its pill. The app's own numbers: a label
+     measured at the theme's own size plus its clearance, and _arrowRoom.
+     Both sides stack a broken board the same way or neither can be looked
+     at against the other. */
+  var ROW = 24, ARROW = 11;
 
   /* The box the board is drawn in. The app gives it half the view — the
      room under the tabs, not the whole window — never squarer than 0.75
@@ -805,40 +811,57 @@ const String _page = r'''<!doctype html>
             : endY(g, radiusAt(g, f));
       return { m: m, f: f, y: y, want: y };
     }).sort(function (a, c2) { return a.y - c2.y; });
-    for (var i = 1; i < labels.length; i++) {
-      /* An arrow hangs outside its own pill, so a label pinned to an edge
-         is given the room for it — the lead and the cut can both be off
-         the same edge at once, which is the board that has broken, and
-         without this the second one's arrow is drawn through the first
-         one's pill. The app's own layout leaves the same room. */
-      var room = 24 + (labels[i].m.out || labels[i - 1].m.out ? 11 : 0);
-      if (labels[i].y - labels[i - 1].y < room) {
-        labels[i].y = labels[i - 1].y + room;
-      }
+    /* Stacked the way the app stacks them, down a running ceiling: each
+       label kept clear of the one above it, and one pinned to an edge
+       given the room its arrow needs on *both* sides rather than only
+       under it. The arrow hangs outside the pill, and the lead and the cut
+       can be off the same edge at once — that is the board that has
+       broken — so a single gap between two of them draws the second one's
+       arrow through the first one's pill. */
+    var ceiling = g.top;
+    labels.forEach(function (L) {
+      var room = L.m.off ? ARROW : 0;
+      L.y = Math.max(L.y, ceiling + room);
+      ceiling = L.y + ROW + room;
+    });
+    /* Stacking them can push the last one off the bottom; lifting the
+       whole set keeps the gaps and loses only the padding under it. */
+    var over = labels.length ? labels[labels.length - 1].y - g.floor : 0;
+    if (over > 0) {
+      labels.forEach(function (L) { L.y = Math.max(g.top, L.y - over); });
     }
+
+    /* Arcs first and labels after, which is the order the app paints them
+       in and the whole reason it makes two passes: a line drawn later
+       cuts straight through the label of the mark above it, and on a
+       board that has broken the label above it is a pill pinned to the
+       edge with nothing between the two. */
+    labels.forEach(function (L) {
+      var m = L.m;
+      if (m.off) return;
+      var ink = INK[m.line] || "var(--text)";
+      /* A podium line is drawn in the metal itself rather than in its
+         flat tone: an arc across the sector is the one thing here with
+         the room to show a ramp. The leader's line and the one in the
+         circle are struck heavier, as the app strikes them. */
+      var line = RAMPED[m.line] ? "url(#m-" + m.line + ")" : ink;
+      var lead = m.line === "first" || m.line === "upNow";
+      out.push('<path d="' + arc(g, L.f) + '" fill="none" stroke="' + line +
+        '" stroke-width="' +
+        (m.line === "cut" ? 1.4 : lead ? 2.6 : 2) + '"' +
+        (m.line === "cut" ? ' stroke-dasharray="6 5" opacity="0.9"' : "") +
+        "/>");
+      /* A marker at the middle of the line, for the athlete the board is
+         being read for — it is how the app says which of these is theirs
+         without spending a second color on it. */
+      if (m.line === "upNow" || m.line === "mine") {
+        out.push('<circle cx="' + g.ax + '" cy="' + yAt(g, L.f) +
+          '" r="4" fill="' + ink + '"/>');
+      }
+    });
 
     labels.forEach(function (L) {
       var m = L.m, ink = INK[m.line] || "var(--text)";
-      if (!m.off) {
-        /* A podium line is drawn in the metal itself rather than in its
-           flat tone: an arc across the sector is the one thing here with
-           the room to show a ramp. The leader's line and the one in the
-           circle are struck heavier, as the app strikes them. */
-        var line = RAMPED[m.line] ? "url(#m-" + m.line + ")" : ink;
-        var lead = m.line === "first" || m.line === "upNow";
-        out.push('<path d="' + arc(g, L.f) + '" fill="none" stroke="' + line +
-          '" stroke-width="' +
-          (m.line === "cut" ? 1.4 : lead ? 2.6 : 2) + '"' +
-          (m.line === "cut" ? ' stroke-dasharray="6 5" opacity="0.9"' : "") +
-          "/>");
-        /* A marker at the middle of the line, for the athlete the board is
-           being read for — it is how the app says which of these is theirs
-           without spending a second color on it. */
-        if (m.line === "upNow" || m.line === "mine") {
-          out.push('<circle cx="' + g.ax + '" cy="' + yAt(g, L.f) +
-            '" r="4" fill="' + ink + '"/>');
-        }
-      }
       var named = (m.label ? m.label + "  " : "") + m.name;
       if (m.off) {
         /* Broken off the band: pinned to the edge it went out of, rather
