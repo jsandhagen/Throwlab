@@ -104,7 +104,7 @@ void main() {
     final athletes = AthleteLibrary();
     await athletes.load();
     await athletes.save(const AthleteRecord(
-        name: 'Dave', fullName: 'David Okonkwo', school: 'Eastside'));
+        name: 'Dave', firstName: 'David', lastName: 'Okonkwo', school: 'Eastside'));
 
     await tester.pumpWidget(
       MultiProvider(

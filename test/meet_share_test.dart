@@ -6,6 +6,7 @@ import 'package:flutter/material.dart' show ColorScheme;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:throwlab/models/meet.dart';
+import 'package:throwlab/models/meet_board.dart' show boardNameOf;
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
@@ -505,6 +506,32 @@ void main() {
   /// publisher pushing at a relay spends it on whether there is anything
   /// worth uploading at all. A hash that moved on its own clock would turn
   /// a competition standing still into a push every few seconds.
+  group('the names on the board', () {
+    test('carries the coach\'s own answer out to the page', () {
+      final made = meet();
+      made.entries.addAll([
+        entry('e1', 'Anna Sofia', [MeetAttempt.mark('m1')], order: 0),
+        entry('e2', 'N. Achebe (Croydon)', [MeetAttempt.untracked(45.10)],
+            order: 1, tracked: false),
+      ]);
+      final read = feedOf(made, [mark('m1', 'Anna Sofia', 46.55)]);
+      // Left to guess, 'Anna Sofia' is drawn across the sector as 'Sofia'.
+      expect([for (final m in read['board']['marks']) m['name']],
+          ['Sofia', 'Achebe (Croydon)']);
+
+      // The screen and the page are one competition read twice, so the
+      // record reaches both by the same route: already spelled, exactly as
+      // every mark on the page is.
+      final said = competitionFeed(made, only(made), [mark('m1', 'Anna Sofia', 46.55)],
+          boardNames: (athlete) =>
+              athlete == 'Anna Sofia' ? 'Anna Sofia' : boardNameOf(athlete));
+      expect([for (final m in said['board']['marks']) m['name']],
+          ['Anna Sofia', 'Achebe (Croydon)']);
+      // And nothing else about the competition moved.
+      expect(said['places'].first['name'], 'Anna Sofia');
+    });
+  });
+
   group('the payload', () {
     ShareSource sourceOf(Meet made, List<ThrowResult> results) => ShareSource(
           meetId: made.id,

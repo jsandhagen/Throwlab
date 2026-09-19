@@ -7,7 +7,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, and the full name and school a heat sheet is matched against), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
@@ -264,6 +264,22 @@ like the app rather than a bare Material default.
   what `heat_sheet_parser.matchAthlete` links a program's entry against, so
   an athlete filed under a nickname a sheet would never print is still found
   on one — by the full name, or by the same surname at the same school.
+  The name is two fields, `firstName` and `lastName`, and `fullName` is what
+  they come to. Which half is the family name is not something to be worked
+  out from a string: everything that shortens a name to what a board has
+  room for read the last word, which is right for 'Nnamdi Achebe', wrong for
+  'Anna Sofia' — two given names, drawn across a sector as 'Sofia' — and
+  wrong the other way for 'Anna van der Berg', whose surname is three words
+  and matched a heat sheet on none of them. So the coach says once, and
+  `AthleteRecord.boardName` is the answer: the family name, or the given name
+  where they have said there is no other. `athleteBoardName` is where a
+  record beats the guess, `AthleteLibrary.boardName` is the one call that
+  makes it (the counterpart of `displayName`, with `boardNameFor` as its soft
+  helper), and `boardNameOf` is still the reading for an athlete nobody has
+  filled anything in for — the last word, which is right far more often than
+  it is wrong. A record stored before the name had two halves is split on
+  that same reading, so nothing moves on the day of the upgrade and the
+  coach is looking at two fields they can put right.
 - A heat sheet heading that names a division but no weight is guessed at in
   `heat_sheet_parser`: a bare 'Men'/'Women' is the senior implement, and
   'Boys'/'Girls'/'High School'/U18-and-under is the U.S. school one — the
@@ -646,7 +662,13 @@ like the app rather than a bare Material default.
   sheet put in brackets after it, never the initial — 'Achebe (Croydon)'.
   A program spells a name for somebody who knows nobody; a board is read by
   somebody watching the competition, and the initial is a third of the width
-  of every label on the sector.
+  of every label on the sector. Which word the surname is comes off the
+  athlete's record where there is one: `MeetBoard(boardNames:)` takes the
+  resolver, threaded exactly as `isPersonalBest` is — through
+  `competitionFeed`, `ShareSource` and `MeetServer`/`MeetRelay.start` — so
+  the screen and the page are handed the same name already cut, the way they
+  are handed every mark already spelled. Nothing but the label moves:
+  `MeetBoardMark.name` stays the athlete tag every throw of theirs carries.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as

@@ -217,7 +217,7 @@ Flight 2 of 2
       achievedOn: DateTime(2026, 5, 1),
     ));
     await athletes.save(const AthleteRecord(
-        name: 'Bud', fullName: 'Robert Fischer', school: 'Central HS'));
+        name: 'Bud', firstName: 'Robert', lastName: 'Fischer', school: 'Central HS'));
     await open(tester);
     await paste(
         tester,

@@ -10,6 +10,7 @@ import '../models/meet_board.dart';
 import '../models/throw_event.dart';
 import '../models/throw_mark.dart';
 import '../models/throw_video.dart';
+import '../services/athlete_library.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
@@ -380,8 +381,10 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// and everything they look down for is the same thing — who is up, what
   /// it will take, and the number they are about to write.
   Widget _liveView(Meet meet, MeetStandings standings, MeetFlight flight) {
-    final board =
-        MeetBoard(standings, inTheCircle: flight.inTheCircle, span: _span);
+    final board = MeetBoard(standings,
+        inTheCircle: flight.inTheCircle,
+        span: _span,
+        boardNames: (athlete) => boardNameFor(context, athlete));
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final library = context.read<VideoLibrary>();

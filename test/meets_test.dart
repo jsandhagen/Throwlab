@@ -1175,6 +1175,30 @@ void main() {
       expect(boardNameOf(''), '');
     });
 
+    test('takes the name the coach filled in over its own reading', () {
+      // The guess is wrong for 'Anna Sofia', which is two given names — and
+      // there is no rule over a string that would know. So the record
+      // answers, and the board stops guessing for whoever it holds one for.
+      final board = MeetBoard(
+        table(field([
+          ('Anna Sofia', 44.90, true),
+          ('N. Achebe (Croydon)', 43.06, false),
+        ])),
+        boardNames: (athlete) =>
+            athlete == 'Anna Sofia' ? 'Anna Sofia' : boardNameOf(athlete),
+      );
+      expect([for (final mark in board.marks) mark.boardName],
+          ['Anna Sofia', 'Achebe (Croydon)']);
+      // The name itself is untouched — it is the athlete tag every throw of
+      // theirs carries, and the board only decides what to draw.
+      expect(board.marks.first.name, 'Anna Sofia');
+    });
+
+    test('reads a name off the spelling when nobody has said', () {
+      final board = MeetBoard(table(field([('Anna Sofia', 44.90, true)])));
+      expect(board.marks.single.boardName, 'Sofia');
+    });
+
     test('draws the podium, furthest first', () {
       final board = MeetBoard(table(field([
         ('Ana Diaz', 41.20, false),

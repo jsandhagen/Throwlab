@@ -33,7 +33,8 @@ class MeetBoardMark {
     required this.name,
     required this.tracked,
     this.place,
-  });
+    String? boardName,
+  }) : _boardName = boardName;
 
   final BoardLine line;
 
@@ -63,7 +64,13 @@ class MeetBoardMark {
   /// also the part that makes every label on the sector a third wider than
   /// it needs to be. The school stays: it is how two throwers with the same
   /// surname are told apart, and it is what a coach shouts.
-  String get boardName => boardNameOf(name);
+  ///
+  /// Handed in where the coach has said which half of the name is the
+  /// family one ([AthleteRecord]), and read off the spelling otherwise —
+  /// see [boardNameOf], which is a guess and says so.
+  String get boardName => _boardName ?? boardNameOf(name);
+
+  final String? _boardName;
 
   /// '1st', '2nd', '3rd', 'the cut', '5th'.
   ///
@@ -115,11 +122,15 @@ class MeetBoard {
   /// drawn as [BoardLine.mine], and the run of the competition the band is
   /// hung on, follow them instead of the coach's own. Empty is the coach's
   /// own screen, which is every board inside the app.
+  /// [boardNames] is how an athlete is named on a board, for the ones the
+  /// coach has filled a record in for. Without it every label is read off
+  /// the spelling the throws carry, which is [boardNameOf]'s guess.
   factory MeetBoard(
     MeetStandings standings, {
     MeetEntry? inTheCircle,
     double? span,
     Iterable<MeetEntry>? following,
+    String Function(String athlete)? boardNames,
   }) {
     // Whose board this is: the athletes somebody is following, and the
     // coach's whole roster when nobody has said. A set either way — a
@@ -159,6 +170,7 @@ class MeetBoard {
           unit: unitOf(placed[i]),
           name: placed[i].entry.athlete,
           tracked: placed[i].entry.tracked,
+          boardName: boardNames?.call(placed[i].entry.athlete),
         ),
     ];
     final drawn = {for (final mark in marks) mark.distance};
@@ -186,6 +198,7 @@ class MeetBoard {
         name: place.entry.athlete,
         tracked: place.entry.tracked,
         place: place.place,
+        boardName: boardNames?.call(place.entry.athlete),
       ));
       drawn.add(place.best!);
     }
@@ -554,6 +567,14 @@ double? _over(List<double> at, double of) {
   return null;
 }
 
+/// A name cut to what a board has room for, read off the spelling alone.
+///
+/// A guess, and the only one available about somebody the coach has filled
+/// nothing in for: the last word is the surname for most of the names a
+/// meet prints, and is a given name for plenty of others. Where it matters
+/// it is answered rather than guessed — see [AthleteRecord.lastName], which
+/// is what [athleteBoardName] prefers.
+///
 /// A name cut to what a board has room for: the surname, keeping whatever a
 /// heat sheet put in brackets after it.
 ///

@@ -1859,15 +1859,18 @@ class _AthleteEditDialog extends StatefulWidget {
 class _AthleteEditDialogState extends State<_AthleteEditDialog> {
   late final TextEditingController _nickname =
       TextEditingController(text: widget.record.nickname);
-  late final TextEditingController _fullName =
-      TextEditingController(text: widget.record.fullName);
+  late final TextEditingController _firstName =
+      TextEditingController(text: widget.record.firstName);
+  late final TextEditingController _lastName =
+      TextEditingController(text: widget.record.lastName);
   late final TextEditingController _school =
       TextEditingController(text: widget.record.school);
 
   @override
   void dispose() {
     _nickname.dispose();
-    _fullName.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
     _school.dispose();
     super.dispose();
   }
@@ -1897,12 +1900,26 @@ class _AthleteEditDialogState extends State<_AthleteEditDialog> {
               ),
             ),
             const SizedBox(height: 12),
+            // Two fields, because which half is the family name is not
+            // something to be worked out from one. 'Anna Sofia' is two
+            // given names, and everything that shortens a name to what a
+            // board has room for was drawing her across the sector as
+            // 'Sofia'.
             TextField(
-              controller: _fullName,
+              controller: _firstName,
               textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(
-                labelText: 'Full name',
-                helperText: 'How a meet program prints them',
+                labelText: 'First name',
+                helperText: 'As a meet program prints it',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _lastName,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Last name',
+                helperText: 'What a board and a sector call them',
               ),
             ),
             const SizedBox(height: 12),
@@ -1926,7 +1943,8 @@ class _AthleteEditDialogState extends State<_AthleteEditDialog> {
             context,
             widget.record.copyWith(
               nickname: _nickname.text.trim(),
-              fullName: _fullName.text.trim(),
+              firstName: _firstName.text.trim(),
+              lastName: _lastName.text.trim(),
               school: _school.text.trim(),
             ),
           ),

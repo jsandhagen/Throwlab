@@ -543,7 +543,10 @@ String? matchKnown(String sheet, List<String> known) {
 /// school a coach may have filled in on their record.
 class KnownAthlete {
   const KnownAthlete(
-      {required this.name, this.fullName = '', this.school = ''});
+      {required this.name,
+      this.fullName = '',
+      this.lastName = '',
+      this.school = ''});
 
   /// The library's own spelling — what a match is filed under, whichever
   /// field it was found on.
@@ -552,6 +555,11 @@ class KnownAthlete {
   /// The full name a program prints, when the library knows them by
   /// something shorter or by a nickname. Blank when the coach hasn't said.
   final String fullName;
+
+  /// Their family name, where the coach has said which part of the name it
+  /// is. The surname match below reads the last word of a name otherwise,
+  /// which calls 'Anna van der Berg' a Berg and 'Anna Sofia' a Sofia.
+  final String lastName;
 
   /// Their school or club, for the surname-and-school match below. Blank
   /// when unset.
@@ -577,13 +585,33 @@ String? matchAthlete(String sheet, String team, List<KnownAthlete> known) {
   if (team.trim().isEmpty) return null;
   for (final athlete in known) {
     if (athlete.school.isEmpty || !sameSchool(team, athlete.school)) continue;
-    if (_sharesSurname(sheet, athlete.name) ||
-        (athlete.fullName.isNotEmpty &&
-            _sharesSurname(sheet, athlete.fullName))) {
-      return athlete.name;
-    }
+    if (_surnameMatches(sheet, athlete)) return athlete.name;
   }
   return null;
+}
+
+/// Whether a name on a sheet carries this athlete's surname.
+///
+/// The coach's own answer wins where there is one, and it is the answer
+/// that matters here: a surname read off a string is its last word, which
+/// makes 'Anna van der Berg' a Berg and never matches the sheet that prints
+/// her in full. Without a record it is the last word, as it always was.
+bool _surnameMatches(String sheet, KnownAthlete athlete) {
+  if (athlete.lastName.isNotEmpty) return _endsOnSurname(sheet, athlete.lastName);
+  return _sharesSurname(sheet, athlete.name) ||
+      (athlete.fullName.isNotEmpty && _sharesSurname(sheet, athlete.fullName));
+}
+
+/// Whether [sheet] ends on [surname], however many words that is.
+bool _endsOnSurname(String sheet, String surname) {
+  final name = _tokens(sheet);
+  final family = _tokens(surname);
+  if (family.isEmpty || name.length < family.length) return false;
+  final tail = name.sublist(name.length - family.length);
+  for (var i = 0; i < family.length; i++) {
+    if (tail[i] != family[i]) return false;
+  }
+  return true;
 }
 
 /// Whether two names end on the same surname — the looser half of a

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/athlete_record.dart';
+import '../models/meet_board.dart' show boardNameOf;
 
 /// Persists the editable athlete records — the nickname, full name and
 /// school a coach fills in about the people they coach.
@@ -69,6 +70,15 @@ class AthleteLibrary extends ChangeNotifier {
   /// reads through the whole app.
   String displayName(String name) => _records[_key(name)]?.displayName ?? name;
 
+  /// The name a board has room for: the family name the coach filled in,
+  /// else the last word of the library spelling.
+  ///
+  /// The counterpart of [displayName], and looked up the same way — a name
+  /// is shortened in one place so a surname set once reads through every
+  /// board, the app's own and the one a stand is holding.
+  String boardName(String name) =>
+      athleteBoardName(name, _records[_key(name)]);
+
   /// Files [record] under its name, or drops it when the coach has cleared
   /// every field — an empty record is nothing worth keeping.
   Future<void> save(AthleteRecord record) async {
@@ -119,3 +129,9 @@ AthleteLibrary? athleteRecordsOf(BuildContext context, {bool listen = true}) {
 /// name unchanged when none are.
 String displayNameOf(BuildContext context, String name, {bool listen = true}) =>
     athleteRecordsOf(context, listen: listen)?.displayName(name) ?? name;
+
+/// [AthleteLibrary.boardName] against whatever records are in scope, and
+/// the plain reading of the name when none are.
+String boardNameFor(BuildContext context, String name, {bool listen = true}) =>
+    athleteRecordsOf(context, listen: listen)?.boardName(name) ??
+    boardNameOf(name);

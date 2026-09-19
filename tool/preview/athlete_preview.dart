@@ -58,7 +58,8 @@ void main() {
     await athletes.save(const AthleteRecord(
         name: 'Adam',
         nickname: 'AJ',
-        fullName: 'Adam Okafor',
+        firstName: 'Adam',
+        lastName: 'Okafor',
         school: 'Central HS'));
 
     // Sessions on one implement, meet marks, and written-up notes. Two

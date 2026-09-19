@@ -26,6 +26,8 @@ import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/models/throw_mark.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/screens/meet_event_screen.dart';
+import 'package:throwlab/models/athlete_record.dart';
+import 'package:throwlab/services/athlete_library.dart';
 import 'package:throwlab/services/meet_library.dart';
 import 'package:throwlab/services/meet_server.dart';
 import 'package:throwlab/services/video_library.dart';
@@ -161,6 +163,14 @@ void main() {
     await library.load();
     final meets = MeetLibrary();
     await meets.load();
+    // 'Anna Sofia' is two given names and no surname, which is the case a
+    // board cannot read off a string: left to guess, every label across the
+    // sector calls her Sofia. The coach has said so on her record, and both
+    // renderings read it from there.
+    final records = AthleteLibrary();
+    await records.load();
+    await records
+        .save(const AthleteRecord(name: 'Anna Sofia', firstName: 'Anna Sofia'));
 
     // A real socket, on the loopback, reading a plausible address back: the
     // sheet has to show the link a coach would actually be handed.
@@ -177,6 +187,7 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider<VideoLibrary>.value(value: library),
+            ChangeNotifierProvider<AthleteLibrary>.value(value: records),
             ChangeNotifierProvider<MeetLibrary>.value(value: meets),
             ChangeNotifierProvider<MeetServer>.value(value: server),
           ],
@@ -254,6 +265,7 @@ void main() {
             at: DateTime.utc(2026, 6, 13, 14, 32),
             isPersonalBest: library.isPersonalBest,
             following: following,
+            boardNames: records.boardName,
           );
       // One answer per set of athletes somebody could be here to watch.
       // The page asks who on the way in and sends the answer up with its

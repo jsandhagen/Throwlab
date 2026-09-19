@@ -58,6 +58,7 @@ class ShareSource {
     required this.meet,
     required this.results,
     this.isPersonalBest,
+    this.boardNames,
   });
 
   final String meetId;
@@ -67,6 +68,12 @@ class ShareSource {
   final Meet? Function() meet;
   final List<ThrowResult> Function() results;
   final bool Function(ThrowResult)? isPersonalBest;
+
+  /// How an athlete is named on a board, for the ones the coach has filled
+  /// a record in for. The record book lives on the phone and the board is
+  /// drawn in a browser, so the answer travels already spelled — exactly
+  /// as every mark on the page does.
+  final String Function(String athlete)? boardNames;
 
   /// Whether this is the competition being asked after — the meet, the
   /// event *and* the weight, since that is the contest an athlete is placed
@@ -97,7 +104,10 @@ class ShareSource {
     final competition = _within(held);
     if (competition == null) return null;
     return SharePayload(competitionFeed(held, competition, results(),
-        at: at, isPersonalBest: isPersonalBest, following: following));
+        at: at,
+        isPersonalBest: isPersonalBest,
+        following: following,
+        boardNames: boardNames));
   }
 
   /// The competition packaged for the coach's own reading, and again for

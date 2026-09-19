@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:qr/qr.dart';
 
 import '../models/meet.dart';
+import '../services/athlete_library.dart';
 import '../services/meet_library.dart';
 import '../services/meet_relay.dart';
 import '../services/video_library.dart';
@@ -71,6 +72,7 @@ class _ShareSheetState extends State<_ShareSheet> {
     // The app's own colors, handed over so the page paints in them rather
     // than in ones matched by eye. The theme stays main.dart's to decide.
     final scheme = Theme.of(context).colorScheme;
+    final records = athleteRecordsOf(context, listen: false);
     setState(() => _working = true);
     await relay.start(
       meetId: widget.meet.id,
@@ -83,6 +85,11 @@ class _ShareSheetState extends State<_ShareSheet> {
       meet: () => meets.byId(widget.meet.id),
       results: () => library.results,
       isPersonalBest: library.isPersonalBest,
+      // Read here rather than in the feed: the records are the coach's own
+      // and live on the phone, so the page is handed a name already cut to
+      // what a board has room for, exactly as it is handed a mark already
+      // spelled.
+      boardNames: records?.boardName,
       // What says the competition has moved. The meet and the record book
       // together, because a mark lands in both.
       changes: Listenable.merge([meets, library]),

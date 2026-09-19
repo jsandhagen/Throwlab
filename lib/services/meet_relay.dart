@@ -168,6 +168,7 @@ class MeetRelay extends ChangeNotifier {
     required Meet? Function() meet,
     required List<ThrowResult> Function() results,
     bool Function(ThrowResult)? isPersonalBest,
+    String Function(String athlete)? boardNames,
     Listenable? changes,
   }) async {
     if (base.isEmpty) {
@@ -190,6 +191,7 @@ class MeetRelay extends ChangeNotifier {
         meet: meet,
         results: results,
         isPersonalBest: isPersonalBest,
+        boardNames: boardNames,
       ),
     );
     _byToken[token] = share;

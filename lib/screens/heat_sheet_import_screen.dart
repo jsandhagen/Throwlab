@@ -98,6 +98,7 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
         KnownAthlete(
           name: name,
           fullName: records?.recordFor(name)?.fullName ?? '',
+          lastName: records?.recordFor(name)?.lastName ?? '',
           school: records?.recordFor(name)?.school ?? '',
         ),
     ];

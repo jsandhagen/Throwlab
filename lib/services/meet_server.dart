@@ -140,6 +140,7 @@ class MeetServer extends ChangeNotifier {
     required Meet? Function() meet,
     required List<ThrowResult> Function() results,
     bool Function(ThrowResult)? isPersonalBest,
+    String Function(String athlete)? boardNames,
   }) async {
     _scheme = scheme;
     final already = _find(meetId, event, implementKg);
@@ -164,6 +165,7 @@ class MeetServer extends ChangeNotifier {
         meet: meet,
         results: results,
         isPersonalBest: isPersonalBest,
+        boardNames: boardNames,
       ),
     );
     _error = null;

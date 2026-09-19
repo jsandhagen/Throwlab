@@ -57,6 +57,7 @@ Map<String, dynamic> competitionFeed(
   DateTime? at,
   bool Function(ThrowResult result)? isPersonalBest,
   Iterable<String>? following,
+  String Function(String athlete)? boardNames,
 }) {
   final held = results.toList();
   // Anybody who has left the field — taken off the meet, or the whole
@@ -71,7 +72,9 @@ Map<String, dynamic> competitionFeed(
   final flight =
       MeetFlight(competition, rounds: meet.rounds, standings: standings);
   final board = MeetBoard(standings,
-      inTheCircle: flight.inTheCircle, following: followed);
+      inTheCircle: flight.inTheCircle,
+      following: followed,
+      boardNames: boardNames);
 
 
   return {

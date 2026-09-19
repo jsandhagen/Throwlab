@@ -225,6 +225,19 @@ void main() {
 
     // The names come in as the parser hands them over — first name first,
     // however the sheet wrote them round.
+    test('matches a surname the coach spelled, however many words it is', () {
+      // Read off a string, the surname here is 'Berg' — so a sheet printing
+      // her in full shares no surname with the record and the school-backed
+      // match never fires. The coach has said which part is the family
+      // name, so it does.
+      const anna = KnownAthlete(
+          name: 'Anna', lastName: 'van der Berg', school: 'Central HS');
+      expect(matchAthlete('Anna van der Berg', 'Central HS', [anna]), 'Anna');
+      // And it is still a surname match, not a free-for-all: somebody else
+      // of the same school and another name is not her.
+      expect(matchAthlete('Mia Berg', 'Central HS', [anna]), isNull);
+    });
+
     test('finds a full name the library spelling could never reach', () {
       expect(matchAthlete('Robert Fischer', 'Central HS', [bud]), 'Bud');
       expect(matchAthlete('R Fischer', 'Central', [bud]), 'Bud');
