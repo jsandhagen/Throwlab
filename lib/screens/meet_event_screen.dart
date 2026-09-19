@@ -181,7 +181,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
             MeetFlight(competition, rounds: meet.rounds, standings: standings);
         // Softly, like the meets: a screen that offers to share still
         // paints in a test with nothing but the competition.
-        final sharing = meetServerOf(context)
+        final sharing = meetRelayOf(context)
                 ?.sharing(meet.id, widget.event, widget.implementKg) ??
             false;
 

@@ -5,7 +5,7 @@ import 'package:qr/qr.dart';
 
 import '../models/meet.dart';
 import '../services/meet_library.dart';
-import '../services/meet_server.dart';
+import '../services/meet_relay.dart';
 import '../services/video_library.dart';
 import 'throw_picker.dart';
 
@@ -18,15 +18,14 @@ import 'throw_picker.dart';
 /// phone. A coach with two rings going shares each and gets a link for
 /// each.
 ///
-/// The link is the phone's own address, so the sheet is mostly about the
-/// one thing a coach has to know for it to work: everybody has to be on the
-/// same network. That is why the wording names the hotspot — a track's
-/// guest wifi usually walls its clients off from each other, and the
-/// phone's own hotspot never does.
+/// The link is a public one now, so the sheet has one less thing to
+/// explain: it is not about which network anybody is on. What it has to
+/// say instead is that the phone has to keep signal, because the phone is
+/// still the only thing that knows what was thrown — it pushes, and a
+/// board nobody can reach is a board that stopped.
 ///
-/// A QR because nobody is typing 192.168.43.1:8080 off a screen in
-/// sunlight, and the link in full underneath because sometimes they have
-/// to.
+/// A QR because nobody is typing a hostname off a screen in sunlight, and
+/// the link in full underneath because sometimes they have to.
 Future<void> showShareCompetition(
   BuildContext context, {
   required Meet meet,
@@ -42,12 +41,12 @@ Future<void> showShareCompetition(
   );
 }
 
-/// The server, looked up softly the way the meets are: a screen that offers
+/// The relay, looked up softly the way the meets are: a screen that offers
 /// to share still paints in a test — or on a phone where the service never
 /// came up — with nothing but the meet.
-MeetServer? meetServerOf(BuildContext context, {bool listen = true}) {
+MeetRelay? meetRelayOf(BuildContext context, {bool listen = true}) {
   try {
-    return Provider.of<MeetServer>(context, listen: listen);
+    return Provider.of<MeetRelay>(context, listen: listen);
   } on ProviderNotFoundException {
     return null;
   }
@@ -66,30 +65,34 @@ class _ShareSheet extends StatefulWidget {
 class _ShareSheetState extends State<_ShareSheet> {
   bool _working = false;
 
-  Future<void> _start(MeetServer server) async {
+  Future<void> _start(MeetRelay relay) async {
     final meets = context.read<MeetLibrary>();
     final library = context.read<VideoLibrary>();
     // The app's own colors, handed over so the page paints in them rather
     // than in ones matched by eye. The theme stays main.dart's to decide.
     final scheme = Theme.of(context).colorScheme;
     setState(() => _working = true);
-    await server.start(
+    await relay.start(
       meetId: widget.meet.id,
       event: widget.competition.event,
       implementKg: widget.competition.implementKg,
       scheme: scheme,
-      // Read live, per request. The server holds no copy of the
-      // competition, so a mark entered between polls is simply there.
+      // Read live, at every push. The relay holds the answers and never a
+      // copy of the competition, so a mark entered a moment ago is in the
+      // next one.
       meet: () => meets.byId(widget.meet.id),
       results: () => library.results,
       isPersonalBest: library.isPersonalBest,
+      // What says the competition has moved. The meet and the record book
+      // together, because a mark lands in both.
+      changes: Listenable.merge([meets, library]),
     );
     if (mounted) setState(() => _working = false);
   }
 
-  Future<void> _stop(MeetServer server) async {
+  Future<void> _stop(MeetRelay relay) async {
     setState(() => _working = true);
-    await server.stop(widget.meet.id, widget.competition.event,
+    await relay.stop(widget.meet.id, widget.competition.event,
         widget.competition.implementKg);
     if (mounted) setState(() => _working = false);
   }
@@ -97,9 +100,9 @@ class _ShareSheetState extends State<_ShareSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final server = meetServerOf(context);
-    final sharing = server != null &&
-        server.sharing(widget.meet.id, widget.competition.event,
+    final relay = meetRelayOf(context);
+    final sharing = relay != null &&
+        relay.sharing(widget.meet.id, widget.competition.event,
             widget.competition.implementKg);
 
     return Padding(
@@ -130,42 +133,55 @@ class _ShareSheetState extends State<_ShareSheet> {
           const SizedBox(height: 8),
           Text(
             sharing
-                ? 'Scan this, or type it in. Everybody has to be on this '
-                    'wifi — or on this phone’s hotspot, which always works.'
-                : 'Puts this event on a page anyone here can open in a '
-                    'browser: the board, the field and the results sheet, '
-                    'updating as you enter it. Nothing is uploaded — the '
-                    'phone itself is the server, so it works with no signal.',
+                ? 'Scan this, or send it to anybody. Keep this phone on '
+                    'signal — it is what the board is being fed from.'
+                : 'Puts this event on a page anyone can open, here or at '
+                    'home: the board, the field and the results sheet, '
+                    'updating as you enter it. This phone works the '
+                    'competition out and sends it on, so it needs signal.',
             style: theme.textTheme.bodyMedium
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
           const SizedBox(height: 18),
-          if (server == null)
+          if (relay == null)
             Text('Sharing is not available.',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.error))
-          else if (sharing)
+          else if (sharing) ...[
             _Sharing(
-                server: server,
+                relay: relay,
                 meet: widget.meet,
-                competition: widget.competition)
-          else ...[
-            if (server.error != null) ...[
-              Text(server.error!,
+                competition: widget.competition),
+            // The one thing the LAN never had to say. The relay goes on
+            // answering with whatever it last heard, so a phone that has
+            // lost signal leaves a board on a stand that looks live and is
+            // an hour old, and the coach is the only one who can be told.
+            if (!relay.reaching) ...[
+              const SizedBox(height: 12),
+              Text(
+                relay.error ?? 'Not reaching the page — it is showing what '
+                    'it last had.',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.error),
+              ),
+            ],
+          ] else ...[
+            if (relay.error != null) ...[
+              Text(relay.error!,
                   style: theme.textTheme.bodyMedium
                       ?.copyWith(color: theme.colorScheme.error)),
               const SizedBox(height: 12),
             ],
             FilledButton.icon(
-              onPressed: _working ? null : () => _start(server),
-              icon: const Icon(Icons.wifi_tethering),
+              onPressed: _working ? null : () => _start(relay),
+              icon: const Icon(Icons.qr_code_2),
               label: const Text('Start sharing'),
             ),
           ],
-          if (server != null && sharing) ...[
+          if (relay != null && sharing) ...[
             const SizedBox(height: 12),
             TextButton.icon(
-              onPressed: _working ? null : () => _stop(server),
+              onPressed: _working ? null : () => _stop(relay),
               icon: const Icon(Icons.stop_circle_outlined),
               label: const Text('Stop sharing'),
             ),
@@ -178,12 +194,12 @@ class _ShareSheetState extends State<_ShareSheet> {
 
 class _Sharing extends StatelessWidget {
   const _Sharing({
-    required this.server,
+    required this.relay,
     required this.meet,
     required this.competition,
   });
 
-  final MeetServer server;
+  final MeetRelay relay;
   final Meet meet;
   final MeetCompetition competition;
 
@@ -191,7 +207,7 @@ class _Sharing extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final url =
-        server.urlFor(meet.id, competition.event, competition.implementKg) ?? '';
+        relay.urlFor(meet.id, competition.event, competition.implementKg) ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -208,7 +224,7 @@ class _Sharing extends StatelessWidget {
             child: CustomPaint(
               size: const Size.square(232),
               painter: QrPainter(
-                  server.qrFor(meet.id, competition.event,
+                  relay.qrFor(meet.id, competition.event,
                           competition.implementKg) ??
                       url),
             ),

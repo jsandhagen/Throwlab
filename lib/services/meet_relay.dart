@@ -72,6 +72,9 @@ class MeetRelay extends ChangeNotifier {
   /// somebody to throw.
   final Duration retry;
 
+  /// How long the first push waits for the medal before going without it.
+  static const _medalPatience = Duration(seconds: 2);
+
   final http.Client _client;
   final Map<String, _Share> _byToken = {};
 
@@ -321,12 +324,25 @@ class MeetRelay extends ChangeNotifier {
   Future<Map<String, dynamic>> _statics(_Share share,
       {required bool whole}) async {
     if (!whole) return const {};
-    final out = <String, dynamic>{'page': spectatorPage(share.scheme)};
+    // Without the question it asks on the way in: answering it takes
+    // something that will work the competition out again around whoever was
+    // ticked, and a relay holds one feed for everybody. Asked and ignored is
+    // a control that looks broken. ROADMAP, Phase 9.
+    final out = <String, dynamic>{
+      'page': spectatorPage(share.scheme,
+          asksWhoYouFollow: false, servedByPhone: false),
+    };
     try {
-      out['medal'] = base64Encode(await medalPng(Medal.gold, size: 48));
+      // Never the thing a link waits on. Striking the badge goes through
+      // the engine, which is quick on a phone and can be slow — or never
+      // finish at all — anywhere else, and a coach standing at a ring with
+      // no QR yet is a worse failure than a page whose medal 404s for one
+      // round. The page has coped with that since it was served off the
+      // phone.
+      out['medal'] = base64Encode(
+          await medalPng(Medal.gold, size: 48).timeout(_medalPatience));
     } catch (_) {
-      // No painter behind us (a test, a headless isolate). The page asks
-      // for it and coped with a 404 long before this.
+      // Timed out, or no painter behind us at all.
     }
     return out;
   }

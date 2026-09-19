@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'screens/home_screen.dart';
 import 'services/athlete_library.dart';
 import 'services/meet_library.dart';
+import 'services/meet_relay.dart';
 import 'services/meet_server.dart';
 import 'services/notes_library.dart';
 import 'services/video_library.dart';
@@ -54,6 +55,7 @@ class ThrowLabApp extends StatelessWidget {
         // Nothing is listening and no socket is open until a coach asks to
         // share a meet, so this costs nothing to have around.
         ChangeNotifierProvider(create: (_) => MeetServer()),
+        ChangeNotifierProvider(create: (_) => MeetRelay()),
       ],
       child: MaterialApp(
         title: 'ThrowLab',
