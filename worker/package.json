@@ -1,0 +1,16 @@
+{
+  "name": "throwlab-share",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stage": "node stage-fonts.js",
+    "dev": "npm run stage && wrangler dev",
+    "deploy": "npm run stage && wrangler deploy",
+    "test": "npm run stage && vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -13,6 +13,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
+| `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
 | `tool/preview/` | Headless UI preview harness (below) |
 
 `android/` is not in the repo: CI runs `flutter create . --platforms=android`

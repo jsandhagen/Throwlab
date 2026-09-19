@@ -1,0 +1,25 @@
+name = "throwlab-share"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# Barlow, the one thing every share serves identically. Staged out of the
+# app's own `assets/fonts/` by `npm run stage` rather than committed twice
+# — the app is where the typeface is decided.
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+[vars]
+# How long a competition outlives its last push. Long enough for a
+# spectator leaving early to pull the results sheet on the drive home,
+# short enough that a field of school-age athletes' names is not sitting
+# on somebody else's disk next week.
+RETENTION_HOURS = "12"
+
+[[durable_objects.bindings]]
+name = "COMPETITION"
+class_name = "Competition"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Competition"]
