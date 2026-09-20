@@ -9,6 +9,18 @@ compatibility_date = "2025-09-01"
 directory = "public"
 binding = "ASSETS"
 
+# Staged before every deploy, by whoever is deploying: `npm run deploy` from
+# a laptop, a Cloudflare git build, a CI runner. `public/` is gitignored —
+# it is built out of the app's own fonts rather than committed twice — so a
+# fresh checkout has no such directory and `wrangler deploy` stops dead on
+# the assets field above. That is not a warning, it is an error, and it is
+# what a build that deploys nothing looks like.
+#
+# Plain node, no npm: this has to work before `npm install` has run, and
+# stage-fonts.js reaches for nothing but node:fs.
+[build]
+command = "node stage-fonts.js"
+
 [vars]
 # How long a competition outlives its last push. Long enough for a
 # spectator leaving early to pull the results sheet on the drive home,

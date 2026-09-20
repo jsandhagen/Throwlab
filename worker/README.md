@@ -95,22 +95,27 @@ npm run deploy  # by hand: needs `wrangler login` once
 
 ## Deploying it
 
-`.github/workflows/deploy-relay.yml` does it, on a push to `main` that
-touches `worker/` or the app's `assets/fonts/`, and on demand from the
-Actions tab — where it also takes a dry run, so the pipeline can be
-exercised without touching the thing a stand is reading. It needs a
-`CLOUDFLARE_API_TOKEN` secret on the repository, with permission to edit
-Workers, and a `CLOUDFLARE_ACCOUNT_ID` one only if that token can reach
-more than one account. It refuses loudly when the token is missing rather
-than passing with nothing done.
+Cloudflare Workers Builds, from the dashboard: the Worker is connected to
+this repository with `main` as its production branch, so a push that
+touches it deploys it. `npm run deploy` is the same thing by hand, for when
+the build itself is what is broken. There is deliberately no second path —
+two systems deploying one Worker race each other.
 
-That is not tidiness. The app and the relay are two halves of one feature
-and they used to ship by two different routes: CI built the APK, and
-somebody remembered to run `wrangler deploy`. They drifted — the phone
-started asking spectators who they came to watch while the relay, still on
-older code, discarded `?f=` before the Durable Object ever saw it. Nothing
-anywhere said so, on either side. `npm run deploy` still works and is the
-right thing when the workflow is what is broken.
+Whoever deploys, the fonts are staged first, by the `[build]` command in
+`wrangler.toml` rather than by remembering. `public/` is gitignored, so a
+fresh checkout has no such directory and the `assets.directory` field stops
+`wrangler deploy` dead:
+
+```
+✘ [ERROR] The directory specified by the "assets.directory" field in your
+  configuration file does not exist
+```
+
+That is an error and not a warning, which is what a git build that deploys
+nothing looks like — and is how the relay sat on old code for a day while
+the phone asked spectators who they came to watch and it threw the question
+away before the Durable Object saw it. The hook is plain `node`, no npm, so
+it works before `npm install` has run.
 
 `npm run stage` copies Barlow out of the app's own `assets/fonts/` into
 `public/f/`. The typeface is `main.dart`'s to decide, so the repo does not
