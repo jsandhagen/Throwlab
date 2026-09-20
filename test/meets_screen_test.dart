@@ -347,8 +347,11 @@ void main() {
       await mountMeets(tester);
       await openCalendar(tester);
 
-      // The month's days, and everything on in it.
-      expect(find.text('20'), findsOneWidget);
+      // The month's days, and everything on in it. The day is read off the
+      // meet rather than written down twice: the fixture moves it when it
+      // would otherwise land on today, and a hard-coded 20 taps an empty
+      // square on the twentieth of the month.
+      expect(find.text('${champs.day}'), findsOneWidget);
       expect(find.text('County Champs'), findsOneWidget);
       expect(find.text('Spring Open'), findsOneWidget);
     });
@@ -356,7 +359,7 @@ void main() {
     testWidgets('a day narrows it to what was on that day', (tester) async {
       await mountMeets(tester);
       await openCalendar(tester);
-      await tester.tap(find.text('20'));
+      await tester.tap(find.text('${champs.day}'));
       await tester.pumpAndSettle();
 
       expect(find.text('County Champs'), findsOneWidget);
