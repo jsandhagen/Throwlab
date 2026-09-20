@@ -1144,6 +1144,15 @@ like the app rather than a bare Material default.
   in the event's color while the phone is serving it, because a coach who
   has walked to the next ring has no other way to tell that it still is.
 
+- The relay deploys from CI too, by `.github/workflows/deploy-relay.yml`, on
+  a push to `main` touching `worker/` or `assets/fonts/` and on demand from
+  the Actions tab (which also offers a dry run). It wants a
+  `CLOUDFLARE_API_TOKEN` secret and fails loudly without one. The app and
+  the relay are two halves of one feature, and while they shipped by two
+  routes — CI for the APK, somebody's memory for `wrangler deploy` — they
+  drifted: the phone asked spectators who they came to watch and the relay,
+  still on older code, threw `?f=` away before the Durable Object saw it,
+  with nothing on either side saying so.
 - CI builds an APK from `main` and republishes the rolling `latest` release;
   the in-app updater compares build numbers against it. The download belongs
   to `AppUpdater`, not to the screen that started it, and writes into a part
