@@ -75,8 +75,8 @@ void main() {
               // Big enough to see what was drawn.
               Row(
                 children: [
-                  for (final event in [ThrowEvent.discus, ThrowEvent.javelin])
-                    EventGlyph(event, size: 160, color: eventColor(event)),
+                  for (final event in [ThrowEvent.discus, ThrowEvent.hammer, ThrowEvent.javelin])
+                    EventGlyph(event, size: 105, color: eventColor(event)),
                 ],
               ),
             ],

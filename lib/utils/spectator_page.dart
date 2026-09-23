@@ -84,7 +84,7 @@ String spectatorPage(
     'second': Medal.silver,
     'third': Medal.bronze,
   };
-  // The discus and the javelin off `EventGlyph`'s own parts, as SVG in the
+  // The discus, the hammer and the javelin off `EventGlyph`'s own parts, as SVG in the
   // unit square: a real implement's proportions are too fine to trace by
   // hand twice and have both come out the same. The steel and the cord are
   // their own colors on the page as in the app, whatever the event's.
@@ -127,6 +127,7 @@ String spectatorPage(
       // sector opens at — the same number the app's own bar leans by.
       .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2))
       .replaceFirst('/*DISCUS*/', implement(discusParts()))
+      .replaceFirst('/*HAMMER*/', implement(hammerParts()))
       .replaceFirst('/*JAVELIN*/', implement(javelinParts()));
 }
 
@@ -634,11 +635,9 @@ const String _page = r'''<!doctype html>
     } else if (event === "shotPut") {
       g = '<path fill-rule="evenodd" d="' + ring(0.5, 0.55, 0.31, 0.06, s, -0.11, -0.12) + '"/>';
     } else if (event === "hammer") {
-      g = '<circle cx="' + 0.30 * s + '" cy="' + 0.70 * s + '" r="' + 0.17 * s + '"/>' +
-        '<path d="M ' + 0.41 * s + " " + 0.59 * s + " L " + 0.74 * s + " " + 0.30 * s +
-        '" stroke="' + tint + '" stroke-width="' + 0.05 * s + '" fill="none"/>';
+      g = '<g transform="scale(' + s + ')">/*HAMMER*/</g>';
     } else {
-      /* The discus above and the javelin here are the app's own parts,
+      /* The discus, the hammer and the javelin are the app's own parts,
          handed over in the unit square rather than traced a second time. */
       g = '<g transform="scale(' + s + ')">/*JAVELIN*/</g>';
     }

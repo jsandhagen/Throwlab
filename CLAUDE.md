@@ -210,13 +210,16 @@ like the app rather than a bare Material default.
   must keep working (in memory, with a banner) when storage fails.
 - Event iconography comes from `EventGlyph`; the competition sector in
   `sector_art.dart` backs the library and the empty state. Both are drawn,
-  not icon-font glyphs. The discus and the javelin are drawn to a real one's
-  proportions (`discusParts`, `javelinParts`), each part in what the real
-  thing is made of (`GlyphMaterial`): the steel — the discus's rim and
-  plate, the javelin's head — in white and kept off the rest by a hairline,
-  which is all that separates them on a card that draws the glyph all in
-  white, and the javelin's cord grip in a near-black gray, light enough not
-  to read as a gap in the shaft on the dark theme. The discus is face on,
+  not icon-font glyphs. The discus, the hammer and the javelin are drawn to
+  a real one's proportions (`discusParts`, `hammerParts`, `javelinParts`),
+  each part in what the real thing is made of (`GlyphMaterial`): the steel
+  — the discus's rim and plate, the hammer's wire and handle, the javelin's
+  head — in white and kept off the rest by a hairline, which is all that
+  separates them on a card that draws the glyph all in white, and the cord
+  of a grip — the javelin's, and across the hammer handle's far bar — in a
+  near-black gray, light enough not to read as a gap on the dark theme. The
+  hammer's handle is a closed triangle both hands go through, not a bar
+  across the wire's end: the loop is what makes it a hammer. The discus is face on,
   not tilted: flat, it is a round implement the size of its neighbors. The spectator page is handed the same parts
   as SVG rather than tracing its own. The backdrop's arcs stay between the sector lines —
   an arc outside them is a line no throwing field has.

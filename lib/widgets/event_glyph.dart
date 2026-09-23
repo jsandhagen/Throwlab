@@ -132,12 +132,116 @@ List<GlyphPart> discusParts() {
   ];
 }
 
+/// The hammer: the ball, the wire, and the handle the thrower holds it by.
+///
+/// The handle is what makes it a hammer rather than a ball on a stick — a
+/// closed loop, a rounded triangle both hands go through with the wire
+/// fixed at its point, not a bar across the end. It is about as wide as the
+/// ball, as on a real one. The wire is steel and a hairline, as it is; the
+/// handle is steel with its grip bound in cord across the far side, where
+/// the hands are. The wire is a fraction of a real one's length, since a
+/// real one is ten balls long and would leave the ball a dot.
+List<GlyphPart> hammerParts() {
+  const ball = Offset(0.28, 0.72);
+  const radius = 0.16;
+  const gap = 0.02; // between the steel and the ball
+  const u = Offset(math.sqrt1_2, -math.sqrt1_2); // ball -> handle
+  const p = Offset(math.sqrt1_2, math.sqrt1_2); // across the wire
+  const reach = 0.54; // ball center to the handle's point
+  const length = 0.21, width = 0.29; // the handle, along and across
+  const frame = 0.032; // the handle's thickness
+  const corner = 0.036; // the rounding at each corner, outside
+  const wire = 0.013; // half the wire's thickness
+  const steps = 64;
+
+  final point = ball + u * reach;
+  final handle = [
+    point,
+    point + u * length + p * (width / 2),
+    point + u * length - p * (width / 2),
+  ];
+
+  // A convex polygon with its corners rounded to [r], struck around the
+  // same centers whatever [r] is, so the inside of the loop is exactly the
+  // outside moved in by the frame's thickness.
+  List<Offset> rounded(List<Offset> corners, double r) {
+    final n = corners.length;
+    final centroid = corners.reduce((a, b) => a + b) / n.toDouble();
+    final out = <Offset>[];
+    for (var i = 0; i < n; i++) {
+      final at = corners[i];
+      final prev = corners[(i + n - 1) % n], next = corners[(i + 1) % n];
+      final a = (prev - at) / (prev - at).distance;
+      final b = (next - at) / (next - at).distance;
+      final bisector = (a + b) / (a + b).distance;
+      final half = math.acos((a.dx * b.dx + a.dy * b.dy).clamp(-1.0, 1.0)) / 2;
+      final center = at + bisector * (corner / math.sin(half));
+      // Outward normals of the edge coming in and the edge going out.
+      Offset outward(Offset from, Offset to) {
+        final d = (to - from) / (to - from).distance;
+        final n1 = Offset(-d.dy, d.dx);
+        final mid = (from + to) / 2;
+        return ((mid + n1) - centroid).distance > (mid - centroid).distance
+            ? n1
+            : -n1;
+      }
+
+      final start = outward(prev, at).direction;
+      var sweep = outward(at, next).direction - start;
+      while (sweep <= -math.pi) {
+        sweep += 2 * math.pi;
+      }
+      while (sweep > math.pi) {
+        sweep -= 2 * math.pi;
+      }
+      const arc = steps ~/ 8;
+      for (var k = 0; k <= arc; k++) {
+        final angle = start + sweep * k / arc;
+        out.add(center + Offset(math.cos(angle), math.sin(angle)) * r);
+      }
+    }
+    return out;
+  }
+
+  List<Offset> circle(Offset center, double r) => [
+        for (var i = 0; i < steps; i++)
+          center +
+              Offset(math.cos(2 * math.pi * i / steps),
+                      math.sin(2 * math.pi * i / steps)) *
+                  r,
+      ];
+
+  List<Offset> bar(Offset from, Offset to, double half) {
+    final d = (to - from) / (to - from).distance;
+    final n = Offset(-d.dy, d.dx) * half;
+    return [from + n, to + n, to - n, from - n];
+  }
+
+  // The grip: over the far bar, between the corners' rounding, and a
+  // little proud of the frame it is bound on.
+  final gripAt = point + u * (length - frame / 2);
+  const gripHalf = width / 2 - corner * 2.2;
+
+  return [
+    GlyphPart([circle(ball, radius)]),
+    GlyphPart([
+      bar(ball + u * (radius + gap), point + u * (frame * 0.5), wire),
+    ], material: GlyphMaterial.steel),
+    GlyphPart([rounded(handle, corner), rounded(handle, corner - frame)],
+        material: GlyphMaterial.steel),
+    GlyphPart([
+      bar(gripAt - p * gripHalf, gripAt + p * gripHalf, frame * 0.72),
+    ], material: GlyphMaterial.cord),
+  ];
+}
+
 /// Hand-drawn implement glyphs so each event reads as its real implement —
-/// a solid shot, a discus with its rim, a pointed javelin, a hammer on its wire —
+/// a solid shot, a discus with its rim, a pointed javelin, a hammer on its wire and handle —
 /// instead of a stand-in Material icon. It takes the ambient [IconTheme]
 /// color unless [color] is given, and its highlights are punched out
 /// (even-odd) so they reveal whatever sits behind the glyph — a faint sheen
-/// on any background. The discus and the javelin are the exception, drawn
+/// on any background. The discus, the hammer and the javelin are the
+/// exception, drawn
 /// in what a real one is made of where that is not paint ([GlyphMaterial]).
 class EventGlyph extends StatelessWidget {
   const EventGlyph(this.event, {super.key, this.size = 24, this.color});
@@ -187,14 +291,6 @@ class _EventGlyphPainter extends CustomPainter {
     ..isAntiAlias = true
     ..style = PaintingStyle.fill;
 
-  Paint _stroke(double width) => Paint()
-    ..color = color
-    ..isAntiAlias = true
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = width
-    ..strokeCap = StrokeCap.round
-    ..strokeJoin = StrokeJoin.round;
-
   /// Solid metal sphere with a punched specular highlight — a heavy ball,
   /// deliberately rounder and fuller than the flat discus.
   void _shotPut(Canvas canvas, double s) {
@@ -220,19 +316,7 @@ class _EventGlyphPainter extends CustomPainter {
     }
   }
 
-  /// Ball on a wire ending in a grip handle — the hammer's three parts.
-  void _hammer(Canvas canvas, double s) {
-    final head = Offset(s * 0.30, s * 0.70);
-    canvas.drawCircle(head, s * 0.17, _fill);
-    final start = Offset(s * 0.41, s * 0.59);
-    final handle = Offset(s * 0.74, s * 0.30);
-    canvas.drawLine(start, handle, _stroke(s * 0.05));
-    // Grip: a short bar across the wire's end.
-    final u = (handle - start) / (handle - start).distance;
-    final p = Offset(-u.dy, u.dx);
-    canvas.drawLine(
-        handle + p * (s * 0.10), handle - p * (s * 0.10), _stroke(s * 0.05));
-  }
+  void _hammer(Canvas canvas, double s) => _parts(canvas, s, hammerParts());
 
   @override
   bool shouldRepaint(_EventGlyphPainter old) =>
