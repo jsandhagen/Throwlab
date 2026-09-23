@@ -59,8 +59,8 @@ void main() {
                       Concept.b2a => 'B2a · The circle is the mouth',
                       Concept.b2b => 'B2b · The neck stands on the circle',
                       Concept.b2c => 'B2c · The flask stands in the sector',
-                      Concept.b3 => 'B3 · The javelin sector in white',
-                      Concept.b3arcs => 'B3 · with the distance arcs',
+                      Concept.b3 => 'B3 · One arc',
+                      Concept.b3arcs => 'B3 · Three arcs',
                     },
                     style: ThrowLabApp.theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
@@ -415,29 +415,29 @@ class _LogoPainter extends CustomPainter {
     final apexY = f.shoulder.dy - (0.5 - f.shoulder.dx) / lean;
     const inset = 0.05;
     final centerY = apexY + inset / lean;
-    const surfaceY = 0.40;
-    final radius = surfaceY - centerY;
     final center = Offset(0.5, centerY) * s;
+    // The meniscus is its own, tighter arc: struck round the lines' center
+    // it would be nearly flat across a neck this narrow.
+    const surfaceY = 0.40, meniscus = 0.07;
+    final liquid = Path.combine(
+        PathOperation.difference,
+        body,
+        Path()
+          ..addOval(Rect.fromCircle(
+              center: Offset(0.5, surfaceY - meniscus) * s,
+              radius: meniscus * s))
+          ..addRect(Rect.fromLTRB(0, 0, s, (surfaceY - meniscus) * s)));
     canvas.save();
-    canvas.clipPath(body);
-    canvas.drawPath(
-        Path.combine(
-            PathOperation.difference,
-            Path()..addRect(Rect.fromLTWH(0, 0, s, s)),
-            Path()
-              ..addOval(Rect.fromCircle(center: center, radius: radius * s))
-              ..addRect(Rect.fromLTRB(0, 0, s, center.dy))),
-        _fill);
+    canvas.clipPath(liquid);
+    canvas.drawRect(Rect.fromLTWH(0, 0, s, s), _fill);
     final white = _stroke(Colors.white, s * 0.024)..strokeCap = StrokeCap.butt;
     for (final side in [-1.0, 1.0]) {
       final d = Offset(math.sin(half) * side, math.cos(half));
-      canvas.drawLine(center + d * (radius * s), center + d * s, white);
+      canvas.drawLine(center, center + d * s, white);
     }
-    if (arcs) {
-      for (final r in [0.62 - centerY, 0.74 - centerY]) {
-        canvas.drawArc(Rect.fromCircle(center: center, radius: r * s),
-            math.pi / 2 - half, half * 2, false, white);
-      }
+    for (final y in arcs ? [0.54, 0.65, 0.76] : [0.65]) {
+      canvas.drawArc(Rect.fromCircle(center: center, radius: (y - centerY) * s),
+          math.pi / 2 - half, half * 2, false, white);
     }
     canvas.restore();
     canvas.drawPath(open, _stroke(_blue, s * 0.05));
