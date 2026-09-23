@@ -215,9 +215,9 @@ like the app rather than a bare Material default.
   each part in what the real thing is made of (`GlyphMaterial`): the steel
   — the discus's rim and plate, the hammer's wire and handle, the javelin's
   head — in white and kept off the rest by a hairline, which is all that
-  separates them on a card that draws the glyph all in white, and the cord
-  of a grip — the javelin's, and across the hammer handle's far bar — in a
-  near-black gray, light enough not to read as a gap on the dark theme. The
+  separates them on a card that draws the glyph all in white, and the
+  javelin's cord grip in a near-black gray, light enough not to read as a
+  gap on the dark theme. A hammer's handle is bare steel, with no cord. The
   hammer's handle is a closed triangle both hands go through, not a bar
   across the wire's end: the loop is what makes it a hammer. The discus is face on,
   not tilted: flat, it is a round implement the size of its neighbors. The spectator page is handed the same parts

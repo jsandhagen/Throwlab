@@ -137,10 +137,11 @@ List<GlyphPart> discusParts() {
 /// The handle is what makes it a hammer rather than a ball on a stick — a
 /// closed loop, a rounded triangle both hands go through with the wire
 /// fixed at its point, not a bar across the end. It is about as wide as the
-/// ball, as on a real one. The wire is steel and a hairline, as it is; the
-/// handle is steel with its grip bound in cord across the far side, where
-/// the hands are. The wire is a fraction of a real one's length, since a
-/// real one is ten balls long and would leave the ball a dot.
+/// ball, as on a real one. The wire and the handle are both bare steel, the
+/// wire a hairline, as it is — nothing is bound on a hammer's handle, so
+/// unlike the javelin's grip it carries no cord. The wire is a fraction of
+/// a real one's length, since a real one is ten balls long and would leave
+/// the ball a dot.
 List<GlyphPart> hammerParts() {
   const ball = Offset(0.28, 0.72);
   const radius = 0.16;
@@ -217,11 +218,6 @@ List<GlyphPart> hammerParts() {
     return [from + n, to + n, to - n, from - n];
   }
 
-  // The grip: over the far bar, between the corners' rounding, and a
-  // little proud of the frame it is bound on.
-  final gripAt = point + u * (length - frame / 2);
-  const gripHalf = width / 2 - corner * 2.2;
-
   return [
     GlyphPart([circle(ball, radius)]),
     GlyphPart([
@@ -229,9 +225,6 @@ List<GlyphPart> hammerParts() {
     ], material: GlyphMaterial.steel),
     GlyphPart([rounded(handle, corner), rounded(handle, corner - frame)],
         material: GlyphMaterial.steel),
-    GlyphPart([
-      bar(gripAt - p * gripHalf, gripAt + p * gripHalf, frame * 0.72),
-    ], material: GlyphMaterial.cord),
   ];
 }
 
