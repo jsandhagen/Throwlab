@@ -211,10 +211,13 @@ like the app rather than a bare Material default.
 - Event iconography comes from `EventGlyph`; the competition sector in
   `sector_art.dart` backs the library and the empty state. Both are drawn,
   not icon-font glyphs. The discus and the javelin are drawn to a real one's
-  proportions (`discusParts`, `javelinParts`), with the parts that are steel
-  on the real thing — the rim and plate, the head — in white and kept off
-  the rest by a hairline, which is all that separates them on a card that
-  draws the glyph all in white. The spectator page is handed the same parts
+  proportions (`discusParts`, `javelinParts`), each part in what the real
+  thing is made of (`GlyphMaterial`): the steel — the discus's rim and
+  plate, the javelin's head — in white and kept off the rest by a hairline,
+  which is all that separates them on a card that draws the glyph all in
+  white, and the javelin's cord grip in a near-black gray, light enough not
+  to read as a gap in the shaft on the dark theme. The discus is face on,
+  not tilted: flat, it is a round implement the size of its neighbors. The spectator page is handed the same parts
   as SVG rather than tracing its own. The backdrop's arcs stay between the sector lines —
   an arc outside them is a line no throwing field has.
 - A throw is tagged with what was thrown, by weight: `ThrowVideo.implementKg`

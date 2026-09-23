@@ -4,28 +4,42 @@ import 'package:flutter/material.dart';
 
 import '../models/throw_event.dart';
 
+/// What a part of a drawn implement is made of, which is what it is
+/// colored by: the glyph's own color for the painted body, and the real
+/// thing's own color for its steel and its cord.
+enum GlyphMaterial { paint, steel, cord }
+
 /// One piece of a drawn implement: outlines in the unit square, filled
-/// even-odd so a ring is an outline with its hole as a second one, in the
-/// glyph's own color or — for the parts a real one makes of steel — in
-/// [glyphMetal].
+/// even-odd so a ring is an outline with its hole as a second one.
 ///
-/// The metal is kept off the colored parts by a hairline of nothing rather
-/// than laid against them, because the glyph is also drawn all in white
-/// (a throw card's placeholder), and there the gap is the only thing that
-/// says where the head ends or the rim begins.
+/// Steel is kept off the painted parts by a hairline of nothing rather than
+/// laid against them, because the glyph is also drawn all in white (a throw
+/// card's placeholder), and there the gap is the only thing that says where
+/// the head ends or the rim begins. Cord needs no gap: it is dark whatever
+/// the glyph is drawn in.
 class GlyphPart {
-  const GlyphPart(this.outlines, {this.metal = false});
+  const GlyphPart(this.outlines, {this.material = GlyphMaterial.paint});
 
   final List<List<Offset>> outlines;
-  final bool metal;
+  final GlyphMaterial material;
 }
 
-/// The steel of a drawn implement: white, as bright as the glyph's own
-/// color is opaque, so a glyph dimmed for a disabled row dims all of it.
-Color glyphMetal(Color tint) => Colors.white.withValues(alpha: tint.a);
+/// The color [material] is drawn in on a glyph drawn in [tint]. Steel is
+/// white and cord is a near-black gray — light enough to stand off the dark
+/// theme it is drawn on, since black cord on a black page is a gap in the
+/// shaft — and both are as opaque as the tint, so a glyph dimmed for a
+/// disabled row dims all of it.
+Color glyphColor(GlyphMaterial material, Color tint) => switch (material) {
+      GlyphMaterial.paint => tint,
+      GlyphMaterial.steel => Colors.white.withValues(alpha: tint.a),
+      GlyphMaterial.cord => glyphCord.withValues(alpha: tint.a),
+    };
 
-/// The javelin, tail bottom-left and point top-right: the shaft with its
-/// cord grip, and the metal head.
+/// The cord a javelin's grip is bound in.
+const glyphCord = Color(0xFF4A4E55);
+
+/// The javelin, tail bottom-left and point top-right: the shaft, the cord
+/// grip bound over it, and the metal head.
 ///
 /// Drawn to a real one's proportions rather than as a needle with a bump:
 /// a shaft of nearly one width, a grip barely proud of it — cord bound on,
@@ -52,11 +66,17 @@ List<GlyphPart> javelinParts() {
     (0.15, 0.50),
     (0.28, 0.76),
     (0.40, 0.97),
-    // The grip, with the rounded ends of bound cord.
-    (0.405, 1.0), (0.409, 1.24), (0.415, 1.32),
-    (0.472, 1.32), (0.478, 1.24), (0.482, 1.0),
     (0.55, 1.0),
     (0.79, 0.95),
+  ];
+  // Bound over the shaft, with the rounded ends of wrapped cord.
+  const grip = [
+    (0.405, 1.0),
+    (0.409, 1.24),
+    (0.415, 1.32),
+    (0.472, 1.32),
+    (0.478, 1.24),
+    (0.482, 1.0),
   ];
   const head = [
     (0.797, 0.95),
@@ -75,74 +95,50 @@ List<GlyphPart> javelinParts() {
 
   return [
     GlyphPart([outline(shaft)]),
-    GlyphPart([outline(head)], metal: true),
+    GlyphPart([outline(grip)], material: GlyphMaterial.cord),
+    GlyphPart([outline(head)], material: GlyphMaterial.steel),
   ];
 }
 
-/// The discus, seen from above and tilted as it flies: a steel rim, the
-/// body inside it, and the steel plate at the middle, with the edge of the
-/// rim showing under the face — which is what makes it a disc with a
-/// thickness rather than a record.
+/// The discus face on, as it lies in the hand: a steel rim, the body
+/// inside it, and the steel plate at the middle.
 ///
 /// To a real one's proportions where they survive the size: the plate a
-/// quarter of the width across, the rim's face about an eighth of the
-/// radius, and the plate lifted toward the viewer off the middle of the
-/// face, because a discus is a lens — three and a half times as thick at
-/// the plate as at the rim — and seen from above the plate stands up off
-/// it. The edge is drawn thicker than a real one's, as the javelin's shaft
-/// is, or it is nothing at 16 px.
+/// quarter of the width across, and the rim's face about a tenth of the
+/// radius. Face on rather than tilted in flight, because a tilted disc is
+/// a squashed oval beside a round shot and a round hammer — flat, it is
+/// the same size as its neighbors and the only one with a rim.
 List<GlyphPart> discusParts() {
-  const center = Offset(0.5, 0.46);
-  const rx = 0.42, ry = 0.24; // the face, foreshortened
-  const edge = 0.055; // the rim's own thickness, seen from above it
+  const center = Offset(0.5, 0.5);
+  const radius = 0.36;
   const gap = 0.02; // between the steel and the body
-  const tilt = -18 * math.pi / 180;
   const steps = 64;
 
-  // The disc's own frame: x across it, y toward the near edge.
-  final cx = Offset(math.cos(tilt), math.sin(tilt));
-  final cy = Offset(-math.sin(tilt), math.cos(tilt));
-  Offset at(double x, double y) => center + cx * x + cy * y;
-  Offset onFace(double a, double scale, {double lift = 0}) =>
-      at(rx * scale * math.cos(a), ry * scale * math.sin(a) - lift);
-  List<Offset> ellipse(double scale, {double lift = 0}) => [
+  List<Offset> circle(double r) => [
         for (var i = 0; i < steps; i++)
-          onFace(2 * math.pi * i / steps, scale, lift: lift),
+          center +
+              Offset(math.cos(2 * math.pi * i / steps),
+                      math.sin(2 * math.pi * i / steps)) *
+                  r,
       ];
 
-  // The near half of the rim's edge: under the face's near arc, down to
-  // the same arc a thickness lower. The gap above it closes to nothing at
-  // the two ends, which is where the face turns into the edge.
-  final side = [
-    for (var i = 0; i <= steps ~/ 2; i++)
-      at(rx * math.cos(math.pi * i / (steps ~/ 2)),
-          ry * math.sin(math.pi * i / (steps ~/ 2)) + edge),
-    for (var i = steps ~/ 2; i >= 0; i--)
-      at(rx * math.cos(math.pi * i / (steps ~/ 2)),
-          (ry + gap) * math.sin(math.pi * i / (steps ~/ 2))),
-  ];
-
-  const rimInner = 0.87;
-  const plate = 0.27;
-  const lift = 0.035;
+  const rimInner = radius * 0.89;
+  const plate = radius * 0.25;
   return [
-    GlyphPart([side], metal: true),
-    GlyphPart([ellipse(1), ellipse(rimInner)], metal: true),
-    GlyphPart([
-      ellipse(rimInner - gap / rx * 1.4),
-      ellipse(plate + gap / rx * 1.4, lift: lift),
-    ]),
-    GlyphPart([ellipse(plate, lift: lift)], metal: true),
+    GlyphPart([circle(radius), circle(rimInner)],
+        material: GlyphMaterial.steel),
+    GlyphPart([circle(rimInner - gap), circle(plate + gap)]),
+    GlyphPart([circle(plate)], material: GlyphMaterial.steel),
   ];
 }
 
 /// Hand-drawn implement glyphs so each event reads as its real implement —
-/// a solid shot, a tilted discus, a pointed javelin, a hammer on its wire —
+/// a solid shot, a discus with its rim, a pointed javelin, a hammer on its wire —
 /// instead of a stand-in Material icon. It takes the ambient [IconTheme]
 /// color unless [color] is given, and its highlights are punched out
 /// (even-odd) so they reveal whatever sits behind the glyph — a faint sheen
-/// on any background. The discus's rim and plate and the javelin's head are
-/// the exception: steel on the real thing, and white here ([glyphMetal]).
+/// on any background. The discus and the javelin are the exception, drawn
+/// in what a real one is made of where that is not paint ([GlyphMaterial]).
 class EventGlyph extends StatelessWidget {
   const EventGlyph(this.event, {super.key, this.size = 24, this.color});
 
@@ -220,8 +216,7 @@ class _EventGlyphPainter extends CustomPainter {
       for (final outline in part.outlines) {
         path.addPolygon([for (final o in outline) o * s], true);
       }
-      canvas.drawPath(
-          path, _fill..color = part.metal ? glyphMetal(color) : color);
+      canvas.drawPath(path, _fill..color = glyphColor(part.material, color));
     }
   }
 

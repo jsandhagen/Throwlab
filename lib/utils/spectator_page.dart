@@ -86,11 +86,15 @@ String spectatorPage(
   };
   // The discus and the javelin off `EventGlyph`'s own parts, as SVG in the
   // unit square: a real implement's proportions are too fine to trace by
-  // hand twice and have both come out the same. The steel is white on the
-  // page as it is in the app, whatever the event's color.
+  // hand twice and have both come out the same. The steel and the cord are
+  // their own colors on the page as in the app, whatever the event's.
   String implement(List<GlyphPart> parts) => [
         for (final part in parts)
-          '<path fill-rule="evenodd"${part.metal ? ' fill="#ffffff"' : ''} '
+          '<path fill-rule="evenodd"${switch (part.material) {
+            GlyphMaterial.paint => '',
+            GlyphMaterial.steel => ' fill="#ffffff"',
+            GlyphMaterial.cord => ' fill="${hex(glyphCord)}"',
+          }} '
               'd="${[
             for (final outline in part.outlines)
               'M ${[
