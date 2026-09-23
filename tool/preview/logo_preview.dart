@@ -17,12 +17,15 @@ const _out = '../../build/preview';
 
 const _blue = Color(0xFF4FC3F7);
 
-enum Concept { a1, a2, b1, b2 }
+enum Concept { a1, a2, b1, b2, b2a, b2b, b2c }
+
+/// The concepts still being weighed; the rest stay drawable for reference.
+const _shown = [Concept.b2, Concept.b2a, Concept.b2b, Concept.b2c];
 
 void main() {
   testWidgets('logo concepts', (tester) async {
     await loadPreviewFonts();
-    tester.view.physicalSize = const Size(1080, 2000);
+    tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     final surface = ThrowLabApp.theme.colorScheme.surface;
@@ -46,13 +49,16 @@ void main() {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              for (final c in Concept.values) ...[
+              for (final c in _shown) ...[
                 Text(
                     switch (c) {
                       Concept.a1 => 'A1 · Flask, javelin, shot and discus',
                       Concept.a2 => 'A2 · All four implements',
                       Concept.b1 => 'B1 · The field in the flask',
                       Concept.b2 => 'B2 · The flask is the sector',
+                      Concept.b2a => 'B2a · The circle is the mouth',
+                      Concept.b2b => 'B2b · The neck stands on the circle',
+                      Concept.b2c => 'B2c · The flask stands in the sector',
                     },
                     style: ThrowLabApp.theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
@@ -227,6 +233,167 @@ class _LogoPainter extends CustomPainter {
     canvas.drawPath(tri, _stroke(_blue, wire));
   }
 
+  /// A flask drawn as a throwing sector: the circle, and the two sector
+  /// lines opening from it at 34.92° all the way down to the base, where
+  /// they are the flask's walls. With [mouth] the circle is the flask's
+  /// mouth and the lines run down through the neck from it; without, the
+  /// neck stands on the circle and the sector opens from under it.
+  void _sectorFlask(Canvas canvas, double s, {required bool mouth}) {
+    final lean = sectorLean;
+    final half = sectorHalfAngleDeg * math.pi / 180;
+    const r = 0.07; // the circle, and the neck, which is as wide as it
+    final wall = s * 0.05;
+    final apex = mouth ? const Offset(0.5, 0.14) : const Offset(0.5, 0.33);
+    const baseY = 0.90;
+    // Where each sector line leaves the circle, and where it reaches the
+    // base's rounded corner.
+    final dirL = Offset(-math.sin(half), math.cos(half));
+    final dirR = Offset(math.sin(half), math.cos(half));
+    final leaveL = apex + dirL * r, leaveR = apex + dirR * r;
+    const round = 0.06;
+    final cornerY = baseY - round;
+    final footL = Offset(0.5 - lean * (cornerY - apex.dy), cornerY);
+    final footR = Offset(0.5 + lean * (cornerY - apex.dy), cornerY);
+    Offset px(Offset o) => o * s;
+
+    // The outline: base, walls up to where they meet the neck (or the
+    // circle), and the neck itself.
+    final ctlL = footL + dirL * (round / dirL.dy);
+    final ctlR = footR + dirR * (round / dirR.dy);
+    final baseL = Offset(ctlL.dx + round * 0.9, baseY);
+    final baseR = Offset(ctlR.dx - round * 0.9, baseY);
+    final outline = Path();
+    void move(Offset o) => outline.moveTo(px(o).dx, px(o).dy);
+    void line(Offset o) => outline.lineTo(px(o).dx, px(o).dy);
+    void quad(Offset c, Offset o) =>
+        outline.quadraticBezierTo(px(c).dx, px(c).dy, px(o).dx, px(o).dy);
+
+    // Where a wall of the neck (x = 0.5 ± r) crosses its sector line.
+    final join = apex.dy + r / lean;
+    const lipY = 0.08;
+    if (mouth) {
+      // Neck from the circle's sides down to where the sector lines reach
+      // it, then the lines themselves are the walls.
+      move(Offset(0.5 - r, apex.dy));
+      line(Offset(0.5 - r, join));
+    } else {
+      move(Offset(0.5 - r, lipY));
+      line(Offset(0.5 - r, apex.dy));
+      move(leaveL);
+    }
+    line(footL);
+    quad(ctlL, baseL);
+    line(baseR);
+    quad(ctlR, footR);
+    if (mouth) {
+      line(Offset(0.5 + r, join));
+      line(Offset(0.5 + r, apex.dy));
+    } else {
+      line(leaveR);
+      move(Offset(0.5 + r, apex.dy));
+      line(Offset(0.5 + r, lipY));
+    }
+
+    // The inside of the flask, for the liquid to be clipped to.
+    final inside = Path()
+      ..moveTo(px(leaveL).dx, px(leaveL).dy)
+      ..lineTo(px(footL).dx, px(footL).dy)
+      ..quadraticBezierTo(px(ctlL).dx, px(ctlL).dy, px(baseL).dx, px(baseL).dy)
+      ..lineTo(px(baseR).dx, px(baseR).dy)
+      ..quadraticBezierTo(px(ctlR).dx, px(ctlR).dy, px(footR).dx, px(footR).dy)
+      ..lineTo(px(leaveR).dx, px(leaveR).dy)
+      ..close();
+
+    // The liquid, up to an arc of the sector, with two more arcs in it:
+    // struck round the circle, so they are the field's own marker lines.
+    final a = px(apex);
+    final depth = (baseY - apex.dy) * s;
+    final surface = depth * 0.46;
+    canvas.save();
+    canvas.clipPath(inside);
+    canvas.drawPath(
+        Path.combine(
+            PathOperation.difference,
+            Path()..addRect(Rect.fromLTWH(0, 0, s, s)),
+            Path()..addOval(Rect.fromCircle(center: a, radius: surface))),
+        _fill);
+    final white = _stroke(Colors.white, s * 0.024);
+    for (final f in [0.64, 0.82]) {
+      canvas.drawArc(Rect.fromCircle(center: a, radius: depth * f),
+          math.pi / 2 - half * 1.6, half * 3.2, false, white);
+    }
+    canvas.restore();
+
+    // The sector lines where they are not already the walls: from the
+    // circle down through the neck (or nowhere, when the neck stands on
+    // the circle and the walls start at it).
+    if (mouth) {
+      final thin = _stroke(_blue, s * 0.03);
+      canvas.drawLine(px(leaveL), px(Offset(0.5 - r, join)), thin);
+      canvas.drawLine(px(leaveR), px(Offset(0.5 + r, join)), thin);
+    }
+    canvas.drawPath(outline, _stroke(_blue, wall));
+    canvas.drawCircle(a, r * s, _stroke(_blue, wall));
+    if (!mouth) {
+      canvas.drawPath(
+          Path()
+            ..moveTo((0.5 - r - 0.05) * s, lipY * s)
+            ..lineTo((0.5 + r + 0.05) * s, lipY * s),
+          _stroke(_blue, wall));
+    }
+  }
+
+  /// The whole sector — the circle at the top and both lines running the
+  /// full height — with the flask standing inside it, its cone laid along
+  /// the lines, and the field's marker arcs carrying on past its base.
+  void _flaskInSector(Canvas canvas, double s) {
+    final lean = sectorLean;
+    final half = sectorHalfAngleDeg * math.pi / 180;
+    const apex = Offset(0.5, 0.06);
+    const ring = 0.045;
+    double lineX(double y) => 0.5 - lean * (y - apex.dy);
+    final f = _Flask(
+      nw: 0.062,
+      lipY: 0.30,
+      neckY: 0.40,
+      shoulder: Offset(lineX(0.47), 0.47),
+      corner: Offset(lineX(0.80), 0.80),
+      baseY: 0.865,
+    );
+    final a = apex * s;
+    final thin = _stroke(_blue, s * 0.028);
+    final dir = Offset(math.sin(half), math.cos(half));
+    const reach = 1.0;
+    // The sector's two lines, from the circle to the foot of the icon.
+    for (final side in [-1.0, 1.0]) {
+      final d = Offset(dir.dx * side, dir.dy);
+      canvas.drawLine(a + d * (ring * s), a + d * (reach * s), thin);
+    }
+    canvas.drawCircle(a, ring * s, _stroke(_blue, s * 0.03));
+    // A marker arc past the flask's base: the field carries on.
+    canvas.drawArc(Rect.fromCircle(center: a, radius: 0.915 * s),
+        math.pi / 2 - half, half * 2, false, thin);
+
+    final body = f.path(s), open = f.path(s, closed: false);
+    canvas.save();
+    canvas.clipPath(body);
+    final surface = 0.52 * s;
+    canvas.drawPath(
+        Path.combine(
+            PathOperation.difference,
+            Path()..addRect(Rect.fromLTWH(0, 0, s, s)),
+            Path()..addOval(Rect.fromCircle(center: a, radius: surface))),
+        _fill);
+    final white = _stroke(Colors.white, s * 0.024);
+    for (final r in [0.63, 0.73]) {
+      canvas.drawArc(Rect.fromCircle(center: a, radius: r * s),
+          math.pi / 2 - half, half * 2, false, white);
+    }
+    canvas.restore();
+    canvas.drawPath(open, _stroke(_blue, s * 0.045));
+    canvas.drawPath(f.lip(s, 0.02), _stroke(_blue, s * 0.045));
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
@@ -339,6 +506,10 @@ class _LogoPainter extends CustomPainter {
         canvas.restore();
         canvas.drawPath(open, _stroke(_blue, wall));
         canvas.drawPath(f.lip(s, 0.05), _stroke(_blue, wall));
+      case Concept.b2c:
+        _flaskInSector(canvas, s);
+      case Concept.b2a || Concept.b2b:
+        _sectorFlask(canvas, s, mouth: concept == Concept.b2a);
     }
     canvas.restore();
   }
