@@ -17,10 +17,10 @@ const _out = '../../build/preview';
 
 const _blue = Color(0xFF4FC3F7);
 
-enum Concept { a1, a2, b1, b2, b2a, b2b, b2c }
+enum Concept { a1, a2, b1, b2, b2a, b2b, b2c, b3, b3arcs }
 
 /// The concepts still being weighed; the rest stay drawable for reference.
-const _shown = [Concept.b2, Concept.b2a, Concept.b2b, Concept.b2c];
+const _shown = [Concept.b2, Concept.b3, Concept.b3arcs];
 
 void main() {
   testWidgets('logo concepts', (tester) async {
@@ -59,6 +59,8 @@ void main() {
                       Concept.b2a => 'B2a · The circle is the mouth',
                       Concept.b2b => 'B2b · The neck stands on the circle',
                       Concept.b2c => 'B2c · The flask stands in the sector',
+                      Concept.b3 => 'B3 · The javelin sector in white',
+                      Concept.b3arcs => 'B3 · with the distance arcs',
                     },
                     style: ThrowLabApp.theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
@@ -394,6 +396,45 @@ class _LogoPainter extends CustomPainter {
     canvas.drawPath(f.lip(s, 0.02), _stroke(_blue, s * 0.045));
   }
 
+  /// B2's flask with a sector drawn in it. The walls are the 34.92° sector
+  /// the shot, discus and hammer land in; inside, in white, is the
+  /// javelin's, which is narrower — 28.96°, its lines struck from the
+  /// center of the arc the javelin is thrown over. That arc is the liquid's
+  /// surface: wide and shallow, it meets the glass either side like a
+  /// meniscus, and the two lines leave it and run to the base.
+  void _circleInFlask(Canvas canvas, double s, {required bool arcs}) {
+    final f = _sector;
+    final body = f.path(s), open = f.path(s, closed: false);
+    const javelinHalf = 28.96 / 2 * math.pi / 180;
+    const centerY = 0.30, radius = 0.26;
+    final center = const Offset(0.5, centerY) * s;
+    canvas.save();
+    canvas.clipPath(body);
+    canvas.drawPath(
+        Path.combine(
+            PathOperation.difference,
+            Path()..addRect(Rect.fromLTWH(0, 0, s, s)),
+            Path()
+              ..addOval(Rect.fromCircle(center: center, radius: radius * s))
+              ..addRect(Rect.fromLTRB(0, 0, s, center.dy))),
+        _fill);
+    final white = _stroke(Colors.white, s * 0.026)..strokeCap = StrokeCap.butt;
+    for (final side in [-1.0, 1.0]) {
+      final d = Offset(math.sin(javelinHalf) * side, math.cos(javelinHalf));
+      canvas.drawLine(
+          center + d * (radius * s), center + d * (0.62 * s), white);
+    }
+    if (arcs) {
+      for (final r in [0.37, 0.47]) {
+        canvas.drawArc(Rect.fromCircle(center: center, radius: r * s),
+            math.pi / 2 - javelinHalf, javelinHalf * 2, false, white);
+      }
+    }
+    canvas.restore();
+    canvas.drawPath(open, _stroke(_blue, s * 0.05));
+    canvas.drawPath(f.lip(s, 0.05), _stroke(_blue, s * 0.05));
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
@@ -506,6 +547,8 @@ class _LogoPainter extends CustomPainter {
         canvas.restore();
         canvas.drawPath(open, _stroke(_blue, wall));
         canvas.drawPath(f.lip(s, 0.05), _stroke(_blue, wall));
+      case Concept.b3 || Concept.b3arcs:
+        _circleInFlask(canvas, s, arcs: concept == Concept.b3arcs);
       case Concept.b2c:
         _flaskInSector(canvas, s);
       case Concept.b2a || Concept.b2b:
