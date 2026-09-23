@@ -404,7 +404,7 @@ class _EventCard extends StatelessWidget {
         flights > 1 ? '$field in $flights flights' : '$field in the field';
     final leader = standings.places.isEmpty ? null : standings.places.first;
     return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      color: cardOverSector(theme.colorScheme),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onOpen,

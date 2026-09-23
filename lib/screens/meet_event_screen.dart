@@ -507,9 +507,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// it, which is the app's texture. Blending it here rather than picking a
   /// new color keeps this card exactly the tone of all the others while
   /// letting nothing through it.
-  Color _opaque(ThemeData theme) => Color.alphaBlend(
-      theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
-      theme.colorScheme.surface);
+  Color _opaque(ThemeData theme) => solidCardOverSector(theme.colorScheme);
 
   /// Where the competition stands — one table, because everyone on this
   /// screen is in the one an athlete is actually placed in.
@@ -1186,12 +1184,13 @@ class _FlightBar extends StatelessWidget {
   final MeetFlight flight;
   final MeetStandings standings;
 
+  // Solid, where the field under it is not: this is the header the whole
+  // list is read against, and the backdrop's lines running through the
+  // round and the three names an infield calls made it the hardest thing
+  // on the screen to read at arm's length.
   @override
   Widget build(BuildContext context) => Card(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withOpacity(0.45),
+        color: solidCardOverSector(Theme.of(context).colorScheme),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           child: _FlightBody(
@@ -1447,7 +1446,7 @@ class _EntryCard extends StatelessWidget {
     final accent = eventColor(entry.event);
     if (embedded) return _body(theme, accent);
     return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      color: cardOverSector(theme.colorScheme),
       margin: EdgeInsets.zero,
       // The athlete in the circle is edged in the event's color, so a coach
       // looking down at the phone finds the row they are about to write on
@@ -1828,7 +1827,7 @@ class _StandingsCard extends StatelessWidget {
     final accent = eventColor(standings.competition.event);
     final places = standings.places;
     return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      color: cardOverSector(theme.colorScheme),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(

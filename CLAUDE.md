@@ -1131,8 +1131,12 @@ like the app rather than a bare Material default.
   was the version that did not line up: the sector came out a couple of
   degrees off and its arcs came out as ellipses. The cards are *not* angular — the competition screen's are
   plain `Card`s at the theme's 16px radius, and translucent
-  (`surfaceContainerHighest` at 45%) so the sector stands through them,
-  which is most of what made an opaque page read as a different app. The
+  (`surfaceContainerHighest` at `cardOverSectorOpacity`, 70%, in
+  `sector_art.dart`) so the sector stands through them, which is most of
+  what made an opaque page read as a different app. Faintly, though: at
+  45% the backdrop's lines ran through the type on every card. The header
+  card over the field is solid (`solidCardOverSector`) on both sides, like
+  the live card — it is what the whole list is read against. The
   athlete in the circle is edged in the event's color at 12px, as theirs
   is. The podium's three metals are written into it out of `gold.dart` too
   — the flat tones as CSS variables for the places, and the five stops as

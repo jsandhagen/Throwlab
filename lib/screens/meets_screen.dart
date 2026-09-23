@@ -1020,7 +1020,7 @@ class MeetCard extends StatelessWidget {
     final facts = _Facts(meet, library);
     final events = facts.events;
     return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      color: cardOverSector(theme.colorScheme),
       child: ListTile(
         contentPadding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
         onTap: onOpen,
