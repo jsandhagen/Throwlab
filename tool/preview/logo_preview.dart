@@ -430,12 +430,18 @@ class _LogoPainter extends CustomPainter {
     canvas.save();
     canvas.clipPath(liquid);
     canvas.drawRect(Rect.fromLTWH(0, 0, s, s), _fill);
-    final white = _stroke(Colors.white, s * 0.024)..strokeCap = StrokeCap.butt;
+    // The lines are cut out of the liquid rather than drawn on it, so they
+    // are whatever the mark stands on: white on the launcher tile and the
+    // sheet, the theme's own dark in the app — as the empty glass above
+    // the liquid already is.
+    final white = _stroke(Colors.black, s * 0.024)
+      ..strokeCap = StrokeCap.butt
+      ..blendMode = BlendMode.clear;
     for (final side in [-1.0, 1.0]) {
       final d = Offset(math.sin(half) * side, math.cos(half));
       canvas.drawLine(center, center + d * s, white);
     }
-    for (final y in arcs ? [0.54, 0.65, 0.795] : [0.65]) {
+    for (final y in arcs ? [0.54, 0.6675, 0.795] : [0.65]) {
       canvas.drawArc(Rect.fromCircle(center: center, radius: (y - centerY) * s),
           math.pi / 2 - half, half * 2, false, white);
     }
