@@ -396,20 +396,28 @@ class _LogoPainter extends CustomPainter {
     canvas.drawPath(f.lip(s, 0.02), _stroke(_blue, s * 0.045));
   }
 
-  /// B2's flask with a sector drawn in it. The walls are the 34.92° sector
-  /// the shot, discus and hammer land in; inside, in white, is the
-  /// javelin's, which is narrower — 28.96°, its lines struck from the
-  /// center of the arc the javelin is thrown over. That arc is the liquid's
-  /// surface: wide and shallow, it meets the glass either side like a
-  /// meniscus, and the two lines leave it and run to the base.
+  /// B2's flask with the sector drawn in it. The liquid fills the body to
+  /// where the neck opens out, and its surface is an arc — the front of
+  /// the throwing circle, or the javelin's foul line, the same way round —
+  /// with the two sector lines leaving it in white. They are struck round
+  /// the same center as the arc, at the sector's own 34.92°, so they run
+  /// parallel to the walls a hairline inside them: the flask's outline
+  /// and the field's lines are one shape drawn twice.
   void _circleInFlask(Canvas canvas, double s, {required bool arcs}) {
     final f = _sector;
     final body = f.path(s), open = f.path(s, closed: false);
-    const javelinHalf = 28.96 / 2 * math.pi / 180;
-    // The surface sits where the neck opens into the body, so the whole
-    // body is liquid and the lines run its full height.
-    const centerY = 0.22, radius = 0.20;
-    final center = const Offset(0.5, centerY) * s;
+    final half = sectorHalfAngleDeg * math.pi / 180;
+    final lean = sectorLean;
+    // Where the walls' own lines meet, above the flask; the arc's center
+    // sits below it by as much as puts the white lines [inset] inside the
+    // walls' middle — the wall's half-width, a gap of blue, and half the
+    // white line.
+    final apexY = f.shoulder.dy - (0.5 - f.shoulder.dx) / lean;
+    const inset = 0.05;
+    final centerY = apexY + inset / lean;
+    const surfaceY = 0.40;
+    final radius = surfaceY - centerY;
+    final center = Offset(0.5, centerY) * s;
     canvas.save();
     canvas.clipPath(body);
     canvas.drawPath(
@@ -420,16 +428,15 @@ class _LogoPainter extends CustomPainter {
               ..addOval(Rect.fromCircle(center: center, radius: radius * s))
               ..addRect(Rect.fromLTRB(0, 0, s, center.dy))),
         _fill);
-    final white = _stroke(Colors.white, s * 0.026)..strokeCap = StrokeCap.butt;
+    final white = _stroke(Colors.white, s * 0.024)..strokeCap = StrokeCap.butt;
     for (final side in [-1.0, 1.0]) {
-      final d = Offset(math.sin(javelinHalf) * side, math.cos(javelinHalf));
-      canvas.drawLine(
-          center + d * (radius * s), center + d * (0.68 * s), white);
+      final d = Offset(math.sin(half) * side, math.cos(half));
+      canvas.drawLine(center + d * (radius * s), center + d * s, white);
     }
     if (arcs) {
-      for (final r in [0.40, 0.53]) {
+      for (final r in [0.62 - centerY, 0.74 - centerY]) {
         canvas.drawArc(Rect.fromCircle(center: center, radius: r * s),
-            math.pi / 2 - javelinHalf, javelinHalf * 2, false, white);
+            math.pi / 2 - half, half * 2, false, white);
       }
     }
     canvas.restore();
