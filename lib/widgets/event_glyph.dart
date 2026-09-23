@@ -111,7 +111,10 @@ List<GlyphPart> javelinParts() {
 List<GlyphPart> discusParts() {
   const center = Offset(0.5, 0.5);
   const radius = 0.36;
-  const gap = 0.02; // between the steel and the body
+  // Between the steel and the body: enough to part them on a card that
+  // draws the glyph all in white, and no more — wider, the two gaps read as
+  // black rings drawn round the plate and inside the rim.
+  const gap = 0.012;
   const steps = 64;
 
   List<Offset> circle(double r) => [
