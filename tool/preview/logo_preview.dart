@@ -435,7 +435,7 @@ class _LogoPainter extends CustomPainter {
       final d = Offset(math.sin(half) * side, math.cos(half));
       canvas.drawLine(center, center + d * s, white);
     }
-    for (final y in arcs ? [0.54, 0.65, 0.76] : [0.65]) {
+    for (final y in arcs ? [0.54, 0.65, 0.795] : [0.65]) {
       canvas.drawArc(Rect.fromCircle(center: center, radius: (y - centerY) * s),
           math.pi / 2 - half, half * 2, false, white);
     }
