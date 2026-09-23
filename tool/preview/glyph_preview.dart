@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/main.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/widgets/event_glyph.dart';
+import 'package:throwlab/widgets/throw_picker.dart';
 
 import 'harness.dart';
 
@@ -41,7 +42,8 @@ void main() {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         for (final size in _sizes) ...[
-                          EventGlyph(event, size: size),
+                          EventGlyph(event,
+                              size: size, color: eventColor(event)),
                           const SizedBox(width: 14),
                         ],
                       ],
@@ -50,8 +52,33 @@ void main() {
                 ),
                 const SizedBox(height: 12),
               ],
-              // One big enough to see what was drawn.
-              const EventGlyph(ThrowEvent.javelin, size: 300),
+              // All in white on the event's own wash, as a throw card with
+              // no still draws it — where the gaps are all that separates
+              // the steel from the rest.
+              Row(
+                children: [
+                  for (final event in ThrowEvent.values) ...[
+                    Container(
+                      width: 64,
+                      height: 64,
+                      color: eventColor(event).withValues(alpha: 0.25),
+                      alignment: Alignment.center,
+                      child: EventGlyph(event,
+                          size: 34,
+                          color: Colors.white.withValues(alpha: 0.75)),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Big enough to see what was drawn.
+              Row(
+                children: [
+                  for (final event in [ThrowEvent.discus, ThrowEvent.javelin])
+                    EventGlyph(event, size: 160, color: eventColor(event)),
+                ],
+              ),
             ],
           ),
         ),

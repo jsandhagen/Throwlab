@@ -1,23 +1,43 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/throw_event.dart';
 
-/// The javelin in the unit square, tail bottom-left and point top-right, as
-/// two closed outlines: the shaft with its cord grip, and the metal head.
+/// One piece of a drawn implement: outlines in the unit square, filled
+/// even-odd so a ring is an outline with its hole as a second one, in the
+/// glyph's own color or — for the parts a real one makes of steel — in
+/// [glyphMetal].
+///
+/// The metal is kept off the colored parts by a hairline of nothing rather
+/// than laid against them, because the glyph is also drawn all in white
+/// (a throw card's placeholder), and there the gap is the only thing that
+/// says where the head ends or the rim begins.
+class GlyphPart {
+  const GlyphPart(this.outlines, {this.metal = false});
+
+  final List<List<Offset>> outlines;
+  final bool metal;
+}
+
+/// The steel of a drawn implement: white, as bright as the glyph's own
+/// color is opaque, so a glyph dimmed for a disabled row dims all of it.
+Color glyphMetal(Color tint) => Colors.white.withValues(alpha: tint.a);
+
+/// The javelin, tail bottom-left and point top-right: the shaft with its
+/// cord grip, and the metal head.
 ///
 /// Drawn to a real one's proportions rather than as a needle with a bump:
 /// a shaft of nearly one width, a grip barely proud of it — cord bound on,
 /// not a handle — sitting just behind the middle over the balance point, a
 /// tail drawn out to a fine point, and a long metal head, a fifth of the
-/// whole, tapering gently and then sharply at the very end. The hairline
-/// left between head and shaft is the seam where the metal is fitted, which
-/// a monochrome glyph can only say as a gap. Everything is thicker than a
-/// real one's by a long way, since a real one at 16 px is no pixels wide,
-/// but the widths keep their ratios to each other.
+/// whole, tapering gently and then sharply at the very end. Everything is
+/// thicker than a real one's by a long way, since a real one at 16 px is no
+/// pixels wide, but the widths keep their ratios to each other.
 ///
-/// The page a competition is shared on draws the same outlines, handed to
-/// it as SVG by `spectatorPage`, so the two cannot be two javelins.
-List<List<Offset>> javelinOutline() {
+/// The page a competition is shared on draws the same parts, handed to it
+/// as SVG by `spectatorPage`, so the two cannot be two javelins.
+List<GlyphPart> javelinParts() {
   const tail = Offset(0.08, 0.92);
   const tip = Offset(0.92, 0.08);
   final length = (tip - tail).distance;
@@ -54,17 +74,75 @@ List<List<Offset>> javelinOutline() {
   }
 
   return [
-    outline(shaft),
-    outline(head),
+    GlyphPart([outline(shaft)]),
+    GlyphPart([outline(head)], metal: true),
+  ];
+}
+
+/// The discus, seen from above and tilted as it flies: a steel rim, the
+/// body inside it, and the steel plate at the middle, with the edge of the
+/// rim showing under the face — which is what makes it a disc with a
+/// thickness rather than a record.
+///
+/// To a real one's proportions where they survive the size: the plate a
+/// quarter of the width across, the rim's face about an eighth of the
+/// radius, and the plate lifted toward the viewer off the middle of the
+/// face, because a discus is a lens — three and a half times as thick at
+/// the plate as at the rim — and seen from above the plate stands up off
+/// it. The edge is drawn thicker than a real one's, as the javelin's shaft
+/// is, or it is nothing at 16 px.
+List<GlyphPart> discusParts() {
+  const center = Offset(0.5, 0.46);
+  const rx = 0.42, ry = 0.24; // the face, foreshortened
+  const edge = 0.055; // the rim's own thickness, seen from above it
+  const gap = 0.02; // between the steel and the body
+  const tilt = -18 * math.pi / 180;
+  const steps = 64;
+
+  // The disc's own frame: x across it, y toward the near edge.
+  final cx = Offset(math.cos(tilt), math.sin(tilt));
+  final cy = Offset(-math.sin(tilt), math.cos(tilt));
+  Offset at(double x, double y) => center + cx * x + cy * y;
+  Offset onFace(double a, double scale, {double lift = 0}) =>
+      at(rx * scale * math.cos(a), ry * scale * math.sin(a) - lift);
+  List<Offset> ellipse(double scale, {double lift = 0}) => [
+        for (var i = 0; i < steps; i++)
+          onFace(2 * math.pi * i / steps, scale, lift: lift),
+      ];
+
+  // The near half of the rim's edge: under the face's near arc, down to
+  // the same arc a thickness lower. The gap above it closes to nothing at
+  // the two ends, which is where the face turns into the edge.
+  final side = [
+    for (var i = 0; i <= steps ~/ 2; i++)
+      at(rx * math.cos(math.pi * i / (steps ~/ 2)),
+          ry * math.sin(math.pi * i / (steps ~/ 2)) + edge),
+    for (var i = steps ~/ 2; i >= 0; i--)
+      at(rx * math.cos(math.pi * i / (steps ~/ 2)),
+          (ry + gap) * math.sin(math.pi * i / (steps ~/ 2))),
+  ];
+
+  const rimInner = 0.87;
+  const plate = 0.27;
+  const lift = 0.035;
+  return [
+    GlyphPart([side], metal: true),
+    GlyphPart([ellipse(1), ellipse(rimInner)], metal: true),
+    GlyphPart([
+      ellipse(rimInner - gap / rx * 1.4),
+      ellipse(plate + gap / rx * 1.4, lift: lift),
+    ]),
+    GlyphPart([ellipse(plate, lift: lift)], metal: true),
   ];
 }
 
 /// Hand-drawn implement glyphs so each event reads as its real implement —
 /// a solid shot, a tilted discus, a pointed javelin, a hammer on its wire —
-/// instead of a stand-in Material icon. Monochrome like an icon: it takes
-/// the ambient [IconTheme] color unless [color] is given, and its
-/// highlights are punched out (even-odd) so they reveal whatever sits
-/// behind the glyph — a faint sheen on any background.
+/// instead of a stand-in Material icon. It takes the ambient [IconTheme]
+/// color unless [color] is given, and its highlights are punched out
+/// (even-odd) so they reveal whatever sits behind the glyph — a faint sheen
+/// on any background. The discus's rim and plate and the javelin's head are
+/// the exception: steel on the real thing, and white here ([glyphMetal]).
 class EventGlyph extends StatelessWidget {
   const EventGlyph(this.event, {super.key, this.size = 24, this.color});
 
@@ -132,23 +210,19 @@ class _EventGlyphPainter extends CustomPainter {
     canvas.drawPath(path, _fill);
   }
 
-  /// Disc seen face-on: a solid ring with an open center, the record-like
-  /// look of the original discus icon.
-  void _discus(Canvas canvas, double s) {
-    final center = Offset(s * 0.5, s * 0.5);
-    final path = Path()..fillType = PathFillType.evenOdd;
-    path.addOval(Rect.fromCircle(center: center, radius: s * 0.33));
-    path.addOval(Rect.fromCircle(center: center, radius: s * 0.075));
-    canvas.drawPath(path, _fill);
-  }
+  void _discus(Canvas canvas, double s) => _parts(canvas, s, discusParts());
 
-  /// The javelin's outline, laid down the diagonal — see [javelinOutline].
-  void _javelin(Canvas canvas, double s) {
-    final path = Path();
-    for (final part in javelinOutline()) {
-      path.addPolygon([for (final o in part) o * s], true);
+  void _javelin(Canvas canvas, double s) => _parts(canvas, s, javelinParts());
+
+  void _parts(Canvas canvas, double s, List<GlyphPart> parts) {
+    for (final part in parts) {
+      final path = Path()..fillType = PathFillType.evenOdd;
+      for (final outline in part.outlines) {
+        path.addPolygon([for (final o in outline) o * s], true);
+      }
+      canvas.drawPath(
+          path, _fill..color = part.metal ? glyphMetal(color) : color);
     }
-    canvas.drawPath(path, _fill);
   }
 
   /// Ball on a wire ending in a grip handle — the hammer's three parts.

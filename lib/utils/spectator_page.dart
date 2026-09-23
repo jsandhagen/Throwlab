@@ -84,16 +84,21 @@ String spectatorPage(
     'second': Medal.silver,
     'third': Medal.bronze,
   };
-  // The javelin's outline off `EventGlyph`'s own, as SVG in the unit
-  // square: a real javelin's proportions are too fine to trace by hand
-  // twice and have both come out the same.
-  final javelin = [
-    for (final part in javelinOutline())
-      'M ${[
-        for (final o in part)
-          '${o.dx.toStringAsFixed(4)} ${o.dy.toStringAsFixed(4)}',
-      ].join(' L ')} Z',
-  ].join(' ');
+  // The discus and the javelin off `EventGlyph`'s own parts, as SVG in the
+  // unit square: a real implement's proportions are too fine to trace by
+  // hand twice and have both come out the same. The steel is white on the
+  // page as it is in the app, whatever the event's color.
+  String implement(List<GlyphPart> parts) => [
+        for (final part in parts)
+          '<path fill-rule="evenodd"${part.metal ? ' fill="#ffffff"' : ''} '
+              'd="${[
+            for (final outline in part.outlines)
+              'M ${[
+                for (final o in outline)
+                  '${o.dx.toStringAsFixed(4)} ${o.dy.toStringAsFixed(4)}',
+              ].join(' L ')} Z',
+          ].join(' ')}"/>',
+      ].join();
   return _page
       .replaceFirst(
           '/*NOTE*/',
@@ -117,7 +122,8 @@ String spectatorPage(
       // The slant every leaning edge on the page uses, which is the one the
       // sector opens at — the same number the app's own bar leans by.
       .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2))
-      .replaceFirst('/*JAVELIN*/', javelin);
+      .replaceFirst('/*DISCUS*/', implement(discusParts()))
+      .replaceFirst('/*JAVELIN*/', implement(javelinParts()));
 }
 
 const String _page = r'''<!doctype html>
@@ -620,7 +626,7 @@ const String _page = r'''<!doctype html>
   function glyph(event, tint) {
     var s = 22, g;
     if (event === "discus") {
-      g = '<path fill-rule="evenodd" d="' + ring(0.5, 0.5, 0.33, 0.075, s) + '"/>';
+      g = '<g transform="scale(' + s + ')">/*DISCUS*/</g>';
     } else if (event === "shotPut") {
       g = '<path fill-rule="evenodd" d="' + ring(0.5, 0.55, 0.31, 0.06, s, -0.11, -0.12) + '"/>';
     } else if (event === "hammer") {
@@ -628,16 +634,16 @@ const String _page = r'''<!doctype html>
         '<path d="M ' + 0.41 * s + " " + 0.59 * s + " L " + 0.74 * s + " " + 0.30 * s +
         '" stroke="' + tint + '" stroke-width="' + 0.05 * s + '" fill="none"/>';
     } else {
-      /* The javelin: the app's own outline, handed over in the unit
-         square rather than traced a second time. */
-      g = '<path transform="scale(' + s + ')" d="/*JAVELIN*/"/>';
+      /* The discus above and the javelin here are the app's own parts,
+         handed over in the unit square rather than traced a second time. */
+      g = '<g transform="scale(' + s + ')">/*JAVELIN*/</g>';
     }
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + " " + s +
       '" fill="' + tint + '" aria-hidden="true" style="width:' + s + "px;height:" +
       s + 'px">' + g + "</svg>";
   }
-  /* A disc with a hole in it, which is both the discus and the shot's
-     highlight — even-odd fill, exactly as the painter does it. */
+  /* A ball with its highlight punched out of it — even-odd fill, exactly
+     as the painter does it. */
   function ring(cx, cy, r, hole, s, hx, hy) {
     function circle(x, y, rad) {
       return "M " + (x - rad) + " " + y + " a " + rad + " " + rad + " 0 1 0 " +
