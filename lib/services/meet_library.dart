@@ -132,12 +132,14 @@ class MeetLibrary extends ChangeNotifier {
     String meetId, {
     required ThrowEvent event,
     required double implementKg,
+    Division? division,
   }) async {
     final meet = byId(meetId);
     if (meet == null) return;
     final before = meet.entries.length;
-    meet.entries.removeWhere(
-        (entry) => entry.event == event && entry.implementKg == implementKg);
+    final competition =
+        MeetCompetition(event, implementKg, const [], division: division);
+    meet.entries.removeWhere(competition.holds);
     if (meet.entries.length == before) return;
     await _persist();
     notifyListeners();

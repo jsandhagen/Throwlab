@@ -55,6 +55,7 @@ class ShareSource {
     required this.meetId,
     required this.event,
     required this.implementKg,
+    this.division,
     required this.meet,
     required this.results,
     this.isPersonalBest,
@@ -64,6 +65,7 @@ class ShareSource {
   final String meetId;
   final ThrowEvent event;
   final double implementKg;
+  final Division? division;
 
   final Meet? Function() meet;
   final List<ThrowResult> Function() results;
@@ -76,12 +78,15 @@ class ShareSource {
   final String Function(String athlete)? boardNames;
 
   /// Whether this is the competition being asked after — the meet, the
-  /// event *and* the weight, since that is the contest an athlete is placed
-  /// in and therefore the thing a link is handed over for.
-  bool covers(String meetId, ThrowEvent event, double implementKg) =>
+  /// event, the weight *and* the division, since that is the contest an
+  /// athlete is placed in and therefore the thing a link is handed over
+  /// for: the girls' discus link never serves the women's.
+  bool covers(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
       this.meetId == meetId &&
       this.event == event &&
-      this.implementKg == implementKg;
+      this.implementKg == implementKg &&
+      this.division == division;
 
   /// The competition as it stands, looked up fresh. Null once the meet — or
   /// everybody in this event — has gone.
@@ -154,7 +159,7 @@ class ShareSource {
 
   MeetCompetition? _within(Meet held) {
     for (final competition in MeetCompetition.of(held)) {
-      if (competition.event == event && competition.implementKg == implementKg) {
+      if (competition.isFor(event, implementKg, division: division)) {
         return competition;
       }
     }

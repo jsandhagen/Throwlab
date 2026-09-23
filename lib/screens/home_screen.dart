@@ -259,6 +259,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             meetId: live.id,
             event: competitions.single.event,
             implementKg: competitions.single.implementKg,
+            division: competitions.single.division,
           ),
         ),
       );

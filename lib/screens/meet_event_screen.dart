@@ -51,16 +51,19 @@ class MeetEventScreen extends StatefulWidget {
     required this.meetId,
     required this.event,
     required this.implementKg,
+    this.division,
     this.filmAttempt,
     this.shareResults,
   });
 
   final String meetId;
 
-  /// Which competition of the meet this is — the event and the weight
-  /// together, since those are what put athletes in the same contest.
+  /// Which competition of the meet this is — the event, the weight and
+  /// who it is for together, since those are what put athletes in the same
+  /// contest.
   final ThrowEvent event;
   final double implementKg;
+  final Division? division;
 
   /// Overrides how a round is filmed; the camera when null.
   final AttemptFilmer? filmAttempt;
@@ -168,13 +171,14 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
         }
         final theme = Theme.of(context);
         final accent = eventColor(widget.event);
-        final spec = widget.event.specFor(widget.implementKg);
         // Empty once the last entry is removed: the competition stops
         // existing, but the screen stays so somebody can be put back in it.
         final competition = MeetCompetition.of(meet).firstWhere(
-          (c) => c.event == widget.event && c.implementKg == widget.implementKg,
-          orElse: () =>
-              MeetCompetition(widget.event, widget.implementKg, const []),
+          (c) => c.isFor(widget.event, widget.implementKg,
+              division: widget.division),
+          orElse: () => MeetCompetition(
+              widget.event, widget.implementKg, const [],
+              division: widget.division),
         );
         final standings = MeetStandings(competition, library.results,
             advancing: meet.advancing, prelimRounds: meet.prelimRounds);
@@ -182,8 +186,9 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
             MeetFlight(competition, rounds: meet.rounds, standings: standings);
         // Softly, like the meets: a screen that offers to share still
         // paints in a test with nothing but the competition.
-        final sharing = meetRelayOf(context)
-                ?.sharing(meet.id, widget.event, widget.implementKg) ??
+        final sharing = meetRelayOf(context)?.sharing(
+                meet.id, widget.event, widget.implementKg,
+                division: widget.division) ??
             false;
 
         return Scaffold(
@@ -197,7 +202,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('${widget.event.label} · ${spec.weightLabel}'),
+                      Text(competition.label, overflow: TextOverflow.ellipsis),
                       Text(
                         meet.name.isEmpty ? 'Meet' : meet.name,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -252,7 +257,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               else
                 Column(
                   children: [
-                    Padding(
+                    HeaderBand(
+                        child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: AngularSegmentedBar<_MeetView>(
                         value: _view,
@@ -275,7 +281,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                               label: 'Standings'),
                         ],
                       ),
-                    ),
+                    )),
                     Expanded(
                       child: switch (_view) {
                         _MeetView.series => _seriesList(meet, meets, library,
@@ -502,9 +508,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   /// it, which is the app's texture. Blending it here rather than picking a
   /// new color keeps this card exactly the tone of all the others while
   /// letting nothing through it.
-  Color _opaque(ThemeData theme) => Color.alphaBlend(
-      theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
-      theme.colorScheme.surface);
+  Color _opaque(ThemeData theme) => solidCardOverSector(theme.colorScheme);
 
   /// Where the competition stands — one table, because everyone on this
   /// screen is in the one an athlete is actually placed in.
@@ -790,6 +794,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       known: library.knownAthletes,
       event: widget.event,
       implementKg: widget.implementKg,
+      division: widget.division,
       // Only worth asking where the field has been split: an athlete
       // noticed mid-competition throws in a flight, and putting them in
       // the wrong one calls them into the circle an hour early or late.
@@ -813,8 +818,9 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     _number(meet);
     var at = -1;
     for (final other in meet.entries) {
-      if (other.event == entry.event &&
-          other.implementKg == entry.implementKg &&
+      if (MeetCompetition(other.event, other.implementKg, const [],
+                  division: other.division)
+              .holds(entry) &&
           other.flight == entry.flight &&
           other.order > at) {
         at = other.order;
@@ -1179,12 +1185,13 @@ class _FlightBar extends StatelessWidget {
   final MeetFlight flight;
   final MeetStandings standings;
 
+  // Solid, where the field under it is not: this is the header the whole
+  // list is read against, and the backdrop's lines running through the
+  // round and the three names an infield calls made it the hardest thing
+  // on the screen to read at arm's length.
   @override
   Widget build(BuildContext context) => Card(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest
-            .withOpacity(0.45),
+        color: solidCardOverSector(Theme.of(context).colorScheme),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           child: _FlightBody(
@@ -1440,7 +1447,7 @@ class _EntryCard extends StatelessWidget {
     final accent = eventColor(entry.event);
     if (embedded) return _body(theme, accent);
     return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      color: cardOverSector(theme.colorScheme),
       margin: EdgeInsets.zero,
       // The athlete in the circle is edged in the event's color, so a coach
       // looking down at the phone finds the row they are about to write on
@@ -1821,7 +1828,7 @@ class _StandingsCard extends StatelessWidget {
     final accent = eventColor(standings.competition.event);
     final places = standings.places;
     return Card(
-      color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.45),
+      color: cardOverSector(theme.colorScheme),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Column(

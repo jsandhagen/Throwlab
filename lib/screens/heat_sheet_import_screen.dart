@@ -140,19 +140,26 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
     // twice: a sheet read again after a scratch should not double the
     // field, and neither should a program that printed somebody's name
     // twice — which is what a field listed once per round looks like.
-    bool already(String name, ThrowEvent event, double kg) =>
+    //
+    // Somebody entered by hand before the sheet came out is in the same
+    // competition whether or not they were given a division, so an entry
+    // with none counts too — [_nameDivisions] gives it the sheet's.
+    bool already(String name, MeetCompetition competition) =>
         [...meet.entries, ...entries].any((entry) =>
-            entry.event == event &&
-            entry.implementKg == kg &&
+            (competition.holds(entry) ||
+                _undivided(entry, competition)) &&
             sameAthlete(entry.athlete, name));
 
     var order = meet.entries.length;
     for (final row in _rows) {
       if (!row.chosen) continue;
+      final competition = MeetCompetition(
+          row.event.event, row.event.implementKg, const [],
+          division: row.event.division);
       for (final athlete in row.athletes) {
         if (!athlete.chosen) continue;
         final name = athlete.known ?? athlete.athlete.name;
-        if (already(name, row.event.event, row.event.implementKg)) continue;
+        if (already(name, competition)) continue;
         entries.add(MeetEntry(
           id: '${MeetLibrary.newEntryId()}_${entries.length}',
           // The library's spelling wins, so a season doesn't split between
@@ -160,6 +167,7 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
           athlete: name,
           event: row.event.event,
           implementKg: row.event.implementKg,
+          division: row.event.division,
           // Only your own athletes reach the record book. The rest of the
           // field is here to be placed against, not to be kept.
           tracked: athlete.known != null,
@@ -174,10 +182,42 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
     return entries;
   }
 
+  /// Whether [entry] is in [competition] in everything but the division,
+  /// which it was entered without.
+  static bool _undivided(MeetEntry entry, MeetCompetition competition) =>
+      entry.division == null &&
+      competition.division != null &&
+      entry.event == competition.event &&
+      entry.implementKg == competition.implementKg;
+
+  /// Gives the sheet's division to the entries already in the meet at the
+  /// same event and weight without one — the field a coach started by hand
+  /// before the program was out. Left alone, the sheet's names would land
+  /// in a 'Boys Shot Put' beside a plain 'Shot Put' holding the athlete
+  /// they had already put in it: one competition drawn as two. Says
+  /// whether it named any.
+  bool _nameDivisions(Meet meet) {
+    var named = false;
+    for (final row in _rows) {
+      if (!row.chosen || row.event.division == null) continue;
+      final competition = MeetCompetition(
+          row.event.event, row.event.implementKg, const [],
+          division: row.event.division);
+      for (final entry in meet.entries) {
+        if (_undivided(entry, competition)) {
+          entry.division = competition.division;
+          named = true;
+        }
+      }
+    }
+    return named;
+  }
+
   Future<void> _add(MeetLibrary meets, Meet meet) async {
     final entries = _going(meet);
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
+    if (_nameDivisions(meet)) await meets.save(meet);
     await meets.addEntries(meet.id, entries);
     navigator.pop();
     messenger.showSnackBar(SnackBar(
@@ -412,10 +452,12 @@ class _EventCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                // The implement's own name for itself, so a 12 lb shot
-                // reads as one rather than as 5.44 kg.
-                '${event.event.label} · '
-                '${event.event.specFor(event.implementKg).weightLabel}',
+                // Named the way the meet screen will name it — the
+                // division first, and the implement's own name for itself,
+                // so a 12 lb shot reads as one rather than as 5.44 kg.
+                MeetCompetition(event.event, event.implementKg, const [],
+                        division: event.division)
+                    .label,
                 style: theme.textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),

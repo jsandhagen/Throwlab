@@ -204,6 +204,28 @@ Flight 2 of 2
     expect(find.text('Enter 1 athlete'), findsOneWidget);
   });
 
+  testWidgets('names the division of a field started by hand',
+      (tester) async {
+    // Entered before the program was out, with no division to give — the
+    // sheet's 'Boys' is the same competition, not a second one beside it.
+    await meets.addEntry('k1',
+        entry: MeetEntry(
+          id: 'e1',
+          athlete: 'Jakob Sandhagen',
+          event: ThrowEvent.shotPut,
+          implementKg: 5.44,
+        ));
+    await open(tester);
+    await paste(tester, sheet);
+    await tester.tap(find.text('Enter 1 athlete'));
+    await tester.pumpAndSettle();
+
+    final meet = meets.byId('k1')!;
+    final competitions = MeetCompetition.of(meet);
+    expect(competitions.map((c) => c.label), ['Boys Shot Put · 12 lb']);
+    expect(competitions.single.entries.length, 2);
+  });
+
   testWidgets('links an athlete by the full name and school on their record',
       (tester) async {
     // Known to the library only as 'Bud' — a nickname no program prints —

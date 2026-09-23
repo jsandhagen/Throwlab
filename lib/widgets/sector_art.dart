@@ -77,6 +77,45 @@ class SectorPainter extends CustomPainter {
       old.color != color || old.opacity != opacity;
 }
 
+/// How much of a card standing over the backdrop is card: the sector shows
+/// through, which is the app's texture, but faintly enough that the lines
+/// never run through what is written on it.
+///
+/// One number for the meet tracker and the spectator page both, because the
+/// page is meant to read as the app and a card of a different weight is the
+/// first thing that would show side by side.
+const double cardOverSectorOpacity = 0.7;
+
+/// A card over the backdrop, in the theme's own container color.
+Color cardOverSector(ColorScheme scheme) =>
+    scheme.surfaceContainerHighest.withOpacity(cardOverSectorOpacity);
+
+/// The same card's tone flattened onto the surface, for the one card that
+/// must let nothing through — a header, or a sector drawn over a sector.
+Color solidCardOverSector(ColorScheme scheme) =>
+    Color.alphaBlend(cardOverSector(scheme), scheme.surface);
+
+/// What sits above a screen's scrolling content — a segmented bar, the
+/// line of weather across a meet — laid on the plain surface, so the
+/// backdrop starts under it rather than running through it.
+///
+/// The sector is texture for the cards; through the controls a coach reads
+/// first on opening a screen, it is lines across the words. It is a band
+/// over the backdrop rather than a backdrop moved down, because the box the
+/// sector is laid out in sets the bearing it crosses the screen on, and the
+/// spectator page lays its own out from the same place.
+class HeaderBand extends StatelessWidget {
+  const HeaderBand({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child: child,
+      );
+}
+
 /// The sector as background art: the throwing circle sits just off the
 /// bottom-left corner, its distance arcs sweep diagonally across the screen,
 /// and the two sector lines cut through them. Faint by design — it should

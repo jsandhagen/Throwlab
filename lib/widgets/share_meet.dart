@@ -78,6 +78,7 @@ class _ShareSheetState extends State<_ShareSheet> {
       meetId: widget.meet.id,
       event: widget.competition.event,
       implementKg: widget.competition.implementKg,
+      division: widget.competition.division,
       scheme: scheme,
       // Read live, at every push. The relay holds the answers and never a
       // copy of the competition, so a mark entered a moment ago is in the
@@ -100,7 +101,8 @@ class _ShareSheetState extends State<_ShareSheet> {
   Future<void> _stop(MeetRelay relay) async {
     setState(() => _working = true);
     await relay.stop(widget.meet.id, widget.competition.event,
-        widget.competition.implementKg);
+        widget.competition.implementKg,
+        division: widget.competition.division);
     if (mounted) setState(() => _working = false);
   }
 
@@ -110,7 +112,8 @@ class _ShareSheetState extends State<_ShareSheet> {
     final relay = meetRelayOf(context);
     final sharing = relay != null &&
         relay.sharing(widget.meet.id, widget.competition.event,
-            widget.competition.implementKg);
+            widget.competition.implementKg,
+            division: widget.competition.division);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -214,7 +217,9 @@ class _Sharing extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final url =
-        relay.urlFor(meet.id, competition.event, competition.implementKg) ?? '';
+        relay.urlFor(meet.id, competition.event, competition.implementKg,
+                division: competition.division) ??
+            '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -232,7 +237,8 @@ class _Sharing extends StatelessWidget {
               size: const Size.square(232),
               painter: QrPainter(
                   relay.qrFor(meet.id, competition.event,
-                          competition.implementKg) ??
+                          competition.implementKg,
+                          division: competition.division) ??
                       url),
             ),
           ),

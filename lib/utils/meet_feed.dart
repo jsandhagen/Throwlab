@@ -137,10 +137,12 @@ Map<String, dynamic> competitionFeed(
   };
 }
 
-/// How a competition is named on the wire — the event and the weight it is
-/// thrown at, which is exactly what makes it its own contest.
+/// How a competition is named on the wire — the event, the weight it is
+/// thrown at and who it is for, which is exactly what makes it its own
+/// contest. A competition with no division keeps the id it always had.
 String competitionId(MeetCompetition competition) =>
-    '${competition.event.name}:${competition.implementKg}';
+    '${competition.event.name}:${competition.implementKg}'
+    '${competition.division == null ? '' : ':${competition.division!.name}'}';
 
 /// Who [following] names in this competition, in the order the field is
 /// read down. Empty for nobody, and anybody the competition no longer

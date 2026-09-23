@@ -89,6 +89,7 @@ List<Map<String, dynamic>> _meets() {
       athlete: 'Anna Sofia',
       event: ThrowEvent.discus,
       implementKg: 1,
+      division: Division.girls,
       order: 0)
     ..setAttempt(0, MeetAttempt.mark('mk1'))
     ..setAttempt(1, MeetAttempt.foul())
@@ -99,6 +100,7 @@ List<Map<String, dynamic>> _meets() {
       athlete: 'Jakob',
       event: ThrowEvent.javelin,
       implementKg: 0.8,
+      division: Division.boys,
       order: 2)
     ..setAttempt(0, MeetAttempt.mark('mk3'))
     ..setAttempt(1, MeetAttempt.mark('mk4'))
@@ -109,6 +111,7 @@ List<Map<String, dynamic>> _meets() {
       athlete: 'Priya Raman',
       event: ThrowEvent.shotPut,
       implementKg: 4,
+      division: Division.girls,
       order: 4)
     ..setAttempt(0, MeetAttempt.mark('mk5'));
 
@@ -120,6 +123,7 @@ List<Map<String, dynamic>> _meets() {
       athlete: name,
       event: ThrowEvent.discus,
       implementKg: 1,
+      division: Division.girls,
       tracked: false,
       order: order,
     );
@@ -159,6 +163,7 @@ List<Map<String, dynamic>> _meets() {
       athlete: name,
       event: ThrowEvent.shotPut,
       implementKg: 4,
+      division: Division.girls,
       tracked: false,
       order: 6 + i,
     )..setAttempt(0, MeetAttempt.untracked(mark)));
@@ -191,6 +196,7 @@ List<Map<String, dynamic>> _meets() {
         athlete: name,
         event: ThrowEvent.shotPut,
         implementKg: 7.26,
+        division: Division.men,
         tracked: false,
         order: shotOrder++,
         flight: flight,
@@ -212,6 +218,7 @@ List<Map<String, dynamic>> _meets() {
       athlete: 'Jakob',
       event: ThrowEvent.shotPut,
       implementKg: 7.26,
+      division: Division.men,
       order: shotOrder++,
       flight: 2,
     ));
@@ -303,7 +310,10 @@ void main() {
         library,
         meets,
         const MeetEventScreen(
-            meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
+            meetId: 'k1',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            division: Division.girls),
         'meet_board');
 
     // Behind it, the field in the order it throws.
@@ -332,7 +342,10 @@ void main() {
         library,
         meets,
         const MeetEventScreen(
-            meetId: 'k1', event: ThrowEvent.shotPut, implementKg: 4),
+            meetId: 'k1',
+            event: ThrowEvent.shotPut,
+            implementKg: 4,
+            division: Division.girls),
         'meet_board_broken');
 
     // A field thrown in flights: the live card of a competition the coach's
@@ -343,7 +356,10 @@ void main() {
         library,
         meets,
         const MeetEventScreen(
-            meetId: 'k1', event: ThrowEvent.shotPut, implementKg: 7.26),
+            meetId: 'k1',
+            event: ThrowEvent.shotPut,
+            implementKg: 7.26,
+            division: Division.men),
         'meet_flight_live');
 
     // And the same field as a list, ruled off where the flights are.
@@ -389,7 +405,10 @@ void main() {
         library,
         meets,
         const MeetEventScreen(
-            meetId: 'k1', event: ThrowEvent.discus, implementKg: 1),
+            meetId: 'k1',
+            event: ThrowEvent.discus,
+            implementKg: 1,
+            division: Division.girls),
         'meet_live_again');
     await tester.tap(find.text('Series'));
     await settle(tester);

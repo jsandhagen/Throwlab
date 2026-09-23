@@ -78,7 +78,10 @@ Uint8List meetResultsPdf(
   final competitions = only != null
       ? [only]
       : [
-          for (final competition in MeetCompetition.of(meet))
+          // In the order the meet screen lists them, so the sheet pinned
+          // to the board and the phone in a coach's hand agree on where
+          // the girls' shot is.
+          for (final competition in MeetCompetition.byEvent(meet))
             if (competition.entries.isNotEmpty) competition,
         ];
   if (competitions.isEmpty) {

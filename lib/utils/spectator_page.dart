@@ -128,7 +128,9 @@ String spectatorPage(
       .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2))
       .replaceFirst('/*DISCUS*/', implement(discusParts()))
       .replaceFirst('/*HAMMER*/', implement(hammerParts()))
-      .replaceFirst('/*JAVELIN*/', implement(javelinParts()));
+      .replaceFirst('/*JAVELIN*/', implement(javelinParts()))
+      // How much of a card is card, which is the app's own number.
+      .replaceAll('/*CARD*/', '${(cardOverSectorOpacity * 100).round()}%');
 }
 
 const String _page = r'''<!doctype html>
@@ -187,6 +189,14 @@ const String _page = r'''<!doctype html>
                        calc(100% - 12px) 100%, 0 100%, 0 12px);
   }
 
+  /* Everything above the view, on the plain page: the sector is texture
+     for the cards, and through the title, the meet and the tabs it is lines
+     across the words — the app lays its segmented bar on the same band.
+     Out to both edges of the screen, past the body's own width, since the
+     backdrop runs to them. */
+  .top { background: var(--bg); margin-bottom: 12px;
+         box-shadow: 0 0 0 100vmax var(--bg); clip-path: inset(0 -100vmax); }
+  .top .tabs { margin-bottom: 0; }
   header { padding: 16px 0 12px; }
   .title { display: flex; align-items: center; gap: 10px; }
   .title h1 { font-size: 19px; margin: 0; font-weight: 600; letter-spacing: 0.2px; }
@@ -219,7 +229,7 @@ const String _page = r'''<!doctype html>
   /* The same translucent card as everything else on the page — this is a
      question about the competition, not a dialog over it, and a scrim
      over the board would hide the thing somebody opened the link for. */
-  .picker { background: color-mix(in srgb, var(--surface) 45%, transparent);
+  .picker { background: color-mix(in srgb, var(--surface) /*CARD*/, transparent);
             border-radius: 16px; padding: 10px 4px 10px 12px; }
   .picker .ask { margin: 0; font-size: 13px; font-weight: 600; }
   .picker .why { margin: 2px 0 6px; font-size: 11px; color: var(--dim); }
@@ -291,10 +301,11 @@ const String _page = r'''<!doctype html>
            transition: left 240ms cubic-bezier(0.22, 1, 0.36, 1); }
 
   /* Translucent, and rounded rather than cut: the competition screen's
-     cards are surfaceContainerHighest at 45%, so the sector stands through
-     them, and they take the theme's own 16px card radius. The angular
-     silhouette belongs to the segmented bar, not to these. */
-  .card { background: color-mix(in srgb, var(--surface) 45%, transparent);
+     cards are surfaceContainerHighest at cardOverSectorOpacity, so the
+     sector stands through them faintly, and they take the theme's own 16px
+     card radius. The angular silhouette belongs to the segmented bar, not
+     to these. */
+  .card { background: color-mix(in srgb, var(--surface) /*CARD*/, transparent);
           border-radius: 16px; padding: 10px 12px; margin-bottom: 9px; }
   /* The athlete in the circle is edged in the event's color, so a coach
      looking down finds the row without reading a name. */
@@ -305,7 +316,7 @@ const String _page = r'''<!doctype html>
      others rather than given a color of its own — the page's sector
      backdrop runs behind it, and two sectors drawn over each other at
      different angles are a picture of nothing. */
-  .card.solid { background: color-mix(in srgb, var(--surface) 45%, var(--bg)); }
+  .card.solid { background: color-mix(in srgb, var(--surface) /*CARD*/, var(--bg)); }
   /* The sector set into the card rather than run on from the header: a
      picture of a sector and a list of names are two different things to
      read, and the edge between them is what says so. */
@@ -461,6 +472,7 @@ const String _page = r'''<!doctype html>
 </head>
 <body>
 <svg id="backdrop" preserveAspectRatio="none" aria-hidden="true"></svg>
+<div class="top">
 <header>
   <div class="title"><span id="glyph"></span><h1 id="label">…</h1>
     <a class="sheet" id="sheet" title="Results sheet" aria-label="Results sheet"><svg
@@ -477,6 +489,7 @@ const String _page = r'''<!doctype html>
   <button data-tab="live" aria-pressed="true">Live</button>
   <button data-tab="series" aria-pressed="false">Series</button>
   <button data-tab="standings" aria-pressed="false">Standings</button>
+</div>
 </div>
 <main id="view"></main>
 <p class="note">/*NOTE*/</p>
@@ -971,9 +984,10 @@ const String _page = r'''<!doctype html>
   /* ---- the three views --------------------------------------------- */
   /* The app's own header over the field, on a card of its own: the round
      and how much of it has been thrown, the three an infield calls out,
-     and whoever is in front under a rule. */
+     and whoever is in front under a rule. Solid, as the app's is, so the
+     backdrop's lines never run through the round and the calls. */
   function header(c, withLeader) {
-    return '<div class="card">' + headerBody(c, withLeader) + "</div>";
+    return '<div class="card solid">' + headerBody(c, withLeader) + "</div>";
   }
 
   /* The header without a card around it, because the live view puts it in

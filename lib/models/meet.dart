@@ -1,6 +1,10 @@
+import 'division.dart';
 import 'meet_conditions.dart';
 import 'throw_event.dart';
 import 'throw_video.dart';
+
+// A competition is named by its division, so anything holding one needs it.
+export 'division.dart';
 
 /// What became of one attempt.
 ///
@@ -105,6 +109,7 @@ class MeetEntry {
     required this.athlete,
     required this.event,
     required this.implementKg,
+    this.division,
     this.tracked = true,
     this.order = 0,
     int flight = 1,
@@ -116,6 +121,15 @@ class MeetEntry {
   String athlete;
   ThrowEvent event;
   double implementKg;
+
+  /// Who the competition they are in is for — the girls' shot rather than
+  /// the boys'. Null where nobody said, which is every entry made before
+  /// there was a division to give, and a field entered by hand without one.
+  ///
+  /// Part of which competition this is, alongside the event and the weight:
+  /// the girls' and the women's 4 kg shot are two contests with two fields
+  /// even when they share a ring and an implement.
+  Division? division;
 
   /// Whether this is one of the coach's own athletes.
   ///
@@ -187,6 +201,7 @@ class MeetEntry {
         'athlete': athlete,
         'event': event.name,
         'implementKg': implementKg,
+        if (division != null) 'division': division!.name,
         'tracked': tracked,
         'order': order,
         // Left off a competition thrown in one order, which is most of
@@ -202,6 +217,9 @@ class MeetEntry {
         athlete: json['athlete'] as String? ?? '',
         event: ThrowEvent.values.byName(json['event'] as String),
         implementKg: (json['implementKg'] as num).toDouble(),
+        // Unknown names read as none rather than failing the meet: a
+        // division is a label, and losing one costs a word on a heading.
+        division: Division.fromName(json['division'] as String?),
         tracked: json['tracked'] as bool? ?? true,
         order: (json['order'] as num?)?.toInt() ?? 0,
         flight: (json['flight'] as num?)?.toInt() ?? 1,
@@ -529,15 +547,34 @@ class MeetSeries {
 /// athlete is placed against the people holding the same implement and
 /// nobody else, so this is the unit standings are worked out over.
 class MeetCompetition {
-  const MeetCompetition(this.event, this.implementKg, this.entries);
+  const MeetCompetition(this.event, this.implementKg, this.entries,
+      {this.division});
 
   final ThrowEvent event;
   final double implementKg;
+  final Division? division;
   final List<MeetEntry> entries;
 
   ImplementSpec get implementSpec => event.specFor(implementKg);
 
-  String get label => '${event.label} · ${implementSpec.weightLabel}';
+  /// 'Girls Shot Put · 4 kg' — who it is for first, because that is the
+  /// word a coach looks for on a screen with the whole day's throwing on
+  /// it, and the weight last, because it is what the record book files the
+  /// marks under.
+  String get label => '${division == null ? '' : '${division!.label} '}'
+      '${event.label} · ${implementSpec.weightLabel}';
+
+  /// Whether [entry] is in this competition: the same event, the same
+  /// weight and the same division.
+  bool holds(MeetEntry entry) =>
+      isFor(entry.event, entry.implementKg, division: entry.division);
+
+  /// Whether this is the competition named by an event, a weight and a
+  /// division — the three things a screen or a link is opened on.
+  bool isFor(ThrowEvent event, double implementKg, {Division? division}) =>
+      this.event == event &&
+      this.implementKg == implementKg &&
+      this.division == division;
 
   /// The flights this is thrown in, in the order they throw.
   ///
@@ -560,17 +597,53 @@ class MeetCompetition {
   /// The competitions in a meet, in the order they were first entered.
   static List<MeetCompetition> of(Meet meet) {
     final grouped = <String, List<MeetEntry>>{};
-    final keys = <String, (ThrowEvent, double)>{};
+    final keys = <String, MeetEntry>{};
     for (final entry in meet.inOrder) {
-      final key = '${entry.event.name}:${entry.implementKg}';
-      keys[key] = (entry.event, entry.implementKg);
+      final key = '${entry.event.name}:${entry.implementKg}:'
+          '${entry.division?.name ?? ''}';
+      keys.putIfAbsent(key, () => entry);
       grouped.putIfAbsent(key, () => []).add(entry);
     }
     return [
       for (final key in grouped.keys)
-        MeetCompetition(keys[key]!.$1, keys[key]!.$2, grouped[key]!),
+        MeetCompetition(keys[key]!.event, keys[key]!.implementKg, grouped[key]!,
+            division: keys[key]!.division),
     ];
   }
+
+  /// The competitions in a meet as a coach looks for one: by event, then
+  /// by who it is for, then heaviest first.
+  ///
+  /// The order they were entered in is the order a heat sheet happened to
+  /// print them or a coach happened to add them, which is no order anybody
+  /// can find a competition by. Without the time each is thrown at — which
+  /// a heat sheet does not carry — the event is the next best thing: every
+  /// shot together, and the girls' shot above the boys' every time.
+  static List<MeetCompetition> byEvent(Meet meet) {
+    final competitions = of(meet);
+    int rank(Division? division) =>
+        division == null ? Division.values.length : division.index;
+    // A stable sort, so two competitions nothing here tells apart keep
+    // the order they were entered in.
+    return _stableSorted(competitions, (a, b) {
+      final event = a.event.index.compareTo(b.event.index);
+      if (event != 0) return event;
+      final division = rank(a.division).compareTo(rank(b.division));
+      if (division != 0) return division;
+      return b.implementKg.compareTo(a.implementKg);
+    });
+  }
+}
+
+/// [items] sorted by [compare], keeping the order of any two it calls
+/// equal — which `List.sort` does not promise.
+List<T> _stableSorted<T>(List<T> items, int Function(T, T) compare) {
+  final indexed = [for (var i = 0; i < items.length; i++) (i, items[i])];
+  indexed.sort((a, b) {
+    final order = compare(a.$2, b.$2);
+    return order != 0 ? order : a.$1.compareTo(b.$1);
+  });
+  return [for (final (_, item) in indexed) item];
 }
 
 /// '1st', '2nd', '3rd', '11th' — a place, written the way it is read out.

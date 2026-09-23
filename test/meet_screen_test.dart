@@ -145,6 +145,35 @@ void main() {
   });
 
   group('the meet', () {
+    testWidgets('lists them by event and says who each is for', (tester) async {
+      // Entered after the discus, as a heat sheet printing the girls' shot
+      // later in the afternoon would have it — and still listed first,
+      // because the shot is where a coach looks for it.
+      await meets.addEntry('k1',
+          entry: MeetEntry(
+            id: 'g1',
+            athlete: 'Priya Raman',
+            event: ThrowEvent.shotPut,
+            implementKg: 4,
+            division: Division.girls,
+            order: 1,
+          ));
+      await mountMeet(tester);
+
+      final shot = find.text('Girls Shot Put · 4 kg');
+      final discus = find.text('Discus · 1 kg');
+      expect(shot, findsOneWidget);
+      expect(
+          tester.getTopLeft(shot).dy, lessThan(tester.getTopLeft(discus).dy));
+
+      // And the event it opens on names itself the same way.
+      await tester.tap(shot);
+      await tester.pumpAndSettle();
+      expect(find.byType(MeetEventScreen), findsOneWidget);
+      expect(find.text('Girls Shot Put · 4 kg'), findsOneWidget);
+      expect(find.text('Priya Raman'), findsWidgets);
+    });
+
     testWidgets('lists the events being contested at it', (tester) async {
       await meets.addEntry('k1',
           entry: MeetEntry(
@@ -299,7 +328,8 @@ void main() {
       expect(find.textContaining('Discus · 1 kg'), findsOneWidget);
       expect(find.textContaining('Discus · 2 kg'), findsOneWidget);
 
-      await openMenu(tester, 0);
+      // Heaviest first within an event, so the 1 kg is the second card.
+      await openMenu(tester, 1);
       await tester.tap(find.text('Remove'));
       await tester.pumpAndSettle();
 

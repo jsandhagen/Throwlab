@@ -13,6 +13,7 @@
 /// `pdf_text` gives back for a page laid out in columns.
 library;
 
+import '../models/division.dart';
 import '../models/throw_event.dart';
 
 /// One event off a heat sheet, with its field.
@@ -22,10 +23,15 @@ class HeatSheetEvent {
     required this.implementKg,
     required this.title,
     required this.athletes,
+    this.division,
     this.weightGuessed = false,
   });
 
   final ThrowEvent event;
+
+  /// Who the heading says it is for — 'Boys', "Women's" — or null for a
+  /// heading that doesn't say, or says two.
+  final Division? division;
 
   /// What is being thrown. Taken off the heading where it says — '12lb',
   /// '(7.26kg)', '6K' — and guessed from who is throwing where it doesn't.
@@ -56,6 +62,7 @@ class HeatSheetEvent {
   HeatSheetEvent withWeight(double kg) => HeatSheetEvent(
         event: event,
         implementKg: kg,
+        division: division,
         title: title,
         athletes: athletes,
         // Once a person has chosen it, it is not a guess any more.
@@ -125,6 +132,7 @@ List<HeatSheetEvent> parseHeatSheet(String text) {
       found.add(HeatSheetEvent(
         event: heading!.event!,
         implementKg: heading.implementKg,
+        division: heading.division,
         title: heading.title,
         weightGuessed: heading.weightGuessed,
         athletes: athletes,
@@ -213,6 +221,7 @@ class _Heading {
   const _Heading({
     this.event,
     this.implementKg = 0,
+    this.division,
     this.title = '',
     this.key = '',
     this.continued = false,
@@ -221,6 +230,7 @@ class _Heading {
 
   final ThrowEvent? event;
   final double implementKg;
+  final Division? division;
   final String title;
 
   /// What two headings have to share to be the same event: [title] with the
@@ -341,6 +351,7 @@ _Heading? _heading(String line) {
   return _Heading(
     event: event,
     implementKg: weight ?? _defaultWeight(line, event),
+    division: Division.read(line),
     title: line.trim().replaceAll(RegExp(r'\s{2,}'), ' '),
     key: _headingKey(line),
     continued: _continued.hasMatch(line),
@@ -386,34 +397,12 @@ final _highSchool = RegExp(
 /// What a division throws, for a sheet that didn't say.
 ///
 /// A heading names a division rather than a weight often enough that a
-/// guess beats leaving it blank — but the guess is only as good as the two
-/// axes a division word carries: senior or school, and men or women. The
-/// screen still says the weight was guessed, because a division heading is
-/// not a spec and a best is per weight.
-///
-/// The school implements are the U.S. high-school ones: the boys' 12 lb shot
-/// and 1.6 kg discus, both their own weight rather than a rounded senior
-/// shell (see [ImplementSpec]). Girls throw the 4 kg shot and 1 kg discus
-/// that are also the senior women's, so only the boys' side needs the split.
-/// Javelin is the 800 g for men and boys alike, which is why it doesn't.
-double _defaultWeight(String line, ThrowEvent event) {
-  final women = _womens.hasMatch(line);
-  final school = _highSchool.hasMatch(line);
-  switch (event) {
-    case ThrowEvent.shotPut:
-      if (women) return 4;
-      return school ? 5.44 : 7.26;
-    case ThrowEvent.discus:
-      if (women) return 1;
-      return school ? 1.6 : 2;
-    case ThrowEvent.hammer:
-      // Not a high-school event, so no school weight to guess: senior men's
-      // or senior women's is the most a bare division heading can say.
-      return women ? 4 : 7.26;
-    case ThrowEvent.javelin:
-      return women ? 0.6 : 0.8;
-  }
-}
+/// guess beats leaving it blank. The screen still says the weight was
+/// guessed, because a division heading is not a spec and a best is per
+/// weight.
+double _defaultWeight(String line, ThrowEvent event) =>
+    defaultImplementKg(event,
+        women: _womens.hasMatch(line), school: _highSchool.hasMatch(line));
 
 final _columns = RegExp(r'\t+| {2,}');
 final _leadingPlace = RegExp(r'^\s*\d{1,3}[.)]?\s+');
