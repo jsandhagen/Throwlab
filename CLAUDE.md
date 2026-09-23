@@ -201,13 +201,17 @@ like the app rather than a bare Material default.
   holds the theme, screens don't restyle it.
 - The app's mark is `LogoMark` (`logo_mark.dart`): an Erlenmeyer flask that
   is also a throwing sector. Its walls lean at the sector's 34.92°, it is
-  full to where the neck opens out, and the liquid carries the field — two
-  sector lines leaving the meniscus exactly where it meets the glass and
-  running to the base just inside the walls, and three evenly spaced
-  distance arcs between them. The meniscus is the front of the throwing
-  circle, or the javelin's foul line. The lines are cut out of the liquid
-  rather than drawn on it, so one drawing is white-lined on the launcher's
-  white tile and the results sheet and dark-lined on the app's theme.
+  full to just below where the neck opens out, and the liquid carries the
+  field — two sector lines leaving the meniscus exactly where it meets the
+  glass and running to the base just inside the walls, and three evenly
+  spaced distance arcs between them. The meniscus is the front of the
+  throwing circle, or the javelin's foul line. It meets the glass below the
+  shoulder on purpose: on the curve the wall is still turning, and a line
+  leaving the corner there runs on under it. The liquid is one fill with
+  the lines and arcs subtracted from it — filled and then cut, the two
+  edges leave a hairline of the meniscus across each line — so the field is
+  holes in it: white on the launcher's tile and the results sheet, the
+  theme's dark in the app.
   It is drawn tight to the flask, never centered in a square: a tall
   narrow flask in a square box is a mark at half the size it was asked for,
   so `LogoMark` takes a height and its width from `logoAspect`. The app

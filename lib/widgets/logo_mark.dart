@@ -93,6 +93,114 @@ Path get _lip => Path()
 final Rect _bounds =
     _flask().getBounds().expandToInclude(_lip.getBounds()).inflate(_wall / 2);
 
+// The field in the flask. The meniscus is its own tight arc — struck round
+// the lines' center it would be nearly flat across a neck this narrow — and
+// each sector line's outer edge leaves it exactly where it meets the glass.
+// The arcs are struck round a center set just below where the walls' lines
+// meet, and run line to line.
+// The surface sits just low enough that the meniscus meets the glass below
+// the shoulder, where the wall is straight: meeting it on the curve, a line
+// leaving the corner at the sector's angle runs on under the turning wall.
+const _surfaceY = 0.44, _meniscus = 0.09, _footY = 0.82;
+const _surface = Offset(_cx, _surfaceY - _meniscus);
+
+/// The inside edge of the left wall, walked down from the lip: the wall's
+/// middle line — neck, shoulder, cone — moved in by half the wall. Worked
+/// out along the curve rather than guessed at across it, because the
+/// meniscus meets the glass on the shoulder, where the wall is turning.
+List<Offset> _innerEdge() {
+  const steps = 800;
+  final points = <Offset>[];
+  void add(Offset at, Offset along) {
+    final d = along / along.distance;
+    points.add(at + Offset(d.dy, -d.dx) * (_wall / 2));
+  }
+
+  const top = Offset(_cx - _nw, _lipY), neck = Offset(_cx - _nw, _neckY);
+  for (var i = 0; i <= steps; i++) {
+    add(Offset.lerp(top, neck, i / steps)!, neck - top);
+  }
+  final c = _shoulderCtl, e = _shoulder;
+  for (var i = 1; i <= steps; i++) {
+    final t = i / steps;
+    final at = neck * ((1 - t) * (1 - t)) + c * (2 * (1 - t) * t) + e * (t * t);
+    add(at, (c - neck) * (2 * (1 - t)) + (e - c) * (2 * t));
+  }
+  for (var i = 1; i <= steps; i++) {
+    add(Offset.lerp(e, _corner, i / steps)!, _corner - e);
+  }
+  return points;
+}
+
+/// Where the meniscus meets the glass on the left: the first point down the
+/// wall's inside edge that is below the surface's center and outside it.
+final Offset _meets = _innerEdge().firstWhere(
+    (p) => p.dy > _surface.dy && (p - _surface).distance >= _meniscus);
+
+final Path _liquid = () {
+  const half = sectorHalfAngleDeg * math.pi / 180;
+  final apexY = _shoulder.dy - (_cx - _shoulder.dx) / sectorLean;
+  final center = Offset(_cx, apexY + 0.05 / sectorLean);
+
+  var liquid = Path.combine(
+      PathOperation.difference,
+      _flask(),
+      Path()
+        ..addOval(Rect.fromCircle(center: _surface, radius: _meniscus))
+        ..addRect(Rect.fromLTRB(0, 0, 1, _surface.dy)));
+
+  // A line's outer edge leaves the glass exactly where the meniscus meets
+  // it and runs to a foot just inside the wall at the base, opening a
+  // little less than the wall does, so it parts from the glass at once
+  // rather than running under it. The line is the band from that edge in
+  // by its own width.
+  final top = _meets;
+  final bottom =
+      Offset(_cx - sectorLean * (_footY - center.dy) - _line / 2, _footY);
+  final u = (bottom - top) / (bottom - top).distance;
+  final inward = Offset(-u.dy, u.dx) * -_line;
+  final outerTop = top - u * 0.1, outerBottom = top + u * 1.0;
+  Offset mirror(Offset o) => Offset(2 * _cx - o.dx, o.dy);
+  Path line(bool right) {
+    final band = [
+      outerTop,
+      outerBottom,
+      outerBottom + inward,
+      outerTop + inward
+    ];
+    return Path()..addPolygon(right ? band.map(mirror).toList() : band, true);
+  }
+
+  final lines = Path.combine(PathOperation.union, line(false), line(true));
+  liquid = Path.combine(PathOperation.difference, liquid, lines);
+
+  // The arcs, each a band struck round the center, cut to the wedge
+  // between the lines so they run from one to the other.
+  const steps = 96;
+  final arcs = Path();
+  for (final y in const [0.54, 0.6675, 0.795]) {
+    final r = y - center.dy;
+    Offset at(double radius, double a) =>
+        center + Offset(math.sin(a), math.cos(a)) * radius;
+    arcs.addPolygon([
+      for (var i = 0; i <= steps; i++)
+        at(r + _line / 2, -half * 2 + half * 4 * i / steps),
+      for (var i = steps; i >= 0; i--)
+        at(r - _line / 2, -half * 2 + half * 4 * i / steps),
+    ], true);
+  }
+  final between = Path()
+    ..addPolygon([
+      outerTop,
+      mirror(outerTop),
+      mirror(outerBottom),
+      outerBottom,
+    ], true);
+  liquid = Path.combine(PathOperation.difference, liquid,
+      Path.combine(PathOperation.intersect, arcs, between));
+  return liquid;
+}();
+
 class LogoPainter extends CustomPainter {
   const LogoPainter();
 
@@ -105,11 +213,7 @@ class LogoPainter extends CustomPainter {
         (size.width - _bounds.width * scale) / 2 - _bounds.left * scale,
         -_bounds.top * scale);
     canvas.scale(scale);
-    // A layer of its own, so the lines cut out of the liquid cut through to
-    // whatever is behind the mark rather than to black.
-    canvas.saveLayer(null, Paint());
-
-    final body = _flask(), open = _flask(closed: false);
+    final open = _flask(closed: false);
     Paint stroke(double width) => Paint()
       ..color = logoBlue
       ..style = PaintingStyle.stroke
@@ -117,76 +221,12 @@ class LogoPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    // The arcs' center: below where the walls' lines meet, by as much as
-    // puts the foot of each sector line just inside its wall.
-    const half = sectorHalfAngleDeg * math.pi / 180;
-    final apexY = _shoulder.dy - (_cx - _shoulder.dx) / sectorLean;
-    final center = Offset(_cx, apexY + 0.05 / sectorLean);
-
-    // The meniscus is its own, tighter arc: struck round the lines' center
-    // it would be nearly flat across a neck this narrow.
-    const surfaceY = 0.40, meniscus = 0.07;
-    const surface = Offset(_cx, surfaceY - meniscus);
-    final liquid = Path.combine(
-        PathOperation.difference,
-        body,
-        Path()
-          ..addOval(Rect.fromCircle(center: surface, radius: meniscus))
-          ..addRect(Rect.fromLTRB(0, 0, 1, surface.dy)));
-
-    // Each sector line leaves the meniscus exactly where it meets the glass
-    // and runs to the same foot as before, so the lines and the surface
-    // are one drawing: the arc the lines are struck from, and the field
-    // opening under it. Where the meniscus meets the glass is found rather
-    // than worked out — the shoulder there is a curve.
-    Offset edge = surface + const Offset(meniscus, 0);
-    for (var y = surface.dy; y <= surfaceY; y += 0.0005) {
-      final x = math.sqrt(math.max(
-          0.0, meniscus * meniscus - (y - surface.dy) * (y - surface.dy)));
-      // Inside the glass once a point half a wall further out is still
-      // inside the wall's middle line.
-      if (body.contains(Offset(_cx + x + _wall / 2 / math.cos(half), y))) {
-        edge = Offset(x, y);
-        break;
-      }
-    }
-    const footY = 0.82;
-    final foot = sectorLean * (footY - center.dy);
-    Offset along(double side, double t) {
-      // In from the edge by half the line and a hair, so the line's own
-      // edge meets the meniscus's rather than disappearing under the wall.
-      final top = Offset(_cx + (edge.dx - _line / 2 - 0.004) * side, edge.dy);
-      final bottom = Offset(_cx + foot * side, footY);
-      return top + (bottom - top) * t;
-    }
-
-    canvas.save();
-    canvas.clipPath(liquid);
-    canvas.drawRect(const Rect.fromLTWH(0, 0, 1, 1), Paint()..color = logoBlue);
-    final cut = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _line
-      ..strokeCap = StrokeCap.butt
-      ..blendMode = BlendMode.clear;
-    for (final side in [-1.0, 1.0]) {
-      canvas.drawLine(along(side, 0), along(side, 2), cut);
-    }
-    // The arcs run from line to line, so they are cut to the wedge between
-    // them rather than to an angle of their own.
-    canvas.save();
-    canvas.clipPath(Path()
-      ..addPolygon(
-          [along(-1, 0), along(1, 0), along(1, 2), along(-1, 2)], true));
-    for (final y in const [0.54, 0.6675, 0.795]) {
-      canvas.drawArc(Rect.fromCircle(center: center, radius: y - center.dy),
-          math.pi / 2 - half * 2, half * 4, false, cut);
-    }
-    canvas.restore();
-    canvas.restore();
-
+    // One fill, with the field already cut out of it: filled and then cut,
+    // the edges of the two leave a hairline of the meniscus across each
+    // line.
+    canvas.drawPath(_liquid, Paint()..color = logoBlue);
     canvas.drawPath(open, stroke(_wall));
     canvas.drawPath(_lip, stroke(_wall));
-    canvas.restore();
     canvas.restore();
   }
 
