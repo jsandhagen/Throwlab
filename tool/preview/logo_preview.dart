@@ -406,7 +406,9 @@ class _LogoPainter extends CustomPainter {
     final f = _sector;
     final body = f.path(s), open = f.path(s, closed: false);
     const javelinHalf = 28.96 / 2 * math.pi / 180;
-    const centerY = 0.30, radius = 0.26;
+    // The surface sits where the neck opens into the body, so the whole
+    // body is liquid and the lines run its full height.
+    const centerY = 0.22, radius = 0.20;
     final center = const Offset(0.5, centerY) * s;
     canvas.save();
     canvas.clipPath(body);
@@ -422,10 +424,10 @@ class _LogoPainter extends CustomPainter {
     for (final side in [-1.0, 1.0]) {
       final d = Offset(math.sin(javelinHalf) * side, math.cos(javelinHalf));
       canvas.drawLine(
-          center + d * (radius * s), center + d * (0.62 * s), white);
+          center + d * (radius * s), center + d * (0.68 * s), white);
     }
     if (arcs) {
-      for (final r in [0.37, 0.47]) {
+      for (final r in [0.40, 0.53]) {
         canvas.drawArc(Rect.fromCircle(center: center, radius: r * s),
             math.pi / 2 - javelinHalf, javelinHalf * 2, false, white);
       }
