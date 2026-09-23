@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:throwlab/models/division.dart';
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/utils/heat_sheet_parser.dart';
 
@@ -161,6 +162,26 @@ void main() {
       // A senior heading still gets the senior weight.
       expect(one('Event 19 Mens Shot Put').implementKg, 7.26);
       expect(one('Event 20 Mens Discus').implementKg, 2);
+    });
+
+    test('says who the competition is for', () {
+      // The word a coach looks for on the meet screen, read off the same
+      // heading the weight is.
+      expect(one('Event 15 Boys Shot Put 12lb').division, Division.boys);
+      expect(one('Event 16 Girls Discus').division, Division.girls);
+      expect(one("Event 21 Men's Shot Put 16lb").division, Division.men);
+      expect(one("Event 9 Women's Javelin 600g").division, Division.women);
+      expect(one('Event 19 Mens Shot Put').division, Division.men);
+      // A heading that names nobody, or names two, is no division — and a
+      // U18 says how heavy the implement is, not who throws it.
+      expect(one('Event 1 Shot Put').division, isNull);
+      expect(one('Event 2 Boys & Girls Javelin').division, isNull);
+      expect(one('Event 3 U18 Discus').division, isNull);
+    });
+
+    test('keeps the division when a weight is picked by hand', () {
+      final girls = one('Event 16 Girls Discus').withWeight(0.75);
+      expect(girls.division, Division.girls);
     });
 
     test('reads a shot put as a shot put, not as a shot', () {

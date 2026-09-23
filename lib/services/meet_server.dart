@@ -99,8 +99,9 @@ class MeetServer extends ChangeNotifier {
   String? get error => _error;
 
   /// The link for one competition, or null when it isn't being shared.
-  String? urlFor(String meetId, ThrowEvent event, double implementKg) =>
-      _find(meetId, event, implementKg)?.url;
+  String? urlFor(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
+      _find(meetId, event, implementKg, division: division)?.url;
 
   /// The same link spelled for somebody to act on rather than to look at:
   /// all capitals, which is what a QR is scanned from and what gets read
@@ -111,15 +112,21 @@ class MeetServer extends ChangeNotifier {
   /// mode whatever the characters are, and QR's tighter alphanumeric mode
   /// has no '#' in its charset anyway, which a relay link would need. Short
   /// is what keeps the code fat here, not case.
-  String? qrFor(String meetId, ThrowEvent event, double implementKg) =>
-      urlFor(meetId, event, implementKg)?.toUpperCase();
+  String? qrFor(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
+      urlFor(meetId, event, implementKg, division: division)?.toUpperCase();
 
-  bool sharing(String meetId, ThrowEvent event, double implementKg) =>
-      _find(meetId, event, implementKg) != null;
+  bool sharing(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
+      _find(meetId, event, implementKg, division: division) != null;
 
-  _Share? _find(String meetId, ThrowEvent event, double implementKg) {
+  _Share? _find(String meetId, ThrowEvent event, double implementKg,
+      {Division? division}) {
     for (final share in _byToken.values) {
-      if (share.source.covers(meetId, event, implementKg)) return share;
+      if (share.source
+          .covers(meetId, event, implementKg, division: division)) {
+        return share;
+      }
     }
     return null;
   }
@@ -137,6 +144,7 @@ class MeetServer extends ChangeNotifier {
     required String meetId,
     required ThrowEvent event,
     required double implementKg,
+    Division? division,
     required ColorScheme scheme,
     required Meet? Function() meet,
     required List<ThrowResult> Function() results,
@@ -144,7 +152,7 @@ class MeetServer extends ChangeNotifier {
     String Function(String athlete)? boardNames,
   }) async {
     _scheme = scheme;
-    final already = _find(meetId, event, implementKg);
+    final already = _find(meetId, event, implementKg, division: division);
     if (already != null) return true;
 
     if (_server == null && !await _open()) return false;
@@ -163,6 +171,7 @@ class MeetServer extends ChangeNotifier {
         meetId: meetId,
         event: event,
         implementKg: implementKg,
+        division: division,
         meet: meet,
         results: results,
         isPersonalBest: isPersonalBest,
@@ -204,8 +213,9 @@ class MeetServer extends ChangeNotifier {
 
   /// Stops sharing one competition, and closes the socket with the last of
   /// them — a port held open for nothing is a port held open.
-  Future<void> stop(String meetId, ThrowEvent event, double implementKg) async {
-    final share = _find(meetId, event, implementKg);
+  Future<void> stop(String meetId, ThrowEvent event, double implementKg,
+      {Division? division}) async {
+    final share = _find(meetId, event, implementKg, division: division);
     if (share == null) return;
     _byToken.remove(share.token);
     if (_byToken.isEmpty) {

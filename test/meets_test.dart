@@ -278,6 +278,98 @@ void main() {
   });
 
   group('the rest of the field', () {
+  group('who a competition is for', () {
+    MeetEntry entry(String id, ThrowEvent event, double kg,
+            {Division? division, int order = 0}) =>
+        MeetEntry(
+            id: id,
+            athlete: id,
+            event: event,
+            implementKg: kg,
+            division: division,
+            order: order);
+
+    test('names it before the event', () {
+      final meet = Meet(id: 'k', name: 'Champs', date: DateTime(2026, 5, 2))
+        ..entries.addAll([
+          entry('a', ThrowEvent.shotPut, 4, division: Division.girls),
+          entry('b', ThrowEvent.shotPut, 7.26, division: Division.men),
+          entry('c', ThrowEvent.discus, 1),
+        ]);
+      expect(MeetCompetition.of(meet).map((c) => c.label), [
+        'Girls Shot Put · 4 kg',
+        "Men's Shot Put · 16 lb",
+        'Discus · 1 kg',
+      ]);
+    });
+
+    test('splits one implement between two divisions', () {
+      // The girls' and the women's 4 kg shot share a ring and a ball, and
+      // are still two fields placed against two cuts.
+      final meet = Meet(id: 'k', name: 'Open', date: DateTime(2026, 5, 2))
+        ..entries.addAll([
+          entry('a', ThrowEvent.shotPut, 4, division: Division.girls),
+          entry('b', ThrowEvent.shotPut, 4, division: Division.women),
+          entry('c', ThrowEvent.shotPut, 4, division: Division.girls),
+        ]);
+      final competitions = MeetCompetition.of(meet);
+      expect(competitions.length, 2);
+      expect(competitions.first.entries.map((e) => e.id), ['a', 'c']);
+      expect(competitions.last.holds(meet.entries[1]), isTrue);
+      expect(competitions.last.holds(meet.entries[0]), isFalse);
+    });
+
+    test('lists them by event, then by division, then heaviest first', () {
+      final meet = Meet(id: 'k', name: 'Champs', date: DateTime(2026, 5, 2))
+        ..entries.addAll([
+          entry('j', ThrowEvent.javelin, 0.8, division: Division.boys),
+          entry('s1', ThrowEvent.shotPut, 5.44, division: Division.boys),
+          entry('d', ThrowEvent.discus, 1, division: Division.girls),
+          entry('s2', ThrowEvent.shotPut, 4, division: Division.girls),
+          entry('s3', ThrowEvent.shotPut, 7.26),
+          entry('s4', ThrowEvent.shotPut, 6),
+        ]);
+      expect(MeetCompetition.byEvent(meet).map((c) => c.label), [
+        'Girls Shot Put · 4 kg',
+        'Boys Shot Put · 12 lb',
+        // Nobody's division last, heaviest of them first.
+        'Shot Put · 16 lb',
+        'Shot Put · 6 kg',
+        'Girls Discus · 1 kg',
+        'Boys Javelin · 800 g',
+      ]);
+      // The order they were entered in is left alone for everything else.
+      expect(MeetCompetition.of(meet).first.event, ThrowEvent.javelin);
+    });
+
+    test('survives a save, and reads as none from before there was one', () {
+      final girls = MeetEntry.fromJson(
+          entry('a', ThrowEvent.discus, 1, division: Division.girls).toJson());
+      expect(girls.division, Division.girls);
+
+      final plain = entry('b', ThrowEvent.discus, 1).toJson();
+      expect(plain.containsKey('division'), isFalse);
+      expect(MeetEntry.fromJson(plain).division, isNull);
+      expect(MeetEntry.fromJson({...plain, 'division': 'juniors'}).division,
+          isNull);
+    });
+
+    test('is removed with its own event and no other', () async {
+      SharedPreferences.setMockInitialValues({});
+      final meets = MeetLibrary();
+      await meets.load();
+      final meet = Meet(id: 'k', name: 'Open', date: DateTime(2026, 5, 2))
+        ..entries.addAll([
+          entry('a', ThrowEvent.shotPut, 4, division: Division.girls),
+          entry('b', ThrowEvent.shotPut, 4, division: Division.women),
+        ]);
+      await meets.save(meet);
+      await meets.removeCompetition('k',
+          event: ThrowEvent.shotPut, implementKg: 4, division: Division.women);
+      expect(meets.byId('k')!.entries.map((e) => e.id), ['a']);
+    });
+  });
+
     test('a rival keeps their distance on the attempt, not in the library', () {
       final entry = _entry(id: 'r1', athlete: 'M. Okoye')..tracked = false;
       entry.setAttempt(0, MeetAttempt.untracked(42.10));

@@ -130,22 +130,29 @@ class MeetRelay extends ChangeNotifier {
   /// told.
   bool get reaching => _byToken.values.every((share) => share.sent != null);
 
-  String? urlFor(String meetId, ThrowEvent event, double implementKg) =>
-      _find(meetId, event, implementKg)?.url;
+  String? urlFor(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
+      _find(meetId, event, implementKg, division: division)?.url;
 
   /// The same link spelled for somebody to act on rather than to look at:
   /// all capitals, which is what a QR is scanned from and what gets read
   /// out when it will not scan. Scheme and host are case-insensitive and
   /// the path is uppercase already, so this is the same link.
-  String? qrFor(String meetId, ThrowEvent event, double implementKg) =>
-      urlFor(meetId, event, implementKg)?.toUpperCase();
+  String? qrFor(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
+      urlFor(meetId, event, implementKg, division: division)?.toUpperCase();
 
-  bool sharing(String meetId, ThrowEvent event, double implementKg) =>
-      _find(meetId, event, implementKg) != null;
+  bool sharing(String meetId, ThrowEvent event, double implementKg,
+          {Division? division}) =>
+      _find(meetId, event, implementKg, division: division) != null;
 
-  _Share? _find(String meetId, ThrowEvent event, double implementKg) {
+  _Share? _find(String meetId, ThrowEvent event, double implementKg,
+      {Division? division}) {
     for (final share in _byToken.values) {
-      if (share.source.covers(meetId, event, implementKg)) return share;
+      if (share.source
+          .covers(meetId, event, implementKg, division: division)) {
+        return share;
+      }
     }
     return null;
   }
@@ -165,6 +172,7 @@ class MeetRelay extends ChangeNotifier {
     required String meetId,
     required ThrowEvent event,
     required double implementKg,
+    Division? division,
     required ColorScheme scheme,
     required Meet? Function() meet,
     required List<ThrowResult> Function() results,
@@ -176,7 +184,7 @@ class MeetRelay extends ChangeNotifier {
       _fail('This build has no relay to share through.');
       return false;
     }
-    final already = _find(meetId, event, implementKg);
+    final already = _find(meetId, event, implementKg, division: division);
     if (already != null) return true;
 
     final token = _newToken();
@@ -189,6 +197,7 @@ class MeetRelay extends ChangeNotifier {
         meetId: meetId,
         event: event,
         implementKg: implementKg,
+        division: division,
         meet: meet,
         results: results,
         isPersonalBest: isPersonalBest,
@@ -219,8 +228,9 @@ class MeetRelay extends ChangeNotifier {
   /// route that deletes is a route somebody else can call; the competition
   /// ages out on its own instead, which is also what happens to a phone
   /// that goes flat on the way to the car park.
-  Future<void> stop(String meetId, ThrowEvent event, double implementKg) async {
-    final share = _find(meetId, event, implementKg);
+  Future<void> stop(String meetId, ThrowEvent event, double implementKg,
+      {Division? division}) async {
+    final share = _find(meetId, event, implementKg, division: division);
     if (share == null) return;
     _byToken.remove(share.token);
     if (_byToken.isEmpty) _quiet();

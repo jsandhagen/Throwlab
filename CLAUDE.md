@@ -7,7 +7,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
@@ -390,6 +390,23 @@ like the app rather than a bare Material default.
   a rival's throw can never surface as somebody's personal best or as a
   name in the athlete list. It is also why an attempt can carry either a
   `resultId` or a `distance`.
+- A competition is the event, the weight *and* the division
+  (`MeetEntry.division`): the girls' and the women's 4 kg shot are two
+  fields with two cuts even with one ball between them. The division is
+  the word a coach looks for on a meet with the whole day's throwing on it,
+  so it leads the label — 'Girls Shot Put · 4 kg', "Men's Discus · 2 kg" —
+  and `MeetCompetition.byEvent` is the order a meet lists its competitions
+  in, and the results sheet with it: by event, then girls, boys, women,
+  men, then nobody's, heaviest first. Not by time, because a heat sheet
+  does not carry one — the times are on a separate schedule when they are
+  anywhere. `heat_sheet_parser` reads the division off the heading
+  (`Division.read`, which will not guess from a 'U18' or a lone 'W'), and a
+  field started by hand without one takes the sheet's when it is imported,
+  rather than splitting into a plain 'Shot Put' beside a 'Boys Shot Put'.
+  Null is a real answer — every meet stored before there was a division,
+  and a small meet's field that is nobody's in particular — and keeps the
+  label and the share link's id exactly as they were. It is never what a
+  best is filed under: that stays the weight.
 - A meet's format is `Meet.rounds` with `prelimRounds`: a 3 + 3 is six
   rounds cut after three, and a competition where the whole field throws
   the lot has the two equal (`hasFinal` is the difference). The cut only

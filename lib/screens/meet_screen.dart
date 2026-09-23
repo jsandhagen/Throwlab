@@ -68,7 +68,9 @@ class MeetScreen extends StatelessWidget {
           return const Scaffold(body: SizedBox.shrink());
         }
         final theme = Theme.of(context);
-        final competitions = MeetCompetition.of(meet);
+        // By event, so a coach finds the girls' shot where the shot is
+        // rather than wherever the heat sheet happened to print it.
+        final competitions = MeetCompetition.byEvent(meet);
         return Scaffold(
           appBar: AppBar(
             title: Column(
@@ -214,6 +216,7 @@ class MeetScreen extends StatelessWidget {
             meetId: meet.id,
             event: competition.event,
             implementKg: competition.implementKg,
+            division: competition.division,
           ),
         ),
       );
@@ -230,8 +233,11 @@ class MeetScreen extends StatelessWidget {
     // Straight into the event they were entered in — an athlete is added
     // because they are about to throw.
     if (context.mounted) {
-      _openEvent(context, meet,
-          MeetCompetition(entry.event, entry.implementKg, [entry]));
+      _openEvent(
+          context,
+          meet,
+          MeetCompetition(entry.event, entry.implementKg, [entry],
+              division: entry.division));
     }
   }
 
@@ -268,7 +274,9 @@ class MeetScreen extends StatelessWidget {
     );
     if (confirmed != true) return;
     await meets.removeCompetition(meet.id,
-        event: competition.event, implementKg: competition.implementKg);
+        event: competition.event,
+        implementKg: competition.implementKg,
+        division: competition.division);
   }
 
   Future<void> _editConditions(

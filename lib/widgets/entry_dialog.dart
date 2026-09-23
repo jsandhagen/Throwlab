@@ -17,6 +17,7 @@ Future<MeetEntry?> showMeetEntryDialog(
   required List<String> known,
   ThrowEvent? event,
   double? implementKg,
+  Division? division,
   List<int> flights = const [],
   int flight = 1,
 }) =>
@@ -26,6 +27,7 @@ Future<MeetEntry?> showMeetEntryDialog(
         known: known,
         event: event,
         implementKg: implementKg,
+        division: division,
         flights: flights,
         flight: flight,
       ),
@@ -39,6 +41,7 @@ class _EntryDialog extends StatefulWidget {
     required this.known,
     this.event,
     this.implementKg,
+    this.division,
     this.flights = const [],
     this.flight = 1,
   });
@@ -50,6 +53,7 @@ class _EntryDialog extends StatefulWidget {
   /// enter them in the wrong one.
   final ThrowEvent? event;
   final double? implementKg;
+  final Division? division;
 
   /// The flights this competition is thrown in, where it has more than
   /// one. Empty for a field thrown in a single order — which is most of
@@ -69,6 +73,7 @@ class _EntryDialogState extends State<_EntryDialog> {
   late ImplementSpec _implement = widget.implementKg == null
       ? _event.defaultImplement
       : _event.specFor(widget.implementKg!);
+  late Division? _division = widget.division;
   bool _tracked = true;
   late int _flight = widget.flights.contains(widget.flight)
       ? widget.flight
@@ -108,9 +113,36 @@ class _EntryDialogState extends State<_EntryDialog> {
                 dense: true,
                 leading:
                     EventGlyph(_event, size: 20, color: eventColor(_event)),
-                title: Text('${_event.label} · ${_implement.weightLabel}'),
+                title: Text(MeetCompetition(
+                        _event, _implement.weightKg, const [],
+                        division: _division)
+                    .label),
               )
             else ...[
+              // Who the competition is for, first: it is the word the meet
+              // screen finds the event by, and picking it puts the weight
+              // that division throws in the box below. Optional, since a
+              // field entered by hand at a small meet is often nobody's
+              // division in particular — tapping the chosen one again
+              // clears it.
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final division in Division.values)
+                    ChoiceChip(
+                      label: Text(division.word),
+                      selected: _division == division,
+                      onSelected: (selected) => setState(() {
+                        _division = selected ? division : null;
+                        if (selected) {
+                          _implement =
+                              _event.specFor(division.implementKgFor(_event));
+                        }
+                      }),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
               DropdownButtonFormField<ThrowEvent>(
                 value: _event,
                 decoration: const InputDecoration(labelText: 'Event'),
@@ -120,7 +152,9 @@ class _EntryDialogState extends State<_EntryDialog> {
                 ],
                 onChanged: (event) => setState(() {
                   _event = event ?? _event;
-                  _implement = _event.defaultImplement;
+                  _implement = _division == null
+                      ? _event.defaultImplement
+                      : _event.specFor(_division!.implementKgFor(_event));
                 }),
               ),
               const SizedBox(height: 12),
@@ -189,6 +223,7 @@ class _EntryDialogState extends State<_EntryDialog> {
                       athlete: _athlete.trim(),
                       event: _event,
                       implementKg: _implement.weightKg,
+                      division: _division,
                       tracked: _tracked,
                       flight: _flight,
                     ),
