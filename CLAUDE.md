@@ -1136,7 +1136,13 @@ like the app rather than a bare Material default.
   what made an opaque page read as a different app. Faintly, though: at
   45% the backdrop's lines ran through the type on every card. The header
   card over the field is solid (`solidCardOverSector`) on both sides, like
-  the live card — it is what the whole list is read against. The
+  the live card — it is what the whole list is read against. And the
+  sector never runs through a header: whatever sits above a screen's
+  scrolling content (the segmented bar, the meet's weather line, and on
+  the page the title, the meet, the follow chip and the tabs) is laid on
+  the plain surface — `HeaderBand` in the app, `.top` on the page — so the
+  backdrop starts under it. A band over the backdrop, not the backdrop
+  moved down, because the box it is laid out in sets its bearing. The
   athlete in the circle is edged in the event's color at 12px, as theirs
   is. The podium's three metals are written into it out of `gold.dart` too
   — the flat tones as CSS variables for the places, and the five stops as

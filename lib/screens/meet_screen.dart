@@ -120,9 +120,11 @@ class MeetScreen extends StatelessWidget {
               ),
               Column(
                 children: [
-                  _ConditionsBar(
-                    meet: meet,
-                    onEdit: () => _editConditions(context, meets, meet),
+                  HeaderBand(
+                    child: _ConditionsBar(
+                      meet: meet,
+                      onEdit: () => _editConditions(context, meets, meet),
+                    ),
                   ),
                   Expanded(
                     child: competitions.isEmpty

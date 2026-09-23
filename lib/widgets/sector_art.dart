@@ -95,6 +95,27 @@ Color cardOverSector(ColorScheme scheme) =>
 Color solidCardOverSector(ColorScheme scheme) =>
     Color.alphaBlend(cardOverSector(scheme), scheme.surface);
 
+/// What sits above a screen's scrolling content — a segmented bar, the
+/// line of weather across a meet — laid on the plain surface, so the
+/// backdrop starts under it rather than running through it.
+///
+/// The sector is texture for the cards; through the controls a coach reads
+/// first on opening a screen, it is lines across the words. It is a band
+/// over the backdrop rather than a backdrop moved down, because the box the
+/// sector is laid out in sets the bearing it crosses the screen on, and the
+/// spectator page lays its own out from the same place.
+class HeaderBand extends StatelessWidget {
+  const HeaderBand({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child: child,
+      );
+}
+
 /// The sector as background art: the throwing circle sits just off the
 /// bottom-left corner, its distance arcs sweep diagonally across the screen,
 /// and the two sector lines cut through them. Faint by design — it should

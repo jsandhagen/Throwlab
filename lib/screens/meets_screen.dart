@@ -130,7 +130,8 @@ class _MeetsScreenState extends State<MeetsScreen> {
               // meet of it gets a date.
               Column(
                 children: [
-                  Padding(
+                  HeaderBand(
+                      child: Padding(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                     child: AngularSegmentedBar<_MeetsView>(
                       value: _view,
@@ -146,7 +147,7 @@ class _MeetsScreenState extends State<MeetsScreen> {
                             label: 'Calendar'),
                       ],
                     ),
-                  ),
+                  )),
                   Expanded(
                     child: _view == _MeetsView.list
                         ? (meets.meets.isEmpty

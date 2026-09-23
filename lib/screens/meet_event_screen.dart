@@ -257,7 +257,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
               else
                 Column(
                   children: [
-                    Padding(
+                    HeaderBand(
+                        child: Padding(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: AngularSegmentedBar<_MeetView>(
                         value: _view,
@@ -280,7 +281,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
                               label: 'Standings'),
                         ],
                       ),
-                    ),
+                    )),
                     Expanded(
                       child: switch (_view) {
                         _MeetView.series => _seriesList(meet, meets, library,

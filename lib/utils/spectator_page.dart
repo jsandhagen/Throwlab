@@ -166,6 +166,14 @@ const String _page = r'''<!doctype html>
                        calc(100% - 12px) 100%, 0 100%, 0 12px);
   }
 
+  /* Everything above the view, on the plain page: the sector is texture
+     for the cards, and through the title, the meet and the tabs it is lines
+     across the words — the app lays its segmented bar on the same band.
+     Out to both edges of the screen, past the body's own width, since the
+     backdrop runs to them. */
+  .top { background: var(--bg); margin-bottom: 12px;
+         box-shadow: 0 0 0 100vmax var(--bg); clip-path: inset(0 -100vmax); }
+  .top .tabs { margin-bottom: 0; }
   header { padding: 16px 0 12px; }
   .title { display: flex; align-items: center; gap: 10px; }
   .title h1 { font-size: 19px; margin: 0; font-weight: 600; letter-spacing: 0.2px; }
@@ -441,6 +449,7 @@ const String _page = r'''<!doctype html>
 </head>
 <body>
 <svg id="backdrop" preserveAspectRatio="none" aria-hidden="true"></svg>
+<div class="top">
 <header>
   <div class="title"><span id="glyph"></span><h1 id="label">…</h1>
     <a class="sheet" id="sheet" title="Results sheet" aria-label="Results sheet"><svg
@@ -457,6 +466,7 @@ const String _page = r'''<!doctype html>
   <button data-tab="live" aria-pressed="true">Live</button>
   <button data-tab="series" aria-pressed="false">Series</button>
   <button data-tab="standings" aria-pressed="false">Standings</button>
+</div>
 </div>
 <main id="view"></main>
 <p class="note">/*NOTE*/</p>
