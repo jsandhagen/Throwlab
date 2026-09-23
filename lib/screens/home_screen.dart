@@ -14,6 +14,7 @@ import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../widgets/angular.dart';
+import '../widgets/logo_mark.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/distance_field.dart';
@@ -423,7 +424,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       appBar: AppBar(
         title: Row(
           children: [
-            Image.asset('assets/icon/logo.png', height: 32),
+            const LogoMark(height: 32),
             const SizedBox(width: 10),
             const Text('ThrowLab',
                 style:
@@ -935,7 +936,7 @@ class _EmptyState extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Image.asset('assets/icon/logo.png', width: 140),
+                const LogoMark(height: 140),
                 const SizedBox(height: 16),
                 Text('No throws yet',
                     style: Theme.of(context).textTheme.headlineSmall),

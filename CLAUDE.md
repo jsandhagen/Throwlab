@@ -10,7 +10,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
@@ -53,7 +53,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/comparison_preview.dart \
                               tool/preview/share_preview.dart \
                               tool/preview/gold_preview.dart \
-                              tool/preview/glyph_preview.dart
+                              tool/preview/glyph_preview.dart \
+                              tool/preview/logo_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -153,7 +154,10 @@ turned round — and the gold itself: the medal at
 every size the app pins it at, on a line of type and on a card's corner
 beside the frame, and then one big enough to see what was drawn — and the
 event glyphs at every size a screen pins them at, each row shot on its own
-at a phone's pixels, with the javelin once more at 300 px. Open the
+at a phone's pixels, with the javelin once more at 300 px — and the
+app's own mark: the launcher icon at the sizes a home screen draws it,
+the adaptive foreground under a circle, a squircle and a rounded square,
+the app bar and the empty library. Open the
 PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
@@ -195,6 +199,23 @@ like the app rather than a bare Material default.
 
 - Dark Material 3 theme seeded from the logo blue (`0xFF4FC3F7`); `main.dart`
   holds the theme, screens don't restyle it.
+- The app's mark is `LogoMark` (`logo_mark.dart`): an Erlenmeyer flask that
+  is also a throwing sector. Its walls lean at the sector's 34.92°, it is
+  full to where the neck opens out, and the liquid carries the field — two
+  sector lines leaving the meniscus exactly where it meets the glass and
+  running to the base just inside the walls, and three evenly spaced
+  distance arcs between them. The meniscus is the front of the throwing
+  circle, or the javelin's foul line. The lines are cut out of the liquid
+  rather than drawn on it, so one drawing is white-lined on the launcher's
+  white tile and the results sheet and dark-lined on the app's theme.
+  It is drawn tight to the flask, never centered in a square: a tall
+  narrow flask in a square box is a mark at half the size it was asked for,
+  so `LogoMark` takes a height and its width from `logoAspect`. The app
+  paints it; the launcher icons and the sheet's `logo.png` are written from
+  the same painter by `flutter test tool/generate_icon.dart`, and committed.
+  The adaptive foreground is sized to the largest that keeps every stroke
+  inside the 66 dp circle Android guarantees, less a twentieth so a round
+  icon does not look jammed; the legacy icon fills 80% of its white tile.
 - Type is Barlow, bundled under `assets/fonts/` (OFL) rather than fetched at
   runtime — the app is used at a track, often with no signal. It is set once
   as `ThemeData.fontFamily`; don't name a family anywhere else.
@@ -842,7 +863,10 @@ like the app rather than a bare Material default.
   wide enough to reach the corner, and is cut to what is left beside it
   (`columnsBeside`) rather than run under it.
   Pixels, not a drawing. `sheetLogo` has the engine decode
-  `assets/icon/logo.png` at the size a sheet draws it and `PdfImage` embeds
+  `assets/icon/logo.png` at the height a sheet draws it — by height alone,
+  since the mark is cropped to a tall flask and a square decode squashes
+  it, which is also why the name beside it is cut to the logo's real width
+  rather than to its height — and `PdfImage` embeds
   what it got — the same rule the personal-best medal is served under, for
   the same reason: every number in a mark somebody designed is measured off
   a reference, and one redrawn out of PDF operators until it looked about

@@ -48,11 +48,13 @@ Uint8List meetResultsPdf(
   // three others should say whose it is without being read.
   if (logo != null) sheet.badge(logo, size: _badge);
   sheet.line(
-      _fit((meet.name.isEmpty ? 'Meet' : meet.name).toUpperCase(),
+      _fit(
+          (meet.name.isEmpty ? 'Meet' : meet.name).toUpperCase(),
           // The name is the one line on the sheet wide enough to reach the
           // corner, so it is cut to what is left beside the mark rather
           // than run under it.
-          sheet.columnsBeside(15, logo == null ? 0 : _badge + 10)),
+          sheet.columnsBeside(
+              15, logo == null ? 0 : _badge * logo.width / logo.height + 10)),
       size: 15,
       face: PdfFace.bold,
       spacing: 18);

@@ -25,7 +25,8 @@ Future<PdfImage?> sheetLogo({int size = 192}) async {
     final asset = await rootBundle.load('assets/icon/logo.png');
     final codec = await ui.instantiateImageCodec(
       asset.buffer.asUint8List(),
-      targetWidth: size,
+      // By height alone: the mark is cropped to the flask, which is tall
+      // and narrow, and a square decode would squash it.
       targetHeight: size,
     );
     final frame = await codec.getNextFrame();
