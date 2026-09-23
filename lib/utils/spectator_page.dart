@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/event_glyph.dart';
 import '../widgets/gold.dart';
 import '../widgets/sector_art.dart';
 
@@ -83,6 +84,16 @@ String spectatorPage(
     'second': Medal.silver,
     'third': Medal.bronze,
   };
+  // The javelin's outline off `EventGlyph`'s own, as SVG in the unit
+  // square: a real javelin's proportions are too fine to trace by hand
+  // twice and have both come out the same.
+  final javelin = [
+    for (final part in javelinOutline())
+      'M ${[
+        for (final o in part)
+          '${o.dx.toStringAsFixed(4)} ${o.dy.toStringAsFixed(4)}',
+      ].join(' L ')} Z',
+  ].join(' ');
   return _page
       .replaceFirst(
           '/*NOTE*/',
@@ -105,7 +116,8 @@ String spectatorPage(
       ].join(' '))
       // The slant every leaning edge on the page uses, which is the one the
       // sector opens at — the same number the app's own bar leans by.
-      .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2));
+      .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2))
+      .replaceFirst('/*JAVELIN*/', javelin);
 }
 
 const String _page = r'''<!doctype html>
@@ -616,11 +628,9 @@ const String _page = r'''<!doctype html>
         '<path d="M ' + 0.41 * s + " " + 0.59 * s + " L " + 0.74 * s + " " + 0.30 * s +
         '" stroke="' + tint + '" stroke-width="' + 0.05 * s + '" fill="none"/>';
     } else {
-      /* The javelin: a needle drawn tail to tip, thickest just past the
-         middle where the cord grip is. */
-      g = '<path d="M ' + 0.12 * s + " " + 0.88 * s + " L " + 0.60 * s + " " +
-        0.34 * s + " L " + 0.88 * s + " " + 0.12 * s + " L " + 0.66 * s + " " +
-        0.44 * s + ' Z"/>';
+      /* The javelin: the app's own outline, handed over in the unit
+         square rather than traced a second time. */
+      g = '<path transform="scale(' + s + ')" d="/*JAVELIN*/"/>';
     }
     return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 ' + s + " " + s +
       '" fill="' + tint + '" aria-hidden="true" style="width:' + s + "px;height:" +

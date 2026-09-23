@@ -52,7 +52,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/compare_preview.dart \
                               tool/preview/comparison_preview.dart \
                               tool/preview/share_preview.dart \
-                              tool/preview/gold_preview.dart
+                              tool/preview/gold_preview.dart \
+                              tool/preview/glyph_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -150,7 +151,9 @@ itself: the two panes across a landscape screen and up a narrow one, the
 mirror offered against each clip, and a mark on A before and after A is
 turned round — and the gold itself: the medal at
 every size the app pins it at, on a line of type and on a card's corner
-beside the frame, and then one big enough to see what was drawn. Open the
+beside the frame, and then one big enough to see what was drawn — and the
+event glyphs at every size a screen pins them at, each row shot on its own
+at a phone's pixels, with the javelin once more at 300 px. Open the
 PNGs to see exactly what the screen paints. **Re-run it
 after touching a screen's layout and actually look at the output.** Run the
 previews one command at a time: two `flutter test` runs at once fight over
