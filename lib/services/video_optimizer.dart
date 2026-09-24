@@ -574,29 +574,28 @@ class VideoOptimizer {
   /// screen. `exact` stops the crop being rounded to the chroma grid behind
   /// the crop's back; the crop is already on it.
   ///
-  /// Sharpened, and then clamped. A small unsharp runs at the clip's own
-  /// pixels, before the scale — after it, a kernel a few pixels wide would be
-  /// sharpening the lanczos rather than the picture — and lanczos makes the
-  /// edges steep. Both do it by overshooting: left alone they drew a dark rim
-  /// round a white block and a bright fringe down every edge between two
-  /// colors, and pushed the most saturated color on the frame past anything
-  /// the clip holds. Measured on a frame of hard edges, saturated patches,
-  /// thin lines and grass, 7.8% of the pixels overshot their neighbors by more
-  /// than four levels, by as much as 61, and the color peaked at 106 where
-  /// the clip's own peak is 103.
+  /// Scaled with lanczos, and then clamped. Lanczos makes an edge steep by
+  /// overshooting it: left alone it drew a dark rim round a white block and a
+  /// bright fringe down every edge between two colors, and pushed the most
+  /// saturated color on the frame past anything the clip holds. So nothing
+  /// leaves the range of the clip's own pixels around it: `erosion` and
+  /// `dilation` take each pixel's darkest and brightest 3x3 neighbor, plane
+  /// by plane, at the clip's resolution, those two bounds are scaled up
+  /// bilinearly beside the picture, and `maskedclamp` holds the picture
+  /// between them. An edge keeps its steepness, which is what reads as sharp,
+  /// and none of its overshoot — and because the chroma planes are clamped
+  /// the same way, no color comes out stronger than the colors it sits among.
+  /// On a frame of hard edges, saturated patches, thin lines and grass the
+  /// color peaks at 101, exactly as the bilinear zoom's does, against the
+  /// clip's own 103.
   ///
-  /// So nothing leaves the range of the clip's own pixels around it:
-  /// `erosion` and `dilation` take each pixel's darkest and brightest 3x3
-  /// neighbor, plane by plane, at the clip's resolution, those two bounds are
-  /// scaled up bilinearly beside the picture, and `maskedclamp` holds the
-  /// sharpened picture between them. An edge keeps all of its steepness,
-  /// which is what reads as sharp, and none of its overshoot, which is what
-  /// reads as sharpened — and because the chroma planes are clamped the same
-  /// way, no color comes out stronger than the colors it sits among. On the
-  /// same frame the overshoot falls to 0.28% of pixels, the color peaks at
-  /// 101 exactly as the bilinear zoom's does, and the sharpness gained (by
-  /// mean gradient) is the 1.45x of lanczos alone, against the 1.93x the
-  /// overshoot was dressing up as detail.
+  /// No sharpening on top, though it was tried. An unsharp mask lifts
+  /// whatever is finest in the picture, and in a phone's footage of a field
+  /// that is the compression — grain in the grass, blocks in the trees. The
+  /// clamp can't catch it, because noise stays inside the range of its
+  /// neighbors. Measured on a real throw, the fine-grain energy in the trees
+  /// rose 42% over the bilinear zoom with an unsharp of 0.6 and 16% without,
+  /// and at 4x it drew the codec's blocks as a checkerboard.
   ///
   /// The color is written the way every other JPEG here is
   /// ([jpegColorFilter]), and after the clamp, so the bounds and the picture
@@ -618,7 +617,7 @@ class VideoOptimizer {
         'scale=${crop.frameWidth}:${crop.frameHeight},'
         'crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}:exact=1,'
         'split=3[pic][lo][hi];'
-        '[pic]unsharp=3:3:0.6:3:3:0,scale=$size:flags=lanczos[sharp];'
+        '[pic]scale=$size:flags=lanczos[sharp];'
         '[lo]erosion,scale=$size:flags=bilinear[floor];'
         '[hi]dilation,scale=$size:flags=bilinear[ceiling];'
         '[sharp][floor][ceiling]maskedclamp=undershoot=0:overshoot=0,'

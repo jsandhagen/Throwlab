@@ -21,9 +21,13 @@ import 'frame_timing.dart';
 /// somebody is measuring off.
 
 /// Below this many screen pixels per pixel of the clip, the GPU's own
-/// scaling is as good as anything ffmpeg would hand back: a 1440p frame on
-/// a 1080-wide phone is being shrunk, not blown up.
-const double kDetailMinMagnification = 1.25;
+/// scaling is as good as anything ffmpeg would hand back. Not much above
+/// one: a portrait clip's playback copy is 810 wide, so a 1080-wide phone
+/// shows it at 1.33x before anybody has pinched, and at that size lanczos
+/// draws the frame all but the same as the GPU does — a render for every
+/// paused frame, and a swap that changes nothing but the grain. The still
+/// is for a frame somebody has zoomed into.
+const double kDetailMinMagnification = 2;
 
 /// Ceiling on the rendered still, in pixels. What is on screen is at most a
 /// phone's own resolution; this is headroom for the snap to whole pixels and

@@ -77,6 +77,20 @@ void main() {
       );
     });
 
+    test('an unzoomed portrait clip on a phone is left to the GPU', () {
+      // A portrait playback copy is 810 wide, so a 1080-wide screen shows it
+      // at 1.33x before anybody pinches: nothing a render would improve.
+      expect(
+        detailCropFor(
+          frameWidth: 810,
+          frameHeight: 1440,
+          visible: const Rect.fromLTWH(0, 0, 1, 1),
+          magnification: 1080 / 810,
+        ),
+        isNull,
+      );
+    });
+
     test('the crop widens outwards to even pixels and is placed by them', () {
       final crop = detailCropFor(
         frameWidth: 2560,
@@ -285,11 +299,11 @@ void main() {
     expect(command, contains('-frames:v 1'));
   });
 
-  test('the sharpened picture is held inside the clip\'s own pixels', () {
-    // Unclamped, the unsharp and the lanczos overshoot: halos round every
-    // hard edge and colors stronger than any in the clip. The clamp is what
-    // stops it, so it has to be there, with no slack, and the color written
-    // after it — a JPEG's numbers are not the clip's.
+  test('the zoomed picture is held inside the clip\'s own pixels', () {
+    // Unclamped, lanczos overshoots: halos round every hard edge and colors
+    // stronger than any in the clip. The clamp is what stops it, so it has
+    // to be there, with no slack, and the color written after it — a JPEG's
+    // numbers are not the clip's.
     final command = VideoOptimizer.detailCommand(
       videoPath: '/clips/a.mp4',
       outPath: '/tmp/d.jpg',
@@ -313,10 +327,10 @@ void main() {
         command.indexOf('maskedclamp'),
         lessThan(command.indexOf('in_color_matrix=bt709:'
             'out_color_matrix=bt601:out_range=pc')));
-    // The sharpening is on the picture and nowhere else: a sharpened bound
-    // would let the overshoot back through.
-    expect(RegExp('unsharp').allMatches(command), hasLength(1));
-    expect(command, contains('[pic]unsharp'));
+    // No sharpening: in a phone's footage the finest thing on the frame is
+    // the compression, and the clamp can't catch it inside its own range.
+    expect(command, isNot(contains('unsharp')));
+    expect(command, contains('[pic]scale=1080:608:flags=lanczos[sharp]'));
   });
 
   group('on the analysis screen', () {
@@ -364,7 +378,7 @@ void main() {
     testWidgets('a clip whose copy may be replaced under it stays soft',
         (tester) async {
       await mount(tester, current: false);
-      await pinchOut(tester, const Offset(400, 300), 120);
+      await pinchOut(tester, const Offset(400, 300), 240);
       await tester.pump(const Duration(milliseconds: 500));
       expect(asked, isEmpty);
     });
@@ -372,7 +386,7 @@ void main() {
     testWidgets('a zoomed frame is drawn sharp once the fingers stop',
         (tester) async {
       await mount(tester);
-      await pinchOut(tester, const Offset(400, 300), 120);
+      await pinchOut(tester, const Offset(400, 300), 240);
       expect(asked, isEmpty, reason: 'nothing until the picture settles');
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump();
@@ -394,7 +408,7 @@ void main() {
     testWidgets('stepping to another frame takes the still down',
         (tester) async {
       await mount(tester);
-      await pinchOut(tester, const Offset(400, 300), 120);
+      await pinchOut(tester, const Offset(400, 300), 240);
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump();
       expect(drawn(tester), isNotNull);
