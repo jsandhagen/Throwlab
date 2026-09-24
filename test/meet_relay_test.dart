@@ -200,7 +200,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 40));
 
       expect(pushes, hasLength(2));
-      // 50 KB of page and medal that change when the app does, not when a
+      // 50 KB of page that changes when the app does, not when a
       // round does.
       expect(bodyOf(pushes.last).containsKey('page'), isFalse);
       expect(bodyOf(pushes.last).containsKey('medal'), isFalse);

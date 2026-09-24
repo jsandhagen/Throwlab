@@ -13,7 +13,6 @@ import '../utils/app_logo.dart';
 import '../utils/meet_report.dart';
 import '../utils/share_payload.dart';
 import '../utils/spectator_page.dart';
-import '../widgets/gold.dart';
 import 'results_sheet.dart';
 
 /// Shares the competition in front of you with anybody holding the link.
@@ -84,9 +83,6 @@ class MeetRelay extends ChangeNotifier {
   /// theirs. It is a few hundred bytes, and it slows to [retry] the moment
   /// nobody is reading — most links spend most of the day like that.
   final Duration lively;
-
-  /// How long the first push waits for the medal before going without it.
-  static const _medalPatience = Duration(seconds: 2);
 
   final http.Client _client;
   final Map<String, _Share> _byToken = {};
@@ -207,9 +203,9 @@ class MeetRelay extends ChangeNotifier {
     _byToken[token] = share;
     _watch(changes);
 
-    // The page and the medal go with the first push and are held after it:
-    // they are 50 KB that change when the app does, and re-sending them
-    // behind every mark would be most of what this costs somebody.
+    // The page goes with the first push and is held after it: it is
+    // 50 KB that changes when the app does, and re-sending it behind
+    // every mark would be most of what this costs somebody.
     final landed = await _push(share, whole: true);
     if (!landed) {
       _byToken.remove(token);
@@ -454,14 +450,11 @@ class MeetRelay extends ChangeNotifier {
     }
   }
 
-  /// The page and the medal, which go once.
+  /// The page, which goes once.
   ///
   /// The page is the app's own — generated here off the app's own
   /// `ColorScheme`, so the theme stays `main.dart`'s to decide and there
-  /// is no second copy of it anywhere to fall behind. The medal is struck
-  /// by the app's own painter for the same reason it always was: every
-  /// number in it is measured off a reference, and a badge that is nearly
-  /// right is worse than none.
+  /// is no second copy of it anywhere to fall behind.
   Future<Map<String, dynamic>> _statics(_Share share,
       {required bool whole}) async {
     if (!whole) return const {};
@@ -476,18 +469,6 @@ class MeetRelay extends ChangeNotifier {
     final out = <String, dynamic>{
       'page': spectatorPage(share.scheme, servedByPhone: false),
     };
-    try {
-      // Never the thing a link waits on. Striking the badge goes through
-      // the engine, which is quick on a phone and can be slow — or never
-      // finish at all — anywhere else, and a coach standing at a ring with
-      // no QR yet is a worse failure than a page whose medal 404s for one
-      // round. The page has coped with that since it was served off the
-      // phone.
-      out['medal'] = base64Encode(
-          await medalPng(Medal.gold, size: 48).timeout(_medalPatience));
-    } catch (_) {
-      // Timed out, or no painter behind us at all.
-    }
     return out;
   }
 

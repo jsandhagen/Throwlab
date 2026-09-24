@@ -12,7 +12,6 @@ import '../utils/app_logo.dart';
 import '../utils/meet_report.dart';
 import '../utils/share_payload.dart';
 import '../utils/spectator_page.dart';
-import '../widgets/gold.dart';
 import 'results_sheet.dart';
 
 /// Shares the competition in front of you with everybody standing at it.
@@ -323,8 +322,6 @@ class MeetServer extends ChangeNotifier {
           await _sheet(response, share);
         case 'f':
           await _font(response, segments.length > 3 ? segments[3] : '');
-        case 'pb.png':
-          await _medal(response);
         default:
           await _plain(response, HttpStatus.notFound, 'Nothing here.');
       }
@@ -369,24 +366,6 @@ class MeetServer extends ChangeNotifier {
     response.headers.contentType = ContentType('font', 'ttf');
     response.headers.set(HttpHeaders.cacheControlHeader, 'max-age=86400');
     response.add(bytes);
-    await response.close();
-  }
-
-  /// The personal-best medal, struck by the app's own painter and sent as
-  /// pixels. Drawn once and held: it is the same badge on every card.
-  Uint8List? _medalBytes;
-
-  Future<void> _medal(HttpResponse response) async {
-    try {
-      _medalBytes ??= await medalPng(Medal.gold, size: 48);
-    } catch (_) {
-      await _plain(response, HttpStatus.notFound, 'No medal here.');
-      return;
-    }
-    response.statusCode = HttpStatus.ok;
-    response.headers.contentType = ContentType('image', 'png');
-    response.headers.set(HttpHeaders.cacheControlHeader, 'max-age=86400');
-    response.add(_medalBytes!);
     await response.close();
   }
 

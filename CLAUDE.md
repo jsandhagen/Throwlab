@@ -59,7 +59,7 @@ flutter test --update-goldens tool/preview/home_preview.dart \
 
 `share_preview` writes a second artifact beside its PNGs:
 `build/preview/spectator.html`, the real spectator page with a competition's
-feed baked in place of its fetch, and Barlow and the medal copied in beside
+feed baked in place of its fetch, and Barlow copied in beside
 it so the type and the badge are the app's there too. A page whose whole job
 happens in a browser cannot be reviewed as a golden — open the file, and
 every tab works, and so does the question it opens with, because the page
@@ -899,7 +899,7 @@ like the app rather than a bare Material default.
   since the mark is cropped to a tall flask and a square decode squashes
   it, which is also why the name beside it is cut to the logo's real width
   rather than to its height — and `PdfImage` embeds
-  what it got — the same rule the personal-best medal is served under, for
+  what it got — the same rule the medal is drawn under everywhere, for
   the same reason: every number in a mark somebody designed is measured off
   a reference, and one redrawn out of PDF operators until it looked about
   right would be nearly the logo. It is decoded once per process and asked
@@ -1177,12 +1177,14 @@ like the app rather than a bare Material default.
   marks. A label is bold type on a quiet panel rather than a stroked box,
   and the athlete the board is being read for carries a marker at the middle
   of their line.
-- The personal-best medal is not ported to SVG. `medalPng` strikes it with
-  the app's own painter and `MeetServer` serves the pixels, because every
-  number in `_MedalPainter` is measured off a reference and a badge that is
-  nearly right is worse than none. The page pins it beside the place, which
-  is where the app pins it — so the best box keeps its own ring and a PB is
-  never said twice.
+- In a competition a personal best is a word, not a medal:
+  `PersonalBestTag`, 'PB' after the mark in the mark's own color, and
+  `.pbtag` on the page. The medal is the podium's there — the place chip
+  beside the mark is struck in the same gold — so a PB disc next to a
+  '1st' read as a win, and an athlete fourth on a lifetime best looked
+  like the leader. The library's cards and the profile keep the medal,
+  where no placing sits beside it. The best box keeps its own ring, so a
+  PB is never said twice.
 - It is meant to read as ThrowLab rather than as a web page about ThrowLab,
   so `spectator_page` is not styled by hand. The palette is written out of
   the app's own `ColorScheme` — handed to `MeetServer.start` by the sheet

@@ -8,8 +8,6 @@
 library;
 
 import 'dart:math' as math;
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -207,24 +205,38 @@ class PersonalBestMedal extends StatelessWidget {
       medal: Medal.gold, size: size, label: 'Personal best');
 }
 
-/// The medal as a PNG, struck by the same painter the app pins on a card.
+/// A personal best in a competition, said the way a results list says it:
+/// 'PB' after the mark, in the color the mark is already set in.
 ///
-/// For the spectator's page, which cannot run a `CustomPainter` — and where
-/// porting this geometry to SVG would give something nearly right, which on
-/// a badge measured off a reference is worse than nothing. The phone draws
-/// it and serves the pixels.
-Future<Uint8List> medalPng(Medal medal, {int size = 48}) async {
-  final recorder = ui.PictureRecorder();
-  final height = (size * _MedalPainter.aspect).round();
-  _MedalPainter(medal).paint(
-      Canvas(recorder), Size(size.toDouble(), height.toDouble()));
-  final image = await recorder.endRecording().toImage(size, height);
-  try {
-    final data = await image.toByteData(format: ui.ImageByteFormat.png);
-    return data!.buffer.asUint8List();
-  } finally {
-    image.dispose();
-  }
+/// Not the medal. In a meet the medal is what a placing is struck in, and
+/// a gold disc beside a gold '1st' read as a win — an athlete fourth on a
+/// lifetime best looked like the leader. A tag is a word, and a word is
+/// the one thing no podium is drawn with.
+class PersonalBestTag extends StatelessWidget {
+  const PersonalBestTag({super.key, required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        label: 'Personal best',
+        excludeSemantics: true,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.16),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            'PB',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                height: 1.2),
+          ),
+        ),
+      );
 }
 
 class _MedalPainter extends CustomPainter {

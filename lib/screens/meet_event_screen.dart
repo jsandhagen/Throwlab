@@ -1571,8 +1571,9 @@ class _EntryCard extends StatelessWidget {
   }
 
   /// What they are standing on, and whether it is the furthest they have
-  /// ever thrown. No word for it: this is the only distance on the row, and
-  /// the boxes underneath say which throw it came out of.
+  /// ever thrown. A best is said in the word a results list prints after
+  /// the mark, never in metal: the place chip beside it is struck in the
+  /// podium's gold, and a gold disc next to '1st' said a PB was a win.
   Widget _placeAndBest(ThemeData theme, Color accent) {
     final best = series.best;
     if (best == null) return const SizedBox.shrink();
@@ -1584,15 +1585,15 @@ class _EntryCard extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (isPb) ...[
-          const PersonalBestMedal(size: 13),
-          const SizedBox(width: 4),
-        ],
         Text(
           formatDistance(best, series.unitAt(bestRound)),
           style: theme.textTheme.titleSmall
               ?.copyWith(fontWeight: FontWeight.w700, color: accent),
         ),
+        if (isPb) ...[
+          const SizedBox(width: 4),
+          PersonalBestTag(color: accent),
+        ],
       ],
     );
   }

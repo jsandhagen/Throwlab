@@ -454,10 +454,12 @@ const String _page = r'''<!doctype html>
   .box.best { background: transparent; color: var(--tint); font-weight: 600;
               box-shadow: inset 0 0 0 1px var(--tint); }
   .box.out { opacity: 0.32; }
-  /* Struck by the app itself and served as pixels — see MeetServer. */
-  /* 13px, the size the app pins it at beside a mark — a badge before it
-     is a picture, and the small one is the size that has to work. */
-  .medal { height: 13px; width: auto; vertical-align: -1px; }
+  /* A best is the word after the mark, in the mark's own color — the
+     app's PersonalBestTag. Never the medal: beside a place struck in gold
+     it read as a win. */
+  .pbtag { font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+           color: var(--tint); padding: 1px 4px; border-radius: 4px;
+           background: color-mix(in srgb, var(--tint) 16%, transparent); }
 
 
   /* The results sheet sits where the app puts it — an action in the top
@@ -1072,11 +1074,12 @@ const String _page = r'''<!doctype html>
     var up = c.flight && p.order === c.flight.upOrder;
     var metal = p.best ? metalOf(p.place) : "";
     var pb = p.series.some(function (a) { return a && a.pb; })
-      ? '<img class="medal" src="' + base + '/pb.png" alt="Personal best">'
+      ? '<span class="pbtag" title="Personal best">PB</span>'
       : "";
     /* The order they throw in down the left, the way the app reads a
        field; the place rides on the right with the mark it was made on,
-       and the medal between them, which is the order the app sets it in. */
+       and a best is said after the mark, which is the order the app sets
+       it in. */
     return '<div class="entry' + (embedded ? " in" : " card") +
       (up && !embedded ? " up" : "") + '"><div class="erow">' +
       '<span class="ord">' + (p.order + 1) + "</span>" +
@@ -1084,7 +1087,7 @@ const String _page = r'''<!doctype html>
       esc(p.name) + "</span>" +
       (p.best
         ? '<span class="chip' + metal + '">' + esc(p.placeLabel) + "</span>" +
-          pb + '<span class="bm big">' + esc(p.best) + "</span>"
+          '<span class="bm big">' + esc(p.best) + "</span>" + pb
         : "") +
       "</div>" + boxes(c, p) + "</div>";
   }

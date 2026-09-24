@@ -33,7 +33,6 @@ import 'package:throwlab/services/meet_server.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/utils/meet_feed.dart';
 import 'package:throwlab/utils/spectator_page.dart';
-import 'package:throwlab/widgets/gold.dart';
 
 import 'harness.dart';
 
@@ -312,10 +311,6 @@ void main() {
           .writeAsBytesSync(File('assets/fonts/Barlow-Regular.ttf').readAsBytesSync());
       File('${fonts.path}/s.ttf').writeAsBytesSync(
           File('assets/fonts/Barlow-SemiBold.ttf').readAsBytesSync());
-      // The medal the page pins on a personal best, struck by the app's own
-      // painter exactly as the server strikes it.
-      File('${folder.path}/pb.png')
-          .writeAsBytesSync(await medalPng(Medal.gold, size: 48));
       // ignore: avoid_print
       print('wrote ${file.path} (${file.lengthSync()} bytes)');
     });

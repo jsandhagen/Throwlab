@@ -376,8 +376,9 @@ void main() {
       await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
-      // The medal says it; the row has no room for the word.
-      expect(find.byType(PersonalBestMedal), findsOneWidget);
+      // Said in a word, never in the metal a placing is struck in.
+      expect(find.byType(PersonalBestTag), findsOneWidget);
+      expect(find.byType(PersonalBestMedal), findsNothing);
     });
 
     testWidgets('a mark short of an older one is not a best', (tester) async {
@@ -392,7 +393,7 @@ void main() {
       await mountEvent(tester);
       await tapMark(tester);
       await enterDistance(tester, '41.20');
-      expect(find.byType(PersonalBestMedal), findsNothing);
+      expect(find.byType(PersonalBestTag), findsNothing);
       expect(find.textContaining('41.20 m'), findsOneWidget);
     });
   });
