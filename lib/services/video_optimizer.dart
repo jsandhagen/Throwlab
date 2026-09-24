@@ -9,6 +9,8 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../utils/zoom_detail.dart';
+
 /// Re-encodes an imported clip with a keyframe every few frames.
 /// Phone recordings keep keyframes seconds apart, so an exact seek has to
 /// decode every frame since the previous keyframe; a tiny GOP caps that
@@ -558,6 +560,85 @@ class VideoOptimizer {
       // Unmeasured → 'auto' below.
     }
     return jpegColorFilter();
+  }
+
+  /// The filter a zoom detail still is drawn through: [crop] cut out of the
+  /// frame at [at] and scaled up to the screen's pixels. See zoom_detail.dart
+  /// for why, and [renderDetail] for where it runs.
+  ///
+  /// The frame is first brought to the size the player reports it at, the
+  /// way the stills are — square pixels, then the player's own dimensions,
+  /// which for the playback copy is already exactly what it is and costs
+  /// nothing. That is the size the crop was measured in, so whatever the
+  /// file turns out to be, the piece cut from it is the piece that was on
+  /// screen. `exact` stops the crop being rounded to the chroma grid behind
+  /// the crop's back; the crop is already on it.
+  ///
+  /// The sharpening is a small one and runs before the scale, at the clip's
+  /// own pixels: after it, a kernel a few pixels wide would be sharpening
+  /// the lanczos rather than the picture. It lifts edges the clip has and
+  /// makes none — at this strength a hand is crisper and a halo is not
+  /// something anybody sees. The color is written the way every other JPEG
+  /// here is ([jpegColorFilter]), or the sharp still would be a shade off
+  /// the soft frame it lands on — the scrub shift again, at 8x.
+  @visibleForTesting
+  static String detailCommand({
+    required String videoPath,
+    required String outPath,
+    required Duration at,
+    required DetailCrop crop,
+    required String color,
+  }) {
+    final seconds =
+        (at.inMicroseconds / Duration.microsecondsPerSecond).toStringAsFixed(6);
+    final vf = 'scale=iw*sar:ih,setsar=1,'
+        'scale=${crop.frameWidth}:${crop.frameHeight},'
+        'crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}:exact=1,'
+        'unsharp=3:3:0.6:3:3:0,'
+        'scale=${crop.outWidth}:${crop.outHeight}:flags=lanczos:$color';
+    // -ss ahead of -i seeks the input and then decodes forward, discarding
+    // every frame before the position: the first frame at or after it, which
+    // is the rule the player keeps after a seek. q:v 2 because this is the
+    // one JPEG here that is looked at closely.
+    return '-y -ss $seconds -i "$videoPath" -frames:v 1 -vf "$vf" '
+        '-q:v 2 "$outPath"';
+  }
+
+  /// [_jpegColorFilterFor], asked once per clip: the detail still is
+  /// rendered every time a zoomed frame settles, and the answer can't change
+  /// under an open clip.
+  static final Map<String, String> _detailColor = {};
+
+  static int _detailSerial = 0;
+
+  /// Renders [crop] of the frame at [at] — see [detailCommand] — and returns
+  /// the JPEG's bytes, or null if ffmpeg could not. The file is only the way
+  /// ffmpeg hands them over and is gone before this returns: a still is for
+  /// one pinch on one frame, and never worth the disk.
+  static Future<Uint8List?> renderDetail(
+    String videoPath, {
+    required Duration at,
+    required DetailCrop crop,
+  }) async {
+    final temp = await getTemporaryDirectory();
+    final out = File('${temp.path}/detail_${_detailSerial++}.jpg');
+    final color =
+        _detailColor[videoPath] ??= await _jpegColorFilterFor(videoPath);
+    try {
+      final session = await FFmpegKit.execute(detailCommand(
+        videoPath: videoPath,
+        outPath: out.path,
+        at: at,
+        crop: crop,
+        color: color,
+      ));
+      if (!ReturnCode.isSuccess(await session.getReturnCode())) return null;
+      return await out.readAsBytes();
+    } catch (_) {
+      return null;
+    } finally {
+      out.delete().ignore();
+    }
   }
 
   /// Parses ffprobe rate strings: "240", "240.000000", or "30000/1001".

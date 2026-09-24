@@ -11,7 +11,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
+| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -626,6 +626,26 @@ like the app rather than a bare Material default.
   names both ends of the conversion: the matrix the clip is actually in
   (what it declares, else the same HD-is-709 guess `colorTagsFor` makes), and
   the matrix a JPEG is actually read with.
+- A zoomed frame is drawn sharp once it stops moving (`zoom_detail.dart`).
+  Pinching blows the frame up on the GPU, bilinearly, and by 8x a hand at
+  release is mush; so when nothing has moved for a moment, ffmpeg cuts what
+  is on screen out of the playback copy, scales it to the screen's own
+  pixels with lanczos and a light unsharp, and `DetailStill` fades it in
+  over the soft frame. It is the pixels the clip has, drawn better — never
+  an AI upscale, which would invent detail on the one part of the frame
+  somebody is measuring off. It lives inside the zoom transform and is
+  placed by the crop it was actually cut to (widened to even pixels), so a
+  pan or pinch leaves it correct where it is while the next one renders; it
+  only comes down when the *frame* changes — a play, a scrub's own stills,
+  a step. Which frame is the whole difficulty, as at the scrub handoff:
+  ffmpeg's `-ss` draws the first frame at or after the position, which is
+  the player's rule after a seek and not after a pause out of playback, so
+  `detailTarget` renders at the player's last seek (`FrameSeeker.lastTargetOf`,
+  kept per player because the transport has seekers of its own) and, after
+  playback, seeks the player onto the frame it is already showing first.
+  The JPEG goes through `jpegColorFilter` like every other one, or the sharp
+  still is a shade off the frame it lands on. A clip whose playback copy is
+  owed a remake is left soft: the file is replaced under the open player.
 - A meet is tracked live, not written up afterwards. `MeetFlight` works
   out where a competition has got to — the round being thrown, and the
   three an infield calls out (`inTheCircle`, `onDeck`, `inTheHole`) — from

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -18,8 +19,10 @@ import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
 import '../utils/scrub_shuttle.dart';
+import '../utils/zoom_detail.dart';
 import '../widgets/angular.dart';
 import '../widgets/athlete_picker.dart';
+import '../widgets/detail_still.dart';
 import '../widgets/drawing_canvas.dart';
 import '../widgets/drawing_rail.dart';
 import '../widgets/event_glyph.dart';
@@ -58,6 +61,11 @@ class AnalysisScreen extends StatefulWidget {
   /// it contains this throw.
   final List<ThrowVideo> siblings;
 
+  /// Stands in for ffmpeg when set, so a widget test — which has no ffmpeg
+  /// behind it — can see what a zoomed frame asks to have drawn.
+  @visibleForTesting
+  static DetailRenderer? debugRenderDetail;
+
   @override
   State<AnalysisScreen> createState() => _AnalysisScreenState();
 }
@@ -84,6 +92,26 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   bool _preparingFrames = false;
 
   bool _openFailed = false;
+
+  /// The sharp still over a zoomed frame once it settles — see
+  /// zoom_detail.dart.
+  late final ZoomDetail _detail = ZoomDetail(_renderDetail);
+  Timer? _detailTimer;
+
+  /// The frame [_detail] was last asked for, so a picture that moves off it
+  /// takes the still down with it.
+  Duration? _detailAt;
+
+  /// The clip has played since the last still: where it paused is somewhere
+  /// inside a frame rather than a position anybody seeked to.
+  bool _playedSinceDetail = false;
+
+  /// Whether the file under the player is the file ffmpeg would open. A
+  /// playback copy owed a remake is replaced on disk while this screen
+  /// keeps playing the old one, and a crop measured on one cut out of the
+  /// other would land the wrong piece of picture on the frame. Most remakes
+  /// turn out to be a probe and nothing more, and those give it back.
+  late bool _canSharpen;
 
   /// Every throw in the set, oldest first, so the count a coach reads
   /// ("3 of 8") follows the order the session was thrown rather than the
@@ -153,6 +181,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       vsync: this,
       frames: _frames,
     );
+    _canSharpen = !widget.video.optimizePending &&
+        widget.video.playbackVersion >= VideoOptimizer.playbackVersion;
+    _controller.addListener(_onPictureMoved);
+    _shuttle.addListener(_onPictureMoved);
     if (!_openFailed) {
       _controller.initialize().then((_) {
         if (mounted) setState(() {});
@@ -217,6 +249,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           force: widget.video.optimizePending);
       if (!mounted) return;
       if (remade != null) widget.video.path = remade;
+      // Nothing was re-encoded: the file under the player is still the file
+      // on disk.
+      if (remade == null && !widget.video.optimizePending) _canSharpen = true;
       widget.video.playbackVersion = VideoOptimizer.playbackVersion;
       widget.video.optimizePending = false;
       await library.update(widget.video);
@@ -263,6 +298,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   @override
   void dispose() {
+    _detailTimer?.cancel();
+    _detail.dispose();
     _shuttle.dispose();
     _frames?.dispose();
     _strip.dispose();
@@ -287,6 +324,111 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         microseconds:
             (Duration.microsecondsPerSecond / widget.video.fps).round());
     _seeker.seekBy(step * frames);
+  }
+
+  // ---- The sharp still over a zoomed frame ----
+
+  /// Keeps the still honest as the picture changes: it comes down the moment
+  /// the clip plays, a scrub puts its own stills up, or the paused frame is
+  /// another one, and a new one is asked for once things stop moving.
+  void _onPictureMoved() {
+    final value = _controller.value;
+    if (value.isPlaying) _playedSinceDetail = true;
+    if (value.isPlaying || _shuttle.overlayVisible) {
+      _dropDetail();
+      return;
+    }
+    final at = _detailAt;
+    if (at != null &&
+        _frameTarget(value.position, playedSince: false).at != at) {
+      _dropDetail();
+    }
+    _scheduleDetail();
+  }
+
+  void _dropDetail() {
+    _detailTimer?.cancel();
+    _detailAt = null;
+    _detail.clear();
+  }
+
+  ({Duration at, bool seek}) _frameTarget(Duration position,
+          {required bool playedSince}) =>
+      detailTarget(
+        position: position,
+        lastSeek: playedSince ? null : FrameSeeker.lastTargetOf(_controller),
+        fps: widget.video.fps,
+      );
+
+  /// Asks for a still once the picture has been left alone a moment. Every
+  /// pinch, pan and step comes through here, so it is the quiet after the
+  /// last of them that renders, rather than each of them.
+  void _scheduleDetail() {
+    _detailTimer?.cancel();
+    if (!_canSharpen || _openFailed || !_controller.value.isInitialized) {
+      return;
+    }
+    if (_controller.value.isPlaying) return;
+    _detailTimer = Timer(const Duration(milliseconds: 220), _sharpen);
+  }
+
+  void _sharpen() {
+    if (!mounted || _controller.value.isPlaying) return;
+    // A scrub in flight comes back through [_onPictureMoved] when its
+    // handoff is done, which is when there is a frame worth drawing.
+    if (_shuttle.busy) return;
+    final box = _canvasBox;
+    final frame = _controller.value.size;
+    if (box == null || frame.isEmpty) return;
+    final canvas = box.size;
+    final visible = visibleCanvasRect(
+      viewport: _viewport,
+      canvas: canvas,
+      zoom: _zoomScale,
+      offset: _zoomOffset,
+    );
+    final crop = visible == null
+        ? null
+        : detailCropFor(
+            frameWidth: frame.width.round(),
+            frameHeight: frame.height.round(),
+            visible: Rect.fromLTRB(
+              visible.left / canvas.width,
+              visible.top / canvas.height,
+              visible.right / canvas.width,
+              visible.bottom / canvas.height,
+            ),
+            magnification: _zoomScale *
+                MediaQuery.devicePixelRatioOf(context) *
+                canvas.width /
+                frame.width,
+          );
+    if (crop == null) {
+      _dropDetail();
+      return;
+    }
+    final target = _frameTarget(_controller.value.position,
+        playedSince: _playedSinceDetail);
+    _playedSinceDetail = false;
+    // Onto the frame it is already showing — see [detailTarget].
+    if (target.seek) _seeker.seekTo(target.at);
+    if (_detailAt != target.at) _detail.clear();
+    _detailAt = target.at;
+    _detail.request(DetailJob(at: target.at, crop: crop));
+  }
+
+  Future<ui.Image?> _renderDetail(DetailJob job) async {
+    final debug = AnalysisScreen.debugRenderDetail;
+    if (debug != null) return debug(job);
+    final bytes = await VideoOptimizer.renderDetail(widget.video.path,
+        at: job.at, crop: job.crop);
+    if (bytes == null) return null;
+    final codec = await ui.instantiateImageCodec(bytes);
+    try {
+      return (await codec.getNextFrame()).image;
+    } finally {
+      codec.dispose();
+    }
   }
 
   // ---- Zoom + unified gestures ----
@@ -500,6 +642,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         _zoomOffset =
             _clampZoomOffset(details.localFocalPoint - anchor * scale, scale);
       });
+      // The still already up stays where it is — it is placed in the
+      // frame's coordinates and moves with it — and a new one for what is
+      // now on screen is asked for once the fingers stop.
+      _scheduleDetail();
       return;
     }
     final canvasPoint = _toCanvas(details.focalPoint);
@@ -535,6 +681,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   void _onScaleEnd(ScaleEndDetails details) {
     _endScrub();
+    _scheduleDetail();
     _nodeDrag = null;
     // The stroke is finished. Leaving this set made the next pinch — which
     // discards the stray stroke a one-finger drag may have started — delete
@@ -990,6 +1137,14 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             )
           : _controller.value.isInitialized
               ? LayoutBuilder(builder: (context, constraints) {
+                  // Turned, or the tools moved: what is on screen is a
+                  // different piece of the frame at a different size.
+                  if (constraints.biggest != _viewport) {
+                    WidgetsBinding.instance
+                        .addPostFrameCallback((_) {
+                      if (mounted) _scheduleDetail();
+                    });
+                  }
                   _viewport = constraints.biggest;
                   // Re-clamp in case the viewport changed (e.g. rotation),
                   // and keep the stored pan equal to the one being drawn:
@@ -1027,6 +1182,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                                     // that never travels leaves the video alone.
                                     Positioned.fill(
                                         child: ScrubStill(shuttle: _shuttle)),
+                                    // Over the stills as well as the video:
+                                    // it is only ever up when neither of
+                                    // them is moving.
+                                    Positioned.fill(
+                                        child: DetailStill(detail: _detail)),
                                     // Rebuilt off the player's own value so
                                     // a dropped timer counts as the clip
                                     // moves; nothing else on the canvas

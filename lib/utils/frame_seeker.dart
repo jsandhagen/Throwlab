@@ -16,6 +16,18 @@ class FrameSeeker {
   bool _pumping = false;
   Duration? _accumulatedDelta;
 
+  /// The last position each player was asked to seek to, by any seeker —
+  /// the transport keeps its own beside the screen's, and both move the
+  /// same picture. Kept on the player rather than on a seeker for that
+  /// reason, and forgotten with it.
+  static final Expando<Duration> _lastTargets = Expando();
+
+  /// Where [controller] was last sent, or null if nothing has seeked it.
+  /// A player paused on a frame it was seeked to shows the first frame at
+  /// or after this, which is how the zoom detail knows which frame to draw.
+  static Duration? lastTargetOf(VideoPlayerController controller) =>
+      _lastTargets[controller];
+
   /// Where the video will be once pending seeks complete.
   Duration get position => _pending ?? _inFlight ?? controller.value.position;
 
@@ -58,6 +70,7 @@ class FrameSeeker {
       microseconds: target.inMicroseconds
           .clamp(0, controller.value.duration.inMicroseconds),
     );
+    _lastTargets[controller] = _pending;
     _pump();
   }
 
