@@ -633,7 +633,13 @@ like the app rather than a bare Material default.
   pixels with lanczos and a light unsharp, and `DetailStill` fades it in
   over the soft frame. It is the pixels the clip has, drawn better — never
   an AI upscale, which would invent detail on the one part of the frame
-  somebody is measuring off. It lives inside the zoom transform and is
+  somebody is measuring off. And never past them: sharpening and lanczos
+  both work by overshooting, which drew halos round hard edges and colors
+  stronger than any in the clip, so the result is clamped (`maskedclamp`)
+  between each pixel's darkest and brightest 3x3 neighbor in the clip, on
+  every plane. An edge keeps its steepness and loses its overshoot, and no
+  color comes out more saturated than the colors around it. Measured, and
+  written down in `detailCommand` — change the filter by measuring again. It lives inside the zoom transform and is
   placed by the crop it was actually cut to (widened to even pixels), so a
   pan or pinch leaves it correct where it is while the next one renders; it
   only comes down when the *frame* changes — a play, a scrub's own stills,

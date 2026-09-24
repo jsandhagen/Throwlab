@@ -281,12 +281,42 @@ void main() {
     expect(command.indexOf('-ss 1.491667'),
         lessThan(command.indexOf('-i "/clips/a.mp4"')));
     expect(command, contains('scale=2560:1440,crop=320:180:1200:600:exact=1'));
-    expect(
-        command,
-        contains('scale=1080:608:flags=lanczos:'
-            'in_color_matrix=bt709:out_color_matrix=bt601:out_range=pc'));
     expect(command.indexOf('crop='), lessThan(command.indexOf('lanczos')));
     expect(command, contains('-frames:v 1'));
+  });
+
+  test('the sharpened picture is held inside the clip\'s own pixels', () {
+    // Unclamped, the unsharp and the lanczos overshoot: halos round every
+    // hard edge and colors stronger than any in the clip. The clamp is what
+    // stops it, so it has to be there, with no slack, and the color written
+    // after it — a JPEG's numbers are not the clip's.
+    final command = VideoOptimizer.detailCommand(
+      videoPath: '/clips/a.mp4',
+      outPath: '/tmp/d.jpg',
+      at: Duration.zero,
+      crop: const DetailCrop(
+        frameWidth: 2560,
+        frameHeight: 1440,
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 180,
+        outWidth: 1080,
+        outHeight: 608,
+      ),
+      color: VideoOptimizer.jpegColorFilter(colorSpace: 'bt709'),
+    );
+    expect(command, contains('[lo]erosion,scale=1080:608:flags=bilinear'));
+    expect(command, contains('[hi]dilation,scale=1080:608:flags=bilinear'));
+    expect(command, contains('maskedclamp=undershoot=0:overshoot=0'));
+    expect(
+        command.indexOf('maskedclamp'),
+        lessThan(command.indexOf('in_color_matrix=bt709:'
+            'out_color_matrix=bt601:out_range=pc')));
+    // The sharpening is on the picture and nowhere else: a sharpened bound
+    // would let the overshoot back through.
+    expect(RegExp('unsharp').allMatches(command), hasLength(1));
+    expect(command, contains('[pic]unsharp'));
   });
 
   group('on the analysis screen', () {
