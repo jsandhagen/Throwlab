@@ -19,6 +19,7 @@ import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
 import '../utils/scrub_shuttle.dart';
+import '../utils/time_format.dart';
 import '../utils/zoom_detail.dart';
 import '../widgets/angular.dart';
 import '../widgets/athlete_picker.dart';
@@ -148,6 +149,21 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   /// Javelin tip/tail auto-detection failed once → plain tap flow.
   bool _manualJavelin = false;
+
+  /// How the measurement reached where it is, which is what an undo has to
+  /// walk back through: the later frame reached through Next on found
+  /// markers, and both later markers found rather than tapped.
+  bool _viaConfirm = false;
+  bool _autoPoints = false;
+
+  /// Where a finger is down on the frame while measuring, in global
+  /// coordinates — what the loupe magnifies. Null when none is, or when a
+  /// second finger turns the touch into a pinch.
+  Offset? _loupeAt;
+  final Set<int> _pointers = {};
+
+  /// The stack everything is laid out in, for placing the loupe in it.
+  final GlobalKey _stageKey = GlobalKey();
 
   @override
   void initState() {
@@ -778,42 +794,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     if (mounted) setState(() {});
   }
 
+  /// Marks the throw's release at [position], or clears it. Kept on the
+  /// clip, so the comparison lines up on the same moment without being told
+  /// it again.
+  Future<void> _setRelease(Duration? position) async {
+    setState(() => widget.video.release = position);
+    await context.read<VideoLibrary>().update(widget.video);
+  }
+
   Future<void> _editFps() async {
-    final fieldController =
-        TextEditingController(text: widget.video.captureFps.toStringAsFixed(0));
-    final fps = await showDialog<double>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Recorded frame rate'),
-        content: TextField(
-          controller: fieldController,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: 'capture fps',
-            helperText: 'Auto-detected on import; override if the '
-                'slow-mo rate was read wrong (usually 120 or 240)',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(context, double.tryParse(fieldController.text)),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (fps != null && fps > 0) {
-      widget.video.captureFps = fps;
-      if (mounted) {
-        await context.read<VideoLibrary>().update(widget.video);
-        setState(() {});
-      }
-    }
+    await editCaptureFps(context, context.read<VideoLibrary>(), widget.video);
+    if (mounted) setState(() {});
   }
 
   // ---- Release measurement ----
@@ -826,46 +817,129 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         _ => 'ball',
       };
 
-  String get _measureInstruction => switch (_measureStep!) {
-        _MeasureStep.refA => _isJavelin
-            ? (_manualJavelin
-                ? 'Pause on the release frame, then tap the javelin TIP'
-                : 'Pause on the release frame, then tap near the javelin '
-                    'TIP')
-            : 'Pause on the release frame, then tap one edge of the '
-                '$_refWord',
-        _MeasureStep.refConfirm =>
-          'Drag the tip/tail markers to fine-tune (re-tap near the tip to '
-              'retry), then tap Next',
-        _MeasureStep.refB => _isJavelin
-            ? 'Now tap the javelin TAIL'
-            : 'Tap the opposite edge of the $_refWord',
-        _MeasureStep.pointA => _isJavelin
-            ? 'Jumped ${(_measureDt * 1000).round()} ms forward — tap '
-                'the javelin TIP again'
-            : 'Tap the center of the $_refWord',
-        _MeasureStep.pointB => _isJavelin
-            ? 'Now tap the javelin TAIL again'
-            : 'Jumped ${(_measureDt * 1000).round()} ms forward — tap the '
-                'same spot on the $_refWord again',
-        _MeasureStep.review =>
-          'Drag any marker to fine-tune, then tap Calculate',
+  /// Which frame the step is taken on, and how far through the four taps
+  /// it is: said above the instruction so a coach knows where they are
+  /// without reading the sentence again.
+  String get _measureStepLabel {
+    final later = '+${(_measureDt * 1000).round()} ms';
+    final (frame, step) = switch (_measureStep!) {
+      _MeasureStep.refA => ('Release frame', 1),
+      _MeasureStep.refB || _MeasureStep.refConfirm => ('Release frame', 2),
+      _MeasureStep.pointA => (_isJavelin ? later : 'Release frame', 3),
+      _MeasureStep.pointB => (later, 4),
+      _MeasureStep.review => ('Check', 4),
+    };
+    return '$frame · $step / 4';
+  }
+
+  /// Taps placed so far, out of four — the segments under the instruction.
+  int get _measureDone => switch (_measureStep!) {
+        _MeasureStep.refA => 0,
+        _MeasureStep.refB => 1,
+        _MeasureStep.refConfirm || _MeasureStep.pointA => 2,
+        _MeasureStep.pointB => 3,
+        _MeasureStep.review => 4,
       };
+
+  /// One short instruction; the step label above it says which frame.
+  String get _measureInstruction {
+    // The release is marked by the first tap when none is, so until then
+    // the frame on screen has to be put there by hand.
+    final scrub =
+        widget.video.release == null ? 'Scrub to the release, then ' : '';
+    return switch (_measureStep!) {
+      _MeasureStep.refA => _isJavelin
+          ? '${scrub}tap ${_manualJavelin ? '' : 'near '}the javelin tip'
+          : '${scrub}tap one edge of the $_refWord',
+      _MeasureStep.refConfirm => 'Drag the tip and tail to fit, then Next',
+      _MeasureStep.refB => _isJavelin
+          ? 'Tap the javelin tail'
+          : 'Tap the opposite edge of the $_refWord',
+      _MeasureStep.pointA => _isJavelin
+          ? 'Tap the javelin tip again'
+          : 'Tap the center of the $_refWord',
+      _MeasureStep.pointB => _isJavelin
+          ? 'Tap the javelin tail again'
+          : 'Tap the same spot on the $_refWord again',
+      _MeasureStep.review => 'Drag any marker to fit, then Calculate',
+    };
+  }
 
   void _startMeasure() {
     if (!_controller.value.isInitialized) return;
     _controller.pause();
+    // A measurement is taken on the release frame, so with one marked it
+    // starts there rather than asking for it to be found again.
+    final release = widget.video.release;
+    if (release != null) {
+      _seeker.seekTo(snapToFrame(release, widget.video.fps));
+    }
     setState(() {
       _refA = _refB = _pointA = _pointB = null;
       _detecting = false;
       _manualJavelin = false;
+      _viaConfirm = false;
+      _autoPoints = false;
       _measureStep = _MeasureStep.refA;
+    });
+  }
+
+  /// Takes back the last tap: its marker comes off, and a jump to the later
+  /// frame that tap made is jumped back. The one correction that works the
+  /// same on every step, rather than a re-tap on one and a drag on another.
+  void _undoMeasureTap() {
+    final step = _measureStep;
+    if (step == null || _detecting) return;
+    void back() => _jogFrames(-_jumpFrames);
+    setState(() {
+      switch (step) {
+        case _MeasureStep.refA:
+          break;
+        case _MeasureStep.refB:
+          _refA = null;
+          _measureStep = _MeasureStep.refA;
+        case _MeasureStep.refConfirm:
+          _refA = _refB = null;
+          _manualJavelin = false;
+          _measureStep = _MeasureStep.refA;
+        case _MeasureStep.pointA:
+          if (_isJavelin) {
+            back();
+            if (_viaConfirm) {
+              // Back to the found markers, to be fitted and confirmed again.
+              _viaConfirm = false;
+              _measureStep = _MeasureStep.refConfirm;
+            } else {
+              _refB = null;
+              _measureStep = _MeasureStep.refB;
+            }
+          } else {
+            _refB = null;
+            _measureStep = _MeasureStep.refB;
+          }
+        case _MeasureStep.pointB:
+          if (!_isJavelin) back();
+          _pointA = null;
+          _measureStep = _MeasureStep.pointA;
+        case _MeasureStep.review:
+          if (_autoPoints) {
+            back();
+            _autoPoints = false;
+            _viaConfirm = false;
+            _pointA = _pointB = null;
+            _measureStep = _MeasureStep.refConfirm;
+          } else {
+            _pointB = null;
+            _measureStep = _MeasureStep.pointB;
+          }
+      }
     });
   }
 
   void _cancelMeasure() {
     setState(() {
       _measureStep = null;
+      _loupeAt = null;
       _detecting = false;
       _refA = _refB = _pointA = _pointB = null;
     });
@@ -885,6 +959,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   }
 
   void _onMeasureTap(Offset position) {
+    // The first tap is taken on the release frame, so it is the release:
+    // marked here it is on the clip for the scale and the comparison.
+    if (_measureStep == _MeasureStep.refA) {
+      final here = _seeker.position;
+      final release = widget.video.release;
+      if (release == null ||
+          frameAt(release, widget.video.fps) !=
+              frameAt(here, widget.video.fps)) {
+        unawaited(_setRelease(here));
+      }
+    }
     switch (_measureStep!) {
       case _MeasureStep.refA:
         if (_isJavelin && !_manualJavelin) {
@@ -993,9 +1078,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     if (!mounted || _measureStep != _MeasureStep.refConfirm) return;
     setState(() {
       _detecting = false;
+      _viaConfirm = true;
       if (found == null) {
         _measureStep = _MeasureStep.pointA; // manual re-tap flow
       } else {
+        _autoPoints = true;
         _pointA = _denormalizeCanvas(found.tip);
         _pointB = _denormalizeCanvas(found.tail);
         _measureStep = _MeasureStep.review;
@@ -1152,7 +1239,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                   _zoomOffset = _clampZoomOffset(_zoomOffset, _zoomScale);
                   final offset = _zoomOffset;
                   return Listener(
-                    onPointerDown: (event) => _pointerDown = event.position,
+                    onPointerDown: (event) {
+                      _pointerDown = event.position;
+                      _onStagePointerDown(event);
+                    },
+                    onPointerMove: _onStagePointerMove,
+                    onPointerUp: _onStagePointerUp,
+                    onPointerCancel: _onStagePointerUp,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTapUp: (details) => _onVideoTap(details.globalPosition),
@@ -1278,21 +1371,28 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             ),
           ),
         ),
-      IconButton(
-        tooltip: widget.video.athlete.isEmpty
-            ? 'Tag athlete'
-            : 'Athlete: ${widget.video.athlete}',
-        icon: Icon(
-            widget.video.athlete.isEmpty ? Icons.person_add_alt : Icons.person),
-        onPressed: _editAthlete,
-      ),
-      IconButton(
-        tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
-        icon: Icon(widget.video.note.isEmpty
-            ? Icons.note_add_outlined
-            : Icons.sticky_note_2),
-        onPressed: _editNote,
-      ),
+      // Upright, the header carries the two things done *with* a throw and
+      // nothing about it: who threw it, the note and the frame rate describe
+      // the throw, and the title already opens the sheet that describes it.
+      // The rail on its side keeps them, where there is a whole edge of room.
+      if (vertical) ...[
+        IconButton(
+          tooltip: widget.video.athlete.isEmpty
+              ? 'Tag athlete'
+              : 'Athlete: ${widget.video.athlete}',
+          icon: Icon(widget.video.athlete.isEmpty
+              ? Icons.person_add_alt
+              : Icons.person),
+          onPressed: _editAthlete,
+        ),
+        IconButton(
+          tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
+          icon: Icon(widget.video.note.isEmpty
+              ? Icons.note_add_outlined
+              : Icons.sticky_note_2),
+          onPressed: _editNote,
+        ),
+      ],
       IconButton(
         tooltip: 'Compare with another throw',
         icon: const Icon(Icons.compare),
@@ -1303,83 +1403,189 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         icon: const Icon(Icons.speed),
         onPressed: _measureStep == null ? _startMeasure : null,
       ),
-      IconButton(
-        tooltip:
-            'Set capture frame rate (${widget.video.captureFps.toStringAsFixed(0)} fps)',
-        icon: const Icon(Icons.shutter_speed),
-        onPressed: _editFps,
-      ),
+      if (vertical)
+        IconButton(
+          tooltip: 'Set capture frame rate '
+              '(${widget.video.captureFps.toStringAsFixed(0)} fps)',
+          icon: const Icon(Icons.shutter_speed),
+          onPressed: _editFps,
+        ),
     ];
   }
 
-  /// The measuring instructions, as a full-width band (portrait) or a
-  /// rounded [pill] that sits beside the left rail (landscape).
+  /// The measuring instructions: which frame and which of the four taps,
+  /// one short sentence, a segment per tap, and the three things that can be
+  /// done about it. Set as type on the header's scrim across the top when
+  /// upright, and as a [pill] beside the left rail on its side.
   Widget? _measureBanner({required bool pill}) {
     if (_measureStep == null) return null;
-    return Material(
-      color: Theme.of(context).colorScheme.secondaryContainer,
-      // Landscape shows the instructions as a pill beside the left
-      // rail instead of a full-width band over the video.
-      borderRadius: pill ? BorderRadius.circular(24) : null,
-      clipBehavior: pill ? Clip.antiAlias : Clip.none,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
-          mainAxisSize: pill ? MainAxisSize.min : MainAxisSize.max,
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final instruction = _detecting
+        ? 'Finding the javelin…'
+        : _measureInstruction.replaceRange(
+            0, 1, _measureInstruction[0].toUpperCase());
+    final done = _measureDone;
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            if (_detecting)
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              const Icon(Icons.straighten, size: 20),
-            const SizedBox(width: 8),
-            Flexible(
-              fit: pill ? FlexFit.loose : FlexFit.tight,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                      _detecting
-                          ? 'Finding the javelin…'
-                          : _measureInstruction,
-                      style: Theme.of(context).textTheme.bodyMedium),
-                  // Said as the measurement begins: the whole result rests on
-                  // the camera being square to the throw, and this is a beta
-                  // tool that can't tell when it wasn't.
-                  if (!_detecting && _measureStep == _MeasureStep.refA)
-                    Text(
-                      'Beta — needs an exact side-on (90°) camera angle.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSecondaryContainer
-                              .withOpacity(0.75)),
-                    ),
-                ],
+            Expanded(
+              child: Text(
+                _measureStepLabel.toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  letterSpacing: 1.2,
+                  color: scheme.onSurface.withOpacity(0.6),
+                ),
               ),
             ),
+            if (_detecting)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 1.5),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(instruction, style: theme.textTheme.titleMedium),
+        // Said as the measurement begins: the whole result rests on the
+        // camera being square to the throw, and this is a beta tool that
+        // can't tell when it wasn't.
+        if (!_detecting && _measureStep == _MeasureStep.refA)
+          Text(
+            'Beta — needs an exact side-on (90°) camera angle.',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurface.withOpacity(0.6)),
+          ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            for (var i = 0; i < 4; i++) ...[
+              if (i > 0) const SizedBox(width: 4),
+              Expanded(
+                child: Container(
+                  height: 2,
+                  color: i < done
+                      ? scheme.primary
+                      : scheme.onSurface.withOpacity(0.18),
+                ),
+              ),
+            ],
+          ],
+        ),
+        Row(
+          children: [
             TextButton(
               onPressed: _cancelMeasure,
               child: const Text('Cancel'),
             ),
+            TextButton(
+              key: const ValueKey('measure-undo'),
+              onPressed: _measureStep == _MeasureStep.refA || _detecting
+                  ? null
+                  : _undoMeasureTap,
+              child: const Text('Undo tap'),
+            ),
+            const Spacer(),
             if (_measureStep == _MeasureStep.refConfirm)
-              FilledButton(
+              TextButton(
                 onPressed: _detecting ? null : _confirmRefAndJump,
                 child: const Text('Next'),
               ),
             if (_measureStep == _MeasureStep.review)
-              FilledButton(
+              TextButton(
                 onPressed: _showResults,
                 child: const Text('Calculate'),
               ),
           ],
         ),
+      ],
+    );
+    if (!pill) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+        child: body,
+      );
+    }
+    // On its side the pill stands over the frame, so it carries the
+    // surface the rails do rather than sitting bare on the picture.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 380),
+      child: Material(
+        color: scheme.surface.withOpacity(0.85),
+        borderRadius: BorderRadius.circular(20),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
+          child: body,
+        ),
       ),
     );
+  }
+
+  /// A round magnifier over the frame while a finger is down on it during a
+  /// measurement. A javelin tip is a few pixels across and a fingertip forty,
+  /// so the one thing the finger covers is the one thing being placed; the
+  /// loupe shows it three times over, with hairlines crossing on the exact
+  /// point, off to the side of the finger rather than under it. It
+  /// magnifies what is painted — the sharp still over a zoomed frame
+  /// included — so it is the clip's own pixels drawn larger, never a guess.
+  Widget? _loupe() {
+    final at = _loupeAt;
+    final stage = _stageKey.currentContext?.findRenderObject();
+    if (at == null ||
+        _measureStep == null ||
+        stage is! RenderBox ||
+        !stage.hasSize) {
+      return null;
+    }
+    const size = 120.0;
+    const lift = 96.0;
+    final local = stage.globalToLocal(at);
+    final bounds = stage.size;
+    // Above the finger, or below it where there is no room above.
+    final above = local.dy - lift - size / 2 >= 0;
+    final center = Offset(
+      local.dx.clamp(size / 2 + 4, bounds.width - size / 2 - 4),
+      above ? local.dy - lift : local.dy + lift,
+    );
+    return Positioned(
+      left: center.dx - size / 2,
+      top: center.dy - size / 2,
+      child: IgnorePointer(
+        child: RawMagnifier(
+          size: const Size.square(size),
+          magnificationScale: 3,
+          focalPointOffset: local - center,
+          decoration: const MagnifierDecoration(
+            shape: CircleBorder(
+              side: BorderSide(color: Colors.white70, width: 1.5),
+            ),
+            shadows: [BoxShadow(color: Colors.black54, blurRadius: 12)],
+          ),
+          child: const CustomPaint(painter: _LoupeCrosshair()),
+        ),
+      ),
+    );
+  }
+
+  void _onStagePointerDown(PointerDownEvent event) {
+    _pointers.add(event.pointer);
+    if (_measureStep == null) return;
+    setState(() => _loupeAt = _pointers.length == 1 ? event.position : null);
+  }
+
+  void _onStagePointerMove(PointerMoveEvent event) {
+    if (_measureStep == null || _pointers.length != 1) return;
+    setState(() => _loupeAt = event.position);
+  }
+
+  void _onStagePointerUp(PointerEvent event) {
+    _pointers.remove(event.pointer);
+    if (_loupeAt != null) setState(() => _loupeAt = null);
   }
 
   List<ThrowVideo> _orderedSet() {
@@ -1726,6 +1932,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   Widget _bottomOverlay() {
     final landscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
+    final toolsOnFrame = _toolsOnFrame;
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -1764,7 +1971,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             // here they sit hard against the scrubber whatever else the
             // overlay is carrying, and have the width of the screen to
             // spread along.
-            if (!landscape)
+            if (!toolsOnFrame)
               Padding(
                 padding: const EdgeInsets.only(left: 4, right: 4, bottom: 2),
                 child: Align(
@@ -1775,23 +1982,64 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                   ),
                 ),
               ),
-            PlaybackControls(
-              controller: _controller,
-              fps: widget.video.fps,
-              captureFps: widget.video.captureFps,
-              dense: true,
-              horizontal: landscape,
-              // Route the wheel through the same smooth shuttle the video
-              // drag uses, so fast wheel spins play through frames instead
-              // of hammering the slow decoder seek.
-              onScrubStart: _beginScrub,
-              onScrubBy: _scrubByFrames,
-              onScrubEnd: _endScrub,
+            // Rebuilt off the drawing so a timer dropped on the frame is
+            // notched into the clip line as it lands.
+            ListenableBuilder(
+              listenable: _drawing,
+              builder: (context, _) => PlaybackControls(
+                controller: _controller,
+                fps: widget.video.fps,
+                captureFps: widget.video.captureFps,
+                dense: true,
+                horizontal: landscape,
+                release: widget.video.release,
+                onReleaseChanged: _setRelease,
+                timers: [
+                  for (final annotation in _drawing.annotations)
+                    if (annotation is TimerMarker)
+                      (annotation.from, annotation.color),
+                ],
+                // Route the wheel through the same smooth shuttle the video
+                // drag uses, so fast wheel spins play through frames instead
+                // of hammering the slow decoder seek.
+                onScrubStart: _beginScrub,
+                onScrubBy: _scrubByFrames,
+                onScrubEnd: _endScrub,
+              ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Roughly what the transport takes at the foot of an upright screen:
+  /// the clip line, the scale and the row of play and the frame steps.
+  static const double _transportHeight = 128;
+
+  /// Roughly what the drawing bar takes laid along the bottom.
+  static const double _toolbarHeight = 56;
+
+  /// Whether the drawing tools stand on the picture, up the right edge, or
+  /// lie in the band under it. Which is decided by the *picture*, not the
+  /// screen: a clip filmed on its side and watched upright leaves a band of
+  /// black under the frame, and the tools lie in it; the same clip filmed
+  /// upright fills the screen, and a bar laid along the bottom of it sat on
+  /// the athlete's feet and the circle — a fifth of the frame, and the part
+  /// of it a throw is judged from. So the bar goes under the frame only
+  /// where the band is deep enough to hold it and the transport together;
+  /// anywhere else the tools float as the column the rail on its side
+  /// already is.
+  bool get _toolsOnFrame {
+    final media = MediaQuery.of(context);
+    if (media.orientation == Orientation.landscape) return true;
+    if (!_controller.value.isInitialized) return false;
+    final aspect = _controller.value.aspectRatio;
+    if (aspect <= 0) return false;
+    final screen = media.size;
+    final frame = math.min(screen.height, screen.width / aspect);
+    final band = (screen.height - frame) / 2;
+    return band < _transportHeight + _toolbarHeight + media.padding.bottom;
   }
 
   @override
@@ -1804,9 +2052,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     final landscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
     final banner = landscape ? _measureBanner(pill: true) : null;
+    final loupe = _loupe();
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
+        key: _stageKey,
         children: [
           Positioned.fill(child: _videoArea()),
           if (landscape) ...[
@@ -1829,6 +2079,27 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           // — clear of the header rail down the left and of the transport
           // along the bottom. Upright they live in the bottom overlay
           // instead, where the letterbox already leaves room for them.
+          if (!landscape && _toolsOnFrame)
+            Positioned(
+              // Under the header and whatever hangs off it, and clear of the
+              // transport: the rail is handed the box it has to fit, which
+              // decides whether it takes one run or two.
+              top: MediaQuery.paddingOf(context).top +
+                  kToolbarHeight +
+                  (_set.length > 1 ? (_stripOpen ? _stripHeight : 0) + 26 : 0) +
+                  8,
+              right: 4,
+              bottom:
+                  MediaQuery.paddingOf(context).bottom + _transportHeight + 4,
+              left: 64,
+              child: Align(
+                alignment: Alignment.bottomRight,
+                child: DrawingRail(
+                  controller: _drawing,
+                  axis: Axis.vertical,
+                ),
+              ),
+            ),
           if (landscape)
             Positioned(
               top: 0,
@@ -1856,10 +2127,41 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             bottom: 0,
             child: _bottomOverlay(),
           ),
+          if (loupe != null) loupe,
         ],
       ),
     );
   }
+}
+
+/// Hairlines across the loupe, broken around the middle so the pixel being
+/// placed is left clear rather than drawn over — dark, with a light edge,
+/// so they read against a sky and against the implement alike.
+class _LoupeCrosshair extends CustomPainter {
+  const _LoupeCrosshair();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    const gap = 6.0;
+    final reach = size.width / 2 - 14;
+    void hairlines(Paint paint) {
+      canvas.drawLine(c - Offset(reach, 0), c - const Offset(gap, 0), paint);
+      canvas.drawLine(c + const Offset(gap, 0), c + Offset(reach, 0), paint);
+      canvas.drawLine(c - Offset(0, reach), c - const Offset(0, gap), paint);
+      canvas.drawLine(c + const Offset(0, gap), c + Offset(0, reach), paint);
+    }
+
+    hairlines(Paint()
+      ..color = Colors.white54
+      ..strokeWidth = 2.5);
+    hairlines(Paint()
+      ..color = Colors.black
+      ..strokeWidth = 1);
+  }
+
+  @override
+  bool shouldRepaint(_LoupeCrosshair oldDelegate) => false;
 }
 
 /// Crosshairs and guide lines for the four measurement taps.

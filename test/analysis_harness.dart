@@ -146,11 +146,12 @@ Future<void> mountAnalysisScreen(
   required Size videoSize,
   VideoLibrary? library,
   List<ThrowVideo> siblings = const [],
+  FakeVideoPlayerPlatform? platform,
 }) async {
   tester.view.physicalSize = screen;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  VideoPlayerPlatform.instance = FakeVideoPlayerPlatform(videoSize);
+  VideoPlayerPlatform.instance = platform ?? FakeVideoPlayerPlatform(videoSize);
   await tester.pumpWidget(
     ChangeNotifierProvider<VideoLibrary>.value(
       value: library ?? VideoLibrary(),

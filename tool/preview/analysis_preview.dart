@@ -144,6 +144,34 @@ void main() {
     await _shoot(tester, 'analysis_portrait_nostrip');
   });
 
+  testWidgets('measuring', (tester) async {
+    // A release already marked: the scale counts from it, the readout
+    // carries the offset, and the measurement starts on it.
+    video.release = const Duration(milliseconds: 1200);
+    await mount(tester, _portrait);
+    await _shoot(tester, 'analysis_release');
+
+    await tester.tap(find.byTooltip('Measure release — speed & angle (beta)'));
+    await _pump(tester, 20);
+    await _shoot(tester, 'analysis_measure');
+
+    // A finger down on the frame: the loupe over it, off to the side. The
+    // gesture is cancelled rather than lifted, since a lift is a tap and a
+    // tap on a javelin reaches for the detector, which is not here.
+    final gesture = await tester.startGesture(const Offset(210, 440));
+    await _pump(tester, 5);
+    await _shoot(tester, 'analysis_loupe');
+    await gesture.cancel();
+    await _pump(tester, 5);
+  });
+
+  testWidgets('measuring on its side', (tester) async {
+    await mount(tester, _landscape);
+    await tester.tap(find.byTooltip('Measure release — speed & angle (beta)'));
+    await _pump(tester, 20);
+    await _shoot(tester, 'analysis_measure_landscape');
+  });
+
   testWidgets('narrow portrait', (tester) async {
     await mount(tester, _narrowPortrait);
     await _shoot(tester, 'analysis_portrait_narrow');

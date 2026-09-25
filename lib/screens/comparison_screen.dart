@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../utils/compare_loop.dart';
 import '../utils/frame_seeker.dart';
@@ -88,10 +90,15 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   double _overlayOpacity = 0.5;
   double _speed = 0.5;
-  bool _linked = false;
+  // Two clips that already carry their releases open lined up, which is
+  // what marking both of them here would have done.
+  late bool _linked =
+      widget.videoA.release != null && widget.videoB.release != null;
 
-  Duration _syncA = Duration.zero;
-  Duration _syncB = Duration.zero;
+  // Seeded from the clips: a release marked on the analyzer is the same
+  // moment here, and asking for it again was a step spent on nothing.
+  late Duration _syncA = widget.videoA.release ?? Duration.zero;
+  late Duration _syncB = widget.videoB.release ?? Duration.zero;
 
   void _setSync({Duration? a, Duration? b}) {
     setState(() {
@@ -100,6 +107,29 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       // Both release frames marked → start driving the clips together.
       if (_syncA != Duration.zero && _syncB != Duration.zero) _linked = true;
     });
+    if (a != null) _keepRelease(widget.videoA, a);
+    if (b != null) _keepRelease(widget.videoB, b);
+  }
+
+  /// The release the wheel under [shuttle] counts from; null while it is
+  /// still to be marked, which is what the zero means here.
+  Duration? _releaseOf(ScrubShuttle shuttle) {
+    final sync = identical(shuttle, _shuttleA) ? _syncA : _syncB;
+    return sync == Duration.zero ? null : sync;
+  }
+
+  /// Writes a release marked here back onto the clip, so the analyzer's
+  /// scale counts from it too. Softly: a comparison mounted without the
+  /// library (a widget test) still lines the two up for as long as it is
+  /// open.
+  void _keepRelease(ThrowVideo video, Duration release) {
+    if (video.release == release) return;
+    video.release = release;
+    try {
+      context.read<VideoLibrary>().update(video);
+    } on ProviderNotFoundException {
+      // Nothing to write it to; it holds for this screen.
+    }
   }
 
   double get _fps => widget.videoA.fps;
@@ -541,6 +571,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       controller: shuttle.controller,
       fps: video.fps,
       captureFps: video.captureFps,
+      release: _releaseOf(shuttle),
       height: height,
       // Linked, one wheel drives both clips; unlinked, each wheel scrubs its
       // own clip — either way through the shuttle, so the stills carry the

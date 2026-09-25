@@ -143,7 +143,10 @@ away to the one chevron), and the same tools lying along the bottom of an
 upright screen, hard against the scrubber with the pen's weight and color
 split onto a button each — at the width that holds them and at the one that
 shrinks them, with the session on top as a strip of stills and with that
-strip put away on its tab — and the compare picker: both slots still empty,
+strip put away on its tab, then with a release marked (the scale counting
+from it and the offset beside the clock), measuring (the step over the
+instruction, upright and on its side) and a finger down with the loupe
+over it — and the compare picker: both slots still empty,
 one filled, both filled and ready to open, the sheet as it opens off a
 throw, the same sheet off the event filter, and a search that found
 something and one that found nothing, all under a navigation bar, which is
@@ -533,7 +536,10 @@ like the app rather than a bare Material default.
   about the *throw*: when it was taken, how far it went, what was written
   down, and the edits for each — `showThrowActions`, the same sheet the
   library opens on a long press, so there is one place a throw is
-  described.
+  described. It is also why the upright header is the title and two
+  actions, compare and measure: who threw it, the note and the frame rate
+  describe the throw, and live on that sheet. The rail on its side keeps
+  all of them, having a whole edge to spend.
 - The drawing tools run along an edge of the frame and are anchored in its
   bottom-right corner. Which edge follows the shape of the *picture*, not
   the shape of the screen. A clip is filmed on its side, so held that way
@@ -544,7 +550,12 @@ like the app rather than a bare Material default.
   below, and there the tools are not floated at all — they are laid out
   inside the bottom overlay, above the scrubber, so they sit hard against
   it whatever else the overlay is carrying rather than at a guessed inset
-  over the frame. That is also what killed the line under the frame naming
+  over the frame. A clip filmed upright and watched upright is the first
+  case again, not the second: it fills the screen, and a bar along the
+  bottom sat on the athlete's feet and the circle. So `_toolsOnFrame` asks
+  whether the band under the picture is deep enough for the bar and the
+  transport together, and where it isn't the tools float up the right edge
+  as the column they are on a turned phone. That is also what killed the line under the frame naming
   the calibration reference: the reference is stated where it is used, on
   the measure sheet and on the card in the library, and the two gestures
   were learned on the first drag.
@@ -573,6 +584,38 @@ like the app rather than a bare Material default.
   their names as tooltips, never a list of ten named rows: a list that long
   scrolls on a short screen, and the name is the least of what a swatch
   says.
+- A throw's release is stored on the clip (`ThrowVideo.release`), because
+  every screen that looks at a throw looks at it around that moment. The
+  flag beside the speed marks it, the first tap of a measurement marks it
+  (that tap is taken on the release frame), and a comparison reads it and
+  writes it back, so 'Set release' is asked once per clip rather than once
+  per pair.
+- The scrubber is a scale, not a slider and a wheel. `ClipLine` is the whole
+  clip as a hairline, the release notched into it in the medal's gold and
+  each timer in its own ink; `ScrubWheel` under it is a ruler under a fixed
+  needle — a tick per frame, and a numbered tick at the shortest round
+  interval of time with room between numbers (`ScalePainter.labelStep`),
+  counted from the release once there is one ('R', '-0.05', '+0.10') and
+  from the start until then. The numbers read left to right, and a drag to
+  the right still goes forward, as it does on the frame, so the two scrub
+  the same way. The needle and the readout both work in whole frames
+  (`formatSinceRelease` takes frames), because a seek lands a quarter frame
+  short of the frame it shows and the release frame has to read 0.000.
+- The scale is felt as well as seen (`FrameHaptics`): a selection click per
+  frame, held to one per 35 ms so a fling is a ripple rather than a buzz, a
+  light impact crossing the release, and one medium impact running into
+  either end — where it stops, rather than asking for a seek that goes
+  nowhere. The frame steps click too, and repeat while held. Nothing asks
+  whether haptics are wanted; the phone's touch-feedback setting does.
+- Measuring is said as a step and a sentence: which frame and which of the
+  four taps (`RELEASE FRAME · 2 / 4`), one short instruction, a segment per
+  tap, and Cancel, Undo tap and Next or Calculate. Undo tap walks the last
+  tap back on every step, jumping the frame back where that tap jumped it,
+  rather than a re-tap on one step and a drag on another. While a finger is
+  down on the frame a loupe (`RawMagnifier`, 3x, hairlines broken round the
+  point) stands off to the side of it, because a javelin tip is a few pixels
+  and a fingertip forty; it magnifies what is painted, so it is the clip's
+  own pixels, the sharp zoom still included.
 - A mark is made the way it is measured. An arrow is dragged tail to head,
   a curved arrow traces the path it wants and takes its head where the
   finger lifts, and a circle is dragged out from the middle: what is being

@@ -68,6 +68,7 @@ class ThrowVideo implements ThrowResult {
     this.scrubFramesVersion = 0,
     this.playbackVersion = 0,
     this.optimizePending = false,
+    this.release,
   }) : captureFps = captureFps ?? fps;
 
   @override
@@ -161,6 +162,13 @@ class ThrowVideo implements ThrowResult {
   /// at home that evening. Cleared once that has happened.
   bool optimizePending;
 
+  /// Where in the clip the implement leaves the hand, as a player position;
+  /// null until somebody marks it. Held on the clip rather than on a screen
+  /// because every screen that looks at the throw is looking at it around
+  /// this moment: the analyzer's scale counts from it, the measurement
+  /// starts on it, and a comparison lines two throws up on it.
+  Duration? release;
+
   ImplementSpec get implementSpec => event.specFor(implementKg);
 
   Map<String, dynamic> toJson() => {
@@ -184,6 +192,7 @@ class ThrowVideo implements ThrowResult {
         'scrubFramesVersion': scrubFramesVersion,
         'playbackVersion': playbackVersion,
         'optimizePending': optimizePending,
+        'releaseUs': release?.inMicroseconds,
       };
 
   factory ThrowVideo.fromJson(Map<String, dynamic> json) => ThrowVideo(
@@ -215,5 +224,8 @@ class ThrowVideo implements ThrowResult {
         scrubFramesVersion: (json['scrubFramesVersion'] as num?)?.toInt() ?? 0,
         playbackVersion: (json['playbackVersion'] as num?)?.toInt() ?? 0,
         optimizePending: json['optimizePending'] as bool? ?? false,
+        release: json['releaseUs'] == null
+            ? null
+            : Duration(microseconds: (json['releaseUs'] as num).toInt()),
       );
 }

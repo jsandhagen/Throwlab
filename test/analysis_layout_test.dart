@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/widgets/drawing_canvas.dart';
+import 'package:throwlab/widgets/playback_controls.dart';
 
 import 'analysis_harness.dart';
 
@@ -163,11 +164,11 @@ void main() {
         'bottom', (tester) async {
       await mount(tester, _portraitPhone);
       final back = tester.getRect(find.byIcon(Icons.arrow_back));
-      final fps = tester.getRect(find.byIcon(Icons.shutter_speed));
+      final measure = tester.getRect(find.byIcon(Icons.speed));
       // One row along the top.
       expect(back.top, lessThan(80));
-      expect(fps.top, closeTo(back.top, 1));
-      expect(fps.left, greaterThan(_portraitPhone.width / 2));
+      expect(measure.top, closeTo(back.top, 1));
+      expect(measure.left, greaterThan(_portraitPhone.width / 2));
       // Title has room here, unlike a 56px rail.
       expect(find.textContaining('Javelin'), findsOneWidget);
 
@@ -220,7 +221,7 @@ void main() {
         (tester) async {
       await mount(tester, _narrowPhone);
       final video = tester.getRect(find.byType(DrawingCanvas));
-      final slider = tester.getRect(find.byType(Slider));
+      final slider = tester.getRect(find.byType(ClipLine));
       for (final control in barControls) {
         final rect = tester.getRect(control);
         expect(rect.top, greaterThan(video.bottom),

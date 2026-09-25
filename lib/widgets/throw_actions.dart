@@ -8,10 +8,11 @@ import 'athlete_picker.dart';
 import 'distance_field.dart';
 import 'throw_picker.dart';
 
-enum _ThrowAction { athlete, implement, distance, note, delete }
+enum _ThrowAction { athlete, implement, distance, note, frameRate, delete }
 
 /// The per-throw edits that used to hang off a row's overflow menu: who
-/// threw it, what they threw, how far it went, a note, and deleting it.
+/// threw it, what they threw, how far it went, a note, the rate it was
+/// filmed at, and deleting it.
 ///
 /// A sheet rather than a popup menu, because the library is stills now and a
 /// long press in the middle of a grid has no corner to hang a menu off. It
@@ -23,45 +24,59 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
   final action = await showModalBottomSheet<_ThrowAction>(
     context: context,
     showDragHandle: true,
+    // Allowed taller than the default half screen, and scrolling where even
+    // that is short: seven rows under a header is more than half of a small
+    // phone.
+    isScrollControlled: true,
+    useSafeArea: true,
     builder: (context) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: ThrowThumbnail(video, width: 64, height: 40),
-            title: Text(throwTitle(video)),
-            subtitle: Text(throwSubtitle(video),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          const Divider(height: 1),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title:
-                Text(video.athlete.isEmpty ? 'Set athlete' : 'Change athlete'),
-            onTap: () => Navigator.pop(context, _ThrowAction.athlete),
-          ),
-          ListTile(
-            leading: const Icon(Icons.fitness_center),
-            title: Text('Implement · ${video.implementSpec.weightLabel}'),
-            onTap: () => Navigator.pop(context, _ThrowAction.implement),
-          ),
-          ListTile(
-            leading: const Icon(Icons.straighten),
-            title: Text(
-                video.distance == null ? 'Add distance' : 'Change distance'),
-            onTap: () => Navigator.pop(context, _ThrowAction.distance),
-          ),
-          ListTile(
-            leading: const Icon(Icons.sticky_note_2),
-            title: Text(video.note.isEmpty ? 'Add note' : 'Edit note'),
-            onTap: () => Navigator.pop(context, _ThrowAction.note),
-          ),
-          ListTile(
-            leading: Icon(Icons.delete_outline, color: scheme.error),
-            title: Text('Delete throw', style: TextStyle(color: scheme.error)),
-            onTap: () => Navigator.pop(context, _ThrowAction.delete),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: ThrowThumbnail(video, width: 64, height: 40),
+              title: Text(throwTitle(video)),
+              subtitle: Text(throwSubtitle(video),
+                  maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: Text(
+                  video.athlete.isEmpty ? 'Set athlete' : 'Change athlete'),
+              onTap: () => Navigator.pop(context, _ThrowAction.athlete),
+            ),
+            ListTile(
+              leading: const Icon(Icons.fitness_center),
+              title: Text('Implement · ${video.implementSpec.weightLabel}'),
+              onTap: () => Navigator.pop(context, _ThrowAction.implement),
+            ),
+            ListTile(
+              leading: const Icon(Icons.straighten),
+              title: Text(
+                  video.distance == null ? 'Add distance' : 'Change distance'),
+              onTap: () => Navigator.pop(context, _ThrowAction.distance),
+            ),
+            ListTile(
+              leading: const Icon(Icons.sticky_note_2),
+              title: Text(video.note.isEmpty ? 'Add note' : 'Edit note'),
+              onTap: () => Navigator.pop(context, _ThrowAction.note),
+            ),
+            ListTile(
+              leading: const Icon(Icons.shutter_speed),
+              title: Text(
+                  'Frame rate · ${video.captureFps.toStringAsFixed(0)} fps'),
+              onTap: () => Navigator.pop(context, _ThrowAction.frameRate),
+            ),
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: scheme.error),
+              title:
+                  Text('Delete throw', style: TextStyle(color: scheme.error)),
+              onTap: () => Navigator.pop(context, _ThrowAction.delete),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -75,6 +90,8 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
       await _editDistance(context, library, video);
     case _ThrowAction.note:
       await _editNote(context, library, video);
+    case _ThrowAction.frameRate:
+      await editCaptureFps(context, library, video);
     case _ThrowAction.delete:
       // remove() reclaims the clip, its still and the scrub frames itself.
       await library.remove(video.id);
@@ -201,5 +218,43 @@ Future<void> _editNote(
   );
   if (saved == null) return;
   video.note = saved;
+  await library.update(video);
+}
+
+/// The rate the clip was really filmed at, which every speed and every time
+/// the analyzer reads is scaled by. Read off the file on import, and wrong
+/// often enough on a slow-motion clip to need a way to say so.
+Future<void> editCaptureFps(
+    BuildContext context, VideoLibrary library, ThrowVideo video) async {
+  final fieldController =
+      TextEditingController(text: video.captureFps.toStringAsFixed(0));
+  final fps = await showDialog<double>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Recorded frame rate'),
+      content: TextField(
+        controller: fieldController,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: 'capture fps',
+          helperText: 'Auto-detected on import; override if the '
+              'slow-mo rate was read wrong (usually 120 or 240)',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () =>
+              Navigator.pop(context, double.tryParse(fieldController.text)),
+          child: const Text('Save'),
+        ),
+      ],
+    ),
+  );
+  if (fps == null || fps <= 0) return;
+  video.captureFps = fps;
   await library.update(video);
 }

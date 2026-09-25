@@ -151,7 +151,7 @@ void main() {
       expect(find.byType(ScrubWheel), findsOneWidget);
 
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel), const Offset(-120, 0));
+      await tester.drag(find.byType(ScrubWheel), const Offset(120, 0));
       await pumpFrames(tester);
 
       // Both players moved, not just the one the wheel is attached to.
@@ -161,7 +161,7 @@ void main() {
     testWidgets('an unlinked wheel moves only its own clip', (tester) async {
       await mount(tester);
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel).first, const Offset(-120, 0));
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
       await pumpFrames(tester);
 
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1});

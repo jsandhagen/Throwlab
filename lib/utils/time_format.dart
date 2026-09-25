@@ -30,3 +30,18 @@ String formatDelta(Duration delta) {
 /// the frame before every one of those targets.
 int frameAt(Duration position, double fps) => nearestFrame(
     position.inMicroseconds * fps / Duration.microsecondsPerSecond);
+
+/// How far the frame on screen is from a throw's release, in seconds to
+/// the millisecond and signed either way off it: the offset the analyzer's
+/// readout carries beside the clock once a release is marked. Counted in
+/// whole frames ([frames] from the release frame, at [fps]) rather than off
+/// the two positions, since a seek lands a little short of the frame it
+/// shows, and the release frame has to read as nothing but zero. A
+/// millisecond rather than the timer's hundredth because a frame at 240 fps
+/// is four of them, and this is the line read to say which frame is the
+/// release. No unit: it sits beside a clock, in a column the width of one.
+String formatSinceRelease(int frames, double fps) {
+  if (frames == 0 || fps <= 0) return '0.000';
+  final seconds = frames.abs() / fps;
+  return '${frames < 0 ? '-' : '+'}${seconds.toStringAsFixed(3)}';
+}
