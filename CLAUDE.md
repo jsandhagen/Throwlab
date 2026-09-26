@@ -588,8 +588,8 @@ like the app rather than a bare Material default.
   the measure sheet and on the card in the library, and the two gestures
   were learned on the first drag.
   A phone is a few pixels short either way — ~300 of usable height on its
-  side and ~352 of width upright, against the 305/377 the tools want — so
-  the rail shrinks to fit, a few percent nobody sees. It only breaks into
+  side and ~352 of width upright, against the 297/369 the tools want — so
+  the rail shrinks to fit where it has to, a few percent nobody sees. It only breaks into
   two runs where shrinking would leave a target a thumb misses at a track
   (`_minScale`), which is a screen no phone has; scrolling is never the
   answer, since a tool scrolled out of reach is one nobody finds and the
@@ -616,11 +616,12 @@ like the app rather than a bare Material default.
   angular silhouette (`railDecoration`, shared with the header's rail down
   the other edge on a turned phone, so the frame is edged by one piece of
   chrome and not a pill facing a plate), and the picked tool marked the way
-  the grouping bar marks its choice — the accent washed across a tile cut
-  to the rail's shape, a hairline of it round the edge and a bright bar
-  along the foot. The tile is inset on every side, so the mark sits in the
-  rail as a smaller copy of it; a slot as wide as the rail put the mark edge
-  to edge, where the rail's own end cut into it.
+  the grouping bar marks its choice — the accent washed across the slot and
+  a bright bar along the edge facing the frame. The mark fills its slot, edge
+  to edge across the rail, and is square: a piece of the rail lit up rather
+  than a second shape set inside it. The rail clips what it holds to its own
+  silhouette, so a slot in one of its cut corners takes the cut and the ones
+  between stay square, however the tools are split into runs.
 - A throw's release is stored on the clip (`ThrowVideo.release`), because
   every screen that looks at a throw looks at it around that moment. The
   flag beside the speed marks it — captioned RELEASE, then MOVE R or

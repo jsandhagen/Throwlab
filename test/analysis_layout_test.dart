@@ -115,11 +115,10 @@ void main() {
       }
     });
 
-    testWidgets('shrinks the last few pixels rather than breaking in two',
+    testWidgets('one column at full size up a turned phone',
         (tester) async {
       await mount(tester, _landscapePhone);
-      // 305 of tools into 300 of usable height: a scale nobody sees, and
-      // one column rather than two.
+      // 297 of tools into 300 of usable height: one column, unshrunk.
       final undo = tester.getRect(find.byKey(const ValueKey('rail-undo')));
       expect(undo.width, closeTo(40, 2));
       expect(undo.height, closeTo(36, 2));
@@ -207,7 +206,7 @@ void main() {
         expect(rects[i].center.dy, closeTo(row, 1));
         expect(rects[i].center.dx, greaterThan(rects[i - 1].center.dx));
       }
-      // 377 of tools into 352: a shrink of a few percent, not a second row.
+      // 369 of tools into 352: a shrink of a few percent, not a second row.
       expect(tester.getRect(find.byKey(const ValueKey('rail-undo'))).width,
           closeTo(40, 3));
       expect(rects.last.right, greaterThan(_narrowPhone.width - 12));

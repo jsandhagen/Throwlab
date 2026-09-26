@@ -63,9 +63,9 @@ void main() {
 
     testWidgets('shrinks a few pixels rather than breaking in two',
         (tester) async {
-      // The 300 a landscape phone leaves above the transport, against the
-      // 305 the tools want.
-      await mountRail(tester, axis: Axis.vertical, box: const Size(200, 300));
+      // A shorter phone on its side than most: 290 above the transport,
+      // against the 297 the tools want.
+      await mountRail(tester, axis: Axis.vertical, box: const Size(200, 290));
       final rects = rectsOf(tester, Axis.vertical);
       expect(runsAcross(rects, Axis.vertical), 1);
       expect(rects.last.height, lessThan(36));
@@ -89,7 +89,7 @@ void main() {
 
   group('along an edge', () {
     testWidgets('takes one row on the commonest Android width', (tester) async {
-      // 360 logical across, less the 4 of inset each side, against the 377
+      // 360 logical across, less the 4 of inset each side, against the 369
       // a bar wants with the pen's two buttons on it: a shrink of a few
       // percent, and still one row.
       await mountRail(tester, axis: Axis.horizontal, box: const Size(352, 200));

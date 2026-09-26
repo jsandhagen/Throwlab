@@ -136,28 +136,29 @@ class _DrawingRailState extends State<DrawingRail> {
 
   static const _slotWidth = 40.0;
   static const _slotHeight = 36.0;
-  static const _sidePadding = 4.0;
-
-  /// The rail wears the app's angular silhouette — two opposite corners
-  /// cut, as the search field, the grouping bar and the cards do — and each
-  /// tile is cut to match — a little less than [railCut], which is what
-  /// keeps its slanted edge the same [_sidePadding] off the rail's as its
-  /// square edges are, so the picked tool sits in the corner as a smaller
-  /// copy of the rail rather than a shape of its own jammed into it.
-  static const _tileCut = 10.0;
 
   /// One slot on the rail, and how a picked one is marked: the grouping
-  /// bar's own block — the accent washed across it on a diagonal, edged in
-  /// a hairline of it, and a bright bar along its foot — so a tool picked
-  /// here reads as the same kind of choice as a grouping picked in the
-  /// library. Unpicked, it is nothing but the icon. It is animated, so the
-  /// mark moves from one tool to the next rather than blinking across.
+  /// bar's own block — the accent washed across it on a diagonal and a
+  /// bright bar along the edge that faces the frame (the foot of a bar, the
+  /// inside of a column) — so a tool picked here reads as the same kind of
+  /// choice as a grouping picked in the library. Unpicked, it is nothing but
+  /// the icon. It is animated, so the mark moves from one tool to the next
+  /// rather than blinking across.
+  ///
+  /// The mark fills the slot, edge to edge across the rail, and is square:
+  /// it is a piece of the rail lit up, not a shape set inside it. A slot in
+  /// one of the rail's cut corners takes that cut, because the rail clips
+  /// what it holds to its own silhouette — so the first tool and the chevron
+  /// are cut where the rail is, the ones between are square, and that holds
+  /// however the tools are split into runs. Inset and cut on its own, the
+  /// mark was a second shape floating in the first.
   Widget _tile({
     required bool selected,
     required Widget child,
     required ColorScheme scheme,
   }) {
     final accent = scheme.primary;
+    const duration = Duration(milliseconds: 180);
     return SizedBox(
       width: _slotWidth,
       height: _slotHeight,
@@ -165,35 +166,27 @@ class _DrawingRailState extends State<DrawingRail> {
         fit: StackFit.expand,
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: duration,
             curve: Curves.easeOutCubic,
-            decoration: ShapeDecoration(
-              shape: angularShape(
-                _tileCut,
-                side: BorderSide(
-                  color: selected
-                      ? accent.withOpacity(0.5)
-                      : accent.withOpacity(0),
-                ),
-              ),
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: selected
-                    ? [accent.withOpacity(0.38), accent.withOpacity(0.10)]
+                    ? [accent.withOpacity(0.42), accent.withOpacity(0.16)]
                     : [accent.withOpacity(0), accent.withOpacity(0)],
               ),
             ),
           ),
-          // Along the foot, stopping short of the cut corner the way the
-          // grouping bar's stops at its slant.
           Positioned(
             left: 0,
-            right: _tileCut,
             bottom: 0,
-            height: 2,
+            top: _upright ? 0 : null,
+            right: _upright ? null : 0,
+            width: _upright ? 2 : null,
+            height: _upright ? null : 2,
             child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
+              duration: duration,
               opacity: selected ? 1 : 0,
               child: ColoredBox(color: accent.withOpacity(0.9)),
             ),
@@ -204,8 +197,7 @@ class _DrawingRailState extends State<DrawingRail> {
     );
   }
 
-  /// A rail button: a [_tile] that takes the tap, with the ink cut to the
-  /// same shape. The icon goes the accent when picked and gray when there
+  /// A rail button: a [_tile] that takes the tap. The icon goes the accent when picked and gray when there
   /// is nothing for it to act on — an undo arrow that does nothing is worse
   /// than one that says so.
   Widget _button({
@@ -229,7 +221,6 @@ class _DrawingRailState extends State<DrawingRail> {
         enabled: onPressed != null,
         child: InkWell(
           key: key,
-          customBorder: angularShape(_tileCut),
           onTap: onPressed,
           child: _tile(
             selected: selected,
@@ -468,15 +459,16 @@ class _DrawingRailState extends State<DrawingRail> {
 
   /// What the rail measures as a single run: four controls for the drawing,
   /// and for the pen four up an edge or five along one (where the weight
-  /// and the color get a button each), plus two gaps, the rule and the
-  /// padding around the lot — 305 up an edge, 377 along one.
+  /// and the color get a button each), plus two gaps and the rule — 297 up
+  /// an edge, 369 along one. No padding: a picked tile fills its slot to the
+  /// rail's edges.
   double get _oneRunExtent => _upright
-      ? _slotHeight * 8 + _gapExtent * 2 + _ruleExtent + _sidePadding * 2
-      : _slotWidth * 9 + _gapExtent * 2 + _ruleExtent + _sidePadding * 2;
+      ? _slotHeight * 8 + _gapExtent * 2 + _ruleExtent
+      : _slotWidth * 9 + _gapExtent * 2 + _ruleExtent;
 
   /// How far the rail will shrink to stay one run. A few percent is
-  /// invisible and is all a phone ever asks for — 300 of usable height on a
-  /// landscape phone against the 305 the tools want. Past this the buttons
+  /// invisible and is all a phone ever asks for — ~352 of width upright
+  /// against the 369 the bar wants. Past this the buttons
   /// would be small enough for a thumb to miss at a track, and the rail
   /// breaks into two runs instead, which is a screen no phone has.
   static const _minScale = 0.85;
@@ -664,15 +656,12 @@ class _DrawingRailState extends State<DrawingRail> {
             alignment: Alignment.bottomRight,
             child: DecoratedBox(
               decoration: railDecoration(scheme),
-              child: Material(
-                type: MaterialType.transparency,
-                child: Padding(
-                  // Across the rail as well as along it: a slot as wide as the
-                  // rail put the selected tool's highlight edge to edge, where
-                  // the rail's end cut into it, so it read as a blot on the
-                  // end of the rail rather than as a tool picked out inside
-                  // it. Inset, it is the rail's shape again, smaller.
-                  padding: const EdgeInsets.all(_sidePadding),
+              // Clipped to the rail's own silhouette, so a picked tile in
+              // one of its cut corners is cut with it.
+              child: ClipPath(
+                clipper: ShapeBorderClipper(shape: angularShape(railCut)),
+                child: Material(
+                  type: MaterialType.transparency,
                   child: !_open
                       ? _run([_collapseButton(scheme)])
                       : oneRun
