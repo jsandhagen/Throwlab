@@ -269,8 +269,12 @@ like the app rather than a bare Material default.
   3.5 lb, so it keeps its metric name.
 - A throw's distance (`ThrowVideo.distance`, always meters, null until
   recorded) is the badge on its card, shown in the unit it was entered in
-  (`distanceUnit`). `DistanceField` is the meters/feet pair that converts
-  as you type; `parseFeet` takes "191-08" the way a meet writes it.
+  (`distanceUnit`). `DistanceField` takes it in one unit at a time — meters,
+  or feet and inches as two boxes, the way a mark is called — behind an
+  m / ft switch that is remembered (`throwlab.distanceUnit`), with the
+  other unit said underneath. A distance already entered opens in its own
+  unit whatever the switch was last left on. `parseFeet` takes "191-08" the
+  way a meet writes it, and the feet box still accepts that.
 - A mark in feet is written in feet and inches, never in decimal feet.
   `formatFeet` is the other half of `parseFeet`: it spells a throw
   '191-08', '44-06.25' — what was called across the sector, printed on the
