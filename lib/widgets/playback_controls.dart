@@ -547,13 +547,15 @@ class _ClipLinePainter extends CustomPainter {
 /// a numbered tick at a round interval of time, counted from the release
 /// once one is marked (so the numbers are the ones a coach says out loud:
 /// 'five hundredths before release') and from the start of the clip until
-/// then, reading left to right like every other ruler.
+/// then.
 ///
-/// It feels like a wheel because it behaves like one. The surface moves
-/// with the finger, so later frames are pulled in from the right: drag left
-/// to go forward, the way a timeline or a tape is pulled. The ruler it
-/// replaced ran against the finger, which read as something slipping under
-/// the thumb rather than being turned by it. While it is being turned it
+/// It feels like a wheel because it behaves like one. A drag to the right
+/// goes forward, as it does on the frame itself, and the surface moves with
+/// the finger — so the later frames are on the left, rolling round to the
+/// needle as the drum is turned, the way the numbers on a jog dial or a
+/// combination lock come to the mark. Both the other ways were tried: a
+/// ruler reading left to right under a rightward drag ran against the
+/// thumb, and one pulled leftward like a tape felt backwards. While it is being turned it
 /// draws where the finger has taken it — the frames it has stepped plus the
 /// part of a frame not stepped yet — rather than where the player has got
 /// to, which lags a scrub by a seek; let go, it eases into the frame it
@@ -677,11 +679,9 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
         .clamp(0.0, math.max(_haptics.lastFrame, 0).toDouble());
   }
 
-  /// Accelerated step from a live finger drag. Negated because the surface
-  /// follows the finger: pulled left, it brings the later frames under the
-  /// needle.
+  /// Accelerated step from a live finger drag: to the right is forward.
   void _onDragUpdate(DragUpdateDetails details) {
-    _emit(_scrub.addDrag(-details.delta.dx, _pixelsPerFrame,
+    _emit(_scrub.addDrag(details.delta.dx, _pixelsPerFrame,
         timestamp: details.sourceTimeStamp));
   }
 
@@ -707,7 +707,7 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     // Hand the fling off at the rate the finger was actually scrubbing —
     // the drag's acceleration folded in — so momentum continues the motion
     // instead of snapping back to 1× at release.
-    _velocity = -details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
+    _velocity = details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
     if (_velocity.abs() < _restVelocity) {
       _settleIn();
       widget.onScrubEnd?.call();
@@ -867,7 +867,9 @@ class ScalePainter extends CustomPainter {
     /// how squarely it faces the eye (1 under the needle, 0 edge on) —
     /// null once it has turned out of view.
     (double, double)? project(double frame) {
-      final angle = (frame - frames) * spacing / radius;
+      // Later frames sit to the left of the needle, so that turning the
+      // drum to the right brings them round to it.
+      final angle = (frames - frame) * spacing / radius;
       if (angle.abs() > _reach) return null;
       return (half + radius * math.sin(angle), math.cos(angle));
     }

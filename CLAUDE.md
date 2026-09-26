@@ -597,12 +597,13 @@ like the app rather than a bare Material default.
   interval of time with room between numbers (`ScalePainter.labelStep`),
   counted from the release once there is one ('R', '-0.05', '+0.10') and
   from the start until then. It is a wheel, and feels like one because it
-  behaves like one. The surface moves with the finger — the numbers read
-  left to right, so later frames are pulled in from the right and a drag to
-  the left goes forward, as a timeline or a tape does. That is the opposite
-  of a drag on the frame, and on purpose: the first version kept the two
-  the same and ran the ruler against the thumb, which read as something
-  slipping under it rather than being turned. In the hand it is drawn where
+  behaves like one. A drag to the right goes forward, as it does on the
+  frame, and the surface moves with the finger — so the later frames sit to
+  the left of the needle and roll round to it as the drum turns, the way
+  the numbers on a jog dial come to the mark. Both the other ways were
+  tried and felt wrong: numbers reading left to right under a rightward
+  drag ran the ruler against the thumb, and the same numbers pulled
+  leftward like a tape read as backwards. In the hand it is drawn where
   the hand has it — the frames stepped plus the part of one not stepped
   yet (`ScrubAccumulator.fraction`) — not where the player has got to,
   which lags a scrub by a seek and moved it in lurches; let go, it eases
