@@ -131,9 +131,6 @@ const titles = {
   page: ['The same flight, on the spectator page',
     'The page a parent opens off the QR, stepped through the same four ' +
     'states of the same competition. It flies the throw exactly as the app does.'],
-  sector: ['Between two sector lines',
-    'The page transition. The next screen opens out of the circle, rests a ' +
-    'moment at the real 34.92° sector, then fills the screen. Back closes it.'],
 };
 
 (async () => {
@@ -142,7 +139,7 @@ if (fs.existsSync(path.join(dir, 'web/spectator.html'))) await shootPage(browser
 const files = await pack(browser);
 await browser.close();
 
-const order = ['flight', 'page', 'best', 'sector'].filter((name) => scenes[name]);
+const order = ['flight', 'page', 'best'].filter((name) => scenes[name]);
 const data = {};
 for (const name of order) {
   data[name] = {
@@ -218,7 +215,7 @@ const html = `<title>ThrowLab Motion</title>
 <main>
   <header>
     <span class="eyebrow">Branch claude/throwing-animations-art-7npgti</span>
-    <h1>Three animations, rendered from the app</h1>
+    <h1>The last throw and a new best, rendered from the app</h1>
     <p>Every frame here was painted by the real widgets on the test clock and
       is played back at the speed it was shot. Tap ¼× to slow one down, or
       drag the bar to stop on a frame.</p>

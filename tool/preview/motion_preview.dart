@@ -16,8 +16,6 @@
 //   it landed, which is how the board says what the last thrower threw.
 // - best: a throw in the library that has just become a personal best, the
 //   frame traced out of the medal's corner and the medal dropped in.
-// - sector: opening an athlete from the library and going back, between
-//   two sector lines.
 
 import 'dart:convert';
 import 'dart:io';
@@ -308,45 +306,5 @@ void main() {
             'of the corner and the medal dropped in');
     frame = _scenes['best']!['frames']! as int;
     _scenes['best']!['frames'] = await _hold(tester, 'best', frame, 16);
-  });
-
-  testWidgets('between two sector lines', (tester) async {
-    await loadPreviewFonts();
-    final thumbs = sampleThumbnails();
-    // ignore: invalid_use_of_visible_for_testing_member
-    SharedPreferences.setMockInitialValues({
-      'flutter.throwlab.videos': jsonEncode(sampleLibrary(thumbs)),
-      'flutter.throwlab.marks': jsonEncode(sampleMarks()),
-    });
-    tester.view.physicalSize = const Size(720, 1520);
-    tester.view.devicePixelRatio = 2;
-    addTearDown(tester.view.reset);
-
-    await warmImages(tester, thumbs);
-    await tester.pumpWidget(const ThrowLabApp());
-    await settle(tester);
-
-    var frame = await _hold(tester, 'sector', 0, 10);
-    await tester.tap(find.text('Anna Sofia').first);
-    await tester.pump();
-    await _record(tester, 'sector',
-        length: const Duration(milliseconds: 560),
-        step: const Duration(milliseconds: 20),
-        start: frame,
-        caption: 'Opening an athlete: out of the circle, between the lines');
-    frame = _scenes['sector']!['frames']! as int;
-    await settle(tester);
-    frame = await _hold(tester, 'sector', frame, 30);
-
-    await tester.pageBack();
-    await tester.pump();
-    await _record(tester, 'sector',
-        length: const Duration(milliseconds: 560),
-        step: const Duration(milliseconds: 20),
-        start: frame,
-        caption: 'And back: the sector closing');
-    frame = _scenes['sector']!['frames']! as int;
-    await settle(tester);
-    _scenes['sector']!['frames'] = await _hold(tester, 'sector', frame, 20);
   });
 }
