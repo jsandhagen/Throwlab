@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -37,6 +38,11 @@ enum LibraryGrouping { athlete, event, date }
 /// to find and tag, and pinned last so housekeeping never sits above the
 /// athletes actually being coached.
 const _unassigned = 'Unassigned';
+
+/// How much of an import's gauge the re-encode takes, the frames taking the
+/// rest. The re-encode is most of the wait; a guess, but a fixed one, so
+/// the flask never drains between the two.
+const _encodeShare = 0.75;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -144,31 +150,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Optimizing video'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ValueListenableBuilder<double?>(
-              valueListenable: encodeProgress,
-              builder: (context, value, _) =>
-                  LinearProgressIndicator(value: value),
-            ),
-            const SizedBox(height: 16),
-            ValueListenableBuilder<String>(
-              valueListenable: stage,
-              builder: (context, text, _) => Text(text),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: VideoOptimizer.cancel,
-            child: const Text('Skip'),
-          ),
-        ],
-      ),
+      builder: (context) =>
+          OptimizingDialog(progress: encodeProgress, stage: stage),
     );
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     // Probe the original file: the re-encode preserves frame timing but
@@ -178,15 +161,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final path = await VideoOptimizer.optimizeForScrubbing(
       picked.path,
       id,
-      onProgress: (p) => encodeProgress.value = p,
+      onProgress: (p) =>
+          encodeProgress.value = p == null ? null : p * _encodeShare,
     );
     stage.value = 'Extracting frames for smooth scrubbing…';
-    encodeProgress.value = null;
+    encodeProgress.value = _encodeShare;
     final frames = await VideoOptimizer.extractScrubFrames(
       path,
       id,
       fps,
-      onProgress: (p) => encodeProgress.value = p,
+      onProgress: (p) => encodeProgress.value =
+          p == null ? _encodeShare : _encodeShare + p * (1 - _encodeShare),
     );
     final thumbnail = await VideoOptimizer.extractThumbnail(path, id);
     if (mounted) Navigator.pop(context);
@@ -451,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             if (_availableBuild != null && _availableBuild != _dismissedBuild)
               ValueListenableBuilder<UpdateStatus>(
                 valueListenable: AppUpdater.status,
-                builder: (context, status, _) => _UpdateBanner(
+                builder: (context, status, _) => UpdateBanner(
                   status: status,
                   onUpdate: _installUpdate,
                   onInstall: AppUpdater.install,
@@ -1064,8 +1049,8 @@ class _ImportDialogState extends State<_ImportDialog> {
 /// One banner for the whole business rather than a dialog: an update is
 /// something to start and then forget about, and the only two moments that
 /// need a thumb are starting it and installing it.
-class _UpdateBanner extends StatelessWidget {
-  const _UpdateBanner({
+class UpdateBanner extends StatelessWidget {
+  const UpdateBanner({
     required this.status,
     required this.onUpdate,
     required this.onInstall,
@@ -1083,7 +1068,7 @@ class _UpdateBanner extends StatelessWidget {
         status.progress == null ? null : '${(status.progress! * 100).round()}%';
     return switch (status.stage) {
       UpdateStage.downloading => MaterialBanner(
-          leading: const Icon(Icons.downloading),
+          leading: FillingFlask(height: 30, progress: status.progress),
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1133,5 +1118,56 @@ class _UpdateBanner extends StatelessWidget {
           ],
         ),
     };
+  }
+}
+
+/// What an import shows while it re-encodes the clip and cuts its scrub
+/// frames: the mark filling over both, and which of the two it is on.
+class OptimizingDialog extends StatelessWidget {
+  const OptimizingDialog(
+      {super.key, required this.progress, required this.stage});
+
+  /// 0..1 over the whole import, null before the first reading.
+  final ValueListenable<double?> progress;
+  final ValueListenable<String> stage;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Optimizing video'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // The mark filling, over the whole import rather than per stage:
+          // a flask that emptied and filled again for the frames would read
+          // as the import starting over.
+          ValueListenableBuilder<double?>(
+            valueListenable: progress,
+            builder: (context, value, _) => Column(
+              children: [
+                FillingFlask(height: 96, progress: value),
+                const SizedBox(height: 10),
+                Text(
+                  value == null ? 'Starting…' : '${(value * 100).round()}%',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          ValueListenableBuilder<String>(
+            valueListenable: stage,
+            builder: (context, text, _) => Text(text),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: VideoOptimizer.cancel,
+          child: const Text('Skip'),
+        ),
+      ],
+    );
   }
 }

@@ -128,6 +128,9 @@ const titles = {
   best: ['A new personal best',
     'A throw becomes a best: the gold frame is traced out of the medal\'s ' +
     'corner, the medal drops in on its ribbon, and the light runs across it once.'],
+  flask: ['The logo as a progress gauge',
+    'Importing a clip. The flask fills by volume, eases onto each reading, ' +
+    'and its surface moves only while readings arrive, so a stall looks still.'],
   page: ['The same flight, on the spectator page',
     'The page a parent opens off the QR, stepped through the same four ' +
     'states of the same competition. It flies the throw exactly as the app does.'],
@@ -139,7 +142,7 @@ if (fs.existsSync(path.join(dir, 'web/spectator.html'))) await shootPage(browser
 const files = await pack(browser);
 await browser.close();
 
-const order = ['flight', 'page', 'best'].filter((name) => scenes[name]);
+const order = ['flask', 'flight', 'page', 'best'].filter((name) => scenes[name]);
 const data = {};
 for (const name of order) {
   data[name] = {
@@ -215,7 +218,7 @@ const html = `<title>ThrowLab Motion</title>
 <main>
   <header>
     <span class="eyebrow">Branch claude/throwing-animations-art-7npgti</span>
-    <h1>The last throw and a new best, rendered from the app</h1>
+    <h1>Four animations, rendered from the app</h1>
     <p>Every frame here was painted by the real widgets on the test clock and
       is played back at the speed it was shot. Tap ¼× to slow one down, or
       drag the bar to stop on a frame.</p>

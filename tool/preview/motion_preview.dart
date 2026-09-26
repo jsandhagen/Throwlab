@@ -307,4 +307,55 @@ void main() {
     frame = _scenes['best']!['frames']! as int;
     _scenes['best']!['frames'] = await _hold(tester, 'best', frame, 16);
   });
+
+  testWidgets('an import filling the flask', (tester) async {
+    await loadPreviewFonts();
+    tester.view.physicalSize = const Size(720, 1520);
+    tester.view.devicePixelRatio = 2;
+    addTearDown(tester.view.reset);
+
+    final progress = ValueNotifier<double?>(null);
+    final stage = ValueNotifier<String>(
+        'Re-encoding for instant frame-by-frame scrubbing. Long or '
+        'high-fps clips take a few minutes.');
+    await tester.pumpWidget(MaterialApp(
+      theme: ThrowLabApp.theme,
+      home: Scaffold(body: OptimizingDialog(progress: progress, stage: stage)),
+    ));
+    await settle(tester);
+    var frame = await _hold(tester, 'flask', 0, 10);
+    // Readings the way ffmpeg gives them: in lurches, with a stall in the
+    // middle where the surface should go still, and the frames after.
+    const readings = [
+      0.04, 0.09, 0.15, 0.22, 0.28, 0.33, 0.38, 0.38, 0.38, 0.38, //
+      0.44, 0.52, 0.60, 0.68, 0.75, 0.80, 0.86, 0.92, 0.97, 1.0,
+    ];
+    for (var i = 0; i < readings.length; i++) {
+      progress.value = readings[i];
+      if (readings[i] >= 0.75 && stage.value.startsWith('Re-encoding')) {
+        stage.value = 'Extracting frames for smooth scrubbing…';
+      }
+      await tester.pump();
+      await _record(tester, 'flask',
+          length: const Duration(milliseconds: 360),
+          start: frame,
+          caption: i == 0
+              ? 'The level eases onto each reading; the surface moves while '
+                  'readings arrive'
+              : i == 7
+                  ? 'Stalled: no new readings, so the surface settles flat'
+                  : i == 10
+                      ? 'Moving again'
+                      : i == readings.length - 1
+                          ? 'Full: the meniscus comes in and it is the logo'
+                          : '');
+      frame = _scenes['flask']!['frames']! as int;
+    }
+    // Long enough for the level to land and the surface to still, and then
+    // the full mark held.
+    await _record(tester, 'flask',
+        length: const Duration(milliseconds: 1600), start: frame);
+    frame = _scenes['flask']!['frames']! as int;
+    _scenes['flask']!['frames'] = await _hold(tester, 'flask', frame, 20);
+  });
 }

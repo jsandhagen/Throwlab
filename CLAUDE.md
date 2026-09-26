@@ -55,7 +55,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/gold_preview.dart \
                               tool/preview/glyph_preview.dart \
                               tool/preview/logo_preview.dart \
-                              tool/preview/distance_preview.dart
+                              tool/preview/distance_preview.dart \
+                              tool/preview/progress_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -109,7 +110,8 @@ node tool/preview/flipbook.js   # build/preview/motion/site/index.html
 The first steps each animation on the test clock and shoots it every 40 ms
 (20 for the page transition): the live board as three throws come in — a
 rival's short of his best, a foul, and one of the coach's own that is a
-personal best — and a card in the library striking a new best. It also writes the spectator's page with the board's
+personal best — a card in the library striking a new best, and an import
+filling the flask, stalls and all. It also writes the spectator's page with the board's
 four states baked in, and the second flies the page through them on
 Playwright's fake clock — paused, or a screenshot's own time is page time
 too — so the page's flight is looked at beside the app's, and packs the lot
@@ -908,6 +910,23 @@ like the app rather than a bare Material default.
   the strike is *over*, not when it starts, or the rebuild that saving the
   mark causes would swap it for a medal at rest halfway through. Reduced
   motion goes straight to the end, which is what a best looks like anyway.
+- The two waits that know how far along they are — optimizing an imported
+  clip, and downloading an update — are gauged by the mark itself
+  (`FillingFlask`, `LogoPainter(fill:)`): the flask's whole field as a
+  faint ghost, and the liquid rising into it. By volume, not height,
+  because the flask is a cone and a level rising at one speed would race
+  through the first half and crawl through the last (`_levelFor`, a table
+  counted off the liquid once). The level eases onto each reading, since
+  both report in lurches, and the surface swells only while readings are
+  arriving — a stall looks still, where a bar at 55% says the same thing
+  moving or stuck. It is never quite full while it is going: full is the
+  mark, and the meniscus coming in is what says it is done. The import's
+  two stages are one fill (`_encodeShare`), because a flask that drained
+  and filled again for the frames would read as the import starting over;
+  the update banner keeps its bar under the words, which reads to the
+  percent where a 30 px flask cannot. A wait that does not know how far
+  along it is keeps its spinner: a flask that fills on no reading is a
+  spinner in a costume.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as

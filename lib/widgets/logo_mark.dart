@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'sector_art.dart';
 
@@ -201,8 +202,56 @@ final Path _liquid = () {
   return liquid;
 }();
 
+/// How high the liquid stands for a flask [fill] of the way full, as a y in
+/// the unit square.
+///
+/// By volume, not by height: the flask is a cone, wide at the base, so a
+/// level that rose at one speed would race through the first half of a
+/// download and crawl through the last. Worked out once, by counting the
+/// liquid's area a row at a time.
+double _levelFor(double fill) {
+  final table = _volume;
+  final at = fill.clamp(0.0, 1.0) * table.last.area;
+  for (var i = 1; i < table.length; i++) {
+    if (table[i].area >= at) {
+      final a = table[i - 1], b = table[i];
+      final t = b.area == a.area ? 0.0 : (at - a.area) / (b.area - a.area);
+      return a.y + (b.y - a.y) * t;
+    }
+  }
+  return table.last.y;
+}
+
+final List<({double y, double area})> _volume = () {
+  final b = _liquid.getBounds();
+  const rows = 160, columns = 120;
+  final table = <({double y, double area})>[(y: b.bottom, area: 0)];
+  var area = 0.0;
+  for (var r = 0; r < rows; r++) {
+    final y = b.bottom - (r + 0.5) * b.height / rows;
+    var inside = 0;
+    for (var c = 0; c < columns; c++) {
+      if (_liquid.contains(Offset(b.left + (c + 0.5) * b.width / columns, y))) {
+        inside++;
+      }
+    }
+    area += inside;
+    table.add((y: b.bottom - (r + 1) * b.height / rows, area: area));
+  }
+  return table;
+}();
+
 class LogoPainter extends CustomPainter {
-  const LogoPainter();
+  const LogoPainter({this.fill = 1, this.ripple = 0, this.phase = 0});
+
+  /// How full the flask is, by volume, 0 to 1. Full is the mark itself;
+  /// anything less is the mark as a progress gauge — see [FillingFlask].
+  final double fill;
+
+  /// How much the surface is moving, 0 (still) to 1, and where along its
+  /// swell it has got to, in radians.
+  final double ripple;
+  final double phase;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -224,12 +273,152 @@ class LogoPainter extends CustomPainter {
     // One fill, with the field already cut out of it: filled and then cut,
     // the edges of the two leave a hairline of the meniscus across each
     // line.
-    canvas.drawPath(_liquid, Paint()..color = logoBlue);
+    if (fill >= 1) {
+      canvas.drawPath(_liquid, Paint()..color = logoBlue);
+    } else {
+      // The whole of what it is filling towards, faintly, so the level is
+      // read against something; then the liquid up to a surface that is
+      // flat, or swelling while there is something arriving. The meniscus
+      // only comes in at the very top, so a full flask is the mark again.
+      canvas.drawPath(_liquid, Paint()..color = logoBlue.withOpacity(0.14));
+      final b = _liquid.getBounds();
+      final level = _levelFor(fill);
+      final surface = Path()..moveTo(b.left - 0.01, level);
+      const steps = 24;
+      for (var i = 0; i <= steps; i++) {
+        final x = b.left - 0.01 + (b.width + 0.02) * i / steps;
+        surface.lineTo(
+            x, level + ripple * 0.007 * math.sin(x * 38 + phase));
+      }
+      surface
+        ..lineTo(b.right + 0.01, b.bottom + 0.01)
+        ..lineTo(b.left - 0.01, b.bottom + 0.01)
+        ..close();
+      canvas.save();
+      canvas.clipPath(surface);
+      canvas.drawPath(_liquid, Paint()..color = logoBlue);
+      canvas.restore();
+    }
     canvas.drawPath(open, stroke(_wall));
     canvas.drawPath(_lip, stroke(_wall));
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(LogoPainter old) => false;
+  bool shouldRepaint(LogoPainter old) =>
+      old.fill != fill || old.ripple != ripple || old.phase != phase;
+}
+
+/// The mark as a progress gauge: the flask filling to [progress], for the
+/// two waits in the app that know how far along they are — optimizing an
+/// imported clip, and downloading an update.
+///
+/// The level eases to each new reading rather than jumping to it, since
+/// both report in lurches, and the surface swells only while readings are
+/// arriving: a download that has stalled at 55% looks still, where a flat
+/// bar at 55% says the same thing whether it is moving or not. Null is a
+/// wait that has not said how far along it is yet, and is the empty glass —
+/// the caller says so in words. Reduced motion sets the level and leaves
+/// the surface flat.
+class FillingFlask extends StatefulWidget {
+  const FillingFlask({super.key, required this.height, this.progress});
+
+  final double height;
+  final double? progress;
+
+  @override
+  State<FillingFlask> createState() => _FillingFlaskState();
+}
+
+class _FillingFlaskState extends State<FillingFlask>
+    with SingleTickerProviderStateMixin {
+  /// Made the first time a reading comes in: a flask that is never
+  /// updated never needs one.
+  Ticker? _ticker;
+  double _shown = 0;
+  double _ripple = 0;
+  double _phase = 0;
+  Duration _last = Duration.zero;
+
+  /// When the last reading came in, on the ticker's clock.
+  Duration _heard = Duration.zero;
+  bool _fresh = false;
+
+  double get _target => widget.progress ?? 0;
+
+  bool get _still => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = _target;
+  }
+
+  @override
+  void didUpdateWidget(FillingFlask old) {
+    super.didUpdateWidget(old);
+    if (widget.progress == old.progress) return;
+    if (_still) {
+      _shown = _target;
+      return;
+    }
+    _fresh = true;
+    final ticker = _ticker ??= createTicker(_tick);
+    if (!ticker.isActive) {
+      _last = Duration.zero;
+      ticker.start();
+    }
+  }
+
+  void _tick(Duration elapsed) {
+    final dt = (elapsed - _last).inMicroseconds / 1e6;
+    _last = elapsed;
+    if (_fresh) {
+      _heard = elapsed;
+      _fresh = false;
+    }
+    // Moving for a moment after each reading, then settling.
+    final since = (elapsed - _heard).inMilliseconds / 1000;
+    final wanted = since < 1.2 ? 1.0 : 0.0;
+    _ripple += (wanted - _ripple) * (1 - math.exp(-dt / 0.35));
+    _phase += dt * 5;
+    _shown += (_target - _shown) * (1 - math.exp(-dt / 0.3));
+    final settled =
+        (_shown - _target).abs() < 0.001 && wanted == 0 && _ripple < 0.01;
+    setState(() {
+      if (settled) {
+        _shown = _target;
+        _ripple = 0;
+      }
+    });
+    if (settled) _ticker?.stop();
+  }
+
+  @override
+  void dispose() {
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = widget.progress;
+    return Semantics(
+      label: 'Progress',
+      value: progress == null ? null : '${(progress * 100).round()}%',
+      child: SizedBox(
+        width: widget.height * logoAspect,
+        height: widget.height,
+        child: CustomPaint(
+          painter: LogoPainter(
+            // Never quite full while it is still going: full is the mark,
+            // and the meniscus coming in is what says it is done.
+            fill: progress != null && progress >= 1 ? 1 : math.min(_shown, 0.995),
+            ripple: _ripple,
+            phase: _phase,
+          ),
+        ),
+      ),
+    );
+  }
 }
