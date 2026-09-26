@@ -69,13 +69,13 @@ void main() {
       ];
 
   Future<void> mount(WidgetTester tester, Size screen,
-      {List<ThrowVideo> siblings = const []}) async {
+      {List<ThrowVideo> siblings = const [],
+      Size videoSize = const Size(1920, 1080)}) async {
     await loadPreviewFonts();
     tester.view.physicalSize = screen;
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    VideoPlayerPlatform.instance =
-        FakeVideoPlayerPlatform(const Size(1920, 1080));
+    VideoPlayerPlatform.instance = FakeVideoPlayerPlatform(videoSize);
     await tester.pumpWidget(
       ChangeNotifierProvider<VideoLibrary>.value(
         value: VideoLibrary(),
@@ -142,6 +142,18 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('throw-strip-handle')));
     await _pump(tester, 20);
     await _shoot(tester, 'analysis_portrait_nostrip');
+  });
+
+  testWidgets('upright clip', (tester) async {
+    // Filmed upright and watched upright: the frame fills the screen, so the
+    // tools stand up its right edge rather than lying in a band under it,
+    // and the tab hangs off the header over the picture itself.
+    video.release = const Duration(milliseconds: 1200);
+    await mount(tester, _portrait,
+        siblings: session(temp), videoSize: const Size(1080, 1920));
+    await tester.tap(find.byKey(const ValueKey('throw-strip-handle')));
+    await _pump(tester, 20);
+    await _shoot(tester, 'analysis_upright');
   });
 
   testWidgets('measuring', (tester) async {

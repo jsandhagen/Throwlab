@@ -1740,7 +1740,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 // The header's own band, so the tab is the header carried
                 // on down rather than a second piece of chrome under it.
                 decoration: BoxDecoration(
-                  color: scheme.surface.withOpacity(0.92),
+                  color: scheme.surface,
                   borderRadius:
                       const BorderRadius.vertical(bottom: Radius.circular(8)),
                 ),
@@ -1914,7 +1914,9 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// the tab started.
   Widget _topOverlay() {
     final banner = _measureBanner(pill: false);
-    final band = Theme.of(context).colorScheme.surface.withOpacity(0.92);
+    // Opaque: any translucency lets the top edge of the frame show through
+    // as a seam across the band wherever the letterbox gives way to it.
+    final band = Theme.of(context).colorScheme.surface;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
