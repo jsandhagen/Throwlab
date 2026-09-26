@@ -612,6 +612,15 @@ like the app rather than a bare Material default.
   their names as tooltips, never a list of ten named rows: a list that long
   scrolls on a short screen, and the name is the least of what a swatch
   says.
+  The rail is dressed in the app's own chrome rather than Material's: the
+  angular silhouette (`railDecoration`, shared with the header's rail down
+  the other edge on a turned phone, so the frame is edged by one piece of
+  chrome and not a pill facing a plate), and the picked tool marked the way
+  the grouping bar marks its choice — the accent washed across a tile cut
+  to the rail's shape, a hairline of it round the edge and a bright bar
+  along the foot. The tile is inset on every side, so the mark sits in the
+  rail as a smaller copy of it; a slot as wide as the rail put the mark edge
+  to edge, where the rail's own end cut into it.
 - A throw's release is stored on the clip (`ThrowVideo.release`), because
   every screen that looks at a throw looks at it around that moment. The
   flag beside the speed marks it — captioned RELEASE, then MOVE R or

@@ -1976,14 +1976,15 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         padding: const EdgeInsets.only(left: 4, top: 4, bottom: 4),
         child: Align(
           alignment: Alignment.topLeft,
-          child: Material(
-            color: Theme.of(context).colorScheme.surface.withOpacity(0.7),
-            borderRadius: BorderRadius.circular(24),
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: _headerActions(vertical: true),
+          child: DecoratedBox(
+            decoration: railDecoration(Theme.of(context).colorScheme),
+            child: Material(
+              type: MaterialType.transparency,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: _headerActions(vertical: true),
+                ),
               ),
             ),
           ),

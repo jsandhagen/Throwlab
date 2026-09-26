@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'angular.dart';
 import 'drawing_canvas.dart';
 
 /// The drawing tools, run along an edge of the frame and anchored in its
@@ -34,6 +35,34 @@ import 'drawing_canvas.dart';
 /// A dedicated chevron on the end — always there, open or closed, and never
 /// also a tool — collapses the rail down to just that button, so there is
 /// one fixed target for getting the tools out of the way and back.
+/// The surface a rail over the frame stands on: the app's angular
+/// silhouette, two opposite corners cut as the search field, the grouping
+/// bar and the cards are, washed on a diagonal and edged in a hairline.
+/// Nearly opaque — the angular chrome elsewhere sits on the app's own dark
+/// and can afford to be a wash, and this sits on a sky. Shared with the
+/// header's rail down the other edge on a turned phone, so the two edges of
+/// the frame are one piece of chrome rather than a pill facing a plate.
+ShapeDecoration railDecoration(ColorScheme scheme) => ShapeDecoration(
+      shape: angularShape(
+        railCut,
+        side: BorderSide(color: scheme.outlineVariant.withOpacity(0.45)),
+      ),
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.alphaBlend(scheme.surfaceContainerHighest.withOpacity(0.55),
+                  scheme.surface)
+              .withOpacity(0.92),
+          scheme.surface.withOpacity(0.86),
+        ],
+      ),
+      shadows: const [BoxShadow(color: Colors.black38, blurRadius: 10)],
+    );
+
+/// How far a rail's corners are cut.
+const double railCut = 12;
+
 class DrawingRail extends StatefulWidget {
   const DrawingRail({
     super.key,
@@ -105,38 +134,123 @@ class _DrawingRailState extends State<DrawingRail> {
         orElse: () => _placedTools[1],
       );
 
-  /// Rail buttons are drawn 40x36 and sized to match: Material's default
-  /// 48px tap padding around each one is invisible room the rail cannot
-  /// spare on a phone, where all nine controls have to fit along an edge.
-  ButtonStyle _styleFor(bool selected, ColorScheme scheme) =>
-      IconButton.styleFrom(
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        backgroundColor: selected ? scheme.primaryContainer : null,
-      );
-
   static const _slotWidth = 40.0;
   static const _slotHeight = 36.0;
   static const _sidePadding = 4.0;
-  static const _slot =
-      BoxConstraints.tightFor(width: _slotWidth, height: _slotHeight);
 
-  Widget _toolButton(
-      DrawTool tool, IconData icon, String tip, ColorScheme scheme) {
-    return IconButton(
-      tooltip: tip,
-      iconSize: 20,
-      padding: EdgeInsets.zero,
-      constraints: _slot,
-      isSelected: controller.tool == tool,
-      style: _styleFor(controller.tool == tool, scheme),
-      icon: Icon(icon),
-      onPressed: () => controller.tool = tool,
+  /// The rail wears the app's angular silhouette — two opposite corners
+  /// cut, as the search field, the grouping bar and the cards do — and each
+  /// tile is cut to match — a little less than [railCut], which is what
+  /// keeps its slanted edge the same [_sidePadding] off the rail's as its
+  /// square edges are, so the picked tool sits in the corner as a smaller
+  /// copy of the rail rather than a shape of its own jammed into it.
+  static const _tileCut = 10.0;
+
+  /// One slot on the rail, and how a picked one is marked: the grouping
+  /// bar's own block — the accent washed across it on a diagonal, edged in
+  /// a hairline of it, and a bright bar along its foot — so a tool picked
+  /// here reads as the same kind of choice as a grouping picked in the
+  /// library. Unpicked, it is nothing but the icon. It is animated, so the
+  /// mark moves from one tool to the next rather than blinking across.
+  Widget _tile({
+    required bool selected,
+    required Widget child,
+    required ColorScheme scheme,
+  }) {
+    final accent = scheme.primary;
+    return SizedBox(
+      width: _slotWidth,
+      height: _slotHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            decoration: ShapeDecoration(
+              shape: angularShape(
+                _tileCut,
+                side: BorderSide(
+                  color: selected
+                      ? accent.withOpacity(0.5)
+                      : accent.withOpacity(0),
+                ),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: selected
+                    ? [accent.withOpacity(0.38), accent.withOpacity(0.10)]
+                    : [accent.withOpacity(0), accent.withOpacity(0)],
+              ),
+            ),
+          ),
+          // Along the foot, stopping short of the cut corner the way the
+          // grouping bar's stops at its slant.
+          Positioned(
+            left: 0,
+            right: _tileCut,
+            bottom: 0,
+            height: 2,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              opacity: selected ? 1 : 0,
+              child: ColoredBox(color: accent.withOpacity(0.9)),
+            ),
+          ),
+          Center(child: child),
+        ],
+      ),
     );
   }
 
-  /// An action on the drawing itself, grayed out when there is nothing for
-  /// it to act on — an undo arrow that does nothing is worse than one that
-  /// says so.
+  /// A rail button: a [_tile] that takes the tap, with the ink cut to the
+  /// same shape. The icon goes the accent when picked and gray when there
+  /// is nothing for it to act on — an undo arrow that does nothing is worse
+  /// than one that says so.
+  Widget _button({
+    Key? key,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required ColorScheme scheme,
+    bool selected = false,
+  }) {
+    final color = onPressed == null
+        ? scheme.onSurface.withOpacity(0.32)
+        : selected
+            ? scheme.primary
+            : scheme.onSurface;
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        enabled: onPressed != null,
+        child: InkWell(
+          key: key,
+          customBorder: angularShape(_tileCut),
+          onTap: onPressed,
+          child: _tile(
+            selected: selected,
+            scheme: scheme,
+            child: Icon(icon, size: 20, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toolButton(
+          DrawTool tool, IconData icon, String tip, ColorScheme scheme) =>
+      _button(
+        tooltip: tip,
+        icon: icon,
+        selected: controller.tool == tool,
+        scheme: scheme,
+        onPressed: () => controller.tool = tool,
+      );
+
   Widget _actionButton({
     required Key key,
     required String tooltip,
@@ -144,15 +258,12 @@ class _DrawingRailState extends State<DrawingRail> {
     required VoidCallback? onPressed,
     required ColorScheme scheme,
   }) =>
-      IconButton(
+      _button(
         key: key,
         tooltip: tooltip,
-        iconSize: 20,
-        padding: EdgeInsets.zero,
-        constraints: _slot,
-        style: _styleFor(false, scheme),
-        icon: Icon(icon),
+        icon: icon,
         onPressed: onPressed,
+        scheme: scheme,
       );
 
   /// A rail-sized menu button: tapping the icon picks [onTap] straight
@@ -165,7 +276,7 @@ class _DrawingRailState extends State<DrawingRail> {
     required List<PopupMenuEntry<T>> items,
     required ValueChanged<T> onSelected,
     VoidCallback? onTap,
-    ColorScheme? scheme,
+    required ColorScheme scheme,
   }) {
     final button = PopupMenuButton<T>(
       key: key,
@@ -176,22 +287,20 @@ class _DrawingRailState extends State<DrawingRail> {
       position: PopupMenuPosition.over,
       itemBuilder: (context) => items,
       onSelected: onSelected,
-      child: Container(
-        width: 40,
-        height: 36,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected && scheme != null
-              ? scheme.primaryContainer
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            icon,
-            const Icon(Icons.arrow_drop_down, size: 14),
-          ],
+      child: _tile(
+        selected: selected,
+        scheme: scheme,
+        child: IconTheme.merge(
+          data: IconThemeData(
+              color: selected ? scheme.primary : scheme.onSurface),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              icon,
+              Icon(Icons.arrow_drop_down,
+                  size: 14, color: scheme.onSurface.withOpacity(0.6)),
+            ],
+          ),
         ),
       ),
     );
@@ -421,6 +530,7 @@ class _DrawingRailState extends State<DrawingRail> {
       if (_upright)
         _menuButton<void>(
           key: const ValueKey('rail-pen'),
+          scheme: scheme,
           tooltip: 'Pen: ${_weightLabel.toLowerCase()} '
               '${_nameOf(controller.color).toLowerCase()}',
           icon: _penPreview(),
@@ -431,6 +541,7 @@ class _DrawingRailState extends State<DrawingRail> {
       else ...[
         _menuButton<void>(
           key: const ValueKey('rail-width'),
+          scheme: scheme,
           tooltip: 'Line width: ${_weightLabel.toLowerCase()}',
           icon: _weightPreview(controller.strokeWidth, controller.color),
           selected: false,
@@ -441,6 +552,7 @@ class _DrawingRailState extends State<DrawingRail> {
         ),
         _menuButton<void>(
           key: const ValueKey('rail-color'),
+          scheme: scheme,
           tooltip: 'Color: ${_nameOf(controller.color)}',
           icon: Container(
             width: 16,
@@ -503,14 +615,11 @@ class _DrawingRailState extends State<DrawingRail> {
   /// end of it, open or closed — never buried in a menu and never doubling
   /// as a tool, so there is one fixed target for getting the tools out of
   /// the way and back.
-  Widget _collapseButton(ColorScheme scheme) => IconButton(
+  Widget _collapseButton(ColorScheme scheme) => _button(
         key: const ValueKey('rail-collapse'),
         tooltip: _open ? 'Hide drawing tools' : 'Show drawing tools',
-        iconSize: 20,
-        padding: EdgeInsets.zero,
-        style: _styleFor(false, scheme),
-        constraints: _slot,
-        icon: Icon(_chevron),
+        icon: _chevron,
+        scheme: scheme,
         onPressed: () => setState(() => _open = !_open),
       );
 
@@ -553,23 +662,28 @@ class _DrawingRailState extends State<DrawingRail> {
           return FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.bottomRight,
-            child: Material(
-              color: scheme.surface.withOpacity(0.8),
-              borderRadius: BorderRadius.circular(24),
-              clipBehavior: Clip.antiAlias,
-              child: Padding(
-                // Across the rail as well as along it: a slot as wide as the
-                // rail put the selected tool's highlight edge to edge, where
-                // the rail's rounded end cut into it, so it read as a blot
-                // on the end of the rail rather than as a tool picked out
-                // inside it. Inset, it is a pill in a pill.
-                padding: const EdgeInsets.all(_sidePadding),
-                child: !_open
-                    ? _run([_collapseButton(scheme)])
-                    : oneRun
-                        ? _run(
-                            [...pen, _gap, ...actions, _collapseButton(scheme)])
-                        : _runs(pen, [...actions, _collapseButton(scheme)]),
+            child: DecoratedBox(
+              decoration: railDecoration(scheme),
+              child: Material(
+                type: MaterialType.transparency,
+                child: Padding(
+                  // Across the rail as well as along it: a slot as wide as the
+                  // rail put the selected tool's highlight edge to edge, where
+                  // the rail's end cut into it, so it read as a blot on the
+                  // end of the rail rather than as a tool picked out inside
+                  // it. Inset, it is the rail's shape again, smaller.
+                  padding: const EdgeInsets.all(_sidePadding),
+                  child: !_open
+                      ? _run([_collapseButton(scheme)])
+                      : oneRun
+                          ? _run([
+                              ...pen,
+                              _gap,
+                              ...actions,
+                              _collapseButton(scheme)
+                            ])
+                          : _runs(pen, [...actions, _collapseButton(scheme)]),
+                ),
               ),
             ),
           );
