@@ -152,7 +152,8 @@ void main() {
 
       platform.seeks.clear();
       await tester.drag(find.byType(ScrubWheel), const Offset(120, 0));
-      await pumpFrames(tester);
+      // Long enough for the fling it was let go with to come to rest.
+      await pumpFrames(tester, 120);
 
       // Both players moved, not just the one the wheel is attached to.
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1, 2});
@@ -162,7 +163,8 @@ void main() {
       await mount(tester);
       platform.seeks.clear();
       await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
-      await pumpFrames(tester);
+      // Long enough for the fling it was let go with to come to rest.
+      await pumpFrames(tester, 120);
 
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1});
     });

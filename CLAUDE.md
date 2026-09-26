@@ -594,7 +594,10 @@ like the app rather than a bare Material default.
   clip as a hairline, the release notched into it in the medal's gold and
   each timer in its own ink; `ScrubWheel` under it is a ruler under a fixed
   needle — a tick per frame, and a numbered tick at the shortest round
-  interval of time with room between numbers (`ScalePainter.labelStep`),
+  interval of time that is a whole number of frames and has room between
+  numbers (`ScalePainter.labelInterval`): a number is only ever on a
+  frame's own tick, since a twentieth of a second at 30 fps is a frame and a
+  half and numbering it left every other number between two ticks,
   counted from the release once there is one ('R', '-0.05', '+0.10') and
   from the start until then. It is a wheel, and feels like one because it
   behaves like one. A drag to the right goes forward, as it does on the
@@ -603,12 +606,17 @@ like the app rather than a bare Material default.
   the numbers on a jog dial come to the mark. Both the other ways were
   tried and felt wrong: numbers reading left to right under a rightward
   drag ran the ruler against the thumb, and the same numbers pulled
-  leftward like a tape read as backwards. In the hand it is drawn where
-  the hand has it — the frames stepped plus the part of one not stepped
-  yet (`ScrubAccumulator.fraction`) — not where the player has got to,
-  which lags a scrub by a seek and moved it in lurches; let go, it eases
-  onto the frame it stopped at like a detent before following the player
-  again. And it is drawn as a drum seen face on (`ScalePainter`): the
+  leftward like a tape read as backwards. The wheel is one number, its
+  position in fractional frames, and the frame stepped to is always the
+  one nearest it, so what is drawn and what is shown can't drift apart.
+  In the hand it is where the hand has it, not where the player has got
+  to, which lags a scrub by a seek and moved it in lurches; a fling is a
+  `FrictionSimulation` from the release speed to rest, one smooth curve
+  rather than a velocity decayed and summed tick by tick; and out of the
+  hand it never jumps — it eases onto the frame it stopped at like a
+  detent, leaves the player alone while the scrub's handoff lands, and
+  then eases to wherever the player is. Snapping back to the player the
+  moment it was let go is what made the ticks leap under a still finger. And it is drawn as a drum seen face on (`ScalePainter`): the
   spacing is true under the needle, where the finger is, and closes up and
   dims toward the edges, the numbers foreshortened with it. Paused, the
   needle and the readout work in whole frames (`formatSinceRelease` takes
