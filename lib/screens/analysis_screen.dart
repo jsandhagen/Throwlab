@@ -1423,11 +1423,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
             ),
           ),
         ),
-      // Upright, the header carries the two things done *with* a throw and
-      // nothing about it: who threw it, the note and the frame rate describe
-      // the throw, and the title already opens the sheet that describes it.
-      // The rail on its side keeps them, where there is a whole edge of room.
-      if (vertical) ...[
+      // Upright, who threw it and the frame rate describe the throw and are
+      // left to the sheet the title opens; the rail on its side keeps them,
+      // where there is a whole edge of room.
+      if (vertical)
         IconButton(
           tooltip: widget.video.athlete.isEmpty
               ? 'Tag athlete'
@@ -1437,14 +1436,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
               : Icons.person),
           onPressed: _editAthlete,
         ),
-        IconButton(
-          tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
-          icon: Icon(widget.video.note.isEmpty
-              ? Icons.note_add_outlined
-              : Icons.sticky_note_2),
-          onPressed: _editNote,
-        ),
-      ],
+      // The note is in the header both ways. It is written while the throw
+      // is being watched — what the coach saw, frame by frame — so it is
+      // reached from the screen rather than from behind the title's sheet,
+      // and a filled icon says there is one without opening anything.
+      IconButton(
+        tooltip: widget.video.note.isEmpty ? 'Add note' : 'Note',
+        icon: Icon(widget.video.note.isEmpty
+            ? Icons.note_add_outlined
+            : Icons.sticky_note_2),
+        onPressed: _editNote,
+      ),
       IconButton(
         tooltip: 'Compare with another throw',
         icon: const Icon(Icons.compare),

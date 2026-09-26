@@ -562,10 +562,12 @@ like the app rather than a bare Material default.
   about the *throw*: when it was taken, how far it went, what was written
   down, and the edits for each — `showThrowActions`, the same sheet the
   library opens on a long press, so there is one place a throw is
-  described. It is also why the upright header is the title and two
-  actions, compare and measure: who threw it, the note and the frame rate
-  describe the throw, and live on that sheet. The rail on its side keeps
-  all of them, having a whole edge to spend.
+  described. It is also why the upright header is the title, the note and
+  two actions, compare and measure: who threw it and the frame rate
+  describe the throw, and live on that sheet. The note is the exception
+  because it is written while the throw is watched — what was seen, frame
+  by frame — so it is on the screen, and its filled icon says there is one.
+  The rail on its side keeps all of them, having a whole edge to spend.
 - The drawing tools run along an edge of the frame and are anchored in its
   bottom-right corner. Which edge follows the shape of the *picture*, not
   the shape of the screen. A clip is filmed on its side, so held that way

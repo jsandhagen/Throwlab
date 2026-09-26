@@ -134,7 +134,7 @@ void main() {
     DrawingRail rail(WidgetTester tester) =>
         tester.widget<DrawingRail>(find.byType(DrawingRail));
 
-    testWidgets('upright, the header is the throw and two actions',
+    testWidgets('upright, the header is the throw, the note and two actions',
         (tester) async {
       final video = testVideo(temp);
       await mountAnalysisScreen(tester,
@@ -144,7 +144,8 @@ void main() {
       expect(find.byTooltip('Compare with another throw'), findsOneWidget);
       expect(find.byTooltip(_measure), findsOneWidget);
       expect(find.byTooltip('Tag athlete'), findsNothing);
-      expect(find.byTooltip('Add note'), findsNothing);
+      // Written while the throw is watched, so it is on the screen.
+      expect(find.byTooltip('Add note'), findsOneWidget);
       expect(find.byIcon(Icons.shutter_speed), findsNothing);
 
       // What they did is on the sheet the title opens.
