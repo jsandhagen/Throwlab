@@ -31,6 +31,12 @@ class VideoLibrary extends ChangeNotifier {
   /// out whether it is wearing a medal.
   Set<String> _bests = const {};
 
+  /// Bests set since the app opened that nobody has been shown yet. Only
+  /// ever a throw that took a best off another one: an athlete's first
+  /// measured throw is trivially their best, and striking a medal for it
+  /// would be striking one for every athlete on their first day.
+  final Set<String> _fresh = {};
+
   List<ThrowVideo> get videos => List.unmodifiable(_videos);
 
   /// Marks with no clip behind them, newest first.
@@ -151,6 +157,28 @@ class VideoLibrary extends ChangeNotifier {
   /// the athlete did in fact throw further.
   bool isPersonalBest(ThrowResult result) => _bests.contains(result.id);
 
+  /// Whether [result] has just become a best and has not been celebrated
+  /// yet — what makes its medal drop in rather than simply be there.
+  bool isFreshBest(ThrowResult result) => _fresh.contains(result.id);
+
+  /// The celebration has been shown; from here it is a best like any
+  /// other. Nothing is notified: the medal is already on screen.
+  void celebrated(ThrowResult result) => _fresh.remove(result.id);
+
+  /// Reranks the bests after [written] was saved, noting it as new if it
+  /// just took a best off another throw.
+  void _rerank(String written) {
+    final before = _bests;
+    _bests = personalBestIds(results);
+    if (_bests.contains(written) &&
+        !before.contains(written) &&
+        before.difference(_bests).isNotEmpty) {
+      _fresh.add(written);
+    } else if (!_bests.contains(written)) {
+      _fresh.remove(written);
+    }
+  }
+
   /// What the library knows about one athlete: their throws, newest first,
   /// their marks, and their best at each thing they throw.
   AthleteProfile profileFor(String name) =>
@@ -158,7 +186,7 @@ class VideoLibrary extends ChangeNotifier {
 
   Future<void> add(ThrowVideo video) async {
     _videos.insert(0, video);
-    _bests = personalBestIds(results);
+    _rerank(video.id);
     await _save();
     notifyListeners();
   }
@@ -170,7 +198,7 @@ class VideoLibrary extends ChangeNotifier {
   Future<void> addMark(ThrowMark mark) async {
     _marks.add(mark);
     _sortMarks();
-    _bests = personalBestIds(results);
+    _rerank(mark.id);
     await _save();
     notifyListeners();
   }
@@ -180,7 +208,7 @@ class VideoLibrary extends ChangeNotifier {
     if (index == -1) return;
     _marks[index] = mark;
     _sortMarks();
-    _bests = personalBestIds(results);
+    _rerank(mark.id);
     await _save();
     notifyListeners();
   }
@@ -234,7 +262,7 @@ class VideoLibrary extends ChangeNotifier {
     final index = _videos.indexWhere((v) => v.id == video.id);
     if (index == -1) return;
     _videos[index] = video;
-    _bests = personalBestIds(results);
+    _rerank(video.id);
     await _save();
     notifyListeners();
   }

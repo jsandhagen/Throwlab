@@ -73,6 +73,8 @@ Map<String, dynamic> competitionFeed(
       MeetFlight(competition, rounds: meet.rounds, standings: standings);
   final board = MeetBoard(standings,
       inTheCircle: flight.inTheCircle,
+      previous: flight.previous,
+      isPersonalBest: isPersonalBest,
       following: followed,
       boardNames: boardNames);
 
@@ -436,6 +438,10 @@ Map<String, dynamic> _board(MeetBoard board) => {
       // with no name on it. Fractions rather than distances, since that is
       // all a faint line needs.
       'others': [for (final at in board.others) board.fractionOf(at)],
+      // The throw just taken, already placed: where across the sector and
+      // how far up the band it came down, and what the corner says about
+      // it. The page flies it in when the key changes, as the app does.
+      if (board.last case final last?) 'last': _last(board, last),
       'marks': [
         for (final mark in board.marks)
           {
@@ -459,6 +465,20 @@ Map<String, dynamic> _board(MeetBoard board) => {
             },
           },
       ],
+    };
+
+Map<String, dynamic> _last(MeetBoard board, MeetBoardThrow last) => {
+      'key': last.key,
+      'kind': last.kind.name,
+      'caption': last.caption,
+      'lateral': last.lateral,
+      if (last.mine) 'mine': true,
+      if (last.personalBest) 'pb': true,
+      if (last.distance != null) ...{
+        'mark': formatDistance(last.distance!, last.unit),
+        'fraction': board.fractionOf(last.distance!),
+      },
+      if (last.improved) 'improved': true,
     };
 
 /// What unit to write the cut in. It belongs to a place rather than to a

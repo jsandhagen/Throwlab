@@ -389,6 +389,8 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
   Widget _liveView(Meet meet, MeetStandings standings, MeetFlight flight) {
     final board = MeetBoard(standings,
         inTheCircle: flight.inTheCircle,
+        previous: flight.previous,
+        isPersonalBest: context.read<VideoLibrary>().isPersonalBest,
         span: _span,
         boardNames: (athlete) => boardNameFor(context, athlete));
     final theme = Theme.of(context);
@@ -1585,7 +1587,14 @@ class _EntryCard extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (isPb) ...[
-          const PersonalBestMedal(size: 13),
+          PersonalBestMedal(
+            // Keyed to the throw, so a best that beats the one already
+            // wearing the medal on this row strikes a new one.
+            key: ValueKey(bestResult.id),
+            size: 13,
+            celebrate: library.isFreshBest(bestResult),
+            onCelebrated: () => library.celebrated(bestResult),
+          ),
           const SizedBox(width: 4),
         ],
         Text(

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../models/meet.dart';
 import '../models/meet_board.dart';
 import '../models/throw_event.dart';
 import 'gold.dart';
@@ -29,7 +30,13 @@ import 'throw_card.dart';
 /// sensible zoom. A crowded label slides clear of its neighbour and grows a
 /// leader down to the line it belongs to, rather than the lines being
 /// spread out to make room for the type.
-class SectorBoard extends StatelessWidget {
+///
+/// The throw just taken ([MeetBoard.last]) is drawn over all of it as what
+/// it was — a flight out of the circle and a divot where it came down — and
+/// flown in when it arrives. The lines say where the competition stands;
+/// the flight says what just happened to it, which a coach who looked down
+/// to write the mark missed.
+class SectorBoard extends StatefulWidget {
   const SectorBoard({
     super.key,
     required this.board,
@@ -48,9 +55,52 @@ class SectorBoard extends StatelessWidget {
   /// nobody says.
   final Color? backdrop;
 
+  /// How long a throw takes to come down on the board: the flight, then the
+  /// landing spreading out and settling. Long enough to follow with an eye
+  /// that was on the notebook a moment ago; short enough to be over before
+  /// the next thrower has walked into the ring.
+  static const flightTime = Duration(milliseconds: 1500);
+
+  @override
+  State<SectorBoard> createState() => _SectorBoardState();
+}
+
+class _SectorBoardState extends State<SectorBoard>
+    with SingleTickerProviderStateMixin {
+  /// 1 is a throw at rest. A board opened on a competition already under
+  /// way starts there: the throw it shows was taken before anybody was
+  /// looking, and flying it in again would be announcing old news.
+  late final AnimationController _flight = AnimationController(
+    vsync: this,
+    duration: SectorBoard.flightTime,
+    value: 1,
+  );
+
+  @override
+  void didUpdateWidget(SectorBoard old) {
+    super.didUpdateWidget(old);
+    final last = widget.board.last;
+    // A zoom rebuilds the board around the same throw, and must not throw
+    // it again.
+    if (last != null && last.key != old.board.last?.key) {
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+        _flight.value = 1;
+      } else {
+        _flight.forward(from: 0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _flight.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final board = widget.board;
     // Takes whatever room it is given — a board is worth the whole screen
     // between attempts, and the caller is the one that knows how much of it
     // there is.
@@ -58,15 +108,18 @@ class SectorBoard extends StatelessWidget {
       size: Size.infinite,
       painter: _SectorBoardPainter(
         board: board,
-        halfAngle: event.sectorHalfAngleDeg * math.pi / 180,
-        accent: accent,
+        flight: _flight,
+        halfAngle: widget.event.sectorHalfAngleDeg * math.pi / 180,
+        accent: widget.accent,
         grass: theme.colorScheme.primary,
         line: theme.colorScheme.outlineVariant,
         faint: theme.colorScheme.onSurfaceVariant,
         // What a name is set on. The card behind the board is opaque, so a
         // label can be lifted off the lines it crosses without the screen's
         // own sector art showing through the middle of it.
-        backdrop: backdrop ?? theme.colorScheme.surface,
+        backdrop: widget.backdrop ?? theme.colorScheme.surface,
+        ink: theme.colorScheme.onSurface,
+        foul: theme.colorScheme.error,
         // Off the theme rather than built here: the app names its type
         // once, and a bare TextStyle paints in the platform default.
         text: theme.textTheme.labelSmall ?? const TextStyle(),
@@ -76,18 +129,28 @@ class SectorBoard extends StatelessWidget {
 }
 
 class _SectorBoardPainter extends CustomPainter {
-  const _SectorBoardPainter({
+  _SectorBoardPainter({
     required this.board,
+    required this.flight,
     required this.halfAngle,
     required this.accent,
     required this.grass,
     required this.line,
     required this.faint,
     required this.backdrop,
+    required this.ink,
+    required this.foul,
     required this.text,
-  });
+  }) : super(repaint: flight);
 
   final MeetBoard board;
+
+  /// How far the last throw has got, 0 in the circle and 1 at rest.
+  final Animation<double> flight;
+
+  /// What somebody else's throw is drawn in, and what a foul is.
+  final Color ink;
+  final Color foul;
 
   /// Half the sector, in radians.
   final double halfAngle;
@@ -276,6 +339,8 @@ class _SectorBoardPainter extends CustomPainter {
       }
     }
 
+    _lastThrow(canvas, size, apex, yOf);
+
     // Labels, furthest first, each one kept clear of the one above it. Two
     // marks a centimeter apart are a real thing a competition does, and the
     // board still has to be readable when it happens — so a crowded label
@@ -316,6 +381,7 @@ class _SectorBoardPainter extends CustomPainter {
     // Without it the lines are decoration; with it the gap between two
     // marks can be read off the board without reading either label.
     _legend(canvas, size);
+    _lastCaption(canvas, size);
 
     for (var i = 0; i < board.marks.length; i++) {
       final mark = board.marks[i];
@@ -360,6 +426,186 @@ class _SectorBoardPainter extends CustomPainter {
     )..layout();
     legend.paint(canvas, Offset(8, size.height - legend.height - 5));
   }
+
+  /// The throw just taken: a flight out of the circle and a divot where it
+  /// came down, or a cross outside the sector line for a foul.
+  ///
+  /// Seen from above, the way the rest of the board is, so the flight runs
+  /// straight out along the ground — the height is in the implement being
+  /// lifted off its own shadow and swelling as it climbs, which is how a
+  /// camera on a gantry sees one. The throw starts at the bottom edge,
+  /// because the circle is below the box.
+  void _lastThrow(Canvas canvas, Size size, Offset apex,
+      double Function(double) yOf) {
+    final last = board.last;
+    if (last == null || last.kind == AttemptKind.pass) return;
+    final t = flight.value;
+    final fouled = last.kind == AttemptKind.foul;
+    final color = fouled ? foul : _throwColor(last);
+
+    // Where it came down. A foul was never measured, so it lands a third of
+    // the way up the band: outside the sector is the whole of what it says.
+    // A throw off either end of the band comes down just past that edge
+    // rather than off the card, where nobody would see it land.
+    final fraction = fouled
+        ? 0.3
+        : board.fractionOf(last.distance!).clamp(-0.04, 1.02).toDouble();
+    // [yOf] takes a distance, and this is a fraction of the band.
+    final y = yOf(board.near + fraction * (board.far - board.near));
+    final radius = apex.dy - y;
+    final angle = last.lateral * halfAngle;
+    Offset along(double r) =>
+        apex + Offset(math.sin(angle) * r, -math.cos(angle) * r);
+    final land = along(radius);
+    // Where the ray leaves the bottom of the box.
+    final from = (apex.dy - size.height - 4) / math.cos(angle);
+
+    const flightEnd = 0.55;
+    // Straight along the ground at one speed, the way an implement's shadow
+    // travels — the climb and the drop are in the height, not in the pace.
+    // Plain arithmetic rather than a [Curves] Bézier, so the page can say
+    // exactly the same thing.
+    final s = (t / flightEnd).clamp(0.0, 1.0);
+    final ground = along(from + (radius - from) * s);
+
+    // The trail, fading back towards the circle, bright while it is being
+    // drawn and settling to a thread once the throw has landed.
+    final settle = ((t - flightEnd) / (1 - flightEnd)).clamp(0.0, 1.0);
+    final trailAlpha = t < flightEnd ? 0.75 : 0.75 - 0.5 * settle;
+    canvas.drawLine(
+      along(from),
+      ground,
+      Paint()
+        ..strokeWidth = 1.6
+        ..strokeCap = StrokeCap.round
+        ..shader = LinearGradient(colors: [
+          color.withOpacity(0),
+          color.withOpacity(trailAlpha),
+        ]).createShader(Rect.fromPoints(along(from), ground)),
+    );
+
+    if (t < flightEnd) {
+      // In the air: the shadow on the ground and the implement above it,
+      // lifted and swollen by how high it is.
+      final height = math.sin(math.pi * s);
+      canvas.drawCircle(
+          ground, 2.5, Paint()..color = Colors.black.withOpacity(0.35));
+      canvas.drawCircle(
+        ground - Offset(0, 16 * height),
+        3.2 + 2.6 * height,
+        Paint()..color = color,
+      );
+      return;
+    }
+
+    // Down. The landing spreads out and fades, the way a divot throws up
+    // turf, and what is left is the divot.
+    if (settle < 1) {
+      canvas.drawCircle(
+        land,
+        4 + 16 * (1 - (1 - settle) * (1 - settle)),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..color = color.withOpacity(0.7 * (1 - settle)),
+      );
+    }
+    if (fouled) {
+      final arm = 4.0 + 1.5 * (1 - settle);
+      final cross = Paint()
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..color = color;
+      canvas
+        ..drawLine(land - Offset(arm, arm), land + Offset(arm, arm), cross)
+        ..drawLine(land - Offset(arm, -arm), land + Offset(arm, -arm), cross);
+    } else {
+      canvas
+        ..drawCircle(land, 6.5,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.2
+              ..color = color.withOpacity(0.55))
+        ..drawCircle(land, 3.2, Paint()..color = color);
+      // A best has its medal hung over the divot: dropped in once the throw
+      // is down, and caught by the light when it has stopped swinging —
+      // the same strike the card of that throw gets in the library.
+      if (last.personalBest) {
+        final strike = StrikeFrame(0.22 + 0.76 * settle);
+        const width = 11.0;
+        final lift = width * 1.4 * (1 - strike.drop);
+        canvas.saveLayer(
+            null, Paint()..color = Color.fromRGBO(0, 0, 0, strike.medalOpacity));
+        canvas.translate(land.dx + 7 + width / 2, land.dy - 22 - lift);
+        canvas.rotate(strike.swing);
+        paintMedal(canvas, const Offset(-width / 2, 0), width, Medal.gold,
+            glint: strike.glint);
+        canvas.restore();
+      }
+    }
+  }
+
+  /// What the last throw was, in the bottom-right corner — the one the
+  /// legend leaves, and one the sector never reaches either. Faded in as
+  /// the throw lands rather than before: a number that turned up while the
+  /// implement was still in the air would give the throw away.
+  void _lastCaption(Canvas canvas, Size size) {
+    final last = board.last;
+    if (last == null) return;
+    final shown = ((flight.value - 0.45) / 0.3).clamp(0.0, 1.0);
+    if (shown == 0) return;
+    final color = switch (last.kind) {
+      AttemptKind.foul => foul,
+      AttemptKind.pass => faint,
+      AttemptKind.mark => _throwColor(last),
+    };
+    final result = switch (last.kind) {
+      AttemptKind.foul => 'foul',
+      AttemptKind.pass => 'pass',
+      AttemptKind.mark => formatDistance(last.distance!, last.unit),
+    };
+    final base = text.copyWith(fontSize: 10.5);
+    final caption = TextPainter(
+      text: TextSpan(children: [
+        TextSpan(
+          text: '${last.caption}  ',
+          style: base.copyWith(
+              color: faint.withOpacity(0.85 * shown),
+              fontWeight: FontWeight.w600),
+        ),
+        TextSpan(
+          text: result,
+          style: base.copyWith(
+              color: color.withOpacity(shown), fontWeight: FontWeight.w700),
+        ),
+      ]),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: size.width * 0.55);
+    final at =
+        Offset(size.width - caption.width - 8, size.height - caption.height - 5);
+    caption.paint(canvas, at);
+    // Beside the caption as it is beside a mark everywhere else in the app.
+    if (last.personalBest) {
+      const width = 7.5;
+      canvas.saveLayer(null, Paint()..color = Color.fromRGBO(0, 0, 0, shown));
+      paintMedal(
+          canvas,
+          at + Offset(-width - 4, (caption.height - width * medalAspect) / 2),
+          width,
+          Medal.gold);
+      canvas.restore();
+    }
+  }
+
+  /// A throw by whoever the board is read for is in their color, since it
+  /// is their line it lands against; anybody else's is plain white.
+  ///
+  /// A personal best is in gold whoever threw it: it is the one throw on the
+  /// board that means the same thing to everybody watching.
+  Color _throwColor(MeetBoardThrow last) =>
+      last.personalBest ? personalBestGold : last.mine ? accent : ink;
 
   /// Whether a mark falls inside the band, and so has a line on the board
   /// rather than an arrow at the edge of it.
@@ -566,6 +812,7 @@ class _SectorBoardPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SectorBoardPainter old) =>
       old.board != board ||
+      old.flight != flight ||
       old.accent != accent ||
       old.halfAngle != halfAngle ||
       old.backdrop != backdrop ||

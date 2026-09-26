@@ -215,6 +215,8 @@ class AthleteScreen extends StatelessWidget {
                 child: _MarkTile(
                   mark: mark,
                   isPersonalBest: library.isPersonalBest(mark),
+                  celebrate: library.isFreshBest(mark),
+                  onCelebrated: () => library.celebrated(mark),
                   onTap: () => _editMark(context, library, mark),
                   onLongPress: () => _deleteMark(context, library, mark),
                 ),
@@ -244,6 +246,8 @@ class AthleteScreen extends StatelessWidget {
                   video: video,
                   title: titleFor(video),
                   isPersonalBest: library.isPersonalBest(video),
+                  celebrate: library.isFreshBest(video),
+                  onCelebrated: () => library.celebrated(video),
                   onTap: () => _openThrow(context, video, profile.throws),
                   onLongPress: () => showThrowActions(context, video),
                 );
@@ -1567,12 +1571,16 @@ class _MarkTile extends StatelessWidget {
   const _MarkTile({
     required this.mark,
     required this.isPersonalBest,
+    this.celebrate = false,
+    this.onCelebrated,
     required this.onTap,
     required this.onLongPress,
   });
 
   final ThrowMark mark;
   final bool isPersonalBest;
+  final bool celebrate;
+  final VoidCallback? onCelebrated;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
@@ -1618,7 +1626,11 @@ class _MarkTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              if (isPersonalBest) const PersonalBestMedal(size: 16),
+              if (isPersonalBest)
+                PersonalBestMedal(
+                    size: 16,
+                    celebrate: celebrate,
+                    onCelebrated: onCelebrated),
               const SizedBox(width: 6),
               Text(
                 formatDistance(mark.distance, mark.distanceUnit),

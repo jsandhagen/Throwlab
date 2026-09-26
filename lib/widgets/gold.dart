@@ -113,29 +113,124 @@ Shader _ramp(List<Color> metal, Rect bounds) => LinearGradient(
 /// clip, and painting it here keeps a best exactly the same size as every
 /// other card instead of two pixels fatter.
 class GoldEdgePainter extends CustomPainter {
-  const GoldEdgePainter({this.radius = 16, this.width = 2});
+  const GoldEdgePainter({
+    this.radius = 16,
+    this.width = 2,
+    this.drawn = 1,
+    this.glint,
+    this.opacity = 1,
+  });
 
   final double radius;
   final double width;
 
+  /// How much of the frame is drawn, traced both ways from the top-right
+  /// corner — where the medal hangs — to meet at the bottom left. 1 is the
+  /// whole frame, which is every frame but the one being struck.
+  final double drawn;
+
+  /// Where a bright band of light is running across the metal, 0 at the
+  /// top-left corner and 1 at the bottom right; null for none.
+  final double? glint;
+
+  final double opacity;
+
   @override
   void paint(Canvas canvas, Size size) {
+    if (drawn <= 0 || opacity <= 0) return;
     // Half the stroke falls either side of the path, so inset by that much
     // to keep all of it inside the clip.
     final rect = Offset.zero & size;
     final inset = rect.deflate(width / 2);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(inset, Radius.circular(radius - width / 2)),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = width
-        ..shader = goldShader(rect),
-    );
+    final rrect =
+        RRect.fromRectAndRadius(inset, Radius.circular(radius - width / 2));
+    final path = drawn >= 1 ? (Path()..addRRect(rrect)) : _traced(rrect);
+    final gold = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round
+      ..shader = goldShader(rect);
+    if (opacity < 1) {
+      canvas.saveLayer(rect, Paint()..color = Color.fromRGBO(0, 0, 0, opacity));
+    }
+    canvas.drawPath(path, gold);
+    if (glint != null) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round
+          ..shader = glintShader(rect, glint!),
+      );
+    }
+    if (opacity < 1) canvas.restore();
+  }
+
+  /// The part of the frame drawn so far: two runs out of the top-right
+  /// corner, one each way, which meet at the far corner as [drawn] reaches
+  /// 1.
+  Path _traced(RRect rrect) {
+    final metric = (Path()..addRRect(rrect)).computeMetrics().first;
+    final length = metric.length;
+    // Where along the outline the top-right corner is. Found rather than
+    // assumed, because where a rounded rectangle's path starts is the
+    // engine's business.
+    final corner = Offset(rrect.right, rrect.top);
+    var start = 0.0;
+    var nearest = double.infinity;
+    for (var at = 0.0; at < length; at += 2) {
+      final gap = (metric.getTangentForOffset(at)!.position - corner).distance;
+      if (gap < nearest) {
+        nearest = gap;
+        start = at;
+      }
+    }
+    final half = length * drawn / 2;
+    final out = Path();
+    void run(double from, double to) {
+      // A run that wraps past the end of the outline is two extracts.
+      if (from < 0) {
+        out.addPath(metric.extractPath(length + from, length), Offset.zero);
+        from = 0;
+      }
+      if (to > length) {
+        out.addPath(metric.extractPath(0, to - length), Offset.zero);
+        to = length;
+      }
+      out.addPath(metric.extractPath(from, to), Offset.zero);
+    }
+
+    run(start - half, start + half);
+    return out;
   }
 
   @override
   bool shouldRepaint(GoldEdgePainter old) =>
-      old.radius != radius || old.width != width;
+      old.radius != radius ||
+      old.width != width ||
+      old.drawn != drawn ||
+      old.glint != glint ||
+      old.opacity != opacity;
+}
+
+/// A narrow band of light across [bounds], lit from the same corner the
+/// ramp is, centered [at] of the way along the diagonal. Laid over metal
+/// that has just been struck, it runs across it once — which is what makes
+/// a best that has just been set read as new rather than as one more medal.
+Shader glintShader(Rect bounds, double at) {
+  const width = 0.14;
+  double stop(double x) => x.clamp(0.0, 1.0).toDouble();
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: const [
+      Color(0x00FFFFFF),
+      Color(0xE6FFFBEA),
+      Color(0x00FFFFFF),
+    ],
+    stops: [stop(at - width), stop(at), stop(at + width)],
+  ).createShader(bounds);
 }
 
 /// A first-place medal: a struck disc with a star cut clean out of it,
@@ -197,14 +292,157 @@ class PlaceMedal extends StatelessWidget {
 /// The gold a personal best wears. The same disc as a first place, named
 /// apart because it means something else: a best is against the athlete's
 /// own record book, a placing is against the field in front of them.
+///
+/// [celebrate] is for the one that has just been won: it drops in on its
+/// ribbon, swings, and catches the light once — see [PersonalBestStrike].
 class PersonalBestMedal extends StatelessWidget {
-  const PersonalBestMedal({super.key, this.size = 20});
+  const PersonalBestMedal({
+    super.key,
+    this.size = 20,
+    this.celebrate = false,
+    this.onCelebrated,
+  });
 
   final double size;
+  final bool celebrate;
+
+  /// Called once it has been struck, so whoever said it was new can stop
+  /// saying so.
+  final VoidCallback? onCelebrated;
 
   @override
-  Widget build(BuildContext context) => PlaceMedal(
-      medal: Medal.gold, size: size, label: 'Personal best');
+  Widget build(BuildContext context) {
+    final medal =
+        PlaceMedal(medal: Medal.gold, size: size, label: 'Personal best');
+    if (!celebrate) return medal;
+    return PersonalBestStrike(
+      onStruck: onCelebrated,
+      builder: (context, strike) => strike.medal(medal, size),
+    );
+  }
+}
+
+/// The moment a best is won, as one animation both halves of the gold hang
+/// off: the frame traced out of the medal's corner, the medal dropping in
+/// on its ribbon and swinging still, and a band of light run across the
+/// metal once it has.
+///
+/// Played once, when it is built — a best is only new the first time
+/// anybody sees it. Reduced motion skips straight to the end, which is
+/// exactly what a best looks like after the moment is over.
+class PersonalBestStrike extends StatefulWidget {
+  const PersonalBestStrike({super.key, required this.builder, this.onStruck});
+
+  final Widget Function(BuildContext context, StrikeFrame strike) builder;
+  final VoidCallback? onStruck;
+
+  static const duration = Duration(milliseconds: 1900);
+
+  @override
+  State<PersonalBestStrike> createState() => _PersonalBestStrikeState();
+}
+
+class _PersonalBestStrikeState extends State<PersonalBestStrike>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: PersonalBestStrike.duration);
+
+  @override
+  void initState() {
+    super.initState();
+    // Told only once it is over. Whoever said the best was new goes on
+    // saying so until then, so a rebuild halfway through — the entry that
+    // set it saving, a poll landing — keeps the strike rather than swapping
+    // it for a medal at rest.
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) widget.onStruck?.call();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+        _controller.value = 1;
+        widget.onStruck?.call();
+      } else {
+        _controller.forward();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) =>
+            widget.builder(context, StrikeFrame(_controller.value)),
+      );
+}
+
+/// Where a [PersonalBestStrike] has got to, and what each part of the gold
+/// is doing at that point.
+class StrikeFrame {
+  const StrikeFrame(this.t);
+
+  /// 0 to 1 over [PersonalBestStrike.duration].
+  final double t;
+
+  static double _span(double t, double from, double to) =>
+      ((t - from) / (to - from)).clamp(0.0, 1.0).toDouble();
+
+  /// How much of the frame is traced.
+  double get drawn =>
+      Curves.easeInOutCubic.transform(_span(t, 0, 0.42));
+
+  /// The medal: how far it has dropped, how hard it is still swinging, and
+  /// whether it is there yet.
+  ///
+  /// The drop overshoots and settles back, written out rather than taken
+  /// from [Curves.easeOutBack] — a Bézier the spectator's page would only
+  /// be approximating — so the page can say exactly the same curve.
+  double get drop {
+    final p = _span(t, 0.22, 0.58) - 1;
+    return 1 + 2.70158 * p * p * p + 1.70158 * p * p;
+  }
+  double get medalOpacity => _span(t, 0.22, 0.3);
+  double get swing {
+    final p = _span(t, 0.4, 0.95);
+    if (p == 0 || p == 1) return 0;
+    return 0.32 * math.pow(1 - p, 2) * math.sin(p * math.pi * 3.5);
+  }
+
+  /// The band of light across the metal, once the medal has come to rest.
+  double? get glint {
+    final p = _span(t, 0.58, 0.98);
+    return p == 0 || p == 1 ? null : -0.2 + 1.4 * Curves.easeInOut.transform(p);
+  }
+
+  /// [child], a medal [size] wide, dropping in and swinging from the top
+  /// of its ribbon — where a medal is held from.
+  Widget medal(Widget child, double size) => Opacity(
+        opacity: medalOpacity,
+        child: Transform.translate(
+          offset: Offset(0, -size * 1.4 * (1 - drop)),
+          child: Transform.rotate(
+            angle: swing,
+            alignment: Alignment.topCenter,
+            child: glint == null
+                ? child
+                : Semantics(
+                    label: 'Personal best',
+                    child: SizedBox(
+                      width: size,
+                      height: size * medalAspect,
+                      child: CustomPaint(
+                          painter: _MedalPainter(Medal.gold, glint: glint)),
+                    ),
+                  ),
+          ),
+        ),
+      );
 }
 
 /// The medal as a PNG, struck by the same painter the app pins on a card.
@@ -227,10 +465,29 @@ Future<Uint8List> medalPng(Medal medal, {int size = 48}) async {
   }
 }
 
+/// Paints a medal [width] wide with its top-left corner at [topLeft] — for
+/// a painter that has one to hang on something it draws, like the board's
+/// divot under a best, and so cannot put a widget there. Its height is
+/// [medalAspect] of its width, the way [PlaceMedal] is sized.
+void paintMedal(Canvas canvas, Offset topLeft, double width, Medal medal,
+    {double? glint}) {
+  canvas.save();
+  canvas.translate(topLeft.dx, topLeft.dy);
+  _MedalPainter(medal, glint: glint)
+      .paint(canvas, Size(width, width * _MedalPainter.aspect));
+  canvas.restore();
+}
+
+/// A medal's height over its width.
+const double medalAspect = _MedalPainter.aspect;
+
 class _MedalPainter extends CustomPainter {
-  const _MedalPainter(this.metal);
+  const _MedalPainter(this.metal, {this.glint});
 
   final Medal metal;
+
+  /// Where a band of light is running across it — see [glintShader].
+  final double? glint;
 
   /// The ribbon, as fractions of the disc's diameter: how tall it stands,
   /// how much air is under it, how wide it is across the top, and how far
@@ -311,8 +568,18 @@ class _MedalPainter extends CustomPainter {
       ..drawPath(
         _star(center, radius * 0.58),
         Paint()..blendMode = BlendMode.clear,
-      )
-      ..restore();
+      );
+    // On the metal only: source-atop keeps the light off the star's hole
+    // and off the air round the ribbon.
+    if (glint != null) {
+      canvas.drawRect(
+        bounds,
+        Paint()
+          ..blendMode = BlendMode.srcATop
+          ..shader = glintShader(bounds, glint!),
+      );
+    }
+    canvas.restore();
   }
 
   /// A five-pointed star, one point straight up. Chunky rather than
@@ -333,5 +600,6 @@ class _MedalPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MedalPainter old) => old.metal != metal;
+  bool shouldRepaint(_MedalPainter old) =>
+      old.metal != metal || old.glint != glint;
 }

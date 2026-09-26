@@ -768,6 +768,42 @@ void main() {
       return MeetCompetition(ThrowEvent.discus, 1, entries);
     }
 
+    test('knows who threw last', () {
+      // Round 2: Ana and Okoye have had it, Smith is up.
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': [41.20, 42.00],
+          'M. Okoye': [44.90, null],
+          'J. Smith': [38.44],
+        }),
+        rounds: 6,
+      );
+      expect(flight.previous?.entry.athlete, 'M. Okoye');
+      expect(flight.previous?.round, 1);
+    });
+
+    test('looks back into the round before at the top of the order', () {
+      // A new round has started with nobody through it yet: the last throw
+      // was the end of the one before.
+      final flight = MeetFlight(
+        field({
+          'Ana Diaz': [41.20],
+          'M. Okoye': [44.90],
+        }),
+        rounds: 6,
+      );
+      expect(flight.previous?.entry.athlete, 'M. Okoye');
+      expect(flight.previous?.round, 0);
+    });
+
+    test('has nobody before the first throw', () {
+      final flight = MeetFlight(
+        field({'Ana Diaz': [], 'M. Okoye': []}),
+        rounds: 6,
+      );
+      expect(flight.previous, isNull);
+    });
+
     test('is on the earliest round anybody is still owed', () {
       final flight = MeetFlight(
         field({
@@ -1289,6 +1325,38 @@ void main() {
     test('reads a name off the spelling when nobody has said', () {
       final board = MeetBoard(table(field([('Anna Sofia', 44.90, true)])));
       expect(board.marks.single.boardName, 'Sofia');
+    });
+
+    test('draws the last throw where it came down, and a foul outside', () {
+      final competition = field([
+        ('Ana Diaz', 41.20, false),
+        ('M. Okoye', 44.90, false),
+      ]);
+      final okoye = competition.entries[1];
+      okoye.setAttempt(1, MeetAttempt.untracked(43.62));
+      final standings = table(competition);
+      final board =
+          MeetBoard(standings, previous: (entry: okoye, round: 1));
+      final last = board.last!;
+      // Short of his best: the board's own lines are untouched, and this is
+      // the only thing on it that says he threw.
+      expect(last.distance, 43.62);
+      expect(last.improved, isFalse);
+      expect(last.caption, 'Okoye · R2');
+      expect(last.lateral.abs(), lessThan(1));
+      // The same throw lands in the same place every time it is drawn.
+      expect(
+          MeetBoard(standings, previous: (entry: okoye, round: 1))
+              .last!
+              .lateral,
+          last.lateral);
+
+      okoye.setAttempt(1, MeetAttempt.foul());
+      final foul =
+          MeetBoard(table(competition), previous: (entry: okoye, round: 1))
+              .last!;
+      expect(foul.distance, isNull);
+      expect(foul.lateral.abs(), greaterThan(1));
     });
 
     test('draws the podium, furthest first', () {

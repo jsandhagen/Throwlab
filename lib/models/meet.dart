@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'division.dart';
 import 'meet_conditions.dart';
 import 'throw_event.dart';
@@ -1006,6 +1008,34 @@ class MeetFlight {
   MeetEntry? get onDeck => hasOrder && waiting.length > 1 ? waiting[1] : null;
   MeetEntry? get inTheHole =>
       hasOrder && waiting.length > 2 ? waiting[2] : null;
+
+  /// Who threw last, and which of their rounds it was — the throw everybody
+  /// at the ring has just watched and the one a coach glanced down too late
+  /// to see land.
+  ///
+  /// Read off the order rather than off a clock, the same way everything
+  /// else here is: the last of this round's throwers ahead of whoever is
+  /// up, else the last of the round before. Null before anybody in this
+  /// group of throws has thrown — a flight walking in has no previous
+  /// thrower, whatever the flight before it did.
+  ({MeetEntry entry, int round})? get previous {
+    if (round < limit) {
+      final up = next == null ? field.length : field.indexOf(next!);
+      for (var i = up - 1; i >= 0; i--) {
+        if (field[i].attemptAt(round) != null) {
+          return (entry: field[i], round: round);
+        }
+      }
+    }
+    final before = math.min(round, limit) - 1;
+    if (before < 0) return null;
+    for (var i = field.length - 1; i >= 0; i--) {
+      if (field[i].attemptAt(before) != null) {
+        return (entry: field[i], round: before);
+      }
+    }
+    return null;
+  }
 
   /// How many of this round have been thrown, and out of how many. The pair
   /// a progress bar is drawn from.

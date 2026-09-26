@@ -10,7 +10,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `sector_transition` (one screen to the next, between two sector lines), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
@@ -97,6 +97,24 @@ run `playwright install`), and it asserts nothing: looking at the three
 files is the review. The competition it prints has a cut in it on purpose,
 so the cut line and the heading over the table are drawn on both sides
 rather than being the parity nobody looked at.
+
+Motion is reviewed the same way, as frames rather than as one still:
+
+```sh
+flutter test --update-goldens tool/preview/motion_preview.dart
+node tool/preview/flipbook.js   # build/preview/motion/site/index.html
+```
+
+The first steps each animation on the test clock and shoots it every 40 ms
+(20 for the page transition): the live board as three throws come in — a
+rival's short of his best, a foul, and one of the coach's own that is a
+personal best — a card in the library striking a new best, and opening an
+athlete and going back. It also writes the spectator's page with the board's
+four states baked in, and the second flies the page through them on
+Playwright's fake clock — paused, or a screenshot's own time is page time
+too — so the page's flight is looked at beside the app's, and packs the lot
+into one page that plays each scene back at the speed it was shot at. Look
+at them in motion; a single frame of an animation says nothing about it.
 
 The results sheet is reviewed the same way, except that the artifact is the
 PDF itself — it writes no golden and asserts nothing, because looking at the
@@ -836,6 +854,41 @@ like the app rather than a bare Material default.
   the screen and the page are handed the same name already cut, the way they
   are handed every mark already spelled. Nothing but the label moves:
   `MeetBoardMark.name` stays the athlete tag every throw of theirs carries.
+- The board draws the throw just taken as well as the standing
+  (`MeetBoard.last`, a `MeetBoardThrow`), because the lines only say where
+  the competition stands: a throw short of its athlete's best moves none of
+  them, so a coach who looked down to write the mark had nothing on the
+  board to say what happened. It is drawn as what it was — a flight out of
+  the circle below the box and a divot where it came down, a cross outside
+  the sector line for a foul, nothing for a pass — with who and how far in
+  the bottom-right corner, the one the scale's legend leaves. Who threw last
+  is `MeetFlight.previous`, read off the order like everything else there:
+  the last of this round ahead of whoever is up, else the end of the round
+  before. A meet records how far and never which way, so where across the
+  sector it lands (`lateral`) is spread off the athlete and the round — FNV,
+  so it is the same on every device — and handed to the page already worked
+  out, like every other answer. A new throw flies in (`SectorBoard` compares
+  `key`s, so a zoom does not throw it again); the one a board is opened on is
+  old news and starts at rest. Along the ground at one speed, the height in
+  the implement lifted off its shadow — and the curves written out as
+  arithmetic rather than taken from `Curves`, whose Béziers the page could
+  only approximate. A personal best lands in gold whoever threw it, with the
+  medal hung over the divot and struck the way a card's is.
+- A best that has just been set is struck, once (`PersonalBestStrike`): the
+  gold frame traced out of the medal's corner both ways, the medal dropped
+  in on its ribbon and swinging still, and a band of light run across the
+  metal (`glintShader`) when it has stopped. `VideoLibrary.isFreshBest` is
+  what says it is new — a throw that took the best off another one, so an
+  athlete's first measured throw, a best corrected by a centimeter and one
+  handed back by a delete are none of them — and `celebrated` is called when
+  the strike is *over*, not when it starts, or the rebuild that saving the
+  mark causes would swap it for a medal at rest halfway through. Reduced
+  motion goes straight to the end, which is what a best looks like anyway.
+- Screens open out of the throwing circle (`SectorPageTransitionsBuilder`,
+  installed in the theme): two sector lines leave the middle of the bottom
+  edge together, rest a moment at the real 34.92° with three distance arcs
+  across them, and carry on out until the new screen is all of it. At rest
+  the page is the page — no clip is kept on it once the transition is over.
 - A meet carries `MeetConditions`: the sky, the temperature as it was
   written (in the unit it was written in — nothing computes with it, so
   converting would only round a number somebody typed exactly), the wind as

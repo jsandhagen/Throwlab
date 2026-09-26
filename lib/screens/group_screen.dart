@@ -83,6 +83,8 @@ class GroupScreen extends StatelessWidget {
                       video: video,
                       title: titleFor(video),
                       isPersonalBest: library.isPersonalBest(video),
+                      celebrate: library.isFreshBest(video),
+                      onCelebrated: () => library.celebrated(video),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(

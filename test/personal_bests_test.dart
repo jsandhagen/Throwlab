@@ -176,6 +176,45 @@ void main() {
       expect(library.isPersonalBest(first), isFalse);
     });
 
+    test('a best that takes one off another is new until it is shown',
+        () async {
+      final library = VideoLibrary();
+      await library.load();
+      final first = _throw('first', distance: 14.10);
+      await library.add(first);
+      // A first measured throw is trivially the best, and nothing to strike
+      // a medal for.
+      expect(library.isFreshBest(first), isFalse);
+
+      final second = _throw('second', distance: 15.44);
+      await library.add(second);
+      expect(library.isFreshBest(second), isTrue);
+
+      library.celebrated(second);
+      expect(library.isFreshBest(second), isFalse);
+      expect(library.isPersonalBest(second), isTrue);
+    });
+
+    test('a corrected best, and one handed back, are not new', () async {
+      final library = VideoLibrary();
+      await library.load();
+      final holder = _throw('holder', distance: 14.10);
+      final runnerUp = _throw('runner-up', distance: 13.00);
+      await library.add(holder);
+      await library.add(runnerUp);
+
+      // Put right by a centimeter: still the same best.
+      holder.distance = 14.11;
+      await library.update(holder);
+      expect(library.isFreshBest(holder), isFalse);
+
+      // The holder deleted: the mark goes back to a throw that already had
+      // it once, which is not a best being set.
+      await library.remove(holder.id);
+      expect(library.isPersonalBest(runnerUp), isTrue);
+      expect(library.isFreshBest(runnerUp), isFalse);
+    });
+
     test('deleting the record holder hands the mark back', () async {
       final library = VideoLibrary();
       await library.load();

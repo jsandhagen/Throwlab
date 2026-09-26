@@ -126,6 +126,7 @@ String spectatorPage(
       // The slant every leaning edge on the page uses, which is the one the
       // sector opens at — the same number the app's own bar leans by.
       .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2))
+      .replaceFirst('/*MEDAL_ASPECT*/', medalAspect.toStringAsFixed(4))
       .replaceFirst('/*DISCUS*/', implement(discusParts()))
       .replaceFirst('/*HAMMER*/', implement(hammerParts()))
       .replaceFirst('/*JAVELIN*/', implement(javelinParts()))
@@ -892,6 +893,12 @@ const String _page = r'''<!doctype html>
       }
     });
 
+    /* The throw just taken, over the lines and under the labels — the
+       order the app paints it in. Drawn by fly() rather than here, because
+       it moves and a poll must not restart it. */
+    flying = b.last ? { g: g, last: b.last } : null;
+    out.push('<g id="flight"></g>');
+
     labels.forEach(function (L) {
       var m = L.m, ink = INK[m.line] || "var(--text)";
       var named = (m.label ? m.label + "  " : "") + m.name;
@@ -920,8 +927,146 @@ const String _page = r'''<!doctype html>
         '" fill="var(--dim)" fill-opacity="0.7" font-size="10" ' +
         'font-weight="600">' + esc(b.gridLabel) + "</text>");
     }
+    out.push('<g id="flight-cap"></g>');
     out.push("</svg>");
     return out.join("");
+  }
+
+  /* ---- the last throw ---------------------------------------------- */
+  /* The throw everybody at the ring just watched, flown in the way the
+     app flies it (SectorBoard._lastThrow): out of the circle below the
+     box, lifted off its own shadow while it is in the air, and down as a
+     divot, or as a cross outside the sector line for a foul. Where it came
+     down is the feed's — how far up the band and which way across — so the
+     page places nothing of its own. */
+  var FLIGHT_MS = 1500, FLIGHT_END = 0.55;
+  var flying = null, flownKey = null, flownAt = 0, flyFrame = 0;
+
+  function easeOut(x) { return 1 - (1 - x) * (1 - x); }
+  function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }
+
+  /* Starts the flight when the throw is a new one. The first throw a page
+     is opened on was taken before anybody was looking, so it starts at
+     rest — as the app's board does. */
+  function launch(last) {
+    if (!last) return;
+    if (flownKey !== null && last.key !== flownKey) flownAt = Date.now();
+    flownKey = last.key;
+  }
+
+  function fly() {
+    cancelAnimationFrame(flyFrame);
+    var body = el("flight"), cap = el("flight-cap");
+    if (!flying || !body || !cap) return;
+    var reduce = window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var t = reduce ? 1 : clamp((Date.now() - flownAt) / FLIGHT_MS, 0, 1);
+    body.innerHTML = flightAt(flying.g, flying.last, t);
+    cap.innerHTML = captionAt(flying.g, flying.last, t);
+    if (t < 1) flyFrame = requestAnimationFrame(fly);
+  }
+
+  function flightAt(g, last, t) {
+    if (last.kind === "pass") return "";
+    var fouled = last.kind === "foul";
+    var ink = fouled ? "var(--bad)" : last.pb ? "var(--first)"
+      : last.mine ? "var(--tint)" : "var(--text)";
+    var f = fouled ? 0.3 : clamp(last.fraction, -0.04, 1.02);
+    var radius = g.ay - yAt(g, f), angle = last.lateral * g.half;
+    function along(r) {
+      return { x: g.ax + Math.sin(angle) * r, y: g.ay - Math.cos(angle) * r };
+    }
+    var land = along(radius);
+    var from = (g.ay - g.h - 4) / Math.cos(angle), start = along(from);
+    var s = clamp(t / FLIGHT_END, 0, 1);
+    var ground = along(from + (radius - from) * s);
+    var settle = clamp((t - FLIGHT_END) / (1 - FLIGHT_END), 0, 1);
+    var alpha = t < FLIGHT_END ? 0.75 : 0.75 - 0.5 * settle;
+    var out = ['<defs><linearGradient id="trail" gradientUnits="userSpaceOnUse"' +
+      ' x1="' + start.x + '" y1="' + start.y + '" x2="' + ground.x +
+      '" y2="' + ground.y + '"><stop offset="0" stop-color="' + ink +
+      '" stop-opacity="0"/><stop offset="1" stop-color="' + ink +
+      '" stop-opacity="' + alpha + '"/></linearGradient></defs>',
+      '<path d="M ' + start.x + " " + start.y + " L " + ground.x + " " +
+      ground.y + '" stroke="url(#trail)" stroke-width="1.6" ' +
+      'stroke-linecap="round"/>'];
+    if (t < FLIGHT_END) {
+      var height = Math.sin(Math.PI * s);
+      out.push('<circle cx="' + ground.x + '" cy="' + ground.y +
+        '" r="2.5" fill="#000" fill-opacity="0.35"/>');
+      out.push('<circle cx="' + ground.x + '" cy="' + (ground.y - 16 * height) +
+        '" r="' + (3.2 + 2.6 * height) + '" fill="' + ink + '"/>');
+      return out.join("");
+    }
+    if (settle < 1) {
+      out.push('<circle cx="' + land.x + '" cy="' + land.y + '" r="' +
+        (4 + 16 * easeOut(settle)) + '" fill="none" stroke="' + ink +
+        '" stroke-width="1.6" stroke-opacity="' + (0.7 * (1 - settle)) + '"/>');
+    }
+    if (fouled) {
+      var arm = 4 + 1.5 * (1 - settle);
+      out.push('<path d="M ' + (land.x - arm) + " " + (land.y - arm) + " L " +
+        (land.x + arm) + " " + (land.y + arm) + " M " + (land.x - arm) + " " +
+        (land.y + arm) + " L " + (land.x + arm) + " " + (land.y - arm) +
+        '" stroke="' + ink + '" stroke-width="2" stroke-linecap="round"/>');
+    } else {
+      out.push('<circle cx="' + land.x + '" cy="' + land.y +
+        '" r="6.5" fill="none" stroke="' + ink +
+        '" stroke-width="1.2" stroke-opacity="0.55"/>');
+      out.push('<circle cx="' + land.x + '" cy="' + land.y + '" r="3.2" fill="' +
+        ink + '"/>');
+      /* A best has the medal the app strikes for it hung over the divot,
+         dropped in once the throw is down and swinging still — the app's
+         own pixels, as everywhere else the page pins one. */
+      if (last.pb) out.push(medalAt(land, settle));
+    }
+    return out.join("");
+  }
+
+  var MEDAL_ASPECT = /*MEDAL_ASPECT*/;
+  function medalAt(land, settle) {
+    var t = 0.22 + 0.76 * settle, w = 11;
+    function span(a, b) { return clamp((t - a) / (b - a), 0, 1); }
+    /* The same curve as StrikeFrame: easeOutBack on the drop, a swing that
+       dies away over three and a half half-turns. */
+    var p = span(0.22, 0.58) - 1;
+    var drop = 1 + 2.70158 * p * p * p + 1.70158 * p * p;
+    var q = span(0.4, 0.95);
+    var swing = q === 0 || q === 1 ? 0
+      : 0.32 * Math.pow(1 - q, 2) * Math.sin(q * Math.PI * 3.5);
+    var cx = land.x + 7 + w / 2, top = land.y - 22 - w * 1.4 * (1 - drop);
+    return '<g opacity="' + span(0.22, 0.3) + '" transform="translate(' + cx +
+      " " + top + ") rotate(" + (swing * 180 / Math.PI) + ')"><image href="' +
+      base + '/pb.png" x="' + (-w / 2) + '" y="0" width="' + w +
+      '" height="' + (w * MEDAL_ASPECT) + '"/></g>';
+  }
+
+  /* What the last throw was, in the bottom-right corner, faded in as it
+     lands rather than while it is still in the air. */
+  function captionAt(g, last, t) {
+    var shown = clamp((t - 0.45) / 0.3, 0, 1);
+    if (!shown) return "";
+    var ink = last.kind === "foul" ? "var(--bad)"
+      : last.kind === "pass" ? "var(--dim)"
+      : last.pb ? "var(--first)"
+      : last.mine ? "var(--tint)" : "var(--text)";
+    var result = last.kind === "mark" ? last.mark : last.kind;
+    /* Beside the caption as it is beside a mark everywhere else. Measured,
+       like every label on the board, so it sits against the type. */
+    var medal = "";
+    if (last.pb) {
+      var w = textWidth(last.caption + "\u00a0\u00a0", 10.5, 600) +
+        textWidth(result, 10.5, 700);
+      medal = '<image href="' + base + '/pb.png" opacity="' + shown +
+        '" x="' + (g.w - 8 - w - 11.5) + '" y="' + (g.h - 9.5 - 7.5 * MEDAL_ASPECT / 2) +
+        '" width="7.5" height="' + (7.5 * MEDAL_ASPECT) + '"/>';
+    }
+    return medal + '<text x="' + (g.w - 8) + '" y="' + (g.h - 5) +
+      '" text-anchor="end" font-size="10.5">' +
+      '<tspan fill="var(--dim)" fill-opacity="' + (0.85 * shown) +
+      '" font-weight="600">' + esc(last.caption) + "\u00a0\u00a0</tspan>" +
+      '<tspan fill="' + ink + '" fill-opacity="' + shown +
+      '" font-weight="700">' + esc(result) + "</tspan></text>";
   }
 
   /* Measured rather than counted: the app lays a label out with a real
@@ -1233,8 +1378,11 @@ const String _page = r'''<!doctype html>
         b.setAttribute("aria-pressed", String(b.dataset.tab === tab));
       });
 
+    launch(data.board && data.board.last);
+    flying = null;
     el("view").innerHTML = tab === "live" ? liveView(data)
       : tab === "series" ? seriesView(data) : standingsView(data);
+    fly();
     el("sheet").setAttribute("href", base + "/results.pdf");
     /* The sector is laid out from where the bar sits, and the bar does not
        sit anywhere until the header above it has its meet on it. */

@@ -88,6 +88,129 @@ class MeetBoardMark {
       };
 }
 
+/// The throw everybody at the ring has just watched: who took it, which
+/// round it was, and where it came down.
+///
+/// Not a line. The board's lines are where the competition *stands*, and a
+/// throw that fell short of its athlete's best leaves every one of them
+/// where it was — which is exactly why a coach who looked down at the
+/// wrong moment could not tell from the board what had just happened. So
+/// it is drawn as what it was: a flight out of the circle and a divot where
+/// it landed, and a foul as one that came down outside the sector.
+class MeetBoardThrow {
+  const MeetBoardThrow({
+    required this.entryId,
+    required this.round,
+    required this.kind,
+    required this.name,
+    required this.boardName,
+    required this.unit,
+    required this.lateral,
+    this.distance,
+    this.place,
+    this.improved = false,
+    this.mine = false,
+    this.personalBest = false,
+  });
+
+  final String entryId;
+
+  /// From 0, like every round in the app.
+  final int round;
+
+  final AttemptKind kind;
+
+  /// The athlete tag, and the name a board says it by.
+  final String name;
+  final String boardName;
+
+  /// Meters; null for a foul or a pass, which were never measured.
+  final double? distance;
+  final DistanceUnit unit;
+
+  /// Where they stand now, with this throw counted.
+  final int? place;
+
+  /// Whether this throw is the one they are now placed on — it moved their
+  /// line, rather than landing short of it.
+  final bool improved;
+
+  /// Whether it was thrown by somebody the board is being read for, whose
+  /// color it lands in — see [BoardLine.mine].
+  final bool mine;
+
+  /// Whether it is the furthest the athlete has ever thrown this implement
+  /// — the one moment on the board worth striking in gold.
+  final bool personalBest;
+
+  /// Where across the sector it came down, as a fraction of the half-angle
+  /// either side of the middle: inside ±1 for a legal throw, outside it for
+  /// a foul.
+  ///
+  /// A meet records how far, never which way, so this is not a measurement.
+  /// It is spread off the athlete and the round so two throws in a row do
+  /// not land in one spot, and so the phone and the page — which are handed
+  /// it already worked out — put the divot in the same place.
+  final double lateral;
+
+  /// What changes when there is a new throw to watch. A mark corrected in
+  /// place is a new throw as far as the board is concerned: it lands again.
+  String get key => '$entryId:$round:${kind.name}:${distance ?? ''}';
+
+  /// Whose throw and which round, the way the corner of the board says it:
+  /// 'Achebe · R3'.
+  String get caption => '$boardName · R${round + 1}';
+
+  static MeetBoardThrow? of(
+    MeetStandings standings,
+    ({MeetEntry entry, int round})? previous, {
+    String Function(String athlete)? boardNames,
+    bool mine = false,
+    bool Function(ThrowResult result)? isPersonalBest,
+  }) {
+    if (previous == null) return null;
+    final entry = previous.entry;
+    final attempt = entry.attemptAt(previous.round);
+    if (attempt == null) return null;
+    final place = standings.placeOf(entry.id);
+    final distance = place?.series.distanceAt(previous.round);
+    // Null for the rest of the field, whose throws never reach the record
+    // book and so hold no bests.
+    final result = place?.series.resultAt(previous.round);
+    final seed = _spread('${entry.id}#${previous.round}');
+    return MeetBoardThrow(
+      entryId: entry.id,
+      round: previous.round,
+      kind: attempt.kind,
+      name: entry.athlete,
+      boardName: boardNames?.call(entry.athlete) ?? boardNameOf(entry.athlete),
+      distance: attempt.kind == AttemptKind.mark ? distance : null,
+      unit: place?.series.unitAt(previous.round) ?? DistanceUnit.meters,
+      place: place?.best == null ? null : place!.place,
+      improved: distance != null && place?.series.bestRound == previous.round,
+      mine: mine,
+      personalBest: attempt.kind == AttemptKind.mark && result != null &&
+          (isPersonalBest?.call(result) ?? false),
+      // Inside the middle two thirds for a legal throw, where most of them
+      // land; a foul is put a fifth of the sector outside a line, far
+      // enough to read as out and near enough to still be on the board.
+      lateral: attempt.kind == AttemptKind.foul
+          ? (seed < 0 ? -1.2 : 1.2)
+          : seed * 0.62,
+    );
+  }
+
+  /// A stable -1..1 off [text]: FNV-1a, so it is the same on every run and
+  /// every device, which `String.hashCode` does not promise.
+  static double _spread(String text) {
+    var hash = 0x811c9dc5;
+    for (final unit in text.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0xffffffff;
+    }
+    return (hash % 2001) / 1000 - 1;
+  }
+}
+
 /// A competition as it would be drawn on the infield: the marks that matter
 /// as lines across the sector, and the band of it worth looking at.
 ///
@@ -125,12 +248,17 @@ class MeetBoard {
   /// [boardNames] is how an athlete is named on a board, for the ones the
   /// coach has filled a record in for. Without it every label is read off
   /// the spelling the throws carry, which is [boardNameOf]'s guess.
+  ///
+  /// [previous] is who threw last ([MeetFlight.previous]), which the board
+  /// draws as [last].
   factory MeetBoard(
     MeetStandings standings, {
     MeetEntry? inTheCircle,
     double? span,
     Iterable<MeetEntry>? following,
     String Function(String athlete)? boardNames,
+    ({MeetEntry entry, int round})? previous,
+    bool Function(ThrowResult result)? isPersonalBest,
   }) {
     // Whose board this is: the athletes somebody is following, and the
     // coach's whole roster when nobody has said. A set either way — a
@@ -141,6 +269,10 @@ class MeetBoard {
     };
     bool isMine(MeetEntry entry) =>
         watched.isEmpty ? entry.tracked : watched.contains(entry.id);
+    final last = MeetBoardThrow.of(standings, previous,
+        boardNames: boardNames,
+        mine: previous != null && isMine(previous.entry),
+        isPersonalBest: isPersonalBest);
 
     final placed = [
       for (final place in standings.places)
@@ -155,6 +287,7 @@ class MeetBoard {
         grid: gridFor(span ?? defaultBoardSpan),
         fitted: span == null,
         hasCut: false,
+        last: last,
       );
     }
 
@@ -291,6 +424,7 @@ class MeetBoard {
       grid: grid,
       fitted: span == null,
       hasCut: standings.hasCut,
+      last: last,
     );
   }
 
@@ -302,6 +436,7 @@ class MeetBoard {
     required this.grid,
     required this.fitted,
     required this.hasCut,
+    this.last,
   });
 
   /// The lines to draw, furthest first.
@@ -326,6 +461,11 @@ class MeetBoard {
   /// Whether anybody is going to be left out, which is what makes the cut
   /// line worth drawing at all.
   final bool hasCut;
+
+  /// The throw just taken, drawn as a flight and where it came down — see
+  /// [MeetBoardThrow]. Null before anybody has thrown, and for a board
+  /// nobody said the order to.
+  final MeetBoardThrow? last;
 
   /// Nobody has a mark on the board yet.
   bool get isEmpty => marks.isEmpty;

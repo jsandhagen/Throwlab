@@ -627,6 +627,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // whichever grouping is selected.
           title: '${_athleteLabel(video.athlete)} · ${video.event.label}',
           isPersonalBest: library.isPersonalBest(video),
+          celebrate: library.isFreshBest(video),
+          onCelebrated: () => library.celebrated(video),
           onTap: () => _openThrow(video, matches),
           onLongPress: () => showThrowActions(context, video),
         );
@@ -731,6 +733,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         video: video,
                         title: _cardTitle(video),
                         isPersonalBest: library.isPersonalBest(video),
+                        celebrate: library.isFreshBest(video),
+                        onCelebrated: () => library.celebrated(video),
                         onTap: () => _openThrow(video, videos),
                         onLongPress: () => showThrowActions(context, video),
                       ),

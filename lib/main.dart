@@ -8,6 +8,7 @@ import 'services/meet_relay.dart';
 import 'services/meet_server.dart';
 import 'services/notes_library.dart';
 import 'services/video_library.dart';
+import 'widgets/sector_transition.dart';
 
 void main() {
   runApp(const ThrowLabApp());
@@ -36,6 +37,16 @@ class ThrowLabApp extends StatelessWidget {
           showValueIndicator: ShowValueIndicator.never,
           trackHeight: 6,
         ),
+        // Every screen opens out of the circle between two sector lines —
+        // see [SectorPageTransitionsBuilder].
+        pageTransitionsTheme: const PageTransitionsTheme(builders: {
+          TargetPlatform.android: SectorPageTransitionsBuilder(),
+          TargetPlatform.iOS: SectorPageTransitionsBuilder(),
+          TargetPlatform.linux: SectorPageTransitionsBuilder(),
+          TargetPlatform.macOS: SectorPageTransitionsBuilder(),
+          TargetPlatform.windows: SectorPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: SectorPageTransitionsBuilder(),
+        }),
         cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(

@@ -106,6 +106,8 @@ class ThrowCard extends StatelessWidget {
     required this.video,
     required this.title,
     this.isPersonalBest = false,
+    this.celebrate = false,
+    this.onCelebrated,
     this.onTap,
     this.onLongPress,
   });
@@ -120,6 +122,12 @@ class ThrowCard extends StatelessWidget {
   /// and weight. Gold-frames the card and pins a medal to it, so the best
   /// throw in a shelf is the one you spot without reading a single number.
   final bool isPersonalBest;
+
+  /// Whether the best has only just been set, and nobody has seen it: the
+  /// frame is traced out of the corner and the medal dropped in, once. See
+  /// [PersonalBestStrike].
+  final bool celebrate;
+  final VoidCallback? onCelebrated;
 
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -218,20 +226,49 @@ class ThrowCard extends StatelessWidget {
                     gold: isPersonalBest,
                   ),
                 ),
-              if (isPersonalBest && roomy)
-                const Positioned(
-                  right: 8,
-                  top: 6,
-                  child: PersonalBestMedal(size: 20),
-                ),
-              // Last, so the metal is stroked over the scrims and the wash
-              // rather than under them.
-              if (isPersonalBest)
-                const Positioned.fill(
+              if (isPersonalBest && celebrate)
+                Positioned.fill(
                   child: IgnorePointer(
-                    child: CustomPaint(painter: GoldEdgePainter()),
+                    child: PersonalBestStrike(
+                      onStruck: onCelebrated,
+                      builder: (context, strike) => Stack(
+                        children: [
+                          if (roomy)
+                            Positioned(
+                              right: 8,
+                              top: 6,
+                              child: strike.medal(
+                                  const PersonalBestMedal(size: 20), 20),
+                            ),
+                          Positioned.fill(
+                            child: CustomPaint(
+                              painter: GoldEdgePainter(
+                                drawn: strike.drawn,
+                                glint: strike.glint,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                )
+              else ...[
+                if (isPersonalBest && roomy)
+                  const Positioned(
+                    right: 8,
+                    top: 6,
+                    child: PersonalBestMedal(size: 20),
+                  ),
+                // Last, so the metal is stroked over the scrims and the wash
+                // rather than under them.
+                if (isPersonalBest)
+                  const Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(painter: GoldEdgePainter()),
+                    ),
+                  ),
+              ],
               Positioned(
                 left: 10,
                 right: 10,
