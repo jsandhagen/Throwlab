@@ -9,7 +9,10 @@ import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../utils/clip_trim.dart';
 import '../utils/frame_seeker.dart';
+import '../utils/scrub_frames.dart';
+import '../utils/scrub_shuttle.dart';
 import '../widgets/playback_controls.dart';
+import '../widgets/scrub_still.dart';
 import '../widgets/trim_bar.dart';
 import 'home_screen.dart' show OptimizingDialog;
 
@@ -37,14 +40,28 @@ class TrimScreen extends StatefulWidget {
   State<TrimScreen> createState() => _TrimScreenState();
 }
 
-class _TrimScreenState extends State<TrimScreen> {
+class _TrimScreenState extends State<TrimScreen>
+    with TickerProviderStateMixin {
   late final VideoPlayerController _controller;
   late final FrameSeeker _seeker;
+
+  /// The analysis screen's smooth-scrub path. A handle dragged along the
+  /// strip seeked the player on every move, and a decoder asked for a new
+  /// frame sixty times a second shows almost none of them — the picture
+  /// trailed the handle in lurches. Behind the stills it follows the finger
+  /// the way the scale on the analysis screen does.
+  late final ScrubShuttle _shuttle;
   TrimRange? _range;
 
   /// The frame the scale is holding while it is in the hand, which the
   /// player only reaches a seek later.
   int? _held;
+
+  /// The same, for a drag along the strip: the frame the stills were last
+  /// sent to while the drag is on, and until the player has taken over from
+  /// them. Null otherwise.
+  int? _dragged;
+  bool _dragging = false;
   bool _saving = false;
 
   @override
@@ -55,6 +72,22 @@ class _TrimScreenState extends State<TrimScreen> {
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
     );
     _seeker = FrameSeeker(_controller);
+    final dir = widget.video.scrubFramesDir;
+    _shuttle = ScrubShuttle(
+      controller: _controller,
+      seeker: _seeker,
+      fps: widget.video.fps,
+      vsync: this,
+      frames: dir == null || widget.video.scrubFrameCount <= 0
+          ? null
+          : (ScrubFrames(
+              dir: dir,
+              count: widget.video.scrubFrameCount,
+              stride: widget.video.scrubFrameStride,
+              fps: widget.video.fps,
+            )..loadTimes(VideoOptimizer.framesTimesFile)),
+    );
+    _shuttle.addListener(_onShuttle);
     _controller.addListener(_onTick);
     _controller.initialize().then((_) {
       if (!mounted) return;
@@ -68,6 +101,9 @@ class _TrimScreenState extends State<TrimScreen> {
   @override
   void dispose() {
     _controller.removeListener(_onTick);
+    _shuttle
+      ..removeListener(_onShuttle)
+      ..dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -86,10 +122,41 @@ class _TrimScreenState extends State<TrimScreen> {
 
   int get _frame {
     final range = _range!;
-    return _held ?? range.frameAt(_seeker.position);
+    return _held ?? _dragged ?? range.frameAt(_seeker.position);
   }
 
+  /// Lets go of the strip's frame once the player is showing it: until the
+  /// handoff is over the player is still on its way there, and the readout
+  /// and the playhead read off it would step back and then forward.
+  void _onShuttle() {
+    if (_dragging || _dragged == null || _shuttle.busy) return;
+    if (mounted) setState(() => _dragged = null);
+  }
+
+  void _dragStart() {
+    _controller.pause();
+    _shuttle.begin();
+    _dragging = true;
+    _dragged = _frame;
+  }
+
+  void _dragEnd() {
+    _dragging = false;
+    _shuttle.end();
+    _onShuttle();
+  }
+
+  /// Puts [frame] up: on the stills while a drag has the strip, steered by
+  /// how far it is from the last one sent — the shuttle is told steps, not
+  /// places — and by a seek otherwise.
   void _seek(int frame) {
+    final from = _dragged;
+    if (_dragging && from != null) {
+      _shuttle.track(frame - from);
+      setState(() => _dragged = frame);
+      return;
+    }
+    _shuttle.release();
     _controller.pause();
     _seeker.seekTo(_range!.seekTarget(frame));
     setState(() {});
@@ -115,6 +182,7 @@ class _TrimScreenState extends State<TrimScreen> {
       await _controller.pause();
       return;
     }
+    _shuttle.release();
     final frame = _frame;
     if (frame < range.first || frame >= range.last) {
       await _controller.seekTo(range.seekTarget(range.first));
@@ -257,7 +325,13 @@ class _TrimScreenState extends State<TrimScreen> {
                   child: Center(
                     child: AspectRatio(
                       aspectRatio: _controller.value.aspectRatio,
-                      child: VideoPlayer(_controller),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          VideoPlayer(_controller),
+                          Positioned.fill(child: ScrubStill(shuttle: _shuttle)),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -339,6 +413,8 @@ class _TrimScreenState extends State<TrimScreen> {
               onFirst: _setFirst,
               onLast: _setLast,
               onSeek: _seek,
+              onDragStart: _dragStart,
+              onDragEnd: _dragEnd,
             ),
           ),
           ScrubWheel(
@@ -346,6 +422,9 @@ class _TrimScreenState extends State<TrimScreen> {
             fps: widget.video.fps,
             captureFps: widget.video.captureFps,
             release: release,
+            onScrubStart: _shuttle.begin,
+            onScrubBy: _shuttle.track,
+            onScrubEnd: _shuttle.end,
             onHold: (held) => setState(() => _held = held),
           ),
           if (cutsRelease)

@@ -738,7 +738,10 @@ like the app rather than a bare Material default.
   or its three dots). The
   ends are picked on a strip of the clip's own scrub stills and then to the
   frame on the scale under it, and the kept part loops while it is being
-  judged. `TrimRange` is frames, both ends kept, never under a fifth of a
+  judged. Both are scrubbed through the analysis screen's `ScrubShuttle`, stills
+  over the player while a handle or the scale is in the hand: a seek per
+  move of a handle is more than a decoder can answer, and the picture
+  trailed the handle in lurches. `TrimRange` is frames, both ends kept, never under a fifth of a
   second. The cut is an encode with the playback recipe, never a stream
   copy — a copy can only start on a keyframe, and a camera's own file has
   them seconds apart — so it also settles a meet capture's `optimizePending`

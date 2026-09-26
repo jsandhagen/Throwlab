@@ -25,6 +25,8 @@ class TrimBar extends StatefulWidget {
     required this.onFirst,
     required this.onLast,
     required this.onSeek,
+    this.onDragStart,
+    this.onDragEnd,
     this.release,
     this.stills = const [],
     this.height = 56,
@@ -37,6 +39,12 @@ class TrimBar extends StatefulWidget {
   final ValueChanged<int> onFirst;
   final ValueChanged<int> onLast;
   final ValueChanged<int> onSeek;
+
+  /// Either side of a drag, so the screen can put the stills up over the
+  /// picture for it: a seek per move of a handle is what a decoder cannot
+  /// keep up with.
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
 
   /// The release frame, or null when none is marked.
   final int? release;
@@ -87,6 +95,7 @@ class _TrimBarState extends State<TrimBar> {
     } else {
       _grip = _Grip.playhead;
     }
+    widget.onDragStart?.call();
     _move(dx, width);
   }
 
@@ -104,6 +113,12 @@ class _TrimBarState extends State<TrimBar> {
     }
   }
 
+  void _end() {
+    if (_grip == null) return;
+    _grip = null;
+    widget.onDragEnd?.call();
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -119,7 +134,8 @@ class _TrimBarState extends State<TrimBar> {
           onTapUp: (d) => widget.onSeek(_frameAt(d.localPosition.dx, width)),
           onHorizontalDragStart: (d) => _start(d.localPosition.dx, width),
           onHorizontalDragUpdate: (d) => _move(d.localPosition.dx, width),
-          onHorizontalDragEnd: (_) => _grip = null,
+          onHorizontalDragEnd: (_) => _end(),
+          onHorizontalDragCancel: _end,
           child: Stack(
             fit: StackFit.expand,
             children: [
