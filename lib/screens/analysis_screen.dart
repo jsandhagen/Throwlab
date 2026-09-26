@@ -207,13 +207,66 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       }).catchError((Object _) {
         if (mounted) setState(() => _openFailed = true);
       });
-      if (_frames == null ||
+      final needsFrames = _frames == null ||
           widget.video.optimizePending ||
           widget.video.scrubFramesVersion < VideoOptimizer.scrubFramesVersion ||
-          widget.video.playbackVersion < VideoOptimizer.playbackVersion) {
+          widget.video.playbackVersion < VideoOptimizer.playbackVersion;
+      if (_mayHaveMissedRate) {
+        // Asked first: stills extracted at a rate that is about to change
+        // would be extracted again.
+        unawaited(_recheckFrameRate().then((reopening) {
+          if (reopening || !mounted || !needsFrames) return;
+          _prepareScrubFrames();
+          setState(() {});
+        }));
+      } else if (needsFrames) {
         _prepareScrubFrames();
       }
     }
+  }
+
+  /// A clip stored at 30 fps with no slow-motion rate is what every import
+  /// came to while the probe was failing silently (see
+  /// [VideoOptimizer.probeFrameRates]), so it is asked again — one probe,
+  /// cheap beside opening the clip. A clip that really was 30 answers 30 and
+  /// nothing happens.
+  bool get _mayHaveMissedRate =>
+      widget.video.fps == 30 && widget.video.captureFps == 30;
+
+  /// Reads the playback copy's own frame rate, and where it is not what the
+  /// clip was stored with, puts it right and opens the throw again: the
+  /// shuttle, the stills and the frame counting were all built on the old
+  /// rate when this screen opened. The stills are re-extracted on the way
+  /// back in. Returns whether the screen is being replaced.
+  ///
+  /// Only the playback rate can be recovered this way — the copy was made
+  /// without the slow-motion tag — so a slow-motion clip keeps whatever
+  /// capture rate it is set to until somebody types the right one in.
+  Future<bool> _recheckFrameRate() async {
+    final video = widget.video;
+    final rates = await VideoOptimizer.probeFrameRates(video.path);
+    if (!mounted || rates == null) return false;
+    if ((rates.playback - video.fps).abs() < 0.5) return false;
+    video
+      ..fps = rates.playback
+      ..captureFps = rates.capture
+      ..scrubFramesVersion = 0;
+    await context.read<VideoLibrary>().update(video);
+    // Never out from under a finger that is scrubbing.
+    while (mounted && _shuttle.busy) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    if (!mounted) return true;
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder<void>(
+        pageBuilder: (_, __, ___) =>
+            AnalysisScreen(video: video, siblings: widget.siblings),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      ),
+    );
+    return true;
   }
 
   /// True once nothing has scrubbed for a clear stretch, so a resolution

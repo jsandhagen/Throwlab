@@ -661,6 +661,21 @@ like the app rather than a bare Material default.
   as it was shot and the clip is stamped `optimizePending`, which
   `AnalysisScreen` settles the first time the throw is opened. Nothing
   else should film without that flag.
+- ffprobe is always asked with its logging off (`VideoOptimizer._probe`,
+  `-v quiet`). ffmpeg-kit parses everything a run printed, log lines
+  included, as one JSON document, so at the `-v error` its own
+  `getMediaInformation` uses, one complaint about a file — which a Samsung
+  clip's own metadata draws — came back as no information at all, and every
+  import fell back to 30 fps without a word. The frame rate goes further and
+  skips the JSON: `probeFrameRates` reads plain `key=value` lines
+  (`readFrameRates`), the stream's average first, then its frames counted
+  over its duration, then the guessed `r_frame_rate`, and says nothing
+  rather than 30 when none of them is readable. A clip stored at exactly 30
+  and 30 is asked again when it is opened, and where its playback copy says
+  otherwise the rate is put right and the throw reopened on it — the
+  shuttle, the stills and the frame count are all built on the rate when the
+  screen opens. Only the playback rate comes back that way; the copy was
+  made without the slow-motion tag.
 - The playback copy is tagged with the color it is in
   (`VideoOptimizer.colorTagsFor`). A clip that says nothing leaves the two
   things this app points at one throw guessing differently — a player reads

@@ -182,6 +182,54 @@ void main() {
     });
   });
 
+  group('VideoOptimizer.readFrameRates', () {
+    test('a 60 fps phone clip reads as 60', () {
+      final rates = VideoOptimizer.readFrameRates('''
+avg_frame_rate=60/1
+r_frame_rate=60/1
+duration=4.016667
+nb_frames=241
+TAG:creation_time=2026-09-20T14:02:11.000000Z
+TAG:creation_time=2026-09-20T14:02:11.000000Z
+''')!;
+      expect(rates.playback, 60);
+      expect(rates.capture, 60);
+      expect(rates.recordedAt, DateTime.utc(2026, 9, 20, 14, 2, 11));
+    });
+
+    test('a slow-motion tag is the capture rate', () {
+      final rates = VideoOptimizer.readFrameRates('''
+avg_frame_rate=30/1
+r_frame_rate=30/1
+TAG:com.android.capture.fps=240.000000
+''')!;
+      expect(rates.playback, 30);
+      expect(rates.capture, 240);
+    });
+
+    test('no average falls back to the frames counted, then the guess', () {
+      expect(
+          VideoOptimizer.readFrameRates('''
+avg_frame_rate=0/0
+r_frame_rate=90000/1
+duration=2.000000
+nb_frames=120
+''')!.playback,
+          60);
+      expect(
+          VideoOptimizer.readFrameRates('''
+avg_frame_rate=0/0
+r_frame_rate=25/1
+''')!.playback,
+          25);
+    });
+
+    test('nothing readable is no answer, not 30', () {
+      expect(VideoOptimizer.readFrameRates(''), isNull);
+      expect(VideoOptimizer.readFrameRates('avg_frame_rate=0/0'), isNull);
+    });
+  });
+
   group('VideoOptimizer.colorTagsFor', () {
     String tags({String? colorSpace, int? height}) =>
         VideoOptimizer.colorTagsFor(colorSpace: colorSpace, height: height);

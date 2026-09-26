@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
+import 'package:ffmpeg_kit_flutter_new/media_information_session.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,7 +35,7 @@ class VideoOptimizer {
 
     double? totalMs;
     try {
-      final probe = await FFprobeKit.getMediaInformation(srcPath);
+      final probe = await _probe(srcPath);
       final seconds =
           double.tryParse(probe.getMediaInformation()?.getDuration() ?? '');
       if (seconds != null && seconds > 0) totalMs = seconds * 1000;
@@ -84,7 +85,7 @@ class VideoOptimizer {
     // denominator, and what color it is in — see [colorTagsFor].
     var colorTags = '';
     try {
-      final probe = await FFprobeKit.getMediaInformation(srcPath);
+      final probe = await _probe(srcPath);
       final info = probe.getMediaInformation();
       if (totalMs == null) {
         final seconds = double.tryParse(info?.getDuration() ?? '');
@@ -169,8 +170,7 @@ class VideoOptimizer {
 
   static Future<bool> _playbackGeometryCurrent(String path) async {
     try {
-      final info =
-          (await FFprobeKit.getMediaInformation(path)).getMediaInformation();
+      final info = (await _probe(path)).getMediaInformation();
       if (info == null) return true;
       for (final stream in info.getStreams()) {
         if (stream.getType() != 'video') continue;
@@ -312,7 +312,7 @@ class VideoOptimizer {
 
     double? seconds;
     try {
-      final probe = await FFprobeKit.getMediaInformation(videoPath);
+      final probe = await _probe(videoPath);
       seconds =
           double.tryParse(probe.getMediaInformation()?.getDuration() ?? '');
     } catch (_) {
@@ -420,12 +420,40 @@ class VideoOptimizer {
     }
   }
 
+  /// What ffprobe knows about [path], asked for with its logging switched
+  /// off.
+  ///
+  /// ffmpeg-kit reads the answer out of *everything* the run printed, log
+  /// lines included, and parses the lot as one JSON document. Its own
+  /// [FFprobeKit.getMediaInformation] asks at `-v error`, so a file ffmpeg
+  /// has a single complaint about — and a Samsung clip carries enough of its
+  /// own metadata to draw one — comes back as no information at all: no
+  /// duration, no color, and a frame rate that fell back to 30. Quiet, the
+  /// output is the JSON and nothing else.
+  static Future<MediaInformationSession> _probe(String path) =>
+      FFprobeKit.getMediaInformationFromCommandArguments([
+        '-v',
+        'quiet',
+        '-hide_banner',
+        '-print_format',
+        'json',
+        '-show_format',
+        '-show_streams',
+        '-i',
+        path,
+      ]);
+
   /// Frame rates and recording time probed from the clip's metadata.
   /// [playback] is the container rate that frame stepping must use;
   /// [capture] is the real recorded rate — slow-mo clips often play at
   /// 30 fps while each frame represents 1/240 s of real time, advertised
   /// by Android via the com.android.capture.fps tag. [recordedAt] is the
   /// camera's creation_time tag (UTC), null when absent.
+  ///
+  /// Read as plain `key=value` lines rather than through ffmpeg-kit's JSON,
+  /// for the reason [_probe] gives: this is the one number every frame step,
+  /// every timer and every measured speed is built on, and when the JSON
+  /// failed to parse it failed silently, to 30.
   static Future<
       ({
         double playback,
@@ -433,33 +461,58 @@ class VideoOptimizer {
         DateTime? recordedAt,
       })?> probeFrameRates(String path) async {
     try {
-      final session = await FFprobeKit.getMediaInformation(path);
-      final info = session.getMediaInformation();
-      if (info == null) return null;
-      double? playback;
-      double? capture;
-      DateTime? recordedAt =
-          DateTime.tryParse('${info.getTags()?['creation_time'] ?? ''}');
-      for (final stream in info.getStreams()) {
-        if (stream.getType() != 'video') continue;
-        playback ??= parseRate(stream.getAverageFrameRate()) ??
-            parseRate(stream.getRealFrameRate());
-        capture ??=
-            parseRate('${stream.getTags()?['com.android.capture.fps'] ?? ''}');
-        recordedAt ??=
-            DateTime.tryParse('${stream.getTags()?['creation_time'] ?? ''}');
-      }
-      capture ??=
-          parseRate('${info.getTags()?['com.android.capture.fps'] ?? ''}');
-      if (playback == null) return null;
-      return (
-        playback: playback,
-        capture: math.max(capture ?? playback, playback),
-        recordedAt: recordedAt,
-      );
+      final session = await FFprobeKit.executeWithArguments([
+        '-v',
+        'quiet',
+        '-select_streams',
+        'v:0',
+        '-show_entries',
+        'stream=avg_frame_rate,r_frame_rate,nb_frames,duration'
+            ':stream_tags=com.android.capture.fps,creation_time'
+            ':format_tags=com.android.capture.fps,creation_time',
+        '-of',
+        'default=noprint_wrappers=1',
+        path,
+      ]);
+      return readFrameRates(await session.getOutput() ?? '');
     } catch (_) {
       return null;
     }
+  }
+
+  /// The rates out of [probeFrameRates]' output: the stream's own lines
+  /// first, then the container's tags. The playback rate is the stream's
+  /// average; where that is missing or nonsense (`0/0`, or a timescale
+  /// passed off as a rate) it is the frames counted over the duration, and
+  /// only then the guessed `r_frame_rate`.
+  @visibleForTesting
+  static ({double playback, double capture, DateTime? recordedAt})?
+      readFrameRates(String output) {
+    final values = <String, String>{};
+    for (final line in const LineSplitter().convert(output)) {
+      final split = line.indexOf('=');
+      if (split <= 0) continue;
+      // The first of each wins: the stream is printed before the container.
+      values.putIfAbsent(line.substring(0, split).trim(),
+          () => line.substring(split + 1).trim());
+    }
+    double? sane(double? rate) =>
+        rate != null && rate >= 1 && rate <= 1000 ? rate : null;
+    final frames = double.tryParse(values['nb_frames'] ?? '');
+    final seconds = double.tryParse(values['duration'] ?? '');
+    final counted = frames != null && seconds != null && seconds > 0
+        ? frames / seconds
+        : null;
+    final playback = sane(parseRate(values['avg_frame_rate'])) ??
+        sane(counted) ??
+        sane(parseRate(values['r_frame_rate']));
+    if (playback == null) return null;
+    final capture = sane(parseRate(values['TAG:com.android.capture.fps']));
+    return (
+      playback: playback,
+      capture: math.max(capture ?? playback, playback),
+      recordedAt: DateTime.tryParse(values['TAG:creation_time'] ?? ''),
+    );
   }
 
   /// The color tags to write onto the playback copy, or empty to leave the
@@ -547,8 +600,7 @@ class VideoOptimizer {
   /// which is no worse than before it was asked.
   static Future<String> _jpegColorFilterFor(String path) async {
     try {
-      final info =
-          (await FFprobeKit.getMediaInformation(path)).getMediaInformation();
+      final info = (await _probe(path)).getMediaInformation();
       for (final stream in info?.getStreams() ?? []) {
         if (stream.getType() != 'video') continue;
         return jpegColorFilter(
