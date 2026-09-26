@@ -655,7 +655,13 @@ like the app rather than a bare Material default.
   position in fractional frames, and the frame stepped to is always the
   one nearest it, so what is drawn and what is shown can't drift apart.
   In the hand it is where the hand has it, not where the player has got
-  to, which lags a scrub by a seek and moved it in lurches; a fling is a
+  to, which lags a scrub by a seek and moved it in lurches — and the
+  picture and the clock go with it: the stills are put up at the wheel's
+  frame (`ScrubShuttle.track`) rather than played toward it the way a drag
+  across the frame is, and the readout reads the frame the wheel is holding
+  (`ScrubWheel.onHold`) until the player has arrived there. Played toward
+  it, the picture was capped at 120 frames a second and a fast spin left it
+  most of a second behind the needle, with the clock lurching after it; a fling is a
   `FrictionSimulation` from the release speed to rest, one smooth curve
   rather than a velocity decayed and summed tick by tick; and out of the
   hand it never jumps — it eases onto the frame it stopped at like a

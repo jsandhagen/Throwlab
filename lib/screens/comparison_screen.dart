@@ -552,12 +552,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   /// One wheel, both clips: A moves by the frames the finger asked for and B
   /// by the same amount of *time*, so they stay aligned on their sync points.
   void _linkedScrubBy(int frames) {
-    _shuttleA.by(frames);
+    _shuttleA.track(frames);
     final scaled =
         frames * widget.videoB.fps / widget.videoA.fps + _linkedRemainderB;
     final whole = scaled.truncate();
     _linkedRemainderB = scaled - whole;
-    _shuttleB.by(whole);
+    _shuttleB.track(whole);
   }
 
   void _endLinkedScrub() {
@@ -582,7 +582,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               _stopLoop();
               shuttle.begin();
             },
-      onScrubBy: linked ? _linkedScrubBy : shuttle.by,
+      onScrubBy: linked ? _linkedScrubBy : shuttle.track,
       onScrubEnd: linked ? _endLinkedScrub : shuttle.end,
     );
   }

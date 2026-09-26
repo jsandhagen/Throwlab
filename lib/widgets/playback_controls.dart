@@ -175,6 +175,16 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   final FrameHaptics _haptics = FrameHaptics();
   Timer? _repeat;
 
+  /// The frame the wheel is holding, while it holds one ([ScrubWheel.onHold]):
+  /// the clock and the clip line read it rather than the player, so the
+  /// numbers beside the needle are the frame under it.
+  int? _held;
+
+  void _hold(int? frame) {
+    if (!mounted || frame == _held) return;
+    setState(() => _held = frame);
+  }
+
   VideoPlayerController get controller => widget.controller;
   double get fps => widget.fps;
 
@@ -393,7 +403,17 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<VideoPlayerValue>(
       valueListenable: controller,
-      builder: (context, value, _) {
+      builder: (context, playing, _) {
+        final held = _held;
+        final value = held == null
+            ? playing
+            : playing.copyWith(
+                position: snapToFrame(
+                    Duration(
+                        microseconds:
+                            (held * Duration.microsecondsPerSecond / fps)
+                                .round()),
+                    fps));
         final dense = widget.dense;
         final clipLine = ClipLine(
           value: value,
@@ -424,6 +444,7 @@ class _PlaybackControlsState extends State<PlaybackControls> {
           onScrubStart: widget.onScrubStart,
           onScrubBy: widget.onScrubBy,
           onScrubEnd: widget.onScrubEnd,
+          onHold: _hold,
           height: widget.horizontal ? 32 : 40,
         );
 
@@ -658,6 +679,7 @@ class ScrubWheel extends StatefulWidget {
     this.onScrubStart,
     this.onScrubBy,
     this.onScrubEnd,
+    this.onHold,
   });
 
   final VideoPlayerController controller;
@@ -675,6 +697,12 @@ class ScrubWheel extends StatefulWidget {
   final VoidCallback? onScrubStart;
   final ValueChanged<int>? onScrubBy;
   final VoidCallback? onScrubEnd;
+
+  /// The frame the wheel has stepped to while it is in the hand and until
+  /// the player has had time to arrive there, then null. The player trails a
+  /// scrub by a seek, so a clock read off it ran behind the needle and moved
+  /// in lurches; this is what the readout beside the wheel shows instead.
+  final ValueChanged<int?>? onHold;
 
   @override
   State<ScrubWheel> createState() => _ScrubWheelState();
@@ -743,6 +771,12 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   @override
   void dispose() {
     widget.controller.removeListener(_follow);
+    // A wheel taken down mid-scrub must not leave the clock held on its
+    // frame; after this frame, since its owner may be mid-build.
+    final onHold = widget.onHold;
+    if (onHold != null && (_inHand || _quiet != null)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => onHold(null));
+    }
     _quiet?.cancel();
     _coastTicker.dispose();
     _settle.dispose();
@@ -791,6 +825,7 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     _frame = _haptics.step(from, raw.round());
     final moved = _frame - from;
     if (moved != 0) {
+      widget.onHold?.call(_frame);
       if (widget.onScrubBy != null) {
         widget.onScrubBy!(moved);
       } else {
@@ -817,6 +852,7 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     // move steps from there rather than from half way through an ease.
     _frame = _settleTo.round();
     _shown.value = _frame.toDouble();
+    widget.onHold?.call(_frame);
     widget.onScrubStart?.call();
   }
 
@@ -867,7 +903,9 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     _quiet?.cancel();
     _quiet = Timer(_handBack, () {
       _quiet = null;
-      if (mounted) _follow();
+      if (!mounted) return;
+      widget.onHold?.call(null);
+      _follow();
     });
   }
 

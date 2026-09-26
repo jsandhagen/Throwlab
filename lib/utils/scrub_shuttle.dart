@@ -156,13 +156,28 @@ class ScrubShuttle extends ChangeNotifier {
   /// video or from the scrub wheel. With the stills active this moves the
   /// finger's target (the shuttle plays the shown frame toward it, stride-
   /// aware); otherwise it seeks the player directly.
-  void by(int frames) {
+  void by(int frames) => _by(frames, direct: false);
+
+  /// [by] for something that already moves smoothly on its own — the scrub
+  /// wheel, whose fling is one friction curve and whose needle says which
+  /// frame it is on. The shown still goes straight to it rather than being
+  /// played toward it: the catch-up is there to smooth a finger dragged
+  /// across the picture, and behind a wheel it only made the picture trail
+  /// the needle — by the better part of a second on a fast spin, since it
+  /// is capped at [_maxCatchUpFramesPerSec] and a wheel is not.
+  void track(int frames) => _by(frames, direct: true);
+
+  void _by(int frames, {required bool direct}) {
     if (frames == 0) return;
     final atlas = _frames;
     if (_scrubbing && atlas != null) {
       _beginShuttle();
       _fingerIndex = (_fingerIndex + frames / atlas.stride)
           .clamp(0.0, (atlas.count - 1).toDouble());
+      if (direct) {
+        _displayIndex = _fingerIndex;
+        _showAndSeek(_displayIndex.round());
+      }
     } else {
       controller.pause();
       seeker.seekBy(_frameStep * frames);
@@ -220,7 +235,10 @@ class ScrubShuttle extends ChangeNotifier {
     if (gap.abs() < 0.5) {
       _displayIndex = _fingerIndex;
       // Caught up: seek for real, so the readout and any handoff are exact.
-      _showAndSeek(_displayIndex.round(), force: true);
+      // Still spaced while a hand has it — caught up is every tick of a
+      // wheel, and forcing each one was a seek per vsync; the tick comes
+      // round again, so a nudge held back goes out once the spacing allows.
+      _showAndSeek(_displayIndex.round(), force: !_scrubbing);
       if (!_scrubbing) {
         _ticker.stop();
         _startVideoHandoff(_displayIndex.round());

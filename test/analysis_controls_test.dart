@@ -228,6 +228,36 @@ void main() {
       expect(find.textContaining('R 0.000'), findsOneWidget);
     });
 
+    testWidgets('the clock reads the frame under the wheel while it is turned',
+        (tester) async {
+      final video = testVideo(temp)
+        ..release = const Duration(milliseconds: 1000);
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: _portraitPhone,
+          videoSize: const Size(1920, 1080));
+      expect(find.textContaining('R -1.000'), findsOneWidget);
+
+      // Turned and still held: the offset has already moved with it, not a
+      // seek later.
+      final wheel = find.byKey(const ValueKey('scrub-wheel'));
+      final gesture = await tester.startGesture(tester.getCenter(wheel));
+      for (var i = 0; i < 12; i++) {
+        await gesture.moveBy(const Offset(10, 0));
+        await tester.pump();
+      }
+      expect(find.textContaining('R -1.000'), findsNothing);
+      final held = tester
+          .widgetList<Text>(find.textContaining('R -'))
+          .single
+          .data;
+
+      // And it is where the picture comes to rest once the wheel is let go.
+      await gesture.up();
+      await pumpFrames(tester, 40);
+      expect(find.textContaining(held!), findsOneWidget);
+    });
+
     testWidgets('the flag says what it marks', (tester) async {
       await mountAnalysisScreen(tester,
           video: testVideo(temp),

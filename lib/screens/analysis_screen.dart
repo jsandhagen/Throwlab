@@ -744,8 +744,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     _scrubByFrames(_scrub.addDrag(dx, _pixelsPerFrame, timestamp: timestamp));
   }
 
-  /// Advances the scrub by [frames] source frames — from the video drag or
-  /// the scrub wheel.
+  /// Advances the scrub by [frames] source frames from the video drag.
   void _scrubByFrames(int frames) => _shuttle.by(frames);
 
   void _onScaleEnd(ScaleEndDetails details) {
@@ -2072,11 +2071,13 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                     if (annotation is TimerMarker)
                       (annotation.from, annotation.color),
                 ],
-                // Route the wheel through the same smooth shuttle the video
-                // drag uses, so fast wheel spins play through frames instead
-                // of hammering the slow decoder seek.
+                // Route the wheel through the stills the video drag uses,
+                // so a fast spin shows frames instead of hammering the slow
+                // decoder seek — tracked rather than caught up with, since
+                // the wheel smooths its own motion and the picture has to
+                // stay under its needle.
                 onScrubStart: _beginScrub,
-                onScrubBy: _scrubByFrames,
+                onScrubBy: _shuttle.track,
                 onScrubEnd: _endScrub,
               ),
             ),
