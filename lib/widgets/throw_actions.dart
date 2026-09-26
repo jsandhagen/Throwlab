@@ -3,22 +3,34 @@ import 'package:provider/provider.dart';
 
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
+import '../screens/trim_screen.dart';
 import '../services/video_library.dart';
 import 'athlete_picker.dart';
 import 'distance_field.dart';
 import 'throw_picker.dart';
 
-enum _ThrowAction { athlete, implement, distance, note, frameRate, delete }
+enum _ThrowAction {
+  athlete,
+  implement,
+  distance,
+  note,
+  frameRate,
+  trim,
+  delete
+}
 
 /// The per-throw edits that used to hang off a row's overflow menu: who
 /// threw it, what they threw, how far it went, a note, the rate it was
-/// filmed at, and deleting it.
+/// filmed at, trimming it, and deleting it.
 ///
 /// A sheet rather than a popup menu, because the library is stills now and a
 /// long press in the middle of a grid has no corner to hang a menu off. It
 /// opens with the throw it is about at the top, so a long press that landed
 /// on the wrong card is obvious before anything is changed.
-Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
+///
+/// Returns true when the clip's file was replaced — a trim — which a screen
+/// playing it has to reopen on, since its player still holds the old one.
+Future<bool> showThrowActions(BuildContext context, ThrowVideo video) async {
   final library = context.read<VideoLibrary>();
   final scheme = Theme.of(context).colorScheme;
   final action = await showModalBottomSheet<_ThrowAction>(
@@ -70,6 +82,11 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
               onTap: () => Navigator.pop(context, _ThrowAction.frameRate),
             ),
             ListTile(
+              leading: const Icon(Icons.content_cut),
+              title: const Text('Trim clip'),
+              onTap: () => Navigator.pop(context, _ThrowAction.trim),
+            ),
+            ListTile(
               leading: Icon(Icons.delete_outline, color: scheme.error),
               title:
                   Text('Delete throw', style: TextStyle(color: scheme.error)),
@@ -80,7 +97,7 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
       ),
     ),
   );
-  if (action == null || !context.mounted) return;
+  if (action == null || !context.mounted) return false;
   switch (action) {
     case _ThrowAction.athlete:
       await _editAthlete(context, library, video);
@@ -92,10 +109,17 @@ Future<void> showThrowActions(BuildContext context, ThrowVideo video) async {
       await _editNote(context, library, video);
     case _ThrowAction.frameRate:
       await editCaptureFps(context, library, video);
+    case _ThrowAction.trim:
+      final trimmed = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(builder: (_) => TrimScreen(video: video)),
+      );
+      return trimmed ?? false;
     case _ThrowAction.delete:
       // remove() reclaims the clip, its still and the scrub frames itself.
       await library.remove(video.id);
   }
+  return false;
 }
 
 /// Tagging reuses the import flow's picker, so a name already in the library

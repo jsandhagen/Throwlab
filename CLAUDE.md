@@ -9,9 +9,9 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `comparison_screen` |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, projectile and release math, formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `trim_screen` (a clip cut down to the throw), `comparison_screen` |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), `trim_bar` (the clip's stills between two handles), playback controls, pickers |
+| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -56,7 +56,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/glyph_preview.dart \
                               tool/preview/logo_preview.dart \
                               tool/preview/distance_preview.dart \
-                              tool/preview/progress_preview.dart
+                              tool/preview/progress_preview.dart \
+                              tool/preview/trim_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -729,6 +730,22 @@ like the app rather than a bare Material default.
   them in the engine's fallback face while the rest of the app is in
   Barlow. Handing the style down is how they match without naming a family
   outside `main.dart`.
+- A clip is trimmed once, for good (`TrimScreen`, from 'Trim clip' on the
+  throw sheet — the library's long press and the analysis title both). The
+  ends are picked on a strip of the clip's own scrub stills and then to the
+  frame on the scale under it, and the kept part loops while it is being
+  judged. `TrimRange` is frames, both ends kept, never under a fifth of a
+  second. The cut is an encode with the playback recipe, never a stream
+  copy — a copy can only start on a keyframe, and a camera's own file has
+  them seconds apart — so it also settles a meet capture's `optimizePending`
+  in the same pass. `trimFilters` cuts with ffmpeg's `trim`/`atrim` half a
+  frame outside the kept frames and restarts both clocks at zero, which is
+  what lets `releaseAfter` move the release by the start and keep it on its
+  frame; a release inside the cut part is cleared, and the screen says so
+  before it happens. The file is built beside the working one and renamed
+  over it, the stills and thumbnail are cut again (the thumbnail evicted
+  from the image cache, since it keeps its path), and the analysis screen
+  reopens on the new file because its player still holds the old one.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

@@ -1682,10 +1682,26 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   /// Scrolls the strip so the open throw sits in the middle of it.
   Future<void> _showThrowInfo() async {
-    await showThrowActions(context, widget.video);
+    final replaced = await showThrowActions(context, widget.video);
+    if (!mounted) return;
+    // A trim put a new file under the throw: the player, the stills and the
+    // frame count this screen was built on are all of the old one, so it
+    // opens again on the new.
+    if (replaced) {
+      Navigator.pushReplacement(
+        context,
+        PageRouteBuilder<void>(
+          pageBuilder: (_, __, ___) =>
+              AnalysisScreen(video: widget.video, siblings: widget.siblings),
+          transitionDuration: Duration.zero,
+          reverseTransitionDuration: Duration.zero,
+        ),
+      );
+      return;
+    }
     // The sheet edits the throw in place — the athlete, the distance, the
     // note — and the header is drawn from it.
-    if (mounted) setState(() {});
+    setState(() {});
   }
 
   /// The tab the strip is put away on and pulled back down by, hanging off

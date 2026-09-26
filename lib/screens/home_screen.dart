@@ -1124,17 +1124,27 @@ class UpdateBanner extends StatelessWidget {
 /// What an import shows while it re-encodes the clip and cuts its scrub
 /// frames: the mark filling over both, and which of the two it is on.
 class OptimizingDialog extends StatelessWidget {
-  const OptimizingDialog(
-      {super.key, required this.progress, required this.stage});
+  const OptimizingDialog({
+    super.key,
+    required this.progress,
+    required this.stage,
+    this.title = 'Optimizing video',
+    this.action = 'Skip',
+  });
 
   /// 0..1 over the whole import, null before the first reading.
   final ValueListenable<double?> progress;
   final ValueListenable<String> stage;
 
+  /// A trim is the same wait under another name, and stopping it keeps the
+  /// clip as it was rather than skipping a step.
+  final String title;
+  final String action;
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Optimizing video'),
+      title: Text(title),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1165,7 +1175,7 @@ class OptimizingDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: VideoOptimizer.cancel,
-          child: const Text('Skip'),
+          child: Text(action),
         ),
       ],
     );

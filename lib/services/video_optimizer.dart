@@ -10,6 +10,7 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../utils/clip_trim.dart';
 import '../utils/zoom_detail.dart';
 
 /// Re-encodes an imported clip with a keyframe every few frames.
@@ -80,10 +81,13 @@ class VideoOptimizer {
     String outPath,
     ValueChanged<double?>? onProgress, {
     double? totalMs,
+    TrimRange? trim,
   }) async {
     // Probed for two things: how long the clip is, so progress has a
-    // denominator, and what color it is in — see [colorTagsFor].
+    // denominator, and what color it is in — see [colorTagsFor]. A trim
+    // also needs to know whether there is any sound to cut with it.
     var colorTags = '';
+    var hasAudio = true;
     try {
       final probe = await _probe(srcPath);
       final info = probe.getMediaInformation();
@@ -91,7 +95,9 @@ class VideoOptimizer {
         final seconds = double.tryParse(info?.getDuration() ?? '');
         if (seconds != null && seconds > 0) totalMs = seconds * 1000;
       }
-      for (final stream in info?.getStreams() ?? []) {
+      final streams = info?.getStreams() ?? [];
+      hasAudio = streams.any((stream) => stream.getType() == 'audio');
+      for (final stream in streams) {
         if (stream.getType() != 'video') continue;
         colorTags = colorTagsFor(
           colorSpace: '${stream.getAllProperties()?['color_space'] ?? ''}',
@@ -103,6 +109,14 @@ class VideoOptimizer {
       // Progress stays indeterminate, and the copy keeps whatever color
       // metadata the source had.
     }
+    final cut = trim == null ? null : trimFilters(trim);
+    if (cut != null) totalMs = trim!.length.inMicroseconds / 1000;
+    final seek = cut == null ? '' : '-ss ${cut.seek} ';
+    final audio = cut == null
+        ? '-c:a copy'
+        : hasAudio
+            ? '-af ${cut.audio} -c:a aac -b:a 128k'
+            : '-an';
     final done = Completer<bool>();
     await FFmpegKit.executeAsync(
       // superfast (not ultrafast) keeps CABAC and the deblocking filter
@@ -129,11 +143,16 @@ class VideoOptimizer {
       // is no crop rectangle and nothing to disagree about. It costs up to
       // 15 px off the right and bottom — a crop, so nothing is distorted
       // and measurements stay honest.
-      '-y -i "$srcPath" '
-      '-vf scale=iw*sar:ih,setsar=1,scale=-2:min(1440\\,ih):flags=lanczos,'
+      //
+      // A trim leads the chain with its own cut (see [trimFilters]); the
+      // sound is cut to match, which means encoding it, since a stream
+      // copied through can only be cut where its own packets fall.
+      '-y $seek-i "$srcPath" '
+      '-vf ${cut == null ? '' : '${cut.video},'}'
+      'scale=iw*sar:ih,setsar=1,scale=-2:min(1440\\,ih):flags=lanczos,'
       'crop=trunc(iw/16)*16:trunc(ih/16)*16:0:0,setsar=1 '
       '-c:v libx264 -preset superfast -crf 17 -g 6 -bf 0 -sc_threshold 0 '
-      '-pix_fmt yuv420p$colorTags -c:a copy "$outPath"',
+      '-pix_fmt yuv420p$colorTags $audio "$outPath"',
       (session) async {
         done.complete(ReturnCode.isSuccess(await session.getReturnCode()));
       },
@@ -228,6 +247,74 @@ class VideoOptimizer {
       return null;
     }
     return outPath;
+  }
+
+  /// Cuts [video]'s clip down to [range] and returns the new file's path,
+  /// or null when the encode failed or was canceled — which leaves the clip
+  /// exactly as it was.
+  ///
+  /// Encoded, not copied out: a stream copy can only start on a keyframe,
+  /// and a camera's own file has them seconds apart, so a trim asked for on
+  /// a frame would start wherever the last one happened to be. Encoded with
+  /// the playback recipe, too, so the result is a playback copy like any
+  /// other — which settles a meet capture still owed its encode in the same
+  /// pass rather than in a second one the next time it is opened. Built
+  /// beside the working file and renamed over it, as a remake is, so an open
+  /// player keeps the old one until its screen is reopened.
+  static Future<String?> trimClip(
+    String srcPath,
+    String id,
+    TrimRange range, {
+    ValueChanged<double?>? onProgress,
+  }) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.path}/throws');
+    await dir.create(recursive: true);
+    final outPath = '${dir.path}/$id.mp4';
+    final staging = '${dir.path}/$id.trim.mp4';
+    File(staging).delete().ignore();
+    final made =
+        await _encodePlaybackCopy(srcPath, staging, onProgress, trim: range);
+    if (!made) {
+      File(staging).delete().ignore();
+      return null;
+    }
+    try {
+      await File(staging).rename(outPath);
+    } catch (_) {
+      File(staging).delete().ignore();
+      return null;
+    }
+    return outPath;
+  }
+
+  /// The ffmpeg that cuts [range] out of a clip: where to seek the input
+  /// to, and the filters that keep exactly its frames, for the picture and
+  /// the sound.
+  ///
+  /// The seek is only to save decoding the whole clip up to the cut, and it
+  /// stops two seconds short of it; the filter does the cutting, by time,
+  /// with the bounds half a frame outside the first and last frames kept,
+  /// so a timestamp a hair off its frame's nominal time is still on the
+  /// right side of the line. ffmpeg counts an input seeked with `-ss` from
+  /// the seek point, so the filter's times are measured from there. Both
+  /// streams then start again from zero, which puts the first kept frame at
+  /// the player's zero — what [TrimRange.releaseAfter] counts from.
+  @visibleForTesting
+  static ({String seek, String video, String audio}) trimFilters(
+      TrimRange range) {
+    final frame = 1 / range.fps;
+    final from = math.max(0.0, (range.first - 0.5) * frame);
+    final to = (range.last + 0.5) * frame;
+    final seek = math.max(0.0, (from - 2).floorToDouble());
+    String s(double seconds) => seconds.toStringAsFixed(6);
+    return (
+      seek: s(seek),
+      video: 'trim=start=${s(from - seek)}:end=${s(to - seek)},'
+          'setpts=PTS-STARTPTS',
+      audio: 'atrim=start=${s(from - seek)}:end=${s(to - seek)},'
+          'asetpts=PTS-STARTPTS',
+    );
   }
 
   /// Largest number of frames to pre-extract per clip. Beyond this the
