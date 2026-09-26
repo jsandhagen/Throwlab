@@ -21,6 +21,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     Future<void> open(String unit) async {
+      // ignore: invalid_use_of_visible_for_testing_member
       SharedPreferences.setMockInitialValues({'throwlab.distanceUnit': unit});
       DistanceField.preferred = DistanceUnit.values.byName(unit);
       await tester.pumpWidget(const SizedBox());
