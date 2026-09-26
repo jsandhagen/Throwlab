@@ -231,37 +231,88 @@ class _PlaybackControlsState extends State<PlaybackControls> {
     _seeker.seekTo(snapToFrame(target, fps));
   }
 
+  /// Takes the clip straight to the release, which is where a throw is
+  /// looked at from: a coach who has scrubbed off to time the block or
+  /// check the finish wants back to the moment the rest is measured around
+  /// without hunting for the notch on the clip line.
+  void _jumpToRelease() {
+    final release = widget.release;
+    if (release == null) return;
+    if (frameAt(release, fps) != frameAt(_seeker.position, fps)) {
+      HapticFeedback.lightImpact();
+    }
+    _seekTo(release);
+  }
+
+  /// The offset from the release, as the button that goes there. It is the
+  /// number that already says how far off the release the frame is, so it
+  /// is the one to press to close the gap — set in the release's gold, in a
+  /// gold outline so it reads as a thing to press rather than a caption, and
+  /// with an arrow pointing the way the release lies. On the release itself
+  /// there is nowhere to go, and the arrow goes with it.
+  Widget _releaseJump(int offset, TextStyle? style) {
+    final arrow = offset < 0
+        ? Icons.arrow_forward
+        : offset > 0
+            ? Icons.arrow_back
+            : null;
+    return Tooltip(
+      message: 'Jump to the release',
+      child: InkWell(
+        key: const ValueKey('release-jump'),
+        borderRadius: BorderRadius.circular(10),
+        onTap: offset == 0 ? null : _jumpToRelease,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(6, 1, 4, 1),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: releaseColor.withOpacity(0.7)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('R ${formatSinceRelease(offset, fps)}',
+                  style: style?.copyWith(color: releaseColor)),
+              if (arrow != null) ...[
+                const SizedBox(width: 2),
+                Icon(arrow, size: 12, color: releaseColor),
+              ] else
+                const SizedBox(width: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// The clock, and under it where the frame sits: the offset from the
-  /// release when one is marked, and the frame number either way.
+  /// release when one is marked — which is also the way back to it — and
+  /// the frame number either way.
   Widget _readout(VideoPlayerValue value) {
     final theme = Theme.of(context);
     final small = theme.textTheme.bodySmall;
     final muted = small?.copyWith(color: small.color?.withOpacity(0.7));
     final release = widget.release;
     final frame = frameAt(value.position, fps);
-    final sinceRelease = release == null
-        ? null
-        : 'R ${formatSinceRelease(frame - frameAt(release, fps), fps)}';
+    final offset = release == null ? null : frame - frameAt(release, fps);
     const tabular = [FontFeature.tabularFigures()];
     // On its side there is one line to spend, beside the rail: the clock,
     // then the offset from the release where there is one, else the frame.
     if (widget.horizontal) {
-      return Text.rich(
-        TextSpan(children: [
-          TextSpan(text: formatPosition(value.position)),
-          const TextSpan(text: '  ·  '),
-          if (release != null)
-            TextSpan(
-              text: sinceRelease,
-              style: TextStyle(color: releaseColor),
-            )
+      final style = small?.copyWith(fontFeatures: tabular);
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('${formatPosition(value.position)}  ·  ',
+              overflow: TextOverflow.ellipsis, style: style),
+          if (offset != null)
+            _releaseJump(offset, style)
           else
-            TextSpan(text: 'frame $frame'),
-        ]),
-        overflow: TextOverflow.ellipsis,
-        style: small?.copyWith(fontFeatures: tabular),
+            Text('frame $frame', style: style),
+        ],
       );
     }
+    final style = muted?.copyWith(fontFeatures: tabular);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,20 +320,19 @@ class _PlaybackControlsState extends State<PlaybackControls> {
         Text(formatPosition(value.position),
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyMedium?.copyWith(fontFeatures: tabular)),
-        Text.rich(
-          TextSpan(children: [
-            if (release != null) ...[
-              TextSpan(
-                text: sinceRelease,
-                style: TextStyle(color: releaseColor),
+        if (offset != null)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _releaseJump(offset, style),
+              Flexible(
+                child: Text(' · f $frame',
+                    overflow: TextOverflow.ellipsis, style: style),
               ),
-              const TextSpan(text: ' · '),
             ],
-            TextSpan(text: release == null ? 'frame $frame' : 'f $frame'),
-          ]),
-          overflow: TextOverflow.ellipsis,
-          style: muted?.copyWith(fontFeatures: tabular),
-        ),
+          )
+        else
+          Text('frame $frame', overflow: TextOverflow.ellipsis, style: style),
       ],
     );
   }
@@ -290,27 +340,52 @@ class _PlaybackControlsState extends State<PlaybackControls> {
   /// Marks the release on the frame on screen; on the release frame itself
   /// it takes it off again. Anywhere else with one already marked, it moves
   /// it — a release is re-marked far more often than it is cleared.
+  ///
+  /// It says what it is under it. A flag on its own was read as a bookmark,
+  /// or as nothing — and the release is the one mark the whole screen
+  /// counts from, so the button that sets it is the one worth a word.
   Widget? _releaseFlag(VideoPlayerValue value) {
     final onChanged = widget.onReleaseChanged;
     if (onChanged == null) return null;
     final release = widget.release;
     final onIt = release != null &&
         frameAt(release, fps) == frameAt(value.position, fps);
-    return IconButton(
-      key: const ValueKey('release-flag'),
-      tooltip: onIt
+    final color = release == null
+        ? Theme.of(context).colorScheme.onSurface
+        : releaseColor;
+    return Tooltip(
+      message: onIt
           ? 'Clear the release'
           : release == null
               ? 'Mark the release here'
               : 'Move the release here',
-      visualDensity: VisualDensity.compact,
-      iconSize: 20,
-      color: release == null ? null : releaseColor,
-      icon: Icon(onIt ? Icons.flag : Icons.outlined_flag),
-      onPressed: () {
-        controller.pause();
-        onChanged(onIt ? null : _seeker.position);
-      },
+      child: InkResponse(
+        key: const ValueKey('release-flag'),
+        radius: 26,
+        onTap: () {
+          controller.pause();
+          onChanged(onIt ? null : _seeker.position);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(onIt ? Icons.flag : Icons.outlined_flag,
+                  size: 20, color: color),
+              Text(
+                release == null ? 'RELEASE' : (onIt ? 'CLEAR R' : 'MOVE R'),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 0.6,
+                      fontWeight: FontWeight.w600,
+                      color: color.withOpacity(0.85),
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -386,8 +461,14 @@ class _PlaybackControlsState extends State<PlaybackControls> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 12),
-                    child:
-                        Align(alignment: Alignment.centerLeft, child: readout),
+                    // Shrinks rather than overflowing, as the right-hand
+                    // side does: the release pill is wider than the text it
+                    // replaced, and a narrow phone is short of it.
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: readout,
+                    ),
                   ),
                 ),
                 stepBack,

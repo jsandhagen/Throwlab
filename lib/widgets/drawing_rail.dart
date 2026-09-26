@@ -558,9 +558,12 @@ class _DrawingRailState extends State<DrawingRail> {
               borderRadius: BorderRadius.circular(24),
               clipBehavior: Clip.antiAlias,
               child: Padding(
-                padding: _upright
-                    ? const EdgeInsets.symmetric(vertical: _sidePadding)
-                    : const EdgeInsets.symmetric(horizontal: _sidePadding),
+                // Across the rail as well as along it: a slot as wide as the
+                // rail put the selected tool's highlight edge to edge, where
+                // the rail's rounded end cut into it, so it read as a blot
+                // on the end of the rail rather than as a tool picked out
+                // inside it. Inset, it is a pill in a pill.
+                padding: const EdgeInsets.all(_sidePadding),
                 child: !_open
                     ? _run([_collapseButton(scheme)])
                     : oneRun

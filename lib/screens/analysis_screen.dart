@@ -658,8 +658,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     if (_drawing.tool == DrawTool.angle) {
       addAngleVertex(_drawing, _normalizeCanvas(canvasPoint));
     } else if (_drawing.tool == DrawTool.timer) {
-      dropTimer(_drawing, _normalizeCanvas(canvasPoint),
-          _controller.value.position);
+      dropTimer(
+          _drawing, _normalizeCanvas(canvasPoint), _controller.value.position);
     }
   }
 
@@ -1280,8 +1280,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                   // Turned, or the tools moved: what is on screen is a
                   // different piece of the frame at a different size.
                   if (constraints.biggest != _viewport) {
-                    WidgetsBinding.instance
-                        .addPostFrameCallback((_) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _scheduleDetail();
                     });
                   }
@@ -1700,10 +1699,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// the box around it, so the thing stays easy to find with a thumb while
   /// being nearly invisible to the eye.
   ///
-  /// It keeps a faint surface behind it rather than sitting bare on the
-  /// video. A bar alone disappears against a bright frame — a sky, an infield
-  /// in full sun — which is a handle nobody can find on exactly the throws
-  /// this app is pointed at.
+  /// It carries the header's own surface behind it rather than sitting bare
+  /// on the video, and hangs flush off the band's bottom edge. A bar alone
+  /// disappears against a bright frame — a sky, an infield in full sun —
+  /// which is a handle nobody can find on exactly the throws this app is
+  /// pointed at; and a tab a shade off the header, or a few pixels under it,
+  /// reads as something that fell off it.
   ///
   /// Tap it or pull it. A bar across the top of a panel is the shape of
   /// something that gets dragged, so a thumb that comes down on it and
@@ -1736,8 +1737,10 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 width: 44,
                 height: 15,
                 alignment: Alignment.center,
+                // The header's own band, so the tab is the header carried
+                // on down rather than a second piece of chrome under it.
                 decoration: BoxDecoration(
-                  color: scheme.surface.withOpacity(0.55),
+                  color: scheme.surface.withOpacity(0.92),
                   borderRadius:
                       const BorderRadius.vertical(bottom: Radius.circular(8)),
                 ),
@@ -1851,17 +1854,12 @@ class _AnalysisScreenState extends State<AnalysisScreen>
   /// the throws nobody was paging through.
   Widget _filmstrip() {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
+    // No surface of its own: it is laid in the header's band, which is what
+    // keeps it a drawer in front of the throw rather than stills floating
+    // over it — and one surface, so the header, the strip and the tab have
+    // no seam between them.
+    return SizedBox(
       height: _stripHeight,
-      // Its own surface rather than the header's scrim: pulled down over a
-      // frame that fills the top of the screen, stills on a fading gradient
-      // read as floating over the throw instead of as a drawer in front of
-      // it.
-      decoration: BoxDecoration(
-        color: scheme.surface.withOpacity(0.92),
-        borderRadius:
-            const BorderRadius.vertical(bottom: Radius.circular(16)),
-      ),
       child: Row(
         children: [
           _pagerButton(forward: false),
@@ -1907,43 +1905,60 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   /// Portrait header: back, title and the per-throw actions across the top,
   /// with the measuring instructions underneath.
+  ///
+  /// The row itself is a solid band in the same surface as the strip and
+  /// its tab, so the three read as one drawer: the strip slides out of the
+  /// header and the tab hangs flush off whichever of them is lowest. On a
+  /// fading scrim the tab hung off nothing — the header's edge was wherever
+  /// the gradient happened to give out over the frame, which was never where
+  /// the tab started.
   Widget _topOverlay() {
     final banner = _measureBanner(pill: false);
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.black87, Colors.transparent],
+    final band = Theme.of(context).colorScheme.surface.withOpacity(0.92);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ColoredBox(
+          color: band,
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: _headerActions(vertical: false)),
+                // Under the header rather than along the bottom. A strip of
+                // stills is how a throw is picked out — by looking at it —
+                // and it is the first thing wanted on opening one, so it
+                // shows; but the bottom of the screen is where the
+                // scrubber, the transport and the drawing tools all already
+                // are, and a strip down there was in the way of all three.
+                if (_set.length > 1)
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    alignment: Alignment.topCenter,
+                    child: _stripOpen
+                        ? _filmstrip()
+                        : const SizedBox(width: double.infinity),
+                  ),
+              ],
+            ),
+          ),
         ),
-      ),
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(children: _headerActions(vertical: false)),
-            // Under the header rather than along the bottom. A strip of
-            // stills is how a throw is picked out — by looking at it — and
-            // it is the first thing wanted on opening one, so it shows;
-            // but the bottom of the screen is where the scrubber, the
-            // transport and the drawing tools all already are, and a strip
-            // down there was in the way of all three.
-            if (_set.length > 1) ...[
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                alignment: Alignment.topCenter,
-                child: _stripOpen
-                    ? _filmstrip()
-                    : const SizedBox(width: double.infinity),
+        if (_set.length > 1) _stripHandle(),
+        if (banner != null)
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.black87, Colors.transparent],
               ),
-              _stripHandle(),
-            ],
-            if (banner != null) banner,
-          ],
-        ),
-      ),
+            ),
+            child: banner,
+          ),
+      ],
     );
   }
 

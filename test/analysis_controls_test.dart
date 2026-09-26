@@ -207,6 +207,34 @@ void main() {
       expect(video.release, isNull);
     });
 
+    testWidgets('the offset from the release takes the clip back to it',
+        (tester) async {
+      final video = testVideo(temp)
+        ..release = const Duration(milliseconds: 1000);
+      final platform = FakeVideoPlayerPlatform(const Size(1920, 1080));
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: _portraitPhone,
+          videoSize: const Size(1920, 1080),
+          platform: platform);
+      // Opened at the top of the clip, a second short of the release.
+      expect(find.textContaining('R -1.000'), findsOneWidget);
+      platform.seeks.clear();
+
+      await tester.tap(find.byKey(const ValueKey('release-jump')));
+      await pumpFrames(tester, 10);
+      expect(platform.seeks.last.position.inMilliseconds, closeTo(1000, 34));
+      expect(find.textContaining('R 0.000'), findsOneWidget);
+    });
+
+    testWidgets('the flag says what it marks', (tester) async {
+      await mountAnalysisScreen(tester,
+          video: testVideo(temp),
+          screen: _portraitPhone,
+          videoSize: const Size(1920, 1080));
+      expect(find.text('RELEASE'), findsOneWidget);
+    });
+
     testWidgets('measuring starts on the release, and a tap can be undone',
         (tester) async {
       final video = testVideo(temp, event: ThrowEvent.shotPut)
