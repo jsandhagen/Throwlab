@@ -543,7 +543,11 @@ like the app rather than a bare Material default.
   the ones nobody is paging through, and a pixel of chrome there is a pixel
   of the throw. It keeps a faint surface behind it rather than sitting bare:
   a bar alone disappears against a bright frame, which is a handle nobody
-  can find on exactly the throws this app is pointed at. The pager sits in
+  can find on exactly the throws this app is pointed at. That surface is
+  the header's own band carried on down: the upright header is solid, the
+  strip slides out of it and the tab hangs flush off whichever is lowest,
+  rather than off a scrim that gave out wherever the gradient did. The
+  pager sits in
   the tray, at the ends of the stills it steps through: next and previous
   are about the set, and the set is what the tray is, so they come and go
   with it rather than holding a card and two buttons open over the frame
@@ -608,10 +612,15 @@ like the app rather than a bare Material default.
   says.
 - A throw's release is stored on the clip (`ThrowVideo.release`), because
   every screen that looks at a throw looks at it around that moment. The
-  flag beside the speed marks it, the first tap of a measurement marks it
+  flag beside the speed marks it — captioned RELEASE, then MOVE R or
+  CLEAR R, because a bare flag read as a bookmark — the first tap of a
+  measurement marks it
   (that tap is taken on the release frame), and a comparison reads it and
   writes it back, so 'Set release' is asked once per clip rather than once
-  per pair.
+  per pair. Once marked, the gold offset under the clock ('R -1.307') is
+  outlined and carries an arrow the way the release lies: it is the button
+  that goes there, since the number saying how far off the release a frame
+  is, is the one a coach reaches for to close the gap.
 - The scrubber is a scale, not a slider and a wheel. `ClipLine` is the whole
   clip as a hairline, the release notched into it in the medal's gold and
   each timer in its own ink; `ScrubWheel` under it is a ruler under a fixed
