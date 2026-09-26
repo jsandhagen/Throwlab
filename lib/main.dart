@@ -23,18 +23,28 @@ class ThrowLabApp extends StatelessWidget {
   /// The one place the app's look is decided — screens don't restyle it.
   /// Named so the preview renderers in tool/ can paint a single screen
   /// under the real theme instead of a default one.
-  static ThemeData get theme => ThemeData(
+  static ThemeData get theme => _themeFor(ColorScheme.fromSeed(
+        // Matches the light blue of the flask-and-javelin logo.
+        seedColor: const Color(0xFF4FC3F7),
+        brightness: Brightness.dark,
+      ));
+
+  static ThemeData _themeFor(ColorScheme scheme) => ThemeData(
         brightness: Brightness.dark,
         fontFamily: 'Barlow',
-        colorScheme: ColorScheme.fromSeed(
-          // Matches the light blue of the flask-and-javelin logo.
-          seedColor: const Color(0xFF4FC3F7),
-          brightness: Brightness.dark,
-        ),
+        colorScheme: scheme,
         useMaterial3: true,
-        appBarTheme: const AppBarTheme(
+        // The bar keeps its color when a list scrolls under it. Material 3
+        // swaps it for surfaceContainer there — a lighter gray, which on
+        // this dark theme read as the header changing under the thumb, and
+        // left it a different gray from the header bands laid on the plain
+        // surface beneath it. Only a color named here stops the swap.
+        appBarTheme: AppBarTheme(
           centerTitle: false,
           titleSpacing: 16,
+          backgroundColor: scheme.surface,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
         ),
         sliderTheme: const SliderThemeData(
           showValueIndicator: ShowValueIndicator.never,
