@@ -719,9 +719,18 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   static const _restVelocity = 40.0;
 
   /// How long after the wheel is let go the player's own reports are left
-  /// alone: a scrub hands back to the decoder with a seek or two in flight,
-  /// and following each of them would wobble the wheel it just set down.
+  /// alone at the least: a scrub hands back to the decoder with a seek or
+  /// two in flight, and following each of them would wobble the wheel it
+  /// just set down.
   static const _handBack = Duration(milliseconds: 350);
+
+  /// And at the most. After [_handBack] the wheel still waits for the player
+  /// to arrive where it was last sent — a seek can take a second to land,
+  /// and following the frame it reports before then eased the wheel back
+  /// to wherever the scrub had passed through and then forward again, which
+  /// read as the wheel jumping on its own. This is for a seek that never
+  /// reports arriving.
+  static const _handBackCeiling = Duration(milliseconds: 2500);
 
   late final FrameSeeker _seeker = FrameSeeker(widget.controller);
   late final Ticker _coastTicker;
@@ -729,7 +738,15 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   final ScrubAccumulator _scrub = ScrubAccumulator();
   final FrameHaptics _haptics = FrameHaptics();
   FrictionSimulation? _coast;
-  Timer? _quiet;
+
+  /// Let go, and not yet handed back to the player ([_handBack]).
+  bool _handingBack = false;
+  bool _floorPassed = false;
+  Timer? _floor, _ceiling;
+
+  /// A fling a finger came down on: stopped where it was, and let go again
+  /// if the finger lifts without dragging.
+  bool _caught = false;
 
   /// Where the wheel is turned to, in fractional frames: one number, which
   /// is what is drawn and what the frame is read off. The frame stepped to
@@ -774,10 +791,11 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     // A wheel taken down mid-scrub must not leave the clock held on its
     // frame; after this frame, since its owner may be mid-build.
     final onHold = widget.onHold;
-    if (onHold != null && (_inHand || _quiet != null)) {
+    if (onHold != null && (_inHand || _handingBack)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => onHold(null));
     }
-    _quiet?.cancel();
+    _floor?.cancel();
+    _ceiling?.cancel();
     _coastTicker.dispose();
     _settle.dispose();
     _shown.dispose();
@@ -802,8 +820,12 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   /// Follows the player while nobody is turning the wheel: continuously
   /// while it plays, and eased onto the frame it stops on.
   void _follow() {
-    if (_inHand || _quiet != null) return;
+    if (_inHand) return;
     final value = widget.controller.value;
+    if (_handingBack) {
+      if (!_floorPassed || !(value.isPlaying || _arrived(value))) return;
+      _finishHandBack();
+    }
     if (value.isPlaying) {
       _settle.stop();
       _settleTo = _shown.value = value.position.inMicroseconds /
@@ -835,22 +857,62 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     return clamped != raw;
   }
 
+  /// Whether the player is showing the frame it was last sent to — by the
+  /// scrub's handoff, or by anything else that seeked it since.
+  bool _arrived(VideoPlayerValue value) {
+    final target = FrameSeeker.lastTargetOf(widget.controller);
+    return target == null ||
+        frameAt(value.position, widget.fps) == frameAt(target, widget.fps);
+  }
+
+  void _finishHandBack() {
+    _floor?.cancel();
+    _ceiling?.cancel();
+    _floor = _ceiling = null;
+    _handingBack = false;
+    widget.onHold?.call(null);
+  }
+
+  /// A finger coming down on a wheel that is still coasting stops it there,
+  /// the way a hand stops a spinning wheel — before any drag has been
+  /// recognized, so a touch that never moves still stops it.
+  void _onDragDown(DragDownDetails details) {
+    if (_coast == null) return;
+    _coastTicker.stop();
+    _coast = null;
+    _caught = true;
+  }
+
+  void _onDragCancel() {
+    if (!_caught) return;
+    _caught = false;
+    _letGo();
+  }
+
   void _onDragStart(DragStartDetails details) {
     widget.controller.pause();
     _coastTicker.stop();
     _coast = null;
+    _caught = false;
     _settle.stop();
-    _quiet?.cancel();
-    _quiet = null;
+    // Picked up on the frame it has stepped to if a fling still had it —
+    // [_settleTo] is where it last came to rest, which a fling has long
+    // since left, and picking it up there threw the wheel back to where
+    // the flick began.
+    final carrying = _inHand;
+    _floor?.cancel();
+    _ceiling?.cancel();
+    _floor = _ceiling = null;
+    _handingBack = false;
     _inHand = true;
     _scrub.reset();
     final release = widget.release;
     _haptics
       ..lastFrame = frameAt(widget.controller.value.duration, widget.fps)
       ..releaseFrame = release == null ? null : frameAt(release, widget.fps);
-    // Picked up on the frame it was resting on or easing to, so the first
+    // Otherwise on the frame it was resting on or easing to, so the first
     // move steps from there rather than from half way through an ease.
-    _frame = _settleTo.round();
+    if (!carrying) _frame = _settleTo.round();
     _shown.value = _frame.toDouble();
     widget.onHold?.call(_frame);
     widget.onScrubStart?.call();
@@ -894,17 +956,23 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   }
 
   /// Out of the hand: eases onto the frame it stepped to, then — once the
-  /// scrub's own handoff to the decoder has had time to land — follows the
-  /// player again.
+  /// scrub's own handoff to the decoder has landed — follows the player
+  /// again.
   void _letGo() {
     _inHand = false;
     _easeTo(_frame.toDouble());
     widget.onScrubEnd?.call();
-    _quiet?.cancel();
-    _quiet = Timer(_handBack, () {
-      _quiet = null;
-      if (!mounted) return;
-      widget.onHold?.call(null);
+    _handingBack = true;
+    _floorPassed = false;
+    _floor?.cancel();
+    _ceiling?.cancel();
+    _floor = Timer(_handBack, () {
+      _floorPassed = true;
+      if (mounted) _follow();
+    });
+    _ceiling = Timer(_handBackCeiling, () {
+      if (!mounted || !_handingBack) return;
+      _finishHandBack();
       _follow();
     });
   }
@@ -915,6 +983,8 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     return GestureDetector(
       key: const ValueKey('scrub-wheel'),
       behavior: HitTestBehavior.opaque,
+      onHorizontalDragDown: _onDragDown,
+      onHorizontalDragCancel: _onDragCancel,
       onHorizontalDragStart: _onDragStart,
       onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,

@@ -258,6 +258,42 @@ void main() {
       expect(find.textContaining(held!), findsOneWidget);
     });
 
+    testWidgets('a fling caught by a finger carries on from where it got to',
+        (tester) async {
+      final video = testVideo(temp)
+        ..release = const Duration(milliseconds: 1000);
+      await mountAnalysisScreen(tester,
+          video: video,
+          screen: _portraitPhone,
+          videoSize: const Size(1920, 1080));
+      int frameShown() {
+        final text = tester
+            .widgetList<Text>(find.textContaining(' · f '))
+            .single
+            .data!;
+        return int.parse(text.split('f ').last.trim());
+      }
+
+      final start = frameShown();
+      final wheel = find.byKey(const ValueKey('scrub-wheel'));
+      await tester.fling(wheel, const Offset(200, 0), 1500);
+      await pumpFrames(tester, 6);
+      final coasting = frameShown();
+      expect(coasting, greaterThan(start));
+
+      // Caught mid-coast and turned on a little further: it goes on from
+      // the frame it had reached, never back toward where the flick began.
+      final gesture = await tester.startGesture(tester.getCenter(wheel));
+      await tester.pump();
+      for (var i = 0; i < 4; i++) {
+        await gesture.moveBy(const Offset(10, 0));
+        await tester.pump();
+      }
+      expect(frameShown(), greaterThanOrEqualTo(coasting));
+      await gesture.up();
+      await pumpFrames(tester, 40);
+    });
+
     testWidgets('the flag says what it marks', (tester) async {
       await mountAnalysisScreen(tester,
           video: testVideo(temp),

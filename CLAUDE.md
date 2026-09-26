@@ -665,8 +665,13 @@ like the app rather than a bare Material default.
   `FrictionSimulation` from the release speed to rest, one smooth curve
   rather than a velocity decayed and summed tick by tick; and out of the
   hand it never jumps — it eases onto the frame it stopped at like a
-  detent, leaves the player alone while the scrub's handoff lands, and
-  then eases to wherever the player is. Snapping back to the player the
+  detent, leaves the player alone until the player is showing the frame it
+  was last sent to (a seek can take a second to land, and following the
+  stale frame it reported before then swung the wheel back and forth), and
+  then eases to wherever the player is. A finger coming down on a coasting
+  wheel stops it where it is, and a drag from there carries on from the
+  frame the fling had reached — picking it up where it last came to rest
+  threw it back to the start of the flick. Snapping back to the player the
   moment it was let go is what made the ticks leap under a still finger. And it is drawn as a drum seen face on (`ScalePainter`): the
   spacing is true under the needle, where the finger is, and closes up and
   dims toward the edges, the numbers foreshortened with it. Paused, the
