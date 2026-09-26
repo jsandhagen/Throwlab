@@ -97,10 +97,16 @@ async function pack(browser) {
           const img = new Image();
           img.src = 'data:image/png;base64,' + b64;
           await img.decode();
+          // A phone's own width is plenty to judge motion by, and a page
+          // of three hundred frames has to load on one.
+          const scale = Math.min(1, 540 / img.naturalWidth);
           const c = document.createElement('canvas');
-          c.width = img.naturalWidth; c.height = img.naturalHeight;
-          c.getContext('2d').drawImage(img, 0, 0);
-          return c.toDataURL('image/jpeg', 0.84).split(',')[1];
+          c.width = Math.round(img.naturalWidth * scale);
+          c.height = Math.round(img.naturalHeight * scale);
+          const g = c.getContext('2d');
+          g.imageSmoothingQuality = 'high';
+          g.drawImage(img, 0, 0, c.width, c.height);
+          return c.toDataURL('image/jpeg', 0.8).split(',')[1];
         }, bytes.toString('base64'));
         const out = name + '/' + pad(seen.size) + '.jpg';
         fs.writeFileSync(path.join(site, out), Buffer.from(jpeg, 'base64'));
@@ -148,130 +154,157 @@ for (const name of order) {
   };
 }
 
-const html = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ThrowLab Motion</title>
+// Written as the body of a page rather than a whole document: it is what
+// gets published for somebody to look at on a phone, and the host wraps it.
+// A browser opens it as it is.
+const html = `<title>ThrowLab Motion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap">
 <style>
-  :root { --bg: #0f1417; --card: #1b2226; --text: #dee3e7; --dim: #9aa4ab;
-          --accent: #7fd0f7; --line: #2f3a40; }
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) { --bg: #f3f5f6; --card: #ffffff;
-      --text: #161b1e; --dim: #5a656c; --accent: #006a8e; --line: #d5dbdf; }
+  :root {
+    --bg: #eef2f4; --surface: #ffffff; --text: #10181c; --dim: #56656d;
+    --accent: #006689; --line: #d2dbe0; --gold: #b07a10; --frame: #0e1417;
   }
-  :root[data-theme="light"] { --bg: #f3f5f6; --card: #ffffff;
-    --text: #161b1e; --dim: #5a656c; --accent: #006a8e; --line: #d5dbdf; }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 1240px; margin: 0 auto; padding: 24px 16px 48px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .lede { color: var(--dim); margin: 0 0 24px; max-width: 62ch; }
-  .scenes { display: grid; gap: 20px;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-  .scene { background: var(--card); border: 1px solid var(--line);
-    border-radius: 14px; padding: 14px; display: flex; flex-direction: column; }
-  .scene h2 { font-size: 16px; margin: 0 0 4px; }
-  .scene p { color: var(--dim); font-size: 13.5px; margin: 0 0 12px; }
-  .frame { position: relative; border-radius: 10px; overflow: hidden;
-    background: #000; aspect-ratio: var(--ratio); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0c1215; --surface: #151e23; --text: #dce4e8; --dim: #92a2ab;
+      --accent: #7fd0f7; --line: #25313a; --gold: #f7b733;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0c1215; --surface: #151e23; --text: #dce4e8; --dim: #92a2ab;
+    --accent: #7fd0f7; --line: #25313a; --gold: #f7b733;
+  }
+  body { background: var(--bg); color: var(--text);
+    font: 15px/1.5 Barlow, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 1320px; margin: 0 auto; padding: 28px 16px 56px; }
+  header { max-width: 62ch; display: grid; gap: 6px; margin-bottom: 26px; }
+  .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--accent); }
+  h1 { margin: 0; font-size: 30px; line-height: 1.15; font-weight: 700;
+    text-wrap: balance; }
+  header p { margin: 0; color: var(--dim); }
+  .scenes { display: grid; gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); }
+  .scene { background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; padding: 14px; display: grid; gap: 10px;
+    grid-template-columns: minmax(0, 1fr); align-content: start;
+    min-width: 0; }
+  .scene h2 { margin: 0; font-size: 17px; font-weight: 700; }
+  .scene .what { margin: 0; color: var(--dim); font-size: 14px; min-height: 4.5em; }
+  .frame { position: relative; overflow: hidden; border-radius: 12px;
+    background: var(--frame); aspect-ratio: var(--ratio, 9 / 19.5);
+    max-width: 100%; }
   .frame img { position: absolute; inset: 0; width: 100%; height: 100%;
     display: block; }
-  .cap { min-height: 2.9em; margin: 10px 0 8px; font-size: 13.5px; }
+  .cap { margin: 0; min-height: 3em; font-size: 14px; font-weight: 500; }
   .controls { display: flex; gap: 8px; align-items: center; }
-  .controls button { font: inherit; font-size: 13px; color: var(--text);
-    background: transparent; border: 1px solid var(--line);
-    border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  .controls button { font: inherit; font-size: 13px; font-weight: 600;
+    color: var(--text); background: transparent; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; }
   .controls button[aria-pressed="true"] { border-color: var(--accent);
     color: var(--accent); }
+  .controls button:focus-visible, .controls input:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
   .controls input { flex: 1; min-width: 0; accent-color: var(--accent); }
+  .count { font-size: 12px; color: var(--dim);
+    font-variant-numeric: tabular-nums; min-width: 6.5ch; text-align: right; }
+  footer { margin-top: 26px; color: var(--dim); font-size: 13px; max-width: 70ch; }
+  footer code { font-size: 12.5px; }
 </style>
-</head>
-<body>
 <main>
-  <h1>ThrowLab motion</h1>
-  <p class="lede">Frames rendered from the app's own widgets on the test
-    clock, played back at the speed they were shot at. Use ¼× to look at
-    one moment, or drag the scrubber to stop on a frame.</p>
+  <header>
+    <span class="eyebrow">Branch claude/throwing-animations-art-7npgti</span>
+    <h1>Three animations, rendered from the app</h1>
+    <p>Every frame here was painted by the real widgets on the test clock and
+      is played back at the speed it was shot. Tap ¼× to slow one down, or
+      drag the bar to stop on a frame.</p>
+  </header>
   <div class="scenes" id="scenes"></div>
+  <footer>Regenerate with <code>flutter test --update-goldens
+    tool/preview/motion_preview.dart</code> then
+    <code>node tool/preview/flipbook.js</code>.</footer>
 </main>
 <script>
 const SCENES = ${JSON.stringify(data)};
 const ORDER = ${JSON.stringify(order)};
 const root = document.getElementById('scenes');
+const still = window.matchMedia &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 ORDER.forEach((name) => {
   const s = SCENES[name];
   const el = document.createElement('section');
   el.className = 'scene';
-  el.innerHTML = '<h2></h2><p></p><div class="frame"><img alt=""></div>' +
-    '<div class="cap"></div><div class="controls">' +
-    '<button data-play aria-pressed="true">Pause</button>' +
-    '<button data-slow aria-pressed="false">¼×</button>' +
-    '<input type="range" min="0" value="0" aria-label="Frame"></div>';
+  el.innerHTML = '<h2></h2><p class="what"></p>' +
+    '<div class="frame"><img alt=""></div><p class="cap" aria-live="off"></p>' +
+    '<div class="controls">' +
+    '<button type="button" id="play-' + name + '" aria-pressed="true">Pause</button>' +
+    '<button type="button" id="slow-' + name + '" aria-pressed="false">¼×</button>' +
+    '<input type="range" id="at-' + name + '" min="0" value="0" aria-label="Frame">' +
+    '<span class="count"></span></div>';
   el.querySelector('h2').textContent = s.title;
-  el.querySelector('p').textContent = s.blurb;
+  el.querySelector('.what').textContent = s.blurb;
   root.appendChild(el);
   const img = el.querySelector('img');
   const cap = el.querySelector('.cap');
+  const count = el.querySelector('.count');
   const range = el.querySelector('input');
-  const play = el.querySelector('[data-play]');
-  const slow = el.querySelector('[data-slow]');
-  const count = s.files.length;
-  range.max = count - 1;
+  const play = el.querySelector('#play-' + name);
+  const slow = el.querySelector('#slow-' + name);
+  const total = s.files.length;
+  range.max = total - 1;
+  img.alt = s.title;
 
   const frames = s.files.map((src) => {
     const im = new Image();
     im.src = src;
     return im;
   });
-  frames[0].onload = () => {
+  frames[0].addEventListener('load', () => {
     el.querySelector('.frame').style.setProperty('--ratio',
       frames[0].naturalWidth + ' / ' + frames[0].naturalHeight);
-  };
+  });
 
-  let i = 0, playing = true, speed = 1, last = 0, acc = 0;
+  let i = 0, playing = !still, speed = 1, last = 0, acc = 0;
   function show(n) {
     i = n;
     img.src = frames[i].src;
     range.value = i;
+    count.textContent = (i + 1) + ' / ' + total;
     let text = '';
     s.cuts.forEach((c) => { if (i >= c.from && c.caption) text = c.caption; });
     cap.textContent = text;
   }
+  function setPlaying(on) {
+    playing = on;
+    play.textContent = on ? 'Pause' : 'Play';
+    play.setAttribute('aria-pressed', String(on));
+  }
   function tick(now) {
-    if (last) acc += (now - last) * speed;
+    if (last && playing) acc += (now - last) * speed;
     last = now;
-    if (playing) {
-      while (acc >= s.step) { acc -= s.step; show((i + 1) % count); }
-    } else {
-      acc = 0;
-    }
+    while (playing && acc >= s.step) { acc -= s.step; show((i + 1) % total); }
     requestAnimationFrame(tick);
   }
-  play.onclick = () => {
-    playing = !playing;
-    play.textContent = playing ? 'Pause' : 'Play';
-    play.setAttribute('aria-pressed', String(playing));
-  };
-  slow.onclick = () => {
+  play.addEventListener('click', () => setPlaying(!playing));
+  slow.addEventListener('click', () => {
     speed = speed === 1 ? 0.25 : 1;
     slow.setAttribute('aria-pressed', String(speed !== 1));
-  };
-  range.oninput = () => {
-    playing = false;
-    play.textContent = 'Play';
-    play.setAttribute('aria-pressed', 'false');
+  });
+  range.addEventListener('input', () => {
+    setPlaying(false);
     show(Number(range.value));
-  };
-  show(0);
+  });
+  setPlaying(playing);
+  // Reduced motion opens on the moment each scene is about, paused.
+  show(still ? Math.min(total - 1, (s.cuts[s.cuts.length - 1] || {from: 0}).from + 30) : 0);
   requestAnimationFrame(tick);
 });
 </script>
-</body>
-</html>
 `;
 
 fs.writeFileSync(path.join(site, 'index.html'), html);
