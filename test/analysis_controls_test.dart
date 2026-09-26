@@ -186,7 +186,7 @@ void main() {
           video: video,
           screen: _portraitPhone,
           videoSize: const Size(1920, 1080));
-      await tester.drag(find.byType(ScrubWheel), const Offset(200, 0));
+      await tester.drag(find.byType(ScrubWheel), const Offset(-200, 0));
       await pumpFrames(tester, 20);
 
       await tester.tap(find.byKey(const ValueKey('release-flag')));

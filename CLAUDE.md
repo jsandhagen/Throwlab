@@ -596,11 +596,23 @@ like the app rather than a bare Material default.
   needle — a tick per frame, and a numbered tick at the shortest round
   interval of time with room between numbers (`ScalePainter.labelStep`),
   counted from the release once there is one ('R', '-0.05', '+0.10') and
-  from the start until then. The numbers read left to right, and a drag to
-  the right still goes forward, as it does on the frame, so the two scrub
-  the same way. The needle and the readout both work in whole frames
-  (`formatSinceRelease` takes frames), because a seek lands a quarter frame
-  short of the frame it shows and the release frame has to read 0.000.
+  from the start until then. It is a wheel, and feels like one because it
+  behaves like one. The surface moves with the finger — the numbers read
+  left to right, so later frames are pulled in from the right and a drag to
+  the left goes forward, as a timeline or a tape does. That is the opposite
+  of a drag on the frame, and on purpose: the first version kept the two
+  the same and ran the ruler against the thumb, which read as something
+  slipping under it rather than being turned. In the hand it is drawn where
+  the hand has it — the frames stepped plus the part of one not stepped
+  yet (`ScrubAccumulator.fraction`) — not where the player has got to,
+  which lags a scrub by a seek and moved it in lurches; let go, it eases
+  onto the frame it stopped at like a detent before following the player
+  again. And it is drawn as a drum seen face on (`ScalePainter`): the
+  spacing is true under the needle, where the finger is, and closes up and
+  dims toward the edges, the numbers foreshortened with it. Paused, the
+  needle and the readout work in whole frames (`formatSinceRelease` takes
+  frames), because a seek lands a quarter frame short of the frame it
+  shows and the release frame has to read 0.000.
 - The scale is felt as well as seen (`FrameHaptics`): a selection click per
   frame, held to one per 35 ms so a fling is a ripple rather than a buzz, a
   light impact crossing the release, and one medium impact running into

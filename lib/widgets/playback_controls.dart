@@ -542,16 +542,25 @@ class _ClipLinePainter extends CustomPainter {
       played != old.played;
 }
 
-/// The scale: drag to step through frames, flick to keep it spinning. It is
-/// a ruler under a fixed needle — a tick per frame, and a numbered tick at a
-/// round interval of time, counted from the release once one is marked (so
-/// the numbers are the ones a coach says out loud: 'five hundredths before
-/// release') and from the start of the clip until then. The ruler reads
-/// left to right like every other one. A drag to the right goes forward, as
-/// it does on the frame itself — the two scrub the same way, so a thumb
-/// never has to know which of them it is on — which means the ruler runs
-/// against the finger rather than under it, the way a needle is pushed
-/// along a scale. Sensitivity scales with the clip's real frame rate (see
+/// The scale: a wheel turned under a fixed needle. Drag to step through
+/// frames, flick it and it keeps spinning. It carries a tick per frame and
+/// a numbered tick at a round interval of time, counted from the release
+/// once one is marked (so the numbers are the ones a coach says out loud:
+/// 'five hundredths before release') and from the start of the clip until
+/// then, reading left to right like every other ruler.
+///
+/// It feels like a wheel because it behaves like one. The surface moves
+/// with the finger, so later frames are pulled in from the right: drag left
+/// to go forward, the way a timeline or a tape is pulled. The ruler it
+/// replaced ran against the finger, which read as something slipping under
+/// the thumb rather than being turned by it. While it is being turned it
+/// draws where the finger has taken it — the frames it has stepped plus the
+/// part of a frame not stepped yet — rather than where the player has got
+/// to, which lags a scrub by a seek; let go, it eases into the frame it
+/// stopped on like a detent, and only then goes back to following the
+/// player. And it is drawn as a drum seen face on: ticks close up and dim
+/// toward the edges, and the numbers are foreshortened with them.
+/// Sensitivity scales with the clip's real frame rate (see
 /// [scrubPixelsPerFrame]), and every frame it passes is a click in the hand
 /// ([FrameHaptics]).
 class ScrubWheel extends StatefulWidget {
@@ -587,8 +596,7 @@ class ScrubWheel extends StatefulWidget {
   State<ScrubWheel> createState() => _ScrubWheelState();
 }
 
-class _ScrubWheelState extends State<ScrubWheel>
-    with SingleTickerProviderStateMixin {
+class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   double get _pixelsPerFrame =>
       scrubPixelsPerFrame(widget.captureFps ?? widget.fps);
 
@@ -598,17 +606,29 @@ class _ScrubWheelState extends State<ScrubWheel>
   /// Coasting stops below this speed (px/s) — about 5 frames/s.
   static const _restVelocity = 40.0;
 
+  /// How long the wheel keeps its own reading after it has settled, for the
+  /// player to catch up with the frame it was turned to — past that it
+  /// follows the player again, wherever the player is.
+  static const _handBack = Duration(milliseconds: 400);
+
   late final FrameSeeker _seeker = FrameSeeker(widget.controller);
   late final Ticker _ticker;
+  late final AnimationController _settle;
   final ScrubAccumulator _scrub = ScrubAccumulator();
   final FrameHaptics _haptics = FrameHaptics();
   double _velocity = 0;
   Duration _lastTick = Duration.zero;
+  Timer? _release;
+  double _settleFrom = 0;
 
-  /// The frame the scale has been moved to in this gesture. Counted here
+  /// The frame the wheel has been turned to in this gesture. Counted here
   /// rather than read off the player, which is a seek or a still behind the
   /// finger, so a click lands on the frame it belongs to.
   int _frame = 0;
+
+  /// Where the wheel is drawn while it is in the hand, in fractional frames;
+  /// null when it is following the player.
+  final ValueNotifier<double?> _held = ValueNotifier(null);
 
   @override
   void initState() {
@@ -616,11 +636,22 @@ class _ScrubWheelState extends State<ScrubWheel>
     // Created eagerly: a lazy ticker that is never flung would be created
     // during dispose(), when looking up the TickerMode is illegal.
     _ticker = createTicker(_onTick);
+    _settle = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 160))
+      ..addListener(_onSettle)
+      ..addStatusListener((status) {
+        if (status != AnimationStatus.completed) return;
+        _release?.cancel();
+        _release = Timer(_handBack, () => _held.value = null);
+      });
   }
 
   @override
   void dispose() {
+    _release?.cancel();
     _ticker.dispose();
+    _settle.dispose();
+    _held.dispose();
     super.dispose();
   }
 
@@ -630,34 +661,45 @@ class _ScrubWheelState extends State<ScrubWheel>
   /// Routes a frame step either to the host's smooth scrub path (when wired)
   /// or straight to the player's seeker, clamped to the clip and felt.
   void _emit(int frames) {
-    if (frames == 0) return;
-    final from = _frame;
-    _frame = _haptics.step(from, from + frames);
-    final moved = _frame - from;
-    if (moved == 0) return;
-    if (widget.onScrubBy != null) {
-      widget.onScrubBy!(moved);
-    } else {
-      _seeker.seekBy(_frameStep * moved);
+    if (frames != 0) {
+      final from = _frame;
+      _frame = _haptics.step(from, from + frames);
+      final moved = _frame - from;
+      if (moved != 0) {
+        if (widget.onScrubBy != null) {
+          widget.onScrubBy!(moved);
+        } else {
+          _seeker.seekBy(_frameStep * moved);
+        }
+      }
     }
+    _held.value = (_frame + _scrub.fraction)
+        .clamp(0.0, math.max(_haptics.lastFrame, 0).toDouble());
   }
 
-  /// Accelerated step from a live finger drag.
+  /// Accelerated step from a live finger drag. Negated because the surface
+  /// follows the finger: pulled left, it brings the later frames under the
+  /// needle.
   void _onDragUpdate(DragUpdateDetails details) {
-    _emit(_scrub.addDrag(details.delta.dx, _pixelsPerFrame,
+    _emit(_scrub.addDrag(-details.delta.dx, _pixelsPerFrame,
         timestamp: details.sourceTimeStamp));
   }
 
   void _onDragStart(DragStartDetails details) {
     widget.controller.pause();
     _ticker.stop();
+    _settle.stop();
+    _release?.cancel();
     _velocity = 0;
     _scrub.reset();
     final release = widget.release;
     _haptics
       ..lastFrame = frameAt(widget.controller.value.duration, widget.fps)
       ..releaseFrame = release == null ? null : frameAt(release, widget.fps);
-    _frame = frameAt(_seeker.position, widget.fps);
+    // Picked up where it was drawn, whether that is still settling or
+    // following the player.
+    _frame = _held.value?.round() ?? frameAt(_seeker.position, widget.fps);
+    _held.value = _frame.toDouble();
     widget.onScrubStart?.call();
   }
 
@@ -665,8 +707,9 @@ class _ScrubWheelState extends State<ScrubWheel>
     // Hand the fling off at the rate the finger was actually scrubbing —
     // the drag's acceleration folded in — so momentum continues the motion
     // instead of snapping back to 1× at release.
-    _velocity = details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
+    _velocity = -details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
     if (_velocity.abs() < _restVelocity) {
+      _settleIn();
       widget.onScrubEnd?.call();
       return;
     }
@@ -683,9 +726,23 @@ class _ScrubWheelState extends State<ScrubWheel>
     _velocity *= math.pow(_decayPerSecond, dt);
     if (_velocity.abs() < _restVelocity) {
       _ticker.stop();
+      _settleIn();
       // Momentum spent: the scrub session is over.
       widget.onScrubEnd?.call();
     }
+  }
+
+  /// Eases the part of a frame the wheel was left between into the frame
+  /// it stepped to, so it comes to rest on a tick the way a detented wheel
+  /// does rather than snapping there.
+  void _settleIn() {
+    _settleFrom = _held.value ?? _frame.toDouble();
+    _settle.forward(from: 0);
+  }
+
+  void _onSettle() {
+    final t = Curves.easeOutCubic.transform(_settle.value);
+    _held.value = _settleFrom + (_frame - _settleFrom) * t;
   }
 
   @override
@@ -697,27 +754,38 @@ class _ScrubWheelState extends State<ScrubWheel>
       onHorizontalDragStart: _onDragStart,
       onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,
-      child: ValueListenableBuilder<VideoPlayerValue>(
-        valueListenable: widget.controller,
-        builder: (context, value, _) => SizedBox(
-          height: widget.height,
-          width: double.infinity,
-          child: CustomPaint(
-            painter: ScalePainter(
-              // The frame on screen, not the position: a seek lands a
-              // little short of the frame it shows, and the needle has to
-              // sit on the tick of the frame it is showing.
-              frames: frameAt(value.position, widget.fps).toDouble(),
-              fps: widget.fps,
-              spacing: _pixelsPerFrame,
-              release: widget.release,
-              tickColor: Colors.white,
-              needleColor: theme.colorScheme.primary,
-              releaseColor: releaseColor,
-              labelStyle: theme.textTheme.labelSmall,
+      child: ListenableBuilder(
+        listenable: Listenable.merge([widget.controller, _held]),
+        builder: (context, _) {
+          final value = widget.controller.value;
+          final held = _held.value;
+          // In the hand, where the hand has it. Playing, where the clip is,
+          // continuously. Paused, on the tick of the frame on screen: a seek
+          // lands a little short of the frame it shows, and the needle has
+          // to sit on that frame's tick.
+          final frames = held ??
+              (value.isPlaying
+                  ? value.position.inMicroseconds /
+                      Duration.microsecondsPerSecond *
+                      widget.fps
+                  : frameAt(value.position, widget.fps).toDouble());
+          return SizedBox(
+            height: widget.height,
+            width: double.infinity,
+            child: CustomPaint(
+              painter: ScalePainter(
+                frames: frames,
+                fps: widget.fps,
+                spacing: _pixelsPerFrame,
+                release: widget.release,
+                tickColor: Colors.white,
+                needleColor: theme.colorScheme.primary,
+                releaseColor: releaseColor,
+                labelStyle: theme.textTheme.labelSmall,
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -726,11 +794,14 @@ class _ScrubWheelState extends State<ScrubWheel>
 /// The round intervals a scale is numbered at, in seconds.
 const _labelSteps = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0, 10.0];
 
-/// The ruler itself. A frame is a tick at [spacing] pixels, the frame on
-/// screen is under the needle in the middle, and the numbered ticks fall at
-/// the shortest round interval of time that leaves [minLabelGap] between
-/// numbers — so a 240 fps clip is read in hundredths and a 30 fps one in
-/// tenths, each at the density it can actually be scrubbed at.
+/// The wheel itself, seen face on. A frame is a tick [spacing] pixels apart
+/// *on the drum's surface*, which is what they are in the middle, under the
+/// needle, where the finger is; toward the edges the surface turns away, so
+/// the same spacing projects closer and closer together and dims with the
+/// light falling off it. The numbered ticks fall at the shortest round
+/// interval of time that leaves [minLabelGap] between numbers at the middle
+/// — so a 240 fps clip is read in hundredths and a 30 fps one in tenths,
+/// each at the density it can actually be scrubbed at.
 class ScalePainter extends CustomPainter {
   ScalePainter({
     required this.frames,
@@ -743,7 +814,7 @@ class ScalePainter extends CustomPainter {
     this.labelStyle,
   });
 
-  /// Where the clip is, in frames (fractional between them).
+  /// Where the wheel is turned to, in frames (fractional between them).
   final double frames;
   final double fps;
   final double spacing;
@@ -755,6 +826,11 @@ class ScalePainter extends CustomPainter {
   final TextStyle? labelStyle;
 
   static const double minLabelGap = 44;
+
+  /// How far round the drum the visible face reaches either side of the
+  /// needle. Short of a quarter turn, so the last ticks at the edge are
+  /// still ticks rather than a smear.
+  static const double _reach = 1.3;
 
   /// The labeled interval, in seconds, for a scale at [fps] frames a second
   /// drawn [spacing] pixels a frame.
@@ -780,54 +856,70 @@ class ScalePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (fps <= 0 || spacing <= 0) return;
     final half = size.width / 2;
+    // The drum's radius, in the surface's own pixels: the visible face
+    // spans [_reach] radians either side, projected onto the half width.
+    final radius = half / math.sin(_reach);
     // Ticks hang from the top edge; the numbers sit under them.
     final majorLength = size.height * 0.4;
     final minorLength = majorLength * 0.45;
-    double fade(double x) =>
-        (1 - math.pow((x - half) / half, 2)).clamp(0.0, 1.0).toDouble();
-    double xOfFrame(double f) => half + (f - frames) * spacing;
+
+    /// Where a point [frame] frames round the surface lands on screen, and
+    /// how squarely it faces the eye (1 under the needle, 0 edge on) —
+    /// null once it has turned out of view.
+    (double, double)? project(double frame) {
+      final angle = (frame - frames) * spacing / radius;
+      if (angle.abs() > _reach) return null;
+      return (half + radius * math.sin(angle), math.cos(angle));
+    }
 
     // A tick per frame.
-    final first = (frames - half / spacing).floor();
-    final last = (frames + half / spacing).ceil();
-    for (var f = first; f <= last; f++) {
+    final reachFrames = _reach * radius / spacing;
+    for (var f = (frames - reachFrames).floor();
+        f <= (frames + reachFrames).ceil();
+        f++) {
       if (f < 0) continue;
-      final x = xOfFrame(f.toDouble());
+      final at = project(f.toDouble());
+      if (at == null) continue;
+      final (x, facing) = at;
       canvas.drawLine(
           Offset(x, 2),
-          Offset(x, 2 + minorLength),
+          Offset(x, 2 + minorLength * (0.7 + 0.3 * facing)),
           Paint()
-            ..color = tickColor.withOpacity(0.1 + 0.45 * fade(x))
-            ..strokeWidth = 1);
+            ..color = tickColor.withOpacity(0.08 + 0.5 * facing * facing)
+            ..strokeWidth = 0.6 + 0.5 * facing);
     }
 
     // Numbered ticks, at a round interval from the zero.
     final step = labelStep(fps, spacing);
     final zero = release == null ? 0.0 : frameAt(release!, fps) / fps;
     final now = frames / fps;
-    final span = half / (fps * spacing);
+    final span = reachFrames / fps;
     final firstK = ((now - span - zero) / step).floor();
     final lastK = ((now + span - zero) / step).ceil();
+    final base = labelStyle ?? const TextStyle(fontSize: 10);
     for (var k = firstK; k <= lastK; k++) {
       final t = zero + k * step;
       if (t < 0) continue;
-      final x = xOfFrame(t * fps);
-      final a = fade(x);
-      if (a <= 0) continue;
+      final at = project(t * fps);
+      if (at == null) continue;
+      final (x, facing) = at;
       final isRelease = release != null && k == 0;
       final color = isRelease ? releaseColor : tickColor;
+      final light = facing * facing;
       canvas.drawLine(
           Offset(x, 2),
-          Offset(x, 2 + majorLength),
+          Offset(x, 2 + majorLength * (0.7 + 0.3 * facing)),
           Paint()
-            ..color = color.withOpacity(isRelease ? a : 0.15 + 0.7 * a)
-            ..strokeWidth = isRelease ? 2 : 1.2);
+            ..color = color.withOpacity(isRelease ? light : 0.12 + 0.7 * light)
+            ..strokeWidth = (isRelease ? 2 : 1.2) * (0.6 + 0.4 * facing));
+      // A number turned far enough away to be squashed past reading is
+      // left off; its tick still says where it is.
+      if (facing < 0.5) continue;
       final text = TextPainter(
         text: TextSpan(
           text: label(k * step, step, relative: release != null),
-          style: (labelStyle ?? const TextStyle(fontSize: 10)).copyWith(
-            color: (isRelease ? releaseColor : tickColor)
-                .withOpacity(isRelease ? a : 0.6 * a),
+          style: base.copyWith(
+            color: color.withOpacity(isRelease ? light : 0.65 * light),
             fontSize: 10,
             height: 1,
             fontFeatures: const [FontFeature.tabularFigures()],
@@ -835,8 +927,13 @@ class ScalePainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      text.paint(
-          canvas, Offset(x - text.width / 2, size.height - text.height - 1));
+      // Foreshortened with the surface it is printed on.
+      canvas
+        ..save()
+        ..translate(x, size.height - text.height - 1)
+        ..scale(facing, 1);
+      text.paint(canvas, Offset(-text.width / 2, 0));
+      canvas.restore();
     }
 
     // The needle: the frame on screen.

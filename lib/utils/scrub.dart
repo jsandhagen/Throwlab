@@ -42,6 +42,12 @@ class ScrubAccumulator {
   /// up exactly where the finger left off instead of snapping back to 1×.
   double get lastGain => _lastGain;
 
+  /// The part of a frame the drag has travelled that has not been emitted
+  /// yet, signed with the direction it was travelling. A wheel drawn at the
+  /// frames emitted plus this follows the finger continuously rather than
+  /// in frame-sized steps.
+  double get fraction => _frameAccumulator;
+
   /// Clears carried-over fraction, speed history, and gain. Call at the
   /// start of every fresh drag.
   void reset() {
