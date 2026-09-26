@@ -8,8 +8,12 @@ import 'services/meet_relay.dart';
 import 'services/meet_server.dart';
 import 'services/notes_library.dart';
 import 'services/video_library.dart';
+import 'widgets/distance_field.dart';
 
 void main() {
+  // Read before anything opens a sheet, so the first one is already in
+  // the unit the coach works in.
+  DistanceField.loadPreference();
   runApp(const ThrowLabApp());
 }
 

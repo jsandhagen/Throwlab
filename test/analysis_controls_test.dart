@@ -77,12 +77,19 @@ void main() {
   });
 
   group('the scale', () {
-    test('is numbered at the shortest round interval with room', () {
-      // 240 fps at ~4 px a frame: a hundredth is 10 px, a twentieth 50.
-      expect(ScalePainter.labelStep(240, scrubPixelsPerFrame(240)), 0.05);
-      // 30 fps at ~33 px a frame: a hundredth is 10 px, a twentieth 50.
-      expect(ScalePainter.labelStep(30, scrubPixelsPerFrame(30)), 0.05);
-      expect(ScalePainter.labelStep(30, 4), 0.5);
+    test('is numbered on whole frames, at the shortest round interval', () {
+      // 240 fps at ~4 px a frame: a twentieth of a second is 12 frames.
+      expect(ScalePainter.labelInterval(240, scrubPixelsPerFrame(240)),
+          (seconds: 0.05, frames: 12));
+      // 30 fps at ~33 px a frame: a twentieth would be a frame and a half,
+      // which would put every other number between two ticks — so tenths.
+      expect(ScalePainter.labelInterval(30, scrubPixelsPerFrame(30)),
+          (seconds: 0.1, frames: 3));
+      expect(ScalePainter.labelInterval(30, 4), (seconds: 0.5, frames: 15));
+      // NTSC's 29.97 is near enough to divide into tenths.
+      expect(ScalePainter.labelInterval(29.97, 33.4).frames, 3);
+      // A rate no round interval divides is numbered by frames.
+      expect(ScalePainter.labelInterval(12.34, 33).frames, 2);
     });
 
     test('counts from the release, signed, and names the release R', () {
@@ -186,7 +193,7 @@ void main() {
           video: video,
           screen: _portraitPhone,
           videoSize: const Size(1920, 1080));
-      await tester.drag(find.byType(ScrubWheel), const Offset(-200, 0));
+      await tester.drag(find.byType(ScrubWheel), const Offset(200, 0));
       await pumpFrames(tester, 20);
 
       await tester.tap(find.byKey(const ValueKey('release-flag')));

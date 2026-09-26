@@ -402,9 +402,12 @@ void main() {
         (tester) async {
       await mountEvent(tester);
       await tapMark(tester);
-      // The second box is feet, and a US meet calls a mark out — and
-      // prints it — as feet and inches.
-      await tester.enterText(find.byType(TextField).last, '191-08');
+      // A US meet calls a mark out — and prints it — as feet and inches,
+      // so feet are typed as the two numbers that were called.
+      await tester.tap(find.text('ft'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey('feet')), '191');
+      await tester.enterText(find.byKey(const ValueKey('inches')), '8');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Save mark'));
       await tester.pumpAndSettle();

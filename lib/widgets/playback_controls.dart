@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
@@ -547,13 +548,15 @@ class _ClipLinePainter extends CustomPainter {
 /// a numbered tick at a round interval of time, counted from the release
 /// once one is marked (so the numbers are the ones a coach says out loud:
 /// 'five hundredths before release') and from the start of the clip until
-/// then, reading left to right like every other ruler.
+/// then.
 ///
-/// It feels like a wheel because it behaves like one. The surface moves
-/// with the finger, so later frames are pulled in from the right: drag left
-/// to go forward, the way a timeline or a tape is pulled. The ruler it
-/// replaced ran against the finger, which read as something slipping under
-/// the thumb rather than being turned by it. While it is being turned it
+/// It feels like a wheel because it behaves like one. A drag to the right
+/// goes forward, as it does on the frame itself, and the surface moves with
+/// the finger — so the later frames are on the left, rolling round to the
+/// needle as the drum is turned, the way the numbers on a jog dial or a
+/// combination lock come to the mark. Both the other ways were tried: a
+/// ruler reading left to right under a rightward drag ran against the
+/// thumb, and one pulled leftward like a tape felt backwards. While it is being turned it
 /// draws where the finger has taken it — the frames it has stepped plus the
 /// part of a frame not stepped yet — rather than where the player has got
 /// to, which lags a scrub by a seek; let go, it eases into the frame it
@@ -606,143 +609,185 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   /// Coasting stops below this speed (px/s) — about 5 frames/s.
   static const _restVelocity = 40.0;
 
-  /// How long the wheel keeps its own reading after it has settled, for the
-  /// player to catch up with the frame it was turned to — past that it
-  /// follows the player again, wherever the player is.
-  static const _handBack = Duration(milliseconds: 400);
+  /// How long after the wheel is let go the player's own reports are left
+  /// alone: a scrub hands back to the decoder with a seek or two in flight,
+  /// and following each of them would wobble the wheel it just set down.
+  static const _handBack = Duration(milliseconds: 350);
 
   late final FrameSeeker _seeker = FrameSeeker(widget.controller);
-  late final Ticker _ticker;
+  late final Ticker _coastTicker;
   late final AnimationController _settle;
   final ScrubAccumulator _scrub = ScrubAccumulator();
   final FrameHaptics _haptics = FrameHaptics();
-  double _velocity = 0;
-  Duration _lastTick = Duration.zero;
-  Timer? _release;
-  double _settleFrom = 0;
+  FrictionSimulation? _coast;
+  Timer? _quiet;
 
-  /// The frame the wheel has been turned to in this gesture. Counted here
-  /// rather than read off the player, which is a seek or a still behind the
-  /// finger, so a click lands on the frame it belongs to.
+  /// Where the wheel is turned to, in fractional frames: one number, which
+  /// is what is drawn and what the frame is read off. The frame stepped to
+  /// is always the nearest one to it, so the tick under the needle and the
+  /// picture on screen are never a frame apart.
+  final ValueNotifier<double> _shown = ValueNotifier(0);
+
+  /// The frame the wheel is on, as stepped — counted here rather than read
+  /// off the player, which is a seek or a still behind the finger, so a
+  /// click lands on the frame it belongs to.
   int _frame = 0;
 
-  /// Where the wheel is drawn while it is in the hand, in fractional frames;
-  /// null when it is following the player.
-  final ValueNotifier<double?> _held = ValueNotifier(null);
+  /// While a finger or a fling has it, the wheel answers to that alone.
+  bool _inHand = false;
+
+  /// Where an ease toward a resting frame started and is going.
+  double _settleFrom = 0;
+  double _settleTo = 0;
+
+  double get _lastFrame => math.max(_haptics.lastFrame, 0).toDouble();
 
   @override
   void initState() {
     super.initState();
     // Created eagerly: a lazy ticker that is never flung would be created
     // during dispose(), when looking up the TickerMode is illegal.
-    _ticker = createTicker(_onTick);
+    _coastTicker = createTicker(_onCoast);
     _settle = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 160))
-      ..addListener(_onSettle)
-      ..addStatusListener((status) {
-        if (status != AnimationStatus.completed) return;
-        _release?.cancel();
-        _release = Timer(_handBack, () => _held.value = null);
+      ..addListener(() {
+        final t = Curves.easeOutCubic.transform(_settle.value);
+        _shown.value = _settleFrom + (_settleTo - _settleFrom) * t;
       });
+    _shown.value = _settleTo =
+        frameAt(widget.controller.value.position, widget.fps).toDouble();
+    widget.controller.addListener(_follow);
   }
 
   @override
   void dispose() {
-    _release?.cancel();
-    _ticker.dispose();
+    widget.controller.removeListener(_follow);
+    _quiet?.cancel();
+    _coastTicker.dispose();
     _settle.dispose();
-    _held.dispose();
+    _shown.dispose();
     super.dispose();
   }
 
   Duration get _frameStep => Duration(
       microseconds: (Duration.microsecondsPerSecond / widget.fps).round());
 
-  /// Routes a frame step either to the host's smooth scrub path (when wired)
-  /// or straight to the player's seeker, clamped to the clip and felt.
-  void _emit(int frames) {
-    if (frames != 0) {
-      final from = _frame;
-      _frame = _haptics.step(from, from + frames);
-      final moved = _frame - from;
-      if (moved != 0) {
-        if (widget.onScrubBy != null) {
-          widget.onScrubBy!(moved);
-        } else {
-          _seeker.seekBy(_frameStep * moved);
-        }
-      }
+  /// Eases the wheel to rest on [frame], from wherever it is drawn now: the
+  /// one way it ever gets to a new place without a hand on it, so it never
+  /// jumps.
+  void _easeTo(double frame) {
+    if (frame == _settleTo && (_settle.isAnimating || _shown.value == frame)) {
+      return;
     }
-    _held.value = (_frame + _scrub.fraction)
-        .clamp(0.0, math.max(_haptics.lastFrame, 0).toDouble());
+    _settleFrom = _shown.value;
+    _settleTo = frame;
+    _settle.forward(from: 0);
   }
 
-  /// Accelerated step from a live finger drag. Negated because the surface
-  /// follows the finger: pulled left, it brings the later frames under the
-  /// needle.
-  void _onDragUpdate(DragUpdateDetails details) {
-    _emit(_scrub.addDrag(-details.delta.dx, _pixelsPerFrame,
-        timestamp: details.sourceTimeStamp));
+  /// Follows the player while nobody is turning the wheel: continuously
+  /// while it plays, and eased onto the frame it stops on.
+  void _follow() {
+    if (_inHand || _quiet != null) return;
+    final value = widget.controller.value;
+    if (value.isPlaying) {
+      _settle.stop();
+      _settleTo = _shown.value = value.position.inMicroseconds /
+          Duration.microsecondsPerSecond *
+          widget.fps;
+      return;
+    }
+    _easeTo(frameAt(value.position, widget.fps).toDouble());
+  }
+
+  /// Turns the wheel by [frames] (fractional), steps to the frame nearest
+  /// where it now is, and says so in the hand and to the player. Returns
+  /// whether it ran into an end.
+  bool _turn(double frames) {
+    final raw = _shown.value + frames;
+    final clamped = raw.clamp(0.0, _lastFrame);
+    _shown.value = clamped;
+    final from = _frame;
+    _frame = _haptics.step(from, raw.round());
+    final moved = _frame - from;
+    if (moved != 0) {
+      if (widget.onScrubBy != null) {
+        widget.onScrubBy!(moved);
+      } else {
+        _seeker.seekBy(_frameStep * moved);
+      }
+    }
+    return clamped != raw;
   }
 
   void _onDragStart(DragStartDetails details) {
     widget.controller.pause();
-    _ticker.stop();
+    _coastTicker.stop();
+    _coast = null;
     _settle.stop();
-    _release?.cancel();
-    _velocity = 0;
+    _quiet?.cancel();
+    _quiet = null;
+    _inHand = true;
     _scrub.reset();
     final release = widget.release;
     _haptics
       ..lastFrame = frameAt(widget.controller.value.duration, widget.fps)
       ..releaseFrame = release == null ? null : frameAt(release, widget.fps);
-    // Picked up where it was drawn, whether that is still settling or
-    // following the player.
-    _frame = _held.value?.round() ?? frameAt(_seeker.position, widget.fps);
-    _held.value = _frame.toDouble();
+    // Picked up on the frame it was resting on or easing to, so the first
+    // move steps from there rather than from half way through an ease.
+    _frame = _settleTo.round();
+    _shown.value = _frame.toDouble();
     widget.onScrubStart?.call();
   }
 
+  /// A drag to the right is forward, at the drag's own acceleration: the
+  /// accumulator is asked only for the gain, and the wheel keeps its own
+  /// position.
+  void _onDragUpdate(DragUpdateDetails details) {
+    final dx = details.delta.dx;
+    _scrub.addDrag(dx, _pixelsPerFrame, timestamp: details.sourceTimeStamp);
+    _turn(dx * _scrub.lastGain / _pixelsPerFrame);
+  }
+
   void _onDragEnd(DragEndDetails details) {
-    // Hand the fling off at the rate the finger was actually scrubbing —
-    // the drag's acceleration folded in — so momentum continues the motion
-    // instead of snapping back to 1× at release.
-    _velocity = -details.velocity.pixelsPerSecond.dx * _scrub.lastGain;
-    if (_velocity.abs() < _restVelocity) {
-      _settleIn();
-      widget.onScrubEnd?.call();
+    // The fling picks up at the rate the wheel was actually turning — the
+    // drag's acceleration folded in — so it carries on rather than
+    // snapping back to 1× at the release.
+    final velocity =
+        details.velocity.pixelsPerSecond.dx * _scrub.lastGain / _pixelsPerFrame;
+    if (velocity.abs() * _pixelsPerFrame < _restVelocity) {
+      _letGo();
       return;
     }
-    _lastTick = Duration.zero;
-    _ticker.start();
+    // One smooth curve from the release speed to rest, rather than a
+    // velocity decayed and added up tick by tick.
+    _coast = FrictionSimulation(_decayPerSecond, _shown.value, velocity);
+    _coastTicker.start();
   }
 
-  void _onTick(Duration elapsed) {
-    final dt =
-        (elapsed - _lastTick).inMicroseconds / Duration.microsecondsPerSecond;
-    _lastTick = elapsed;
-    // Coast at 1× — the velocity already carries the drag's acceleration.
-    _emit(_scrub.addRaw(_velocity * dt, _pixelsPerFrame));
-    _velocity *= math.pow(_decayPerSecond, dt);
-    if (_velocity.abs() < _restVelocity) {
-      _ticker.stop();
-      _settleIn();
-      // Momentum spent: the scrub session is over.
-      widget.onScrubEnd?.call();
+  void _onCoast(Duration elapsed) {
+    final coast = _coast;
+    if (coast == null) return;
+    final t = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+    final hitEnd = _turn(coast.x(t) - _shown.value);
+    if (hitEnd || coast.dx(t).abs() * _pixelsPerFrame < _restVelocity) {
+      _coastTicker.stop();
+      _coast = null;
+      _letGo();
     }
   }
 
-  /// Eases the part of a frame the wheel was left between into the frame
-  /// it stepped to, so it comes to rest on a tick the way a detented wheel
-  /// does rather than snapping there.
-  void _settleIn() {
-    _settleFrom = _held.value ?? _frame.toDouble();
-    _settle.forward(from: 0);
-  }
-
-  void _onSettle() {
-    final t = Curves.easeOutCubic.transform(_settle.value);
-    _held.value = _settleFrom + (_frame - _settleFrom) * t;
+  /// Out of the hand: eases onto the frame it stepped to, then — once the
+  /// scrub's own handoff to the decoder has had time to land — follows the
+  /// player again.
+  void _letGo() {
+    _inHand = false;
+    _easeTo(_frame.toDouble());
+    widget.onScrubEnd?.call();
+    _quiet?.cancel();
+    _quiet = Timer(_handBack, () {
+      _quiet = null;
+      if (mounted) _follow();
+    });
   }
 
   @override
@@ -754,38 +799,24 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
       onHorizontalDragStart: _onDragStart,
       onHorizontalDragUpdate: _onDragUpdate,
       onHorizontalDragEnd: _onDragEnd,
-      child: ListenableBuilder(
-        listenable: Listenable.merge([widget.controller, _held]),
-        builder: (context, _) {
-          final value = widget.controller.value;
-          final held = _held.value;
-          // In the hand, where the hand has it. Playing, where the clip is,
-          // continuously. Paused, on the tick of the frame on screen: a seek
-          // lands a little short of the frame it shows, and the needle has
-          // to sit on that frame's tick.
-          final frames = held ??
-              (value.isPlaying
-                  ? value.position.inMicroseconds /
-                      Duration.microsecondsPerSecond *
-                      widget.fps
-                  : frameAt(value.position, widget.fps).toDouble());
-          return SizedBox(
-            height: widget.height,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: ScalePainter(
-                frames: frames,
-                fps: widget.fps,
-                spacing: _pixelsPerFrame,
-                release: widget.release,
-                tickColor: Colors.white,
-                needleColor: theme.colorScheme.primary,
-                releaseColor: releaseColor,
-                labelStyle: theme.textTheme.labelSmall,
-              ),
+      child: ValueListenableBuilder<double>(
+        valueListenable: _shown,
+        builder: (context, frames, _) => SizedBox(
+          height: widget.height,
+          width: double.infinity,
+          child: CustomPaint(
+            painter: ScalePainter(
+              frames: frames,
+              fps: widget.fps,
+              spacing: _pixelsPerFrame,
+              release: widget.release,
+              tickColor: Colors.white,
+              needleColor: theme.colorScheme.primary,
+              releaseColor: releaseColor,
+              labelStyle: theme.textTheme.labelSmall,
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
   }
@@ -832,20 +863,40 @@ class ScalePainter extends CustomPainter {
   /// still ticks rather than a smear.
   static const double _reach = 1.3;
 
-  /// The labeled interval, in seconds, for a scale at [fps] frames a second
-  /// drawn [spacing] pixels a frame.
-  static double labelStep(double fps, double spacing) {
-    final pxPerSecond = fps * spacing;
+  /// How far apart the numbers go, in seconds and in frames, for a scale at
+  /// [fps] frames a second drawn [spacing] pixels a frame: the shortest
+  /// round interval of time that is a whole number of frames and leaves
+  /// [minLabelGap] between numbers. Whole frames because a number is only
+  /// ever on a tick — a twentieth of a second at 30 fps is a frame and a
+  /// half, and numbering it put every other number between two ticks, a
+  /// scale that read as unevenly cut. A rate no round interval divides is
+  /// numbered every so many frames instead.
+  static ({double seconds, int frames}) labelInterval(
+      double fps, double spacing) {
     for (final step in _labelSteps) {
-      if (step * pxPerSecond >= minLabelGap) return step;
+      final exact = step * fps;
+      final whole = exact.round();
+      if (whole < 1 || (exact - whole).abs() > 0.05) continue;
+      if (whole * spacing >= minLabelGap) return (seconds: step, frames: whole);
     }
-    return _labelSteps.last;
+    for (final whole in const [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]) {
+      if (whole * spacing >= minLabelGap) {
+        return (seconds: whole / fps, frames: whole);
+      }
+    }
+    return (seconds: 1000 / fps, frames: 1000);
   }
 
   /// A number on the scale: signed seconds from the release, which reads
   /// 'R' on the release itself, or plain seconds into the clip.
   static String label(double seconds, double step, {required bool relative}) {
-    final decimals = step >= 1 ? 0 : (step >= 0.1 ? 1 : 2);
+    final decimals = step >= 1
+        ? 0
+        : step >= 0.1
+            ? 1
+            : step >= 0.01
+                ? 2
+                : 3;
     final text = seconds.abs().toStringAsFixed(decimals);
     if (!relative) return text;
     if (double.parse(text) == 0) return 'R';
@@ -867,7 +918,9 @@ class ScalePainter extends CustomPainter {
     /// how squarely it faces the eye (1 under the needle, 0 edge on) —
     /// null once it has turned out of view.
     (double, double)? project(double frame) {
-      final angle = (frame - frames) * spacing / radius;
+      // Later frames sit to the left of the needle, so that turning the
+      // drum to the right brings them round to it.
+      final angle = (frames - frame) * spacing / radius;
       if (angle.abs() > _reach) return null;
       return (half + radius * math.sin(angle), math.cos(angle));
     }
@@ -889,18 +942,17 @@ class ScalePainter extends CustomPainter {
             ..strokeWidth = 0.6 + 0.5 * facing);
     }
 
-    // Numbered ticks, at a round interval from the zero.
-    final step = labelStep(fps, spacing);
-    final zero = release == null ? 0.0 : frameAt(release!, fps) / fps;
-    final now = frames / fps;
-    final span = reachFrames / fps;
-    final firstK = ((now - span - zero) / step).floor();
-    final lastK = ((now + span - zero) / step).ceil();
+    // Numbered ticks, every so many frames from the zero, so each one is
+    // on a frame's own tick.
+    final interval = labelInterval(fps, spacing);
+    final zero = release == null ? 0 : frameAt(release!, fps);
+    final firstK = ((frames - reachFrames - zero) / interval.frames).floor();
+    final lastK = ((frames + reachFrames - zero) / interval.frames).ceil();
     final base = labelStyle ?? const TextStyle(fontSize: 10);
     for (var k = firstK; k <= lastK; k++) {
-      final t = zero + k * step;
-      if (t < 0) continue;
-      final at = project(t * fps);
+      final frame = zero + k * interval.frames;
+      if (frame < 0) continue;
+      final at = project(frame.toDouble());
       if (at == null) continue;
       final (x, facing) = at;
       final isRelease = release != null && k == 0;
@@ -917,7 +969,8 @@ class ScalePainter extends CustomPainter {
       if (facing < 0.5) continue;
       final text = TextPainter(
         text: TextSpan(
-          text: label(k * step, step, relative: release != null),
+          text: label(k * interval.seconds, interval.seconds,
+              relative: release != null),
           style: base.copyWith(
             color: color.withOpacity(isRelease ? light : 0.65 * light),
             fontSize: 10,

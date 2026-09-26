@@ -54,7 +54,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/share_preview.dart \
                               tool/preview/gold_preview.dart \
                               tool/preview/glyph_preview.dart \
-                              tool/preview/logo_preview.dart
+                              tool/preview/logo_preview.dart \
+                              tool/preview/distance_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -286,8 +287,12 @@ like the app rather than a bare Material default.
   3.5 lb, so it keeps its metric name.
 - A throw's distance (`ThrowVideo.distance`, always meters, null until
   recorded) is the badge on its card, shown in the unit it was entered in
-  (`distanceUnit`). `DistanceField` is the meters/feet pair that converts
-  as you type; `parseFeet` takes "191-08" the way a meet writes it.
+  (`distanceUnit`). `DistanceField` takes it in one unit at a time — meters,
+  or feet and inches as two boxes, the way a mark is called — behind an
+  m / ft switch that is remembered (`throwlab.distanceUnit`), with the
+  other unit always shown underneath at full size, converted. A distance already entered opens in its own
+  unit whatever the switch was last left on. `parseFeet` takes "191-08" the
+  way a meet writes it, and the feet box still accepts that.
 - A mark in feet is written in feet and inches, never in decimal feet.
   `formatFeet` is the other half of `parseFeet`: it spells a throw
   '191-08', '44-06.25' — what was called across the sector, printed on the
@@ -611,20 +616,29 @@ like the app rather than a bare Material default.
   clip as a hairline, the release notched into it in the medal's gold and
   each timer in its own ink; `ScrubWheel` under it is a ruler under a fixed
   needle — a tick per frame, and a numbered tick at the shortest round
-  interval of time with room between numbers (`ScalePainter.labelStep`),
+  interval of time that is a whole number of frames and has room between
+  numbers (`ScalePainter.labelInterval`): a number is only ever on a
+  frame's own tick, since a twentieth of a second at 30 fps is a frame and a
+  half and numbering it left every other number between two ticks,
   counted from the release once there is one ('R', '-0.05', '+0.10') and
   from the start until then. It is a wheel, and feels like one because it
-  behaves like one. The surface moves with the finger — the numbers read
-  left to right, so later frames are pulled in from the right and a drag to
-  the left goes forward, as a timeline or a tape does. That is the opposite
-  of a drag on the frame, and on purpose: the first version kept the two
-  the same and ran the ruler against the thumb, which read as something
-  slipping under it rather than being turned. In the hand it is drawn where
-  the hand has it — the frames stepped plus the part of one not stepped
-  yet (`ScrubAccumulator.fraction`) — not where the player has got to,
-  which lags a scrub by a seek and moved it in lurches; let go, it eases
-  onto the frame it stopped at like a detent before following the player
-  again. And it is drawn as a drum seen face on (`ScalePainter`): the
+  behaves like one. A drag to the right goes forward, as it does on the
+  frame, and the surface moves with the finger — so the later frames sit to
+  the left of the needle and roll round to it as the drum turns, the way
+  the numbers on a jog dial come to the mark. Both the other ways were
+  tried and felt wrong: numbers reading left to right under a rightward
+  drag ran the ruler against the thumb, and the same numbers pulled
+  leftward like a tape read as backwards. The wheel is one number, its
+  position in fractional frames, and the frame stepped to is always the
+  one nearest it, so what is drawn and what is shown can't drift apart.
+  In the hand it is where the hand has it, not where the player has got
+  to, which lags a scrub by a seek and moved it in lurches; a fling is a
+  `FrictionSimulation` from the release speed to rest, one smooth curve
+  rather than a velocity decayed and summed tick by tick; and out of the
+  hand it never jumps — it eases onto the frame it stopped at like a
+  detent, leaves the player alone while the scrub's handoff lands, and
+  then eases to wherever the player is. Snapping back to the player the
+  moment it was let go is what made the ticks leap under a still finger. And it is drawn as a drum seen face on (`ScalePainter`): the
   spacing is true under the needle, where the finger is, and closes up and
   dims toward the edges, the numbers foreshortened with it. Paused, the
   needle and the readout work in whole frames (`formatSinceRelease` takes

@@ -151,8 +151,9 @@ void main() {
       expect(find.byType(ScrubWheel), findsOneWidget);
 
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel), const Offset(-120, 0));
-      await pumpFrames(tester);
+      await tester.drag(find.byType(ScrubWheel), const Offset(120, 0));
+      // Long enough for the fling it was let go with to come to rest.
+      await pumpFrames(tester, 120);
 
       // Both players moved, not just the one the wheel is attached to.
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1, 2});
@@ -161,8 +162,9 @@ void main() {
     testWidgets('an unlinked wheel moves only its own clip', (tester) async {
       await mount(tester);
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel).first, const Offset(-120, 0));
-      await pumpFrames(tester);
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
+      // Long enough for the fling it was let go with to come to rest.
+      await pumpFrames(tester, 120);
 
       expect(platform.seeks.map((seek) => seek.playerId).toSet(), {1});
     });
@@ -174,13 +176,13 @@ void main() {
   /// Scrubs each clip somewhere different and marks it as the release,
   /// which is what links the two.
   Future<({Duration a, Duration b})> markReleases(WidgetTester tester) async {
-    await tester.drag(find.byType(ScrubWheel).first, const Offset(-400, 0));
+    await tester.drag(find.byType(ScrubWheel).first, const Offset(400, 0));
     await pumpFrames(tester, 20);
     final releaseA = lastSeek(1);
     await tester.tap(find.text('Set release').first);
     await pumpFrames(tester, 10);
 
-    await tester.drag(find.byType(ScrubWheel).last, const Offset(-250, 0));
+    await tester.drag(find.byType(ScrubWheel).last, const Offset(250, 0));
     await pumpFrames(tester, 20);
     final releaseB = lastSeek(2);
     await tester.tap(find.text('Set release'));
@@ -332,7 +334,7 @@ void main() {
       // something and the unmarked one around its own first frames, which
       // is two clips running to different places at once.
       await mount(tester);
-      await tester.drag(find.byType(ScrubWheel).first, const Offset(-400, 0));
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(400, 0));
       await pumpFrames(tester, 20);
       await tester.tap(find.text('Set release').first);
       await pumpFrames(tester, 10);
@@ -619,7 +621,7 @@ void main() {
       await mount(tester);
 
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel).first, const Offset(-120, 0));
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
       await pumpFrames(tester, 40);
 
       // The scrub starts at zero, where a still's lead is clamped away;
@@ -639,7 +641,7 @@ void main() {
       await mount(tester);
 
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel).first, const Offset(-120, 0));
+      await tester.drag(find.byType(ScrubWheel).first, const Offset(120, 0));
       await pumpFrames(tester, 40);
 
       expect(platform.seeks, isNotEmpty);
@@ -659,7 +661,7 @@ void main() {
       await pumpFrames(tester);
 
       platform.seeks.clear();
-      await tester.drag(find.byType(ScrubWheel), const Offset(-120, 0));
+      await tester.drag(find.byType(ScrubWheel), const Offset(120, 0));
       await pumpFrames(tester, 40);
 
       Duration lastFor(int playerId) => platform.seeks

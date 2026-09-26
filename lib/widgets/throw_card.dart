@@ -55,13 +55,19 @@ String formatDistance(double meters,
 /// every mark is spending three characters on nothing — and the app is
 /// read at arm's length.
 String formatFeet(double meters) {
+  final (feet, inches) = feetAndInches(meters);
+  return '$feet-${inches == inches.roundToDouble() ? inches.toStringAsFixed(0).padLeft(2, '0') : inches.toStringAsFixed(2).padLeft(5, '0')}';
+}
+
+/// A mark as whole feet and inches, the inches to the lesser quarter —
+/// the two numbers [formatFeet] writes with a dash between them, and the
+/// two boxes a mark in feet is typed into.
+(int, double) feetAndInches(double meters) {
   // A hair over before the floor: the arithmetic that got here has been
   // through meters and back, and a mark sitting exactly on a quarter must
   // not be dropped to the one below by the last bit of a double.
   final quarters = (meters / metersPerFoot * 48 + 1e-6).floor();
-  final feet = quarters ~/ 48;
-  final inches = (quarters % 48) / 4;
-  return '$feet-${inches == inches.roundToDouble() ? inches.toStringAsFixed(0).padLeft(2, '0') : inches.toStringAsFixed(2).padLeft(5, '0')}';
+  return (quarters ~/ 48, (quarters % 48) / 4);
 }
 
 /// A typed number, or null when it isn't one. Accepts a comma decimal

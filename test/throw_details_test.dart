@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/models/throw_video.dart';
 import 'package:throwlab/widgets/athlete_picker.dart';
 import 'package:throwlab/widgets/distance_field.dart';
@@ -73,60 +74,123 @@ void main() {
   });
 
   group('DistanceField', () {
-    testWidgets('fills in the conversion as you type, either way',
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      DistanceField.preferred = DistanceUnit.meters;
+    });
+
+    Future<void> pump(WidgetTester tester,
+        {double? meters,
+        DistanceUnit? unit,
+        void Function(double?, DistanceUnit)? onChanged}) async {
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: DistanceField(
+            meters: meters,
+            unit: unit,
+            onChanged: onChanged ?? (_, __) {},
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    TextEditingController box(WidgetTester tester, String key) =>
+        tester.widget<TextField>(find.byKey(ValueKey(key))).controller!;
+
+    testWidgets('takes meters, and says the mark in feet under it',
         (tester) async {
       double? meters;
       DistanceUnit? unit;
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: DistanceField(
-            meters: null,
-            unit: DistanceUnit.meters,
-            onChanged: (value, entered) {
-              meters = value;
-              unit = entered;
-            },
-          ),
-        ),
-      ));
+      await pump(tester, onChanged: (value, entered) {
+        meters = value;
+        unit = entered;
+      });
+      // One unit at a time: no feet box beside the meters one.
+      expect(find.byKey(const ValueKey('feet')), findsNothing);
 
-      final metersBox = find.byType(TextField).first;
-      final feetBox = find.byType(TextField).last;
-
-      await tester.enterText(metersBox, '58.42');
+      await tester.enterText(find.byKey(const ValueKey('meters')), '58.42');
       await tester.pump();
       expect(meters, closeTo(58.42, 1e-9));
       expect(unit, DistanceUnit.meters);
-      expect(tester.widget<TextField>(feetBox).controller!.text, '191-08');
+      expect(find.text('191-08'), findsOneWidget);
 
-      await tester.enterText(feetBox, '150-06');
+      // Clearing the box clears the throw's distance.
+      await tester.enterText(find.byKey(const ValueKey('meters')), '');
+      await tester.pump();
+      expect(meters, isNull);
+    });
+
+    testWidgets('takes feet and inches in two boxes, and remembers the unit',
+        (tester) async {
+      double? meters;
+      DistanceUnit? unit;
+      await pump(tester, onChanged: (value, entered) {
+        meters = value;
+        unit = entered;
+      });
+      await tester.tap(find.text('ft'));
+      await tester.pumpAndSettle();
+      expect(unit, DistanceUnit.feet);
+
+      await tester.enterText(find.byKey(const ValueKey('feet')), '150');
+      await tester.enterText(find.byKey(const ValueKey('inches')), '6');
       await tester.pump();
       expect(unit, DistanceUnit.feet);
       expect(meters, closeTo(150.5 * 0.3048, 1e-9));
-      expect(tester.widget<TextField>(metersBox).controller!.text, '45.87');
+      expect(find.text('45.87 m'), findsOneWidget);
 
-      // Clearing a box clears the throw's distance, and the other box.
-      await tester.enterText(feetBox, '');
+      // A quarter inch, the way a shot is measured.
+      await tester.enterText(find.byKey(const ValueKey('inches')), '6.25');
+      await tester.pump();
+      expect(meters, closeTo((150 + 6.25 / 12) * 0.3048, 1e-9));
+
+      // Twelve inches is a foot, not a mark.
+      await tester.enterText(find.byKey(const ValueKey('inches')), '12');
       await tester.pump();
       expect(meters, isNull);
-      expect(tester.widget<TextField>(metersBox).controller!.text, '');
+      expect(find.text('Under 12'), findsOneWidget);
+
+      // The whole mark in the feet box, as a sheet writes it, still reads.
+      await tester.enterText(find.byKey(const ValueKey('inches')), '');
+      await tester.enterText(find.byKey(const ValueKey('feet')), '191-08');
+      await tester.pump();
+      expect(meters, closeTo(58.42, 1e-3));
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('throwlab.distanceUnit'), 'feet');
+
+      // The next empty field opens in feet.
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester);
+      expect(find.byKey(const ValueKey('feet')), findsOneWidget);
+      expect(find.byKey(const ValueKey('meters')), findsNothing);
     });
 
-    testWidgets('opens on the distance a throw already has', (tester) async {
-      await tester.pumpWidget(MaterialApp(
-        home: Scaffold(
-          body: DistanceField(
-            meters: 58.42,
-            unit: DistanceUnit.feet,
-            onChanged: (_, __) {},
-          ),
-        ),
-      ));
-      // By the controllers, not by find.text: the meters box hints with
-      // an example distance, which is a "58.42" of its own.
-      final fields = tester.widgetList<TextField>(find.byType(TextField));
-      expect(fields.first.controller!.text, '58.42');
-      expect(fields.last.controller!.text, '191-08');
+    testWidgets('switching carries the mark across', (tester) async {
+      DistanceUnit? unit;
+      await pump(tester, onChanged: (_, entered) => unit = entered);
+      await tester.enterText(find.byKey(const ValueKey('meters')), '58.42');
+      await tester.tap(find.text('ft'));
+      await tester.pumpAndSettle();
+      expect(unit, DistanceUnit.feet);
+      expect(box(tester, 'feet').text, '191');
+      expect(box(tester, 'inches').text, '8');
+    });
+
+    testWidgets('opens on the distance a throw already has, in its unit',
+        (tester) async {
+      await pump(tester, meters: 58.42, unit: DistanceUnit.feet);
+      expect(box(tester, 'feet').text, '191');
+      expect(box(tester, 'inches').text, '8');
+
+      // Even when the coach has since gone over to meters.
+      SharedPreferences.setMockInitialValues(
+          {'throwlab.distanceUnit': 'meters'});
+      await tester.pumpWidget(const SizedBox());
+      await pump(tester, meters: 13.57, unit: DistanceUnit.feet);
+      expect(box(tester, 'feet').text, '44');
+      expect(box(tester, 'inches').text, '6.25');
     });
   });
 
