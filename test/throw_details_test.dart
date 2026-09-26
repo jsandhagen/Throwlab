@@ -113,7 +113,7 @@ void main() {
       await tester.pump();
       expect(meters, closeTo(58.42, 1e-9));
       expect(unit, DistanceUnit.meters);
-      expect(find.text('= 191-08'), findsOneWidget);
+      expect(find.text('191-08'), findsOneWidget);
 
       // Clearing the box clears the throw's distance.
       await tester.enterText(find.byKey(const ValueKey('meters')), '');
@@ -138,7 +138,7 @@ void main() {
       await tester.pump();
       expect(unit, DistanceUnit.feet);
       expect(meters, closeTo(150.5 * 0.3048, 1e-9));
-      expect(find.text('= 45.87 m'), findsOneWidget);
+      expect(find.text('45.87 m'), findsOneWidget);
 
       // A quarter inch, the way a shot is measured.
       await tester.enterText(find.byKey(const ValueKey('inches')), '6.25');

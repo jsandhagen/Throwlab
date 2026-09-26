@@ -10,7 +10,7 @@ import 'throw_card.dart';
 /// boxes side by side, one per unit, asked a coach to look for the right
 /// one every time — and a US meet never measures in meters, so half the
 /// sheet was a box nobody there would ever type in. The other unit is
-/// still said underneath, converted, for the coach checking a mark against
+/// always shown underneath, converted, for the coach checking a mark against
 /// a sheet printed in it.
 ///
 /// Feet are feet *and* inches, two boxes, because that is how the mark is
@@ -255,14 +255,30 @@ class _DistanceFieldState extends State<DistanceField> {
               suffixText: 'm',
             ),
           ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         Row(
           children: [
+            // Always there, and at the size of the number typed: both
+            // units are read at a glance, and a readout that only appears
+            // once something is typed is one nobody knows to look for.
             Expanded(
-              child: Text(
-                converted == null ? '' : '= $converted',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    feet ? 'In meters' : 'In feet',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  Text(
+                    converted ?? '—',
+                    key: const ValueKey('converted'),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                        color: converted == null
+                            ? theme.colorScheme.onSurfaceVariant
+                            : theme.colorScheme.onSurface),
+                  ),
+                ],
               ),
             ),
             SegmentedButton<DistanceUnit>(

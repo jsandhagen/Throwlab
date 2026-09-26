@@ -54,7 +54,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/share_preview.dart \
                               tool/preview/gold_preview.dart \
                               tool/preview/glyph_preview.dart \
-                              tool/preview/logo_preview.dart
+                              tool/preview/logo_preview.dart \
+                              tool/preview/distance_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -272,7 +273,7 @@ like the app rather than a bare Material default.
   (`distanceUnit`). `DistanceField` takes it in one unit at a time — meters,
   or feet and inches as two boxes, the way a mark is called — behind an
   m / ft switch that is remembered (`throwlab.distanceUnit`), with the
-  other unit said underneath. A distance already entered opens in its own
+  other unit always shown underneath at full size, converted. A distance already entered opens in its own
   unit whatever the switch was last left on. `parseFeet` takes "191-08" the
   way a meet writes it, and the feet box still accepts that.
 - A mark in feet is written in feet and inches, never in decimal feet.
