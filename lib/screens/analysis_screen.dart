@@ -1456,13 +1456,19 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         icon: const Icon(Icons.speed),
         onPressed: _measureStep == null ? _startMeasure : null,
       ),
-      if (vertical)
-        IconButton(
-          tooltip: 'Set capture frame rate '
-              '(${widget.video.captureFps.toStringAsFixed(0)} fps)',
-          icon: const Icon(Icons.shutter_speed),
-          onPressed: _editFps,
-        ),
+      // The title opens the throw's sheet, but nothing about a title says
+      // it can be tapped: the three dots are the control everybody already
+      // knows means 'there is more', and it opens the same sheet — trim,
+      // distance, implement, delete — so it is never a second menu. On its
+      // side the rail has no title to tap at all, and no room for one more
+      // button, so the dots take the frame rate's place: the frame rate is
+      // a row on the sheet they open.
+      IconButton(
+        key: const ValueKey('throw-more'),
+        tooltip: 'More',
+        icon: const Icon(Icons.more_vert),
+        onPressed: _showThrowInfo,
+      ),
     ];
   }
 

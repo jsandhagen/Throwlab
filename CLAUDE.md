@@ -570,7 +570,10 @@ like the app rather than a bare Material default.
   describe the throw, and live on that sheet. The note is the exception
   because it is written while the throw is watched — what was seen, frame
   by frame — so it is on the screen, and its filled icon says there is one.
-  The rail on its side keeps all of them, having a whole edge to spend.
+  The rail on its side keeps the rest, having a whole edge to spend. Both
+  end in three dots opening the same sheet, because nothing about a title
+  says it can be tapped and the sheet is where trim and delete live; on
+  its side the dots took the frame rate's slot, which the sheet carries.
 - The drawing tools run along an edge of the frame and are anchored in its
   bottom-right corner. Which edge follows the shape of the *picture*, not
   the shape of the screen. A clip is filmed on its side, so held that way
@@ -731,7 +734,8 @@ like the app rather than a bare Material default.
   Barlow. Handing the style down is how they match without naming a family
   outside `main.dart`.
 - A clip is trimmed once, for good (`TrimScreen`, from 'Trim clip' on the
-  throw sheet — the library's long press and the analysis title both). The
+  throw sheet — the library's long press, and the analysis screen's title
+  or its three dots). The
   ends are picked on a strip of the clip's own scrub stills and then to the
   frame on the scale under it, and the kept part loops while it is being
   judged. `TrimRange` is frames, both ends kept, never under a fifth of a

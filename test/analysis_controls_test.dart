@@ -156,14 +156,38 @@ void main() {
       expect(find.text('Frame rate · 30 fps'), findsOneWidget);
     });
 
-    testWidgets('on its side the rail keeps everything', (tester) async {
+    // Nothing about a title says it can be tapped, so the sheet also hangs
+    // off the three dots — on screen both ways, and the same sheet.
+    for (final (name, screen) in [
+      ('upright', _portraitPhone),
+      ('on its side', _landscapePhone),
+    ]) {
+      testWidgets('$name, the three dots open the throw sheet', (tester) async {
+        await mountAnalysisScreen(tester,
+            video: testVideo(temp),
+            screen: screen,
+            videoSize: const Size(1920, 1080));
+        final more = find.byKey(const ValueKey('throw-more'));
+        final box = tester.getRect(more);
+        expect((Offset.zero & tester.view.physicalSize).contains(box.center),
+            isTrue);
+        expect(box.bottom, lessThanOrEqualTo(tester.view.physicalSize.height));
+        await tester.tap(more);
+        await pumpFrames(tester, 30);
+        expect(find.text('Trim clip'), findsOneWidget);
+        expect(find.text('Frame rate · 30 fps'), findsOneWidget);
+      });
+    }
+
+    testWidgets('on its side the rail keeps the rest', (tester) async {
       await mountAnalysisScreen(tester,
           video: testVideo(temp),
           screen: _landscapePhone,
           videoSize: const Size(1920, 1080));
       expect(find.byTooltip('Tag athlete'), findsOneWidget);
       expect(find.byTooltip('Add note'), findsOneWidget);
-      expect(find.byIcon(Icons.shutter_speed), findsOneWidget);
+      // The frame rate gave its place to the dots, whose sheet carries it.
+      expect(find.byIcon(Icons.shutter_speed), findsNothing);
     });
 
     testWidgets('a sideways clip held upright lays the tools under it',
@@ -247,10 +271,8 @@ void main() {
         await tester.pump();
       }
       expect(find.textContaining('R -1.000'), findsNothing);
-      final held = tester
-          .widgetList<Text>(find.textContaining('R -'))
-          .single
-          .data;
+      final held =
+          tester.widgetList<Text>(find.textContaining('R -')).single.data;
 
       // And it is where the picture comes to rest once the wheel is let go.
       await gesture.up();
@@ -267,10 +289,8 @@ void main() {
           screen: _portraitPhone,
           videoSize: const Size(1920, 1080));
       int frameShown() {
-        final text = tester
-            .widgetList<Text>(find.textContaining(' · f '))
-            .single
-            .data!;
+        final text =
+            tester.widgetList<Text>(find.textContaining(' · f ')).single.data!;
         return int.parse(text.split('f ').last.trim());
       }
 
