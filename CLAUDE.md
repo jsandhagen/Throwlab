@@ -661,9 +661,17 @@ like the app rather than a bare Material default.
   across the frame is, and the readout reads the frame the wheel is holding
   (`ScrubWheel.onHold`) until the player has arrived there. Played toward
   it, the picture was capped at 120 frames a second and a fast spin left it
-  most of a second behind the needle, with the clock lurching after it; a fling is a
-  `FrictionSimulation` from the release speed to rest, one smooth curve
-  rather than a velocity decayed and summed tick by tick; and out of the
+  most of a second behind the needle, with the clock lurching after it. So
+  the cap moved to the wheel instead: it never turns faster than
+  `ScrubShuttle.maxFramesPerSecond`, dragged or flung, which is about as
+  fast as the stills decode — put up any faster, the picture showed only
+  the frames that happened to be ready, and read as the video skipping. A
+  drag spends an allowance refilled at that rate off the touches' own
+  timestamps, a few frames deep so a finger that rested and then darted off
+  cannot jump. A fling is a `CappedCoast`: a `FrictionSimulation` from the
+  release speed to rest, held at the cap until friction brings it under,
+  one smooth curve rather than a velocity decayed and summed tick by tick,
+  and a harder flick still carries further by spending longer at the cap; and out of the
   hand it never jumps — it eases onto the frame it stopped at like a
   detent, leaves the player alone until the player is showing the frame it
   was last sent to (a seek can take a second to land, and following the

@@ -97,12 +97,16 @@ class ScrubShuttle extends ChangeNotifier {
   /// gap can't jump — it fast-forwards smoothly instead of skipping. At ~2x
   /// the clip's own rate it shows roughly every other frame during a fast
   /// spin, which reads as smooth speed-up rather than a stride.
-  static const _maxCatchUpFramesPerSec = 120.0;
+  ///
+  /// It is also as fast as the scrub wheel ever turns: the stills decode at
+  /// about this rate, and a picture put up any faster than they arrive
+  /// skips over the frames that were not ready.
+  static const maxFramesPerSecond = 120.0;
 
   /// Wall-clock spacing between decoder nudges while the shuttle is running.
   /// The extracted stills are what's on screen mid-scrub, so the player only
   /// has to stay roughly nearby for a quick handoff at the end. Seeking it on
-  /// every shuttle frame meant a flick fired up to [_maxCatchUpFramesPerSec]
+  /// every shuttle frame meant a flick fired up to [maxFramesPerSecond]
   /// platform seeks a second, each one flushing ExoPlayer's decode pipeline —
   /// which is what made a flick stutter and stall. ~10/s keeps the time/frame
   /// readout and the wheel live for a fraction of the work.
@@ -163,8 +167,8 @@ class ScrubShuttle extends ChangeNotifier {
   /// frame it is on. The shown still goes straight to it rather than being
   /// played toward it: the catch-up is there to smooth a finger dragged
   /// across the picture, and behind a wheel it only made the picture trail
-  /// the needle — by the better part of a second on a fast spin, since it
-  /// is capped at [_maxCatchUpFramesPerSec] and a wheel is not.
+  /// the needle — by the better part of a second on a fast spin. The wheel
+  /// holds itself to [maxFramesPerSecond], so the stills keep up with it.
   void track(int frames) => _by(frames, direct: true);
 
   void _by(int frames, {required bool direct}) {
@@ -245,7 +249,7 @@ class ScrubShuttle extends ChangeNotifier {
       }
       return;
     }
-    final maxStep = _maxCatchUpFramesPerSec / frames.stride * dt;
+    final maxStep = maxFramesPerSecond / frames.stride * dt;
     var step = gap * _catchUp;
     if (step > maxStep) step = maxStep;
     if (step < -maxStep) step = -maxStep;

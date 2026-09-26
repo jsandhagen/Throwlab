@@ -10,6 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/frame_timing.dart';
 import '../utils/scrub.dart';
+import '../utils/scrub_shuttle.dart';
 import '../utils/time_format.dart';
 import 'gold.dart';
 
@@ -715,6 +716,29 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   /// Fraction of fling velocity left after one second of coasting.
   static const _decayPerSecond = 0.02;
 
+  /// The fastest the wheel turns, in frames a second, dragged or flung.
+  /// Fast enough to cross a throw in a flick, and no faster than the stills
+  /// behind it decode: a wheel that outran them either left the picture
+  /// trailing the needle or put up only the frames that happened to be
+  /// ready, which read as the video skipping.
+  static const _maxFramesPerSecond = ScrubShuttle.maxFramesPerSecond;
+
+  /// How many frames a drag may still turn by, refilled at
+  /// [_maxFramesPerSecond] off the wall clock and never above [_burst]. A
+  /// budget rather than a limit per move, because moves arrive bunched —
+  /// two in one frame, then none — and a limit per move starved whichever
+  /// came second.
+  double _allowance = 0;
+
+  /// When the allowance was last topped up, on the clock the drag's own
+  /// moves are read on; null until the first of them.
+  Duration? _allowanceAt;
+
+  /// What a move can spend at once: a thirtieth of a second of turning, so
+  /// a finger that rested and then darted off puts up a frame or two more,
+  /// never a jump the stills could not have kept up with.
+  static const double _burst = _maxFramesPerSecond / 30;
+
   /// Coasting stops below this speed (px/s) — about 5 frames/s.
   static const _restVelocity = 40.0;
 
@@ -737,7 +761,8 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   late final AnimationController _settle;
   final ScrubAccumulator _scrub = ScrubAccumulator();
   final FrameHaptics _haptics = FrameHaptics();
-  FrictionSimulation? _coast;
+  CappedCoast? _coast;
+  final Stopwatch _clock = Stopwatch()..start();
 
   /// Let go, and not yet handed back to the player ([_handBack]).
   bool _handingBack = false;
@@ -894,6 +919,8 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     _coastTicker.stop();
     _coast = null;
     _caught = false;
+    _allowance = _burst;
+    _allowanceAt = null;
     _settle.stop();
     // Picked up on the frame it has stepped to if a fling still had it —
     // [_settleTo] is where it last came to rest, which a fling has long
@@ -924,7 +951,22 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
   void _onDragUpdate(DragUpdateDetails details) {
     final dx = details.delta.dx;
     _scrub.addDrag(dx, _pixelsPerFrame, timestamp: details.sourceTimeStamp);
-    _turn(dx * _scrub.lastGain / _pixelsPerFrame);
+    // The touch's own time where it has one, which is when the finger was
+    // there rather than when the event got through.
+    final now = details.sourceTimeStamp ?? _clock.elapsed;
+    final since = _allowanceAt;
+    // Started off the first move rather than the drag's start, which can be
+    // stamped on another clock; and never backwards, whatever a clock does.
+    final dt = since == null
+        ? 0.0
+        : math.max(0, (now - since).inMicroseconds) /
+            Duration.microsecondsPerSecond;
+    _allowanceAt = now;
+    _allowance = math.min(_burst, _allowance + _maxFramesPerSecond * dt);
+    final frames =
+        (dx * _scrub.lastGain / _pixelsPerFrame).clamp(-_allowance, _allowance);
+    _allowance -= frames.abs();
+    _turn(frames);
   }
 
   void _onDragEnd(DragEndDetails details) {
@@ -939,7 +981,12 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
     }
     // One smooth curve from the release speed to rest, rather than a
     // velocity decayed and added up tick by tick.
-    _coast = FrictionSimulation(_decayPerSecond, _shown.value, velocity);
+    _coast = CappedCoast(
+      decayPerSecond: _decayPerSecond,
+      start: _shown.value,
+      velocity: velocity,
+      cap: _maxFramesPerSecond,
+    );
     _coastTicker.start();
   }
 
@@ -1009,6 +1056,39 @@ class _ScrubWheelState extends State<ScrubWheel> with TickerProviderStateMixin {
       ),
     );
   }
+}
+
+/// A fling that runs no faster than [cap]: a flick harder than that holds
+/// the cap until friction would have brought it down there, then slows off
+/// it exactly as an uncapped one would. Still one curve worked out from the
+/// release rather than a speed summed tick by tick, and a hard flick still
+/// carries further than a soft one — it spends longer at the cap.
+class CappedCoast {
+  CappedCoast({
+    required double decayPerSecond,
+    required double start,
+    required double velocity,
+    required double cap,
+  })  : _start = start,
+        _sign = velocity.sign,
+        _cap = cap,
+        // How long the cap holds: until v0 · decay^t has come down to it.
+        _held = velocity.abs() <= cap
+            ? 0
+            : math.log(cap / velocity.abs()) / math.log(decayPerSecond),
+        _tail = FrictionSimulation(decayPerSecond, 0,
+            velocity.abs() <= cap ? velocity : velocity.sign * cap);
+
+  final double _start, _sign, _cap, _held;
+  final FrictionSimulation _tail;
+
+  /// Where the wheel is [t] seconds after the release.
+  double x(double t) => t < _held
+      ? _start + _sign * _cap * t
+      : _start + _sign * _cap * _held + _tail.x(t - _held);
+
+  /// How fast it is turning then, in frames a second.
+  double dx(double t) => t < _held ? _sign * _cap : _tail.dx(t - _held);
 }
 
 /// The round intervals a scale is numbered at, in seconds.
