@@ -4,9 +4,11 @@ import '../models/elite_releases.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../utils/flight_model.dart';
+import '../widgets/angular.dart';
 import '../widgets/distance_field.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/flight_field.dart';
+import '../widgets/sector_art.dart';
 import '../widgets/throw_card.dart';
 
 /// The what-if calculator: a release, the distance it throws, and what
@@ -279,24 +281,6 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final oneFlight = flyThrow(_event, _one.spec, _one.release);
-    final twoFlight =
-        _two == null ? null : flyThrow(_event, _two!.spec, _two!.release);
-    final current = _current;
-    final best = bestAngle(_event, current.spec, current.release);
-    final units = _Units(_unit);
-    final worth = sensitivity(_event, current.spec, current.release,
-        speedStep: units.speedLever, heightStep: units.heightLever);
-    final unit = _unit;
-    // The first throw steps back to a neutral ink once there is a second to
-    // stand in front of it.
-    final oneColor = _comparing ? scheme.onSurfaceVariant : scheme.primary;
-    final twoColor = scheme.primary;
-    final showBack = widget.measured != null &&
-        _event == widget.event &&
-        _one.label != _measuredLabel;
-    final other = _other?.release;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('What if'),
@@ -311,8 +295,14 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               segments: const [
-                ButtonSegment(value: DistanceUnit.meters, label: Text('m')),
-                ButtonSegment(value: DistanceUnit.feet, label: Text('ft')),
+                ButtonSegment(
+                    value: DistanceUnit.meters,
+                    label: Text('m'),
+                    tooltip: 'Meters'),
+                ButtonSegment(
+                    value: DistanceUnit.feet,
+                    label: Text('ft'),
+                    tooltip: 'Feet, inches and mph'),
               ],
               selected: {_unit},
               onSelectionChanged: (u) => setState(() => _unit = u.first),
@@ -320,215 +310,262 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
           ),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: _EventPicker(event: _event, onEvent: _pickEvent),
+      body: Stack(
+        children: [
+          // The sector every other screen in the app stands on, so this
+          // reads as a room in it rather than a form from somewhere else.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: SectorBackdropPainter(color: scheme.primary),
+              ),
             ),
-            const _Disclaimer(),
-            _ResultCard(
-              event: _event,
-              units: units,
-              one: (name: _source(0), flight: oneFlight, color: oneColor),
-              two: twoFlight == null
-                  ? null
-                  : (name: _source(1), flight: twoFlight, color: twoColor),
-              ghost: _comparing || (best.distance - oneFlight.distance) < 0.02
-                  ? null
-                  : flyThrow(_event, _one.spec,
-                      _one.release.copyWith(angleDeg: best.angleDeg)),
-            ),
-            if (showBack)
-              Align(
-                alignment: Alignment.centerLeft,
+          ),
+          Column(
+            children: [
+              HeaderBand(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: TextButton.icon(
-                    onPressed: _backToMeasured,
-                    icon: const Icon(Icons.undo),
-                    label: const Text('Back to the measured throw'),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: AngularSegmentedBar<ThrowEvent>(
+                    value: _event,
+                    onChanged: _pickEvent,
+                    segments: [
+                      for (final e in ThrowEvent.values)
+                        AngularSegment(
+                          value: e,
+                          glyph: (color) =>
+                              EventGlyph(e, size: 16, color: color),
+                          label: e == ThrowEvent.shotPut ? 'Shot' : e.label,
+                        ),
+                    ],
                   ),
                 ),
               ),
-            _Heading('Release',
-                action: _comparing
-                    ? IconButton(
-                        tooltip: 'Remove the what-if',
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.close),
-                        onPressed: _removeSecond,
-                      )
-                    : TextButton.icon(
-                        onPressed: _addSecond,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Try a change'),
-                      )),
-            if (_comparing)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: SegmentedButton<int>(
-                  showSelectedIcon: false,
-                  segments: [
-                    for (final i in [0, 1])
-                      ButtonSegment(
-                        value: i,
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: i == 0 ? oneColor : twoColor,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(_role(i)),
-                          ],
+              Expanded(child: _body(context)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _body(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final oneFlight = flyThrow(_event, _one.spec, _one.release);
+    final twoFlight =
+        _two == null ? null : flyThrow(_event, _two!.spec, _two!.release);
+    final current = _current;
+    final best = bestAngle(_event, current.spec, current.release);
+    final units = _Units(_unit);
+    final unit = _unit;
+    final worth = sensitivity(_event, current.spec, current.release,
+        speedStep: units.speedLever, heightStep: units.heightLever);
+    // The baseline steps back to a neutral ink once there is a what-if to
+    // stand in front of it.
+    final oneColor = _comparing ? scheme.onSurfaceVariant : scheme.primary;
+    final twoColor = scheme.primary;
+    final showBack = widget.measured != null &&
+        _event == widget.event &&
+        _one.label != _measuredLabel;
+    final other = _other?.release;
+
+    return SafeArea(
+      top: false,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
+        children: [
+          const _Disclaimer(),
+          _ResultCard(
+            event: _event,
+            units: units,
+            one: (name: _source(0), flight: oneFlight, color: oneColor),
+            two: twoFlight == null
+                ? null
+                : (name: _source(1), flight: twoFlight, color: twoColor),
+            ghost: _comparing || (best.distance - oneFlight.distance) < 0.02
+                ? null
+                : flyThrow(_event, _one.spec,
+                    _one.release.copyWith(angleDeg: best.angleDeg)),
+          ),
+          if (showBack)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: TextButton.icon(
+                  onPressed: _backToMeasured,
+                  icon: const Icon(Icons.undo),
+                  label: const Text('Back to the measured throw'),
+                ),
+              ),
+            ),
+          _Heading('Release',
+              action: _comparing
+                  ? IconButton(
+                      tooltip: 'Remove the what-if',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.close),
+                      onPressed: _removeSecond,
+                    )
+                  : TextButton.icon(
+                      onPressed: _addSecond,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Try a change'),
+                    )),
+          if (_comparing)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: AngularSegmentedBar<int>(
+                value: _editing,
+                onChanged: (i) => setState(() => _editing = i),
+                segments: [
+                  for (final i in [0, 1])
+                    AngularSegment(
+                      value: i,
+                      // The throw's own ink, so the switch is also the key
+                      // to the two lines on the field above it.
+                      glyph: (_) => Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: i == 0 ? oneColor : twoColor,
                         ),
                       ),
-                  ],
-                  selected: {_editing},
-                  onSelectionChanged: (s) => setState(() => _editing = s.first),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _source(_editing),
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
+                      label: _role(i),
                     ),
-                  ),
-                  DropdownButton<ImplementSpec>(
-                    value: current.spec,
-                    underline: const SizedBox(),
-                    items: [
-                      for (final s in _event.implements)
-                        DropdownMenuItem(value: s, child: Text(s.weightLabel)),
-                    ],
-                    onChanged: (s) {
-                      if (s != null) _setSpec(s);
-                    },
-                  ),
                 ],
               ),
             ),
-            _Dial(
-              label: 'Speed',
-              value: current.release.speed,
-              other: other?.speed,
-              span: _spans[_event]!.speed,
-              step: units.speedStep,
-              format: units.speed,
-              delta: units.speedDelta,
-              onChanged: (v) => _setRelease(current.release.copyWith(speed: v)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _source(_editing),
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                DropdownButton<ImplementSpec>(
+                  value: current.spec,
+                  underline: const SizedBox(),
+                  items: [
+                    for (final s in _event.implements)
+                      DropdownMenuItem(value: s, child: Text(s.weightLabel)),
+                  ],
+                  onChanged: (s) {
+                    if (s != null) _setSpec(s);
+                  },
+                ),
+              ],
             ),
+          ),
+          _Dial(
+            label: 'Speed',
+            value: current.release.speed,
+            other: other?.speed,
+            span: _spans[_event]!.speed,
+            step: units.speedStep,
+            format: units.speed,
+            delta: units.speedDelta,
+            onChanged: (v) => _setRelease(current.release.copyWith(speed: v)),
+          ),
+          _Dial(
+            label: 'Angle',
+            value: current.release.angleDeg,
+            other: other?.angleDeg,
+            span: _angleSpan,
+            step: 0.5,
+            format: (v) => '${v.toStringAsFixed(1)}°',
+            delta: (d) => '${_signed(d, 1)}°',
+            onChanged: (v) =>
+                _setRelease(current.release.copyWith(angleDeg: v)),
+          ),
+          _Dial(
+            label: 'Height',
+            value: current.release.height,
+            other: other?.height,
+            span: _spans[_event]!.height,
+            step: units.heightStep,
+            format: units.height,
+            delta: units.heightDelta,
+            onChanged: (v) => _setRelease(current.release.copyWith(height: v)),
+          ),
+          if (_hasAttack(_event))
             _Dial(
-              label: 'Angle',
-              value: current.release.angleDeg,
-              other: other?.angleDeg,
-              span: _angleSpan,
+              label: 'Attack',
+              hint: _event == ThrowEvent.discus
+                  ? 'Leading edge above (+) or below (−) the path'
+                  : 'Nose above (+) or below (−) the path',
+              value: current.release.attackDeg,
+              other: other?.attackDeg,
+              span: _attackSpan,
               step: 0.5,
-              format: (v) => '${v.toStringAsFixed(1)}°',
+              format: (v) => '${_signed(v, 1)}°',
               delta: (d) => '${_signed(d, 1)}°',
               onChanged: (v) =>
-                  _setRelease(current.release.copyWith(angleDeg: v)),
+                  _setRelease(current.release.copyWith(attackDeg: v)),
             ),
+          if (_hasWind(_event))
             _Dial(
-              label: 'Height',
-              value: current.release.height,
-              other: other?.height,
-              span: _spans[_event]!.height,
-              step: units.heightStep,
-              format: units.height,
-              delta: units.heightDelta,
-              onChanged: (v) =>
-                  _setRelease(current.release.copyWith(height: v)),
+              label: 'Wind',
+              hint: 'Behind the thrower (+) or in their face (−)',
+              value: current.release.wind,
+              other: other?.wind,
+              span: _windSpan,
+              step: units.windStep,
+              format: units.wind,
+              delta: units.windDelta,
+              onChanged: (v) => _setRelease(current.release.copyWith(wind: v)),
             ),
-            if (_hasAttack(_event))
-              _Dial(
-                label: 'Attack',
-                hint: _event == ThrowEvent.discus
-                    ? 'Leading edge above (+) or below (−) the path'
-                    : 'Nose above (+) or below (−) the path',
-                value: current.release.attackDeg,
-                other: other?.attackDeg,
-                span: _attackSpan,
-                step: 0.5,
-                format: (v) => '${_signed(v, 1)}°',
-                delta: (d) => '${_signed(d, 1)}°',
-                onChanged: (v) =>
-                    _setRelease(current.release.copyWith(attackDeg: v)),
-              ),
-            if (_hasWind(_event))
-              _Dial(
-                label: 'Wind',
-                hint: 'Behind the thrower (+) or in their face (−)',
-                value: current.release.wind,
-                other: other?.wind,
-                span: _windSpan,
-                step: units.windStep,
-                format: units.wind,
-                delta: units.windDelta,
-                onChanged: (v) =>
-                    _setRelease(current.release.copyWith(wind: v)),
-              ),
-            _BestAngle(
-              best: best,
-              gain: best.distance -
-                  flyThrow(_event, current.spec, current.release).distance,
-              angleDeg: current.release.angleDeg,
-              flies: _hasAttack(_event),
-              unit: unit,
-            ),
-            _Heading('What each is worth',
-                trailing: _comparing
-                    ? 'to the ${_role(_editing).toLowerCase()}'
-                    : null),
-            _Worth(worth: worth, units: units),
-            const _Heading('Compare with an elite final'),
-            _EliteCards(
-              event: _event,
-              units: units,
-              selected: _two?.label,
-              throwFor: (field) => _elite(_event, field),
-              onTap: _compareWith,
-            ),
-            _Heading('Measured at finals', trailing: _event.label),
-            _References(
-              event: _event,
-              selected: _two?.label,
-              units: units,
-              onTry: (r) {
-                final spec = _event.specFor(r.weightKg);
-                // Only what was published: a row with a speed alone takes
-                // the angle and height from the throw it is laid over.
-                _compareWith(_Throw(
-                  spec,
-                  _one.release.copyWith(
-                    speed: r.speed,
-                    angleDeg: r.angleDeg,
-                    height: r.height,
-                  ),
-                  r.athlete,
-                ));
-              },
-            ),
-            const _Heading('About the model'),
-            const _Caveat(),
-            const _Heading('Sources'),
-            const _Sources(),
-          ],
-        ),
+          _BestAngle(
+            best: best,
+            gain: best.distance -
+                flyThrow(_event, current.spec, current.release).distance,
+            angleDeg: current.release.angleDeg,
+            flies: _hasAttack(_event),
+            unit: unit,
+          ),
+          _Heading('What each is worth',
+              trailing: _comparing
+                  ? 'to the ${_role(_editing).toLowerCase()}'
+                  : null),
+          _Worth(worth: worth, units: units),
+          const _Heading('Compare with an elite final'),
+          _EliteCards(
+            event: _event,
+            units: units,
+            selected: _two?.label,
+            throwFor: (field) => _elite(_event, field),
+            onTap: _compareWith,
+          ),
+          _Heading('Measured at finals', trailing: _event.label),
+          _References(
+            event: _event,
+            selected: _two?.label,
+            units: units,
+            onTry: (r) {
+              final spec = _event.specFor(r.weightKg);
+              // Only what was published: a row with a speed alone takes
+              // the angle and height from the throw it is laid over.
+              _compareWith(_Throw(
+                spec,
+                _one.release.copyWith(
+                  speed: r.speed,
+                  angleDeg: r.angleDeg,
+                  height: r.height,
+                ),
+                r.athlete,
+              ));
+            },
+          ),
+          const _Heading('About the model'),
+          const _Caveat(),
+          const _Heading('Sources'),
+          const _Sources(),
+        ],
       ),
     );
   }
@@ -540,37 +577,6 @@ String _signed(double v, int digits) {
   final s = v.abs().toStringAsFixed(digits);
   if (double.parse(s) == 0) return s;
   return '${v > 0 ? '+' : '−'}$s';
-}
-
-class _EventPicker extends StatelessWidget {
-  const _EventPicker({required this.event, required this.onEvent});
-
-  final ThrowEvent event;
-  final ValueChanged<ThrowEvent> onEvent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SegmentedButton<ThrowEvent>(
-          showSelectedIcon: false,
-          segments: [
-            for (final e in ThrowEvent.values)
-              ButtonSegment(
-                value: e,
-                tooltip: e.label,
-                icon: EventGlyph(e, size: 22),
-              ),
-          ],
-          selected: {event},
-          onSelectionChanged: (s) => onEvent(s.first),
-        ),
-        const SizedBox(height: 8),
-        Text(event.label, style: Theme.of(context).textTheme.titleMedium),
-      ],
-    );
-  }
 }
 
 typedef _Shown = ({String name, Flight flight, Color color});
@@ -692,7 +698,11 @@ class _ResultCard extends StatelessWidget {
       );
     }
 
+    // Solid, like the live board's card: a field drawn over the sector
+    // backdrop is two fields at different angles.
+    final surface = solidCardOverSector(scheme);
     return Card(
+      color: surface,
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
@@ -708,6 +718,7 @@ class _ResultCard extends StatelessWidget {
                 if (two != null) FieldFlight(two!.flight, two!.color),
               ],
               unit: unit,
+              backdrop: surface,
               ghost: ghost,
             ),
           ],
@@ -782,6 +793,7 @@ class _EliteCards extends StatelessWidget {
                     final on = selected == t.label;
                     final d = flyThrow(event, t.spec, t.release).distance;
                     return Card(
+                      color: cardOverSector(scheme),
                       margin: const EdgeInsets.symmetric(horizontal: 4),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -1082,6 +1094,7 @@ class _WorthTile extends StatelessWidget {
     final theme = Theme.of(context);
     return Expanded(
       child: Card(
+        color: cardOverSector(theme.colorScheme),
         margin: const EdgeInsets.symmetric(horizontal: 4),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -1127,6 +1140,7 @@ class _References extends StatelessWidget {
     ];
 
     return Card(
+      color: cardOverSector(theme.colorScheme),
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1182,7 +1196,11 @@ class _Caveat extends StatelessWidget {
         'the papers below and then tuned so typical elite releases land '
         'near where finals are won — not values measured for this app. The '
         'discus comes out several meters short at elite speeds, and the '
-        "hammer's wire is not counted. Distance runs from the hand, so the "
+        "hammer's wire is not counted. The javelin's published aerodynamics "
+        "mostly predate the men's 1986 and women's 1999 rule changes, which "
+        'moved the center of mass forward and shortened its flight, so its '
+        "lift is tuned to what today's finals throw, not to those papers. "
+        'Distance runs from the hand, so the '
         'few tenths a thrower reaches past the stop board are not in it. A '
         'measured release is only as good as the video: side-on, square to '
         'the throw. The typical elite finals are approximate ranges drawn '

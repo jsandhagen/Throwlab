@@ -31,6 +31,7 @@ class DistanceField extends StatefulWidget {
     this.unit,
     required this.onChanged,
     this.autofocus = false,
+    this.remember = true,
   });
 
   final double? meters;
@@ -45,6 +46,11 @@ class DistanceField extends StatefulWidget {
   final void Function(double? meters, DistanceUnit unit) onChanged;
 
   final bool autofocus;
+
+  /// Whether flipping the switch changes the unit the next mark is typed
+  /// in. A mark being entered does; a converter being played with does
+  /// not — looking a number up in feet is not deciding to measure in them.
+  final bool remember;
 
   static const _prefKey = 'throwlab.distanceUnit';
 
@@ -138,8 +144,7 @@ class _DistanceFieldState extends State<DistanceField> {
 
   void _focusFirst() => WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        (_unit == DistanceUnit.feet ? _feetFocus : _metersFocus)
-            .requestFocus();
+        (_unit == DistanceUnit.feet ? _feetFocus : _metersFocus).requestFocus();
       });
 
   void _typedMeters(String text) {
@@ -182,7 +187,7 @@ class _DistanceFieldState extends State<DistanceField> {
       _unit = unit;
       _fill(_value);
     });
-    DistanceField._remember(unit);
+    if (widget.remember) DistanceField._remember(unit);
     widget.onChanged(_value, unit);
     _focusFirst();
   }

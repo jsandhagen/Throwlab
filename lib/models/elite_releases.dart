@@ -247,13 +247,17 @@ const whatIfSources = <({String citation, String usedFor})>[
     citation: 'Hubbard, M., & Rust, H. J. (1984). Simulation of javelin '
         'flight using experimental aerodynamic data. Journal of '
         'Biomechanics, 17(10), 769–776.',
-    usedFor: 'The shape of the javelin lift and drag curves.',
+    usedFor: 'The shape of the javelin lift and drag curves only. Measured '
+        "on the men's javelin before the 1986 rule change moved its center "
+        'of mass 4 cm forward, so it is not the javelin thrown today; the '
+        'coefficients were tuned to modern results rather than taken from it.',
   ),
   (
     citation: 'Bartlett, R. M., & Best, R. J. (1988). The biomechanics of '
         'javelin throwing: a review. Journal of Sports Sciences, 6(1), '
         '1–38.',
     usedFor: 'Javelin release ranges, and the cost of a nose held above '
-        'the flight path.',
+        'the flight path. Written two years after the men\'s rule change, '
+        'and drawing on work either side of it.',
   ),
 ];

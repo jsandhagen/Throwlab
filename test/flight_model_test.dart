@@ -307,7 +307,7 @@ void main() {
     testWidgets('switching event shows its own references', (tester) async {
       await pump(tester, const ReleaseCalculatorScreen());
       expect(find.text('Attack'), findsNothing);
-      await tester.tap(find.byTooltip('Discus'));
+      await tester.tap(find.text('Discus'));
       await tester.pump();
       await tester.scrollUntilVisible(find.text('Attack'), 200);
       await tester.scrollUntilVisible(find.text('Daniel Ståhl'), 300);

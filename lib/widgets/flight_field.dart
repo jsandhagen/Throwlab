@@ -31,6 +31,7 @@ class FlightField extends StatelessWidget {
     required this.flights,
     required this.unit,
     this.ghost,
+    this.backdrop,
   });
 
   final ThrowEvent event;
@@ -43,6 +44,11 @@ class FlightField extends StatelessWidget {
 
   /// Faint and dashed behind the rest — the same release at its best angle.
   final Flight? ghost;
+
+  /// What the field is painted on, so a label can be lifted off the lines
+  /// behind it without a box of another color around it. The card's own
+  /// color when it is not given.
+  final Color? backdrop;
 
   @override
   Widget build(BuildContext context) {
@@ -64,11 +70,9 @@ class FlightField extends StatelessWidget {
             line: theme.colorScheme.outlineVariant,
             faint: theme.colorScheme.onSurfaceVariant,
             ink: theme.colorScheme.onSurface,
-            // What the card the field sits on is painted in, so a label can
-            // be lifted off the lines behind it without a box of another
-            // color around it.
-            backdrop:
-                theme.cardTheme.color ?? theme.colorScheme.surfaceContainerLow,
+            backdrop: backdrop ??
+                theme.cardTheme.color ??
+                theme.colorScheme.surfaceContainerLow,
             text: theme.textTheme.labelSmall ?? const TextStyle(),
           ),
         ),
