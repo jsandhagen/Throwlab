@@ -102,6 +102,12 @@ void main() {
     );
     await tap(const ValueKey('elite-men'));
     await shoot('what_if_javelin_feet');
+
+    // The whole page in feet: mph on the sliders, heights in feet and
+    // inches, and the worth tiles priced in a mile an hour and four inches.
+    await open(measured, height: 7200, unit: DistanceUnit.feet);
+    await tap(const ValueKey('elite-men'));
+    await shoot('what_if_feet_full');
     DistanceField.preferred = DistanceUnit.meters;
   });
 }

@@ -221,7 +221,7 @@ void main() {
       await tester.scrollUntilVisible(find.textContaining('Linthorne'), 200);
     });
 
-    testWidgets('an elite final lays a second throw over the first',
+    testWidgets('an elite final is laid over the baseline as the what-if',
         (tester) async {
       await pump(
           tester,
@@ -231,37 +231,45 @@ void main() {
             measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
           ));
       final women = find.byKey(const ValueKey('elite-women'));
+      // Built is not on screen: bring it all the way in before tapping.
       await tester.scrollUntilVisible(women, 300);
+      await tester.ensureVisible(women);
+      await tester.pumpAndSettle();
       await tester.tap(women);
       await tester.pump();
 
-      // Throw 2 is the one on the sliders, with throw 1 ticked on each
+      // The what-if is the one on the sliders, with the baseline ticked on each
       // track and the difference beside the value.
       await tester.scrollUntilVisible(find.text('+2.1 m/s'), -300);
       expect(find.byKey(const ValueKey('other-Speed')), findsOneWidget);
 
       await tester.scrollUntilVisible(
-          find.text('THROW 2 AGAINST THROW 1'), -300);
+          find.text('further than the baseline'), -300);
       expect(find.textContaining('Elite women · 4 kg'), findsWidgets);
       expect(text(tester, 'whatIfGap'), startsWith('+'));
 
       // Tapping it again puts it away.
+      // Built is not on screen: bring it all the way in before tapping.
       await tester.scrollUntilVisible(women, 300);
+      await tester.ensureVisible(women);
+      await tester.pumpAndSettle();
       await tester.tap(women);
       await tester.pump();
       await tester.scrollUntilVisible(find.text('YOUR MEASURED THROW'), -300);
-      expect(find.text('THROW 2 AGAINST THROW 1'), findsNothing);
+      expect(find.byKey(const ValueKey('whatIfGap')), findsNothing);
     });
 
-    testWidgets('a second throw starts as a copy and moves on its own',
+    testWidgets(
+        'a what-if starts as a copy of the baseline and moves on its own',
         (tester) async {
       await pump(tester, const ReleaseCalculatorScreen());
-      await tester.scrollUntilVisible(find.text('Second throw'), 200);
-      await tester.tap(find.text('Second throw'));
+      await tester.scrollUntilVisible(find.text('Try a change'), 200);
+      await tester.tap(find.text('Try a change'));
       await tester.pump();
       await tester.scrollUntilVisible(
           find.byKey(const ValueKey('whatIfGap')), -300);
-      expect(text(tester, 'whatIfGap'), '+0.00 m');
+      expect(text(tester, 'whatIfGap'), '0.00 m');
+      expect(text(tester, 'whatIfVerdict'), 'the same as the baseline');
 
       await tester.scrollUntilVisible(find.text('Angle'), 200);
       await tester.drag(find.byType(Slider).first, const Offset(-80, 0));
@@ -269,6 +277,31 @@ void main() {
       await tester.scrollUntilVisible(
           find.byKey(const ValueKey('whatIfGap')), -300);
       expect(text(tester, 'whatIfGap'), startsWith('−'));
+      expect(text(tester, 'whatIfVerdict'), 'shorter than the baseline');
+    });
+
+    testWidgets('reads in feet and miles an hour when switched',
+        (tester) async {
+      await pump(
+          tester,
+          const ReleaseCalculatorScreen(
+            event: ThrowEvent.shotPut,
+            implementKg: 7.26,
+            measured: Release(speed: 12, angleDeg: 38, height: 2.0),
+          ));
+      final meters = text(tester, 'whatIfDistance');
+      await tester.tap(find.text('ft'));
+      await tester.pump();
+      // The same throw, spelled the way a meet in feet writes it.
+      final feet = text(tester, 'whatIfDistance');
+      expect(feet, matches(RegExp(r'^\d+-\d')));
+      expect(feet, isNot(meters));
+      await tester.scrollUntilVisible(find.text('Angle'), 200);
+      expect(find.text('26.8 mph'), findsOneWidget);
+      // 2.00 m of release height, in feet and inches.
+      await tester.scrollUntilVisible(find.text('6-06.50'), 100);
+      await tester.scrollUntilVisible(find.text('+1 mph'), 200);
+      expect(find.text('+4 in higher'), findsOneWidget);
     });
 
     testWidgets('switching event shows its own references', (tester) async {

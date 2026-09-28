@@ -1197,11 +1197,23 @@ like the app rather than a bare Material default.
   The order is the order of the questions: what nudging a number does —
   the result, the sliders, what each is worth — before any elite final,
   which is the rarer question and waits underneath.
-  It compares, because the question is always this throw against that one:
-  throw 1 is what it opened on, throw 2 is laid over it, and the sliders
+  It compares, because the question is always this throw against that one.
+  The two are named for what they are, not numbered: the *baseline* is
+  whatever the comparison is measured from — a measured throw, an elite
+  final or numbers typed in, and the card says which — and the *what if* is
+  the change being asked about. The headline is the difference said the way
+  a coach says it ('+6.95 m / further than the baseline'). The sliders
   move whichever is picked — the other ticked on each track and the
   difference beside each value, the gap between the two landings lit on
-  the ground and set large over the field. Each throw carries its own
+  the ground.
+  It reads in the coach's units, flipped by an m / ft switch in its app bar
+  that opens on `DistanceField.preferred` and does not write it back. In
+  feet the marks are spelled the way a meet writes them, a release height
+  too, speed and wind are in miles an hour (what a radar gun reads), and
+  the worth tiles are priced in a mile an hour and four inches rather than
+  in a meter a second spelled in the wrong unit (`_Units`). Everything is
+  still stored and flown in meters; the unit is only how it is read and how
+  far a slider's step goes. Each throw carries its own
   implement, since a 12 lb put against a men's final is the comparison a
   high school coach wants. `FlightField` draws them side-on across a field
   to one scale both ways — the circle's stop board or the javelin's foul
@@ -1209,10 +1221,10 @@ like the app rather than a bare Material default.
   distance beside its divot on the side the flight is not coming in from.
   Every event has an elite men's and women's final one tap away
   (`eliteRanges`, typical releases marked approximate), and a tap lays it
-  in as throw 2 — any reference goes in second, over the throw a coach
+  in as the what-if — any reference goes over the baseline a coach
   brought. `EliteRelease` holds releases measured at finals, with the report
   named on each; only what was published goes in, so a row that has only a
-  speed takes its angle and height from throw 1 rather than filling them
+  speed takes its angle and height from the baseline rather than filling them
   with a guess under somebody's name.
 - A modal bottom sheet is only safe at the top. `useSafeArea` insets the
   top and leaves the bottom to the sheet, which is right — a sheet runs to

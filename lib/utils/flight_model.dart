@@ -320,18 +320,21 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
   return (angleDeg: angle, distance: at(angle));
 }
 
-/// What each lever is worth from here: meters gained for one more m/s, one
-/// more degree, and ten more centimeters of height. The comparison the
-/// research keeps coming back to — speed is worth far more than angle —
-/// and the one a coach can do something with.
+/// What each lever is worth from here: meters gained for [speedStep] more
+/// m/s, one more degree, and [heightStep] more meters of height — one m/s
+/// and ten centimeters by default, a mile an hour and four inches for a
+/// coach reading in feet. The comparison the research keeps coming back
+/// to — speed is worth far more than angle — and the one a coach can do
+/// something with.
 ({double perSpeed, double perDegree, double perHeight}) sensitivity(
-    ThrowEvent event, ImplementSpec spec, Release release) {
+    ThrowEvent event, ImplementSpec spec, Release release,
+    {double speedStep = 1, double heightStep = 0.1}) {
   final aero = Aero.of(event, spec);
   double at(Release r) => fly(r, aero, spec.weightKg).distance;
   final base = at(release);
   return (
-    perSpeed: at(release.copyWith(speed: release.speed + 1)) - base,
+    perSpeed: at(release.copyWith(speed: release.speed + speedStep)) - base,
     perDegree: at(release.copyWith(angleDeg: release.angleDeg + 1)) - base,
-    perHeight: at(release.copyWith(height: release.height + 0.1)) - base,
+    perHeight: at(release.copyWith(height: release.height + heightStep)) - base,
   );
 }

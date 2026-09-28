@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../utils/flight_model.dart';
-import 'distance_field.dart';
 import 'throw_card.dart';
 
 /// One flight on the field, in the ink it is drawn in.
@@ -30,10 +29,14 @@ class FlightField extends StatelessWidget {
     super.key,
     required this.event,
     required this.flights,
+    required this.unit,
     this.ghost,
   });
 
   final ThrowEvent event;
+
+  /// What the markers are counted in and the landings spelled in.
+  final DistanceUnit unit;
 
   /// One or two. The last is drawn on top.
   final List<FieldFlight> flights;
@@ -44,7 +47,6 @@ class FlightField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final unit = DistanceField.preferred;
     return LayoutBuilder(builder: (context, box) {
       final all = [...flights.map((f) => f.flight), if (ghost != null) ghost!];
       final layout = _FieldLayout.of(all, box.maxWidth, unit, event);
