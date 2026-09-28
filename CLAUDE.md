@@ -1241,7 +1241,22 @@ like the app rather than a bare Material default.
   speed flattered the flight; the angle's dial says so under it. Where the
   loss is nothing — the hammer, the discus, a loss the coach set to zero —
   the speed is held, and the dial says that instead whenever the angle is
-  raised against the other throw.
+  raised against the other throw. The speed's dial carries a link to the
+  angle's, and is lit — 'with the angle' — while the angle is in the hand
+  and for a moment after it is stepped: the step it takes is a few percent
+  of its track, and unlit it was easy to watch the angle and never see the
+  speed go.
+  A slider in the hand flies two throws a frame and nothing else. The best
+  angle, what a nudge is worth and the gap's breakdown are a hundred
+  flights between them on a javelin, and flown on every move they held a
+  frame to a tenth of a second, which felt like a slider that dragged and
+  showed the speed jumping after the angle instead of riding with it. So
+  they are cached (`_derivedFor`, keyed on everything they read) and
+  worked out again when the finger lifts, dimmed (`_Settling`) while they
+  are describing the throw as it was. `fly` itself steps in fixed
+  `Float64List` buffers rather than a list per RK4 stage, and does the
+  same arithmetic in the same order, so every distance is the same to the
+  last bit.
   Every dial carries a step either way at the ends of its track, since a
   thumb is a blunt tool for a tenth of a meter a second, and its
   difference from the other throw is a button that puts it back level.

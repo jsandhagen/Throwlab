@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/elite_releases.dart';
@@ -217,6 +219,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
 
   @override
   void dispose() {
+    _followTimer?.cancel();
     _scroll.dispose();
     super.dispose();
   }
@@ -242,6 +245,79 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     final next = off();
     if (next != _floating) setState(() => _floating = next);
   }
+
+  /// A slider in the hand, and which. While one is, only the two flights
+  /// on the field are flown for each move: the best angle, what a nudge is
+  /// worth and where the gap comes from are a hundred flights between them
+  /// on a javelin, and flown on every move they held each frame to a tenth
+  /// of a second — which a coach felt as a slider that dragged, and saw as
+  /// the speed jumping after the angle rather than riding with it. They
+  /// are worked out once the finger lifts.
+  String? _sliding;
+
+  /// The speed has just moved because the angle did, so its dial can say
+  /// so for a moment after a tap as well as for the length of a drag.
+  bool _speedFollowed = false;
+  Timer? _followTimer;
+
+  ({String key, _Derived value})? _derived;
+
+  /// Everything [_derived] depends on, spelled out: the same release to the
+  /// last bit is the same answer.
+  String _derivedKey(_Units units) {
+    String r(Release x) => '${x.speed},${x.angleDeg},${x.height},'
+        '${x.attackDeg},${x.wind},${x.pitchRate}';
+    return '${_event.name}|${_spec.weightKg}|${r(_one.release)}|'
+        '${_two == null ? '-' : r(_two!.release)}|$_editing|$_loss|'
+        '${units.speedLever}|${units.heightLever}';
+  }
+
+  /// The slow half of the screen, from the cache while a slider is in the
+  /// hand and worked out again otherwise when anything it reads has moved.
+  ({String key, _Derived value}) _derivedFor(_Units units) {
+    final key = _derivedKey(units);
+    final cached = _derived;
+    if (cached != null && (cached.key == key || _sliding != null)) {
+      return cached;
+    }
+    final current = _current;
+    // The athlete's best angle, with speed falling as it rises, and the
+    // flight's own with speed held — the two answers the literature gives,
+    // said side by side so neither is mistaken for the other.
+    final best = bestAngle(_event, current.spec, current.release,
+        speedLossPerDeg: _loss);
+    final held =
+        _loss > 0 ? bestAngle(_event, current.spec, current.release) : null;
+    final worth = sensitivity(_event, current.spec, current.release,
+        speedStep: units.speedLever,
+        heightStep: units.heightLever,
+        speedLossPerDeg: _loss);
+    final shares = !_comparing
+        ? null
+        : gapShares(_event, _spec, _one.release, _two!.release);
+    final from = flyThrow(_event, current.spec, current.release).distance;
+    Flight? ghost;
+    if (!_comparing) {
+      final at = flyThrow(_event, _one.spec,
+          _one.release.copyWith(angleDeg: best.angleDeg, speed: best.speed));
+      if (at.distance - from >= 0.02) ghost = at;
+    }
+    return _derived = (
+      key: key,
+      value: (
+        best: best,
+        held: held,
+        worth: worth,
+        shares: shares,
+        ghost: ghost,
+        gain: best.distance - from,
+        angleDeg: current.release.angleDeg,
+      ),
+    );
+  }
+
+  void _slideStart(String label) => setState(() => _sliding = label);
+  void _slideEnd() => setState(() => _sliding = null);
 
   bool get _comparing => _two != null;
   _Throw get _current => _editing == 1 ? _two! : _one;
@@ -346,11 +422,25 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   /// speed for every degree steeper, and back on for every degree flatter.
   void _setAngle(double angle) {
     final r = _current.release;
+    if (_loss > 0) {
+      _speedFollowed = true;
+      _followTimer?.cancel();
+      _followTimer = Timer(_followShown, () {
+        if (mounted) setState(() => _speedFollowed = false);
+      });
+    }
     _setRelease(r.copyWith(
       angleDeg: angle,
       speed: r.speed - _loss * (angle - r.angleDeg),
     ));
   }
+
+  static const _followShown = Duration(milliseconds: 900);
+
+  /// Whether the speed's dial is lit as following the angle: while the
+  /// angle is in the hand, and for a moment after it was stepped.
+  bool get _speedFollowing =>
+      _loss > 0 && (_sliding == 'Angle' || _speedFollowed);
 
   void _pickEvent(ThrowEvent event) {
     if (event == _event) return;
@@ -530,21 +620,16 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         _two == null ? null : flyThrow(_event, _two!.spec, _two!.release);
     final current = _current;
     final units = _Units(_unit);
-    // The athlete's best angle, with speed falling as it rises, and the
-    // flight's own with speed held — the two answers the literature gives,
-    // said side by side so neither is mistaken for the other.
     final tradesSpeed = typicalSpeedLossPerDeg(_event) > 0;
-    final best = bestAngle(_event, current.spec, current.release,
-        speedLossPerDeg: tradesSpeed ? _speedLoss : 0);
-    final held = tradesSpeed && _speedLoss > 0
-        ? bestAngle(_event, current.spec, current.release)
-        : null;
     final speedLoss = _loss;
     final loss = _loss;
-    final worth = sensitivity(_event, current.spec, current.release,
-        speedStep: units.speedLever,
-        heightStep: units.heightLever,
-        speedLossPerDeg: speedLoss);
+    final derived = _derivedFor(units);
+    // Held over from before the slider was picked up, and said so by
+    // dimming, rather than a number that disagrees with the flight above
+    // it read as if it were current.
+    final stale = derived.key != _derivedKey(units);
+    final (:best, :held, :worth, :shares, :ghost, gain: _, angleDeg: _) =
+        derived.value;
 
     // The baseline steps back to a neutral ink once there is a what-if to
     // stand in front of it.
@@ -556,9 +641,6 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         _one.label != _measuredLabel;
     final other = _other?.release;
     final otherRole = _comparing ? _role(1 - _editing).toLowerCase() : null;
-    final shares = !_comparing
-        ? null
-        : gapShares(_event, _spec, _one.release, _two!.release);
     final gap =
         twoFlight == null ? 0.0 : twoFlight.distance - oneFlight.distance;
     final shown = (
@@ -577,8 +659,14 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
       required ValueChanged<double> onChanged,
       double? other,
       String? hint,
+      String? follows,
+      bool following = false,
     }) =>
         _Dial(
+          onSlideStart: () => _slideStart(label),
+          onSlideEnd: _slideEnd,
+          follows: follows,
+          following: following,
           label: label,
           value: value,
           span: span,
@@ -615,20 +703,17 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               // What changed, under the picture of what it did.
               breakdown: shares == null
                   ? null
-                  : _GapShares(
-                      shares: shares,
-                      gap: gap,
-                      one: _one,
-                      two: _two!,
-                      units: units,
+                  : _Settling(
+                      stale: stale,
+                      child: _GapShares(
+                        shares: shares,
+                        gap: stale ? _sum(shares) : gap,
+                        one: _one,
+                        two: _two!,
+                        units: units,
+                      ),
                     ),
-              ghost: _comparing || (best.distance - oneFlight.distance) < 0.02
-                  ? null
-                  : flyThrow(
-                      _event,
-                      _one.spec,
-                      _one.release.copyWith(
-                          angleDeg: best.angleDeg, speed: best.speed)),
+              ghost: ghost,
               // The two ways off the number: ask what a change would do, or
               // go back to the throw that was measured.
               actions: [
@@ -715,6 +800,8 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             ),
             dial(
               label: 'Speed',
+              follows: loss > 0 ? 'Angle' : null,
+              following: _speedFollowing,
               value: current.release.speed,
               other: other?.speed,
               span: _spans[_event]!.speed,
@@ -810,33 +897,37 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 trailing: _comparing
                     ? 'for the ${_role(_editing).toLowerCase()}'
                     : null),
-            _BestAngle(
-              event: _event,
-              best: best,
-              held: held,
-              gain: best.distance -
-                  flyThrow(_event, current.spec, current.release).distance,
-              angleDeg: current.release.angleDeg,
-              speedLoss: tradesSpeed ? _speedLoss : null,
-              units: units,
-              onTry: () => _tryAngle(best),
-              lossDial: !tradesSpeed
-                  ? null
-                  : _Dial(
-                      label: 'Speed lost per 10° steeper',
-                      hint: _speedLossBasis(_event),
-                      value: _speedLoss * 10,
-                      span: _speedLossSpan,
-                      step: units.speedStep,
-                      format: units.speed,
-                      delta: units.speedDelta,
-                      onChanged: (v) => setState(() => _speedLoss = v / 10),
-                    ),
-              onResetLoss:
-                  (_speedLoss - typicalSpeedLossPerDeg(_event)).abs() < 1e-9
-                      ? null
-                      : () => setState(
-                          () => _speedLoss = typicalSpeedLossPerDeg(_event)),
+            _Settling(
+              stale: stale,
+              child: _BestAngle(
+                event: _event,
+                best: best,
+                held: held,
+                gain: derived.value.gain,
+                angleDeg: derived.value.angleDeg,
+                speedLoss: tradesSpeed ? _speedLoss : null,
+                units: units,
+                onTry: () => _tryAngle(best),
+                lossDial: !tradesSpeed
+                    ? null
+                    : _Dial(
+                        onSlideStart: () => _slideStart('loss'),
+                        onSlideEnd: _slideEnd,
+                        label: 'Speed lost per 10° steeper',
+                        hint: _speedLossBasis(_event),
+                        value: _speedLoss * 10,
+                        span: _speedLossSpan,
+                        step: units.speedStep,
+                        format: units.speed,
+                        delta: units.speedDelta,
+                        onChanged: (v) => setState(() => _speedLoss = v / 10),
+                      ),
+                onResetLoss:
+                    (_speedLoss - typicalSpeedLossPerDeg(_event)).abs() < 1e-9
+                        ? null
+                        : () => setState(
+                            () => _speedLoss = typicalSpeedLossPerDeg(_event)),
+              ),
             ),
             // One nudge each from where the sliders are, not a split of the
             // gap — that is what the list under the result is for, and a
@@ -845,7 +936,11 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 trailing: _comparing
                     ? 'from the ${_role(_editing).toLowerCase()}'
                     : 'from here'),
-            _Worth(worth: worth, units: units, speedLossPerDeg: speedLoss),
+            _Settling(
+              stale: stale,
+              child: _Worth(
+                  worth: worth, units: units, speedLossPerDeg: speedLoss),
+            ),
             _Heading('Compare with elite throwers', trailing: _eliteTrailing()),
             _EliteThrowers(
               event: _event,
@@ -909,7 +1004,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                       units: units,
                       one: shown.one,
                       two: shown.two,
-                      shares: shares,
+                      shares: stale ? null : shares,
                       gap: gap,
                       onTap: () => _scroll.animateTo(0,
                           duration: const Duration(milliseconds: 300),
@@ -983,6 +1078,25 @@ String _speedLossBasis(ThrowEvent event) => switch (event) {
           "Set it to your athlete's own if you have it.",
     };
 
+double _sum(Map<Lever, double> m) => m.values.fold(0.0, (a, b) => a + b);
+
+/// What is held over from before a slider was picked up, set back while it
+/// is: a best angle and a breakdown for the throw as it was, read at full
+/// weight beside a flight that has moved on, would say two things at once.
+class _Settling extends StatelessWidget {
+  const _Settling({required this.stale, required this.child});
+
+  final bool stale;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnimatedOpacity(
+        opacity: stale ? 0.4 : 1,
+        duration: const Duration(milliseconds: 120),
+        child: child,
+      );
+}
+
 /// '+0.8', '−2.0', '0.0' — a plain zero rather than a signed one, since
 /// '+0.0' reads as a change that isn't there.
 String _signed(double v, int digits) {
@@ -992,6 +1106,20 @@ String _signed(double v, int digits) {
 }
 
 typedef _Shown = ({String name, Flight flight, Color color});
+
+typedef _Derived = ({
+  ({double angleDeg, double distance, double speed}) best,
+  ({double angleDeg, double distance, double speed})? held,
+  ({double perSpeed, double perDegree, double perHeight}) worth,
+  Map<Lever, double>? shares,
+  Flight? ghost,
+
+  /// What the best angle gains on the throw it was worked out for, and the
+  /// angle that throw was at — kept with the answer so that, held over
+  /// while a slider moves, the two still describe one throw.
+  double gain,
+  double angleDeg,
+});
 
 /// The gap said the way a coach would say it: how much further or shorter
 /// the change throws than what it was measured from.
@@ -1240,6 +1368,17 @@ class _Approx extends StatelessWidget {
   }
 }
 
+/// How far a typical elite release goes with an implement. It is the same
+/// for as long as the event and implement are, and flying it again on every
+/// move of a slider was a javelin flight a frame spent on nothing.
+final _typicalDistances = <String, double>{};
+
+double _typicalDistance(ThrowEvent event, ImplementSpec spec, Release r) =>
+    _typicalDistances.putIfAbsent(
+        '${event.name}|${spec.weightKg}|${r.speed}|${r.angleDeg}|'
+        '${r.height}|${r.attackDeg}',
+        () => flyThrow(event, spec, r).distance);
+
 /// The elite throwers who throw this implement, one tap each: the typical
 /// release first, approximate and drawn from the literature, then the
 /// throwers measured by name. Only this implement's — an elite thrower's
@@ -1319,7 +1458,7 @@ class _EliteThrowers extends StatelessWidget {
                     t: typical!,
                     title: _eliteLabel,
                     subtitle:
-                        '≈ ${units.mark(flyThrow(event, spec, typical!.release).distance)}'
+                        '≈ ${units.mark(_typicalDistance(event, spec, typical!.release))}'
                         ' · ${units.release(typical!.release)}',
                   ),
                 for (final r in named)
@@ -1563,11 +1702,28 @@ class _Dial extends StatelessWidget {
     this.other,
     this.otherRole,
     this.hint,
+    this.onSlideStart,
+    this.onSlideEnd,
+    this.follows,
+    this.following = false,
   });
 
   final String label;
   final String? hint;
   final double value;
+
+  /// A finger down on the track, and up again.
+  final VoidCallback? onSlideStart;
+  final VoidCallback? onSlideEnd;
+
+  /// The dial this one moves with, when it moves with one — the speed with
+  /// the angle — said by a link beside the label.
+  final String? follows;
+
+  /// Lit while it is being moved by the one it [follows]: the step it takes
+  /// is a few percent of its track, and unlit it was easy to watch the
+  /// angle and never see the speed go with it.
+  final bool following;
 
   /// The same setting on the other throw, when there is one.
   final double? other;
@@ -1604,14 +1760,56 @@ class _Dial extends StatelessWidget {
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      margin: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+      decoration: BoxDecoration(
+        color: following
+            ? scheme.primary.withValues(alpha: 0.12)
+            : scheme.primary.withValues(alpha: 0),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: Text(label, style: theme.textTheme.bodyLarge)),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(label,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyLarge),
+                    ),
+                    if (follows != null)
+                      Tooltip(
+                        message: 'Moves with the ${follows!.toLowerCase()}',
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: Icon(Icons.link,
+                              key: ValueKey('follows-$label'),
+                              size: 16,
+                              color: following
+                                  ? scheme.primary
+                                  : scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    if (following)
+                      Flexible(
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 4),
+                          child: Text('with the ${follows!.toLowerCase()}',
+                              key: ValueKey('following-$label'),
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: scheme.primary)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               if (differs)
                 Tooltip(
                   message: 'Match the ${otherRole ?? 'other throw'}',
@@ -1641,8 +1839,9 @@ class _Dial extends StatelessWidget {
                   ),
                 ),
               Text(format(value),
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: following ? scheme.primary : null)),
             ],
           ),
           if (hint != null)
@@ -1684,6 +1883,8 @@ class _Dial extends StatelessWidget {
                           min: span.$1,
                           max: span.$2,
                           semanticFormatterCallback: format,
+                          onChangeStart: (_) => onSlideStart?.call(),
+                          onChangeEnd: (_) => onSlideEnd?.call(),
                           onChanged: (v) => onChanged(_snap(v)),
                         ),
                       ),

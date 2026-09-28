@@ -693,6 +693,53 @@ void main() {
       expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
     });
 
+    testWidgets('while the angle is in the hand the speed rides with it',
+        (tester) async {
+      // The shot: no dials in the air between the angle and its best.
+      await pump(tester, const ReleaseCalculatorScreen());
+      await reach(tester, find.byKey(const ValueKey('Raise-Angle')));
+      final angle = find.descendant(
+          of: find
+              .ancestor(
+                  of: find.byKey(const ValueKey('Raise-Angle')),
+                  matching: find.byType(Row))
+              .first,
+          matching: find.byType(Slider));
+      expect(find.byKey(const ValueKey('follows-Speed')), findsOneWidget);
+      final before = text(tester, 'bestAngle');
+      double speed() => tester
+          .widget<Slider>(find.descendant(
+              of: find
+                  .ancestor(
+                      of: find.byKey(const ValueKey('Raise-Speed')),
+                      matching: find.byType(Row))
+                  .first,
+              matching: find.byType(Slider)))
+          .value;
+      final speedBefore = speed();
+
+      final rect = tester.getRect(angle);
+      final x = rect.left + 18 + (rect.width - 36) * 34.5 / 60;
+      final finger = await tester.startGesture(Offset(x, rect.center.dy));
+      await tester.pump();
+      for (var i = 0; i < 4; i++) {
+        await finger.moveBy(const Offset(12, 0));
+        await tester.pump();
+      }
+      // The speed has come down with the angle and says why; the best
+      // angle is the one from before the finger went down, held over.
+      expect(speed(), lessThan(speedBefore));
+      expect(find.byKey(const ValueKey('following-Speed')), findsOneWidget);
+      expect(text(tester, 'bestAngle'), before);
+
+      await finger.up();
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('following-Speed')), findsNothing);
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('bestAngle')), 300);
+      expect(text(tester, 'bestAngle'), isNot(before));
+    });
+
     testWidgets('the result floats over the dials once scrolled past',
         (tester) async {
       await pump(tester, const ReleaseCalculatorScreen());

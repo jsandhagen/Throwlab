@@ -20,6 +20,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' show Offset;
 
 import '../models/throw_event.dart';
@@ -299,19 +300,28 @@ Flight fly(Release release, Aero aero, double mass) {
   final k = airDensity * aero.area / (2 * mass);
   final gamma0 = _rad(release.angleDeg);
 
-  // State: x, y, vx, vy, attitude, pitch rate.
-  var s = [
+  // State: x, y, vx, vy, attitude, pitch rate. Held in fixed buffers and
+  // written in place: a flight is a couple of thousand RK4 steps, the
+  // calculator flies dozens of them for every move of a slider, and a
+  // fresh list per stage was most of what a flight cost.
+  var s = Float64List.fromList([
     0.0,
     release.height,
     release.speed * math.cos(gamma0),
     release.speed * math.sin(gamma0),
     gamma0 + (aero.hasAttitude ? _rad(release.attackDeg) : 0),
     aero.pitches ? _rad(release.pitchRate) : 0.0,
-  ];
+  ]);
+  var next = Float64List(6);
+  final k1 = Float64List(6);
+  final k2 = Float64List(6);
+  final k3 = Float64List(6);
+  final k4 = Float64List(6);
+  final mid = Float64List(6);
 
   // Wrapped, so a javelin sent tumbling by a slider at its end reads the
   // angle it is actually meeting the air at rather than a turn and a half.
-  double alphaOf(List<double> s) {
+  double alphaOf(Float64List s) {
     if (!aero.hasAttitude) return 0;
     final a = s[4] - math.atan2(s[3], s[2] - release.wind);
     return math.atan2(math.sin(a), math.cos(a));
@@ -322,7 +332,7 @@ Flight fly(Release release, Aero aero, double mass) {
   // whole step and moved only between them.
   var stalled = aero.stallsAt(alphaOf(s));
 
-  List<double> derivative(List<double> s) {
+  void derivative(Float64List s, Float64List out) {
     final ux = s[2] - release.wind;
     final uy = s[3];
     final u = math.sqrt(ux * ux + uy * uy);
@@ -359,11 +369,19 @@ Flight fly(Release release, Aero aero, double mass) {
         dRate = (moment + damping) / aero.pitchInertia;
       }
     }
-    return [s[2], s[3], ax, ay, s[5], dRate];
+    out[0] = s[2];
+    out[1] = s[3];
+    out[2] = ax;
+    out[3] = ay;
+    out[4] = s[5];
+    out[5] = dRate;
   }
 
-  List<double> step(List<double> s, List<double> d, double h) =>
-      [for (var i = 0; i < s.length; i++) s[i] + d[i] * h];
+  void step(Float64List s, Float64List d, double h, Float64List out) {
+    for (var i = 0; i < 6; i++) {
+      out[i] = s[i] + d[i] * h;
+    }
+  }
 
   final path = <Offset>[Offset(0, release.height)];
   var t = 0.0;
@@ -372,21 +390,25 @@ Flight fly(Release release, Aero aero, double mass) {
   // A minute of flight is a release nothing in athletics produces; the cap
   // is only there so a nonsense input can't spin the loop forever.
   while (t < 60) {
-    final k1 = derivative(s);
-    final k2 = derivative(step(s, k1, dt / 2));
-    final k3 = derivative(step(s, k2, dt / 2));
-    final k4 = derivative(step(s, k3, dt));
-    final next = [
-      for (var i = 0; i < s.length; i++)
-        s[i] + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i])
-    ];
+    derivative(s, k1);
+    step(s, k1, dt / 2, mid);
+    derivative(mid, k2);
+    step(s, k2, dt / 2, mid);
+    derivative(mid, k3);
+    step(s, k3, dt, mid);
+    derivative(mid, k4);
+    for (var i = 0; i < 6; i++) {
+      next[i] = s[i] + dt / 6 * (k1[i] + 2 * k2[i] + 2 * k3[i] + k4[i]);
+    }
     if (next[1] <= 0) {
       final f = s[1] / (s[1] - next[1]);
       final x = s[0] + (next[0] - s[0]) * f;
       path.add(Offset(x, 0));
       return Flight(distance: x, time: t + dt * f, apex: apex, path: path);
     }
+    final was = s;
     s = next;
+    next = was;
     t += dt;
     final alpha = alphaOf(s);
     if (!stalled && aero.stallsAt(alpha)) stalled = true;
