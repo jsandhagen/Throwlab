@@ -269,6 +269,46 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         _editing = 0;
       });
 
+  /// Whether the what-if has been moved off the baseline at all — the reset
+  /// is only offered when there is something to reset.
+  bool get _differs {
+    final a = _one.release, b = _two!.release;
+    return _one.spec != _two!.spec ||
+        a.speed != b.speed ||
+        a.angleDeg != b.angleDeg ||
+        a.height != b.height ||
+        a.attackDeg != b.attackDeg ||
+        a.wind != b.wind ||
+        a.pitchRate != b.pitchRate;
+  }
+
+  void _resetToBaseline() => setState(() {
+        _two = _Throw(_one.spec, _one.release);
+      });
+
+  /// The best angle, tried. With nothing to compare against it goes in as a
+  /// what-if over the throw it was worked out for, so the gain is read off
+  /// the headline rather than the baseline being lost to it; while
+  /// comparing it moves whichever throw the sliders are on. The speed goes
+  /// with it, since the thrower's best angle is flown at the speed the
+  /// thrower would have there.
+  void _tryAngle(({double angleDeg, double distance, double speed}) best) =>
+      setState(() {
+        final angle = (best.angleDeg * 10).round() / 10;
+        if (!_comparing) {
+          _two = _fit(
+              _Throw(
+                  _one.spec,
+                  _one.release.copyWith(angleDeg: angle, speed: best.speed),
+                  'At the best angle'),
+              _event);
+          _editing = 1;
+          return;
+        }
+        _put(_Throw(_current.spec,
+            _current.release.copyWith(angleDeg: angle, speed: best.speed)));
+      });
+
   void _backToMeasured() => setState(() {
         _one = _fit(
             _Throw(
@@ -394,6 +434,30 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         _event == widget.event &&
         _one.label != _measuredLabel;
     final other = _other?.release;
+    final otherRole = _comparing ? _role(1 - _editing).toLowerCase() : null;
+    Widget dial({
+      required String label,
+      required double value,
+      required (double, double) span,
+      required double step,
+      required String Function(double) format,
+      required String Function(double) delta,
+      required ValueChanged<double> onChanged,
+      double? other,
+      String? hint,
+    }) =>
+        _Dial(
+          label: label,
+          value: value,
+          span: span,
+          step: step,
+          format: format,
+          delta: delta,
+          onChanged: onChanged,
+          other: other,
+          otherRole: otherRole,
+          hint: hint,
+        );
 
     return SafeArea(
       top: false,
@@ -415,6 +479,23 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                     _one.spec,
                     _one.release
                         .copyWith(angleDeg: best.angleDeg, speed: best.speed)),
+            // The two ways off the number: ask what a change would do, or
+            // go back to the throw that was measured.
+            actions: [
+              if (!_comparing)
+                FilledButton.tonalIcon(
+                  key: const ValueKey('whatIfTry'),
+                  onPressed: _addSecond,
+                  icon: const Icon(Icons.tune, size: 18),
+                  label: const Text('Try a change'),
+                ),
+              if (showBack)
+                TextButton.icon(
+                  onPressed: _backToMeasured,
+                  icon: const Icon(Icons.undo, size: 18),
+                  label: const Text('Back to the measured throw'),
+                ),
+            ],
           ),
           if (_comparing)
             _GapShares(
@@ -428,18 +509,6 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               two: _two!,
               units: units,
             ),
-          if (showBack)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: TextButton.icon(
-                  onPressed: _backToMeasured,
-                  icon: const Icon(Icons.undo),
-                  label: const Text('Back to the measured throw'),
-                ),
-              ),
-            ),
           _Heading('Release',
               action: _comparing
                   ? IconButton(
@@ -448,11 +517,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                       icon: const Icon(Icons.close),
                       onPressed: _removeSecond,
                     )
-                  : TextButton.icon(
-                      onPressed: _addSecond,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Try a change'),
-                    )),
+                  : null),
           if (_comparing)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -479,19 +544,41 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               ),
             ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    _source(_editing),
+                  child: Text.rich(
+                    TextSpan(children: [
+                      if (_comparing)
+                        TextSpan(
+                            text:
+                                'Moving the ${_role(_editing).toLowerCase()} · ',
+                            style: TextStyle(color: scheme.onSurfaceVariant)),
+                      TextSpan(text: _source(_editing)),
+                    ]),
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                 ),
+                // Always there while the what-if is on the sliders, and only
+                // lit once it has moved: appearing on the first nudge pushed
+                // every dial under it down a row, out from under the thumb.
+                if (_comparing && _editing == 1)
+                  IconButton(
+                    key: const ValueKey('whatIfReset'),
+                    tooltip: 'Start again from the baseline',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.restart_alt),
+                    onPressed: _differs ? _resetToBaseline : null,
+                  ),
+                // The implement is part of the throw: a 12 lb put is not a
+                // 16 lb one at the same release, so it sits with the dials.
                 DropdownButton<ImplementSpec>(
+                  key: const ValueKey('whatIfImplement'),
                   value: current.spec,
                   underline: const SizedBox(),
+                  borderRadius: BorderRadius.circular(12),
                   items: [
                     for (final s in _event.implements)
                       DropdownMenuItem(value: s, child: Text(s.weightLabel)),
@@ -503,7 +590,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               ],
             ),
           ),
-          _Dial(
+          dial(
             label: 'Speed',
             value: current.release.speed,
             other: other?.speed,
@@ -513,7 +600,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             delta: units.speedDelta,
             onChanged: (v) => _setRelease(current.release.copyWith(speed: v)),
           ),
-          _Dial(
+          dial(
             label: 'Angle',
             // Every angle here is flown at the speed on the slider above
             // it, and no athlete keeps that: going higher costs release
@@ -534,7 +621,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             onChanged: (v) =>
                 _setRelease(current.release.copyWith(angleDeg: v)),
           ),
-          _Dial(
+          dial(
             label: 'Height',
             value: current.release.height,
             other: other?.height,
@@ -544,8 +631,14 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             delta: units.heightDelta,
             onChanged: (v) => _setRelease(current.release.copyWith(height: v)),
           ),
+          // What the implement does once it has left the hand, apart from
+          // the three numbers every release has: a coach reading a shot put
+          // never sees this heading, and one reading a javelin sees where
+          // the release stops and the flight starts.
+          if (_hasAttack(_event) || _hasWind(_event))
+            const _Heading('In the air'),
           if (_hasAttack(_event))
-            _Dial(
+            dial(
               label: 'Attack',
               hint: _event == ThrowEvent.discus
                   ? 'Leading edge above (+) or below (−) the path'
@@ -560,7 +653,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                   _setRelease(current.release.copyWith(attackDeg: v)),
             ),
           if (_hasPitchRate(_event))
-            _Dial(
+            dial(
               label: 'Pitch rate',
               hint: 'Nose turning up (+) or down (−) as it leaves the hand',
               value: current.release.pitchRate,
@@ -573,7 +666,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                   _setRelease(current.release.copyWith(pitchRate: v)),
             ),
           if (_hasWind(_event))
-            _Dial(
+            dial(
               label: 'Wind',
               hint: 'Behind the thrower (+) or in their face (−)',
               value: current.release.wind,
@@ -584,6 +677,10 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               delta: units.windDelta,
               onChanged: (v) => _setRelease(current.release.copyWith(wind: v)),
             ),
+          _Heading('Best angle',
+              trailing: _comparing
+                  ? 'for the ${_role(_editing).toLowerCase()}'
+                  : null),
           _BestAngle(
             event: _event,
             best: best,
@@ -593,18 +690,25 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             angleDeg: current.release.angleDeg,
             speedLoss: tradesSpeed ? _speedLoss : null,
             units: units,
+            onTry: () => _tryAngle(best),
+            lossDial: !tradesSpeed
+                ? null
+                : _Dial(
+                    label: 'Speed lost per 10° steeper',
+                    hint: _speedLossBasis(_event),
+                    value: _speedLoss * 10,
+                    span: _speedLossSpan,
+                    step: units.speedStep,
+                    format: units.speed,
+                    delta: units.speedDelta,
+                    onChanged: (v) => setState(() => _speedLoss = v / 10),
+                  ),
+            onResetLoss: (_speedLoss - typicalSpeedLossPerDeg(_event)).abs() <
+                    1e-9
+                ? null
+                : () =>
+                    setState(() => _speedLoss = typicalSpeedLossPerDeg(_event)),
           ),
-          if (tradesSpeed)
-            _Dial(
-              label: 'Speed lost per 10° steeper',
-              hint: 'An estimate — set it to your athlete\'s own',
-              value: _speedLoss * 10,
-              span: _speedLossSpan,
-              step: units.speedStep,
-              format: units.speed,
-              delta: units.speedDelta,
-              onChanged: (v) => setState(() => _speedLoss = v / 10),
-            ),
           // One nudge each from where the sliders are, not a split of the
           // gap — that is what the list under the result is for, and a
           // heading that let these read as one had coaches adding them up.
@@ -651,6 +755,19 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   }
 }
 
+/// Where the speed-loss estimate an event opens on comes from, said under
+/// its dial: a number a coach is asked to trust or replace has to say what
+/// it rests on.
+String _speedLossBasis(ThrowEvent event) => switch (event) {
+      ThrowEvent.javelin =>
+        'Estimated from academic research: Red & Zogaib (1977) measured '
+            'javelin throwers releasing slower as they released higher. '
+            "Set it to your athlete's own if you have it.",
+      _ => 'Estimated from academic research: Linthorne (2001) measured '
+          'shot putters releasing slower as they released higher. '
+          "Set it to your athlete's own if you have it.",
+    };
+
 /// '+0.8', '−2.0', '0.0' — a plain zero rather than a signed one, since
 /// '+0.0' reads as a change that isn't there.
 String _signed(double v, int digits) {
@@ -668,6 +785,7 @@ class _ResultCard extends StatelessWidget {
     required this.one,
     required this.two,
     required this.ghost,
+    this.actions = const [],
   });
 
   final ThrowEvent event;
@@ -675,6 +793,7 @@ class _ResultCard extends StatelessWidget {
   final _Shown one;
   final _Shown? two;
   final Flight? ghost;
+  final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
@@ -801,11 +920,60 @@ class _ResultCard extends StatelessWidget {
               backdrop: surface,
               ghost: ghost,
             ),
+            if (ghost != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      child: CustomPaint(
+                        size: const Size(18, 2),
+                        painter: _DashPainter(scheme.onSurfaceVariant),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text('The same throw at its best angle',
+                          style: muted),
+                    ),
+                  ],
+                ),
+              ),
+            if (actions.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: actions,
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+/// The dashed key to the ghost flight on the field.
+class _DashPainter extends CustomPainter {
+  const _DashPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5;
+    final y = size.height / 2;
+    for (var x = 0.0; x < size.width; x += 6) {
+      canvas.drawLine(Offset(x, y), Offset(x + 3, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashPainter old) => old.color != color;
 }
 
 /// A distance with the '≈' every estimate on this screen wears.
@@ -950,6 +1118,9 @@ class _BestAngle extends StatelessWidget {
     required this.angleDeg,
     required this.speedLoss,
     required this.units,
+    required this.onTry,
+    this.lossDial,
+    this.onResetLoss,
   });
 
   final ThrowEvent event;
@@ -963,6 +1134,18 @@ class _BestAngle extends StatelessWidget {
   /// m/s per degree, or null for an event flown at a held speed.
   final double? speedLoss;
   final _Units units;
+
+  /// Puts the best angle on the sliders.
+  final VoidCallback onTry;
+
+  /// The speed lost per degree, set here rather than among the release's
+  /// own dials: it is not part of any throw, only of how the best angle is
+  /// searched for, and among speed, angle and height it read as a fourth
+  /// thing about the release.
+  final Widget? lossDial;
+
+  /// Back to the estimate, when the coach has moved off it.
+  final VoidCallback? onResetLoss;
 
   @override
   Widget build(BuildContext context) {
@@ -1004,21 +1187,65 @@ class _BestAngle extends StatelessWidget {
           "going higher, so an athlete's own best angle sits somewhat under "
           'this one.';
     }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(line,
-              key: const ValueKey('bestAngle'),
-              style: theme.textTheme.bodyMedium),
-          const SizedBox(height: 2),
-          Text(
-            note,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ],
+    final scheme = theme.colorScheme;
+    return Card(
+      color: cardOverSector(scheme),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 12, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(line,
+                        key: const ValueKey('bestAngle'),
+                        style: theme.textTheme.bodyLarge
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                  ),
+                  if (!atBest) ...[
+                    const SizedBox(width: 8),
+                    FilledButton.tonal(
+                      key: const ValueKey('tryBestAngle'),
+                      onPressed: onTry,
+                      style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact),
+                      child: const Text('Try it'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Text(
+                note,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+            if (lossDial != null) ...[
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Divider(height: 1),
+              ),
+              lossDial!,
+              if (onResetLoss != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: TextButton.icon(
+                    key: const ValueKey('resetSpeedLoss'),
+                    onPressed: onResetLoss,
+                    icon: const Icon(Icons.restart_alt, size: 18),
+                    label: const Text('Back to the research estimate'),
+                  ),
+                ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1060,7 +1287,11 @@ class _Heading extends StatelessWidget {
 
 /// A labelled slider that snaps to [step], so what it reads is what was
 /// set — with the other throw's setting ticked on its track and how far
-/// this one is from it beside the value.
+/// this one is from it beside the value. A thumb is a blunt tool for a
+/// tenth of a meter a second, so a step either way sits at each end of the
+/// track, and the difference is a button that puts this one back level
+/// with the other throw: the two things a coach otherwise drags at and
+/// misses.
 class _Dial extends StatelessWidget {
   const _Dial({
     required this.label,
@@ -1071,6 +1302,7 @@ class _Dial extends StatelessWidget {
     required this.delta,
     required this.onChanged,
     this.other,
+    this.otherRole,
     this.hint,
   });
 
@@ -1080,6 +1312,9 @@ class _Dial extends StatelessWidget {
 
   /// The same setting on the other throw, when there is one.
   final double? other;
+
+  /// What the other throw is called, for the match button's tooltip.
+  final String? otherRole;
   final (double, double) span;
   final double step;
   final String Function(double) format;
@@ -1088,12 +1323,28 @@ class _Dial extends StatelessWidget {
 
   static const _inset = 18.0;
 
+  double _snap(double v) => _clamp((v / step).round() * step, span);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final diff = other == null ? 0.0 : value - other!;
     final differs = other != null && diff.abs() >= step / 2;
+    Widget nudge(IconData icon, double by, String tip) {
+      final next = _snap(value + by);
+      return IconButton(
+        key: ValueKey('$tip-$label'),
+        tooltip: '$tip $label',
+        visualDensity: VisualDensity.compact,
+        iconSize: 20,
+        color: scheme.onSurfaceVariant,
+        onPressed:
+            (next - value).abs() < step / 2 ? null : () => onChanged(next),
+        icon: Icon(icon),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
       child: Column(
@@ -1103,17 +1354,32 @@ class _Dial extends StatelessWidget {
             children: [
               Expanded(child: Text(label, style: theme.textTheme.bodyLarge)),
               if (differs)
-                Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: scheme.primary.withValues(alpha: 0.16),
+                Tooltip(
+                  message: 'Match the ${otherRole ?? 'other throw'}',
+                  child: InkWell(
+                    key: ValueKey('match-$label'),
                     borderRadius: BorderRadius.circular(6),
+                    onTap: () => onChanged(_clamp(other!, span)),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.fromLTRB(6, 1, 4, 1),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(delta(diff),
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 2),
+                          Icon(Icons.undo, size: 12, color: scheme.primary),
+                        ],
+                      ),
+                    ),
                   ),
-                  child: Text(delta(diff),
-                      style: theme.textTheme.labelMedium?.copyWith(
-                          color: scheme.primary, fontWeight: FontWeight.w600)),
                 ),
               Text(format(value),
                   style: theme.textTheme.bodyLarge
@@ -1124,45 +1390,51 @@ class _Dial extends StatelessWidget {
             Text(hint!,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant)),
-          LayoutBuilder(builder: (context, box) {
-            final track = box.maxWidth - 2 * _inset;
-            double xOf(double v) =>
-                _inset + track * (v - span.$1) / (span.$2 - span.$1);
-            return Stack(
-              alignment: Alignment.centerLeft,
-              children: [
-                if (other != null)
-                  Positioned(
-                    left: xOf(_clamp(other!, span)) - 1.5,
-                    top: 10,
-                    bottom: 10,
-                    child: Container(
-                      key: ValueKey('other-$label'),
-                      width: 3,
-                      decoration: BoxDecoration(
-                        color: scheme.onSurfaceVariant,
-                        borderRadius: BorderRadius.circular(2),
+          Row(
+            children: [
+              nudge(Icons.remove, -step, 'Lower'),
+              Expanded(
+                child: LayoutBuilder(builder: (context, box) {
+                  final track = box.maxWidth - 2 * _inset;
+                  double xOf(double v) =>
+                      _inset + track * (v - span.$1) / (span.$2 - span.$1);
+                  return Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      if (other != null)
+                        Positioned(
+                          left: xOf(_clamp(other!, span)) - 1.5,
+                          top: 10,
+                          bottom: 10,
+                          child: Container(
+                            key: ValueKey('other-$label'),
+                            width: 3,
+                            decoration: BoxDecoration(
+                              color: scheme.onSurfaceVariant,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          overlayShape: const RoundSliderOverlayShape(
+                              overlayRadius: _inset),
+                        ),
+                        child: Slider(
+                          value: value,
+                          min: span.$1,
+                          max: span.$2,
+                          semanticFormatterCallback: format,
+                          onChanged: (v) => onChanged(_snap(v)),
+                        ),
                       ),
-                    ),
-                  ),
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: _inset),
-                  ),
-                  child: Slider(
-                    value: value,
-                    min: span.$1,
-                    max: span.$2,
-                    semanticFormatterCallback: format,
-                    onChanged: (v) {
-                      onChanged((v / step).round() * step);
-                    },
-                  ),
-                ),
-              ],
-            );
-          }),
+                    ],
+                  );
+                }),
+              ),
+              nudge(Icons.add, step, 'Raise'),
+            ],
+          ),
         ],
       ),
     );
@@ -1238,7 +1510,6 @@ class _GapShares extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (shares.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final muted =
@@ -1259,6 +1530,28 @@ class _GapShares extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: Column(
               children: [
+                // Said as a prompt, and at a row's height, rather than the
+                // card turning up on the first nudge and pushing every dial
+                // under it down out from under the thumb.
+                if (order.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(Icons.tune,
+                            size: 18, color: scheme.onSurfaceVariant),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Move a dial below to change the what-if.',
+                            key: const ValueKey('gapEmpty'),
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 for (final l in order)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
@@ -1443,41 +1736,88 @@ class _References extends StatelessWidget {
   }
 }
 
+/// How the model is built and where it falls short, a point to a
+/// paragraph: one block of it was a page nobody read to the end, and the
+/// end was where the javelin's and the discus's caveats were.
 class _Caveat extends StatelessWidget {
   const _Caveat();
+
+  static const _points = [
+    (
+      'The flight',
+      'The implement is flown as a point through still, sea-level air. Drag '
+          'acts on every implement, and lift on the discus and the javelin. '
+          'Distance runs from the hand, so the few tenths a thrower reaches '
+          'past the stop board are not in it.',
+    ),
+    (
+      'Javelin',
+      'Flies on drag, lift and pitching moment measured in a wind tunnel on '
+          "a women's 600 g javelin (Seo et al. 2023), with nothing tuned; "
+          'every other weight flies on the same ones with its own length and '
+          "thickness, since no men's javelin has been measured that way. It "
+          'pitches under the measured moment — nose-up under about 11° of '
+          'attack, nose-down over it — so it settles there and rides it. How '
+          'heavy it is to turn is an estimate.',
+    ),
+    (
+      'Discus',
+      'Its coefficients are shaped like the tunnel curves in the papers '
+          'below and tuned so elite releases land near where finals are won. '
+          'It holds the tilt it was released at, stalls at 29° and only '
+          'recovers under 25°. The real one turns in roll, which a flight in '
+          'one plane cannot show, and it comes out several meters short at '
+          'elite speeds.',
+    ),
+    (
+      'Hammer',
+      'The wire is not counted, and speed is held when the best angle is '
+          'searched for, because nobody has measured how much a hammer '
+          'thrower loses going higher.',
+    ),
+    (
+      'Speed lost going higher',
+      'Release speed falls as the release angle rises, so the best angle '
+          'for the javelin and the shot is searched with speed falling by the '
+          'amount set on that card. It opens on an estimate built from '
+          'academic research — Red & Zogaib (1977) on javelin throwers, '
+          'Linthorne (2001) on shot putters — scaled to each event rather '
+          "than one published number, and is best replaced by an athlete's "
+          'own.',
+    ),
+    (
+      'References',
+      'A measured release is only as good as the video: side-on, square to '
+          'the throw. The typical elite finals are approximate ranges drawn '
+          "from the literature, the women's from the thinner half of it.",
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Text(
-        'The implement is flown as a point through still, sea-level air. '
-        'Drag acts on every implement and lift on the discus and the '
-        'javelin. The javelin flies on coefficients measured in a wind '
-        "tunnel on a women's 600 g javelin (Seo et al. 2023), with nothing "
-        'tuned; every other weight flies on the same ones with its own '
-        "length and thickness, since no men's javelin has been measured "
-        'that way. It pitches under the moment that was measured — nose-up '
-        'under about 11° of attack, nose-down over it — so it settles there '
-        'and rides it; how heavy it is to turn is an estimate. The discus '
-        'has coefficients shaped like the tunnel curves in the papers below '
-        'and tuned so elite releases land near where finals are won. It '
-        'holds the tilt it was released at, stalls at 29° and only recovers '
-        'under 25°; the real one turns in roll, which a flight in one plane '
-        'cannot show, and it comes out several meters short at elite speeds. '
-        "The hammer's wire is not counted. Release speed falls as the "
-        'release angle rises, so for the javelin and the shot the best angle '
-        'is searched with speed falling by the amount set under it — an '
-        'estimate unless it is set to the athlete\'s own; the hammer and '
-        'discus hold their speed, because nobody has measured how much it '
-        'falls. Distance runs from the hand, so the '
-        'few tenths a thrower reaches past the stop board are not in it. A '
-        'measured release is only as good as the video: side-on, square to '
-        'the throw. The typical elite finals are approximate ranges drawn '
-        "from the literature, the women's from the thinner half of it.",
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (title, body) in _points)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                      text: '$title. ',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                  TextSpan(text: body),
+                ]),
+                style: muted,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1495,22 +1835,27 @@ class _Disclaimer extends StatelessWidget {
     return Container(
       key: const ValueKey('whatIfDisclaimer'),
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
       decoration: BoxDecoration(
-        color: scheme.secondaryContainer.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
+        color: scheme.secondaryContainer.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(10),
       ),
+      // Small, because it is read once and then sits over every number
+      // after that: the banner it replaced was a third of the result card.
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline,
-              size: 20, color: scheme.onSecondaryContainer),
-          const SizedBox(width: 10),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(Icons.info_outline,
+                size: 16, color: scheme.onSecondaryContainer),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               'Numbers are based on ideal, simplified flight mechanics and '
               'should be used as a guide, not a reference.',
-              style: theme.textTheme.bodyMedium
+              style: theme.textTheme.bodySmall
                   ?.copyWith(color: scheme.onSecondaryContainer),
             ),
           ),

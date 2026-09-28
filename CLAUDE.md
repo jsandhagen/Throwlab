@@ -1238,6 +1238,20 @@ like the app rather than a bare Material default.
   and they did not come to the gap. Every angle on a slider is flown at
   the speed on its slider, which no athlete keeps going higher, and the
   angle's dial says so whenever it is raised against the other throw.
+  Every dial carries a step either way at the ends of its track, since a
+  thumb is a blunt tool for a tenth of a meter a second, and its
+  difference from the other throw is a button that puts it back level.
+  Nothing appears above the dials when one moves — the gap card is there
+  from the moment a what-if exists, with a prompt in it, and the reset is
+  an icon that lights rather than a row that arrives — because a control
+  that pushes the dials down moves them out from under the thumb on the
+  first tap. The attack, the pitch rate and the wind sit under their own
+  heading, In the air, apart from the three numbers every release has.
+  The best angle is its own card with 'Try it' on it, which goes in as the
+  what-if over the throw it was worked out for, and the speed-loss dial
+  lives on that card rather than among the release's dials, because it
+  belongs to no throw — only to how the best angle is searched for. It says
+  under it which research the estimate rests on.
   The best angle is the one place the loss is modeled, because that is
   the number a coach reads at a glance, and the literature's 30–37° is an
   athlete's best, not the flight's: release speed falls as the angle rises

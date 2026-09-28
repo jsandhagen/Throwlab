@@ -422,7 +422,75 @@ void main() {
       expect(banner.bottom, lessThan(number.top));
       expect(find.textContaining('guide, not a reference'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('SOURCES'), 600);
-      await tester.scrollUntilVisible(find.textContaining('Linthorne'), 200);
+      await tester.scrollUntilVisible(
+          find.textContaining('Linthorne, N. P.'), 200);
+    });
+
+    testWidgets('the speed-loss estimate says what research it rests on',
+        (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      await tester.scrollUntilVisible(
+          find.text('Speed lost per 10° steeper'), 300);
+      expect(find.textContaining('Estimated from academic research'),
+          findsOneWidget);
+      expect(find.textContaining('Linthorne (2001) measured shot putters'),
+          findsOneWidget);
+      await tester.scrollUntilVisible(find.text('Hammer'), -2000);
+      await tester.tap(find.text('Javelin'));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+          find.text('Speed lost per 10° steeper'), 300);
+      expect(
+          find.textContaining('Red & Zogaib (1977) measured'), findsOneWidget);
+    });
+
+    testWidgets('the best angle can be tried, and goes in as the what-if',
+        (tester) async {
+      await pump(
+          tester,
+          const ReleaseCalculatorScreen(
+            event: ThrowEvent.shotPut,
+            implementKg: 7.26,
+            measured: Release(speed: 12, angleDeg: 30, height: 2.0),
+          ));
+      final button = find.byKey(const ValueKey('tryBestAngle'));
+      await tester.scrollUntilVisible(button, 300);
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pump();
+      // Tried, it is at its best and asks no more.
+      expect(button, findsNothing);
+      expect(text(tester, 'bestAngle'), "At this thrower's best angle.");
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('whatIfGap')), -600);
+      expect(text(tester, 'whatIfGap'), startsWith('+'));
+      expect(find.textContaining('YOUR MEASURED THROW'), findsNothing);
+    });
+
+    testWidgets('a dial steps by its unit and matches the other throw',
+        (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
+      await tester.pump();
+      final raise = find.byKey(const ValueKey('Raise-Speed'));
+      await tester.scrollUntilVisible(raise, 200);
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(raise);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('+0.2 m/s'), findsOneWidget);
+      // The difference is the way back level with the baseline.
+      final match = find.byKey(const ValueKey('match-Speed'));
+      await tester.scrollUntilVisible(match, -100);
+      await tester.ensureVisible(match);
+      await tester.pumpAndSettle();
+      await tester.tap(match);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('whatIfGap')), -300);
+      expect(text(tester, 'whatIfGap'), '0.00 m');
     });
 
     testWidgets('an elite final is laid over the baseline as the what-if',

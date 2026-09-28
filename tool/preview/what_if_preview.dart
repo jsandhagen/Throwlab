@@ -74,6 +74,10 @@ void main() {
     );
     await open(measured);
     await shoot('what_if_measured');
+    // The best angle, tried: it goes in as the what-if over the measured
+    // throw, so the headline is what the angle alone is worth.
+    await tap(const ValueKey('tryBestAngle'));
+    await shoot('what_if_best_angle');
     await tap(const ValueKey('elite-men'));
     await shoot('what_if_vs_men');
     await open(measured, height: 5600);

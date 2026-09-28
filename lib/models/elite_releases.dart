@@ -232,14 +232,16 @@ const whatIfSources = <({String citation, String usedFor})>[
         '496–498.',
     usedFor: "Why an athlete's best angle sits below the flight's: release "
         'speed falls as the release angle rises. Measured on javelin '
-        'throwers, and the method the best-angle search follows. The speed '
-        'lost per degree is an estimate on the screen, not their figure.',
+        'throwers, and the method the best-angle search follows. The '
+        "javelin's speed lost per degree is an estimate scaled from their "
+        'finding, not a figure they published.',
   ),
   (
     citation: 'Linthorne, N. P. (2001). Optimum release angle in the shot '
         'put. Journal of Sports Sciences, 19(5), 359–372.',
-    usedFor: 'The same fall in release speed measured on shot putters, and '
-        'the scale of the shot\'s default.',
+    usedFor: 'The same fall in release speed measured on shot putters. The '
+        "shot's speed lost per degree is estimated from the 1.7 (m/s)/rad "
+        'reported for his college putters.',
   ),
   (
     citation: 'Seo, K., Okuizumi, H., Konishi, Y., Kobayashi, T., Hasegawa, '
