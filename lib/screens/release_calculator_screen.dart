@@ -193,7 +193,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
 
   /// m/s of release speed the athlete gives up per degree steeper, for the
   /// best-angle search only. Opens on the event's estimate and is the
-  /// coach's to set; the discus, which has no one number, has none.
+  /// coach's to set.
   late double _speedLoss = typicalSpeedLossPerDeg(widget.event);
   late _Throw _one = _baseline();
   _Throw? _two;
@@ -819,9 +819,9 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               // Linthorne 2001), so where the loss is modeled the speed moves
               // with the angle, by the amount on the best-angle card: a
               // steeper release at the same speed is a throw nobody makes,
-              // and the flight flattered it. Where it isn't — the discus, a
-              // loss set to nothing — the speed is held, and that
-              // is said where the angle is raised against the other throw.
+              // and the flight flattered it. Where it isn't — a loss the
+              // coach set to nothing — the speed is held, and that is said
+              // where the angle is raised against the other throw.
               hint: loss > 0
                   ? 'Speed moves with it: '
                       '${units.speedDelta(-loss * 10)} per 10° steeper'
@@ -1076,6 +1076,12 @@ String _speedLossBasis(ThrowEvent event) => switch (event) {
         'Estimated from academic research: Red & Zogaib (1977) measured '
             'javelin throwers releasing slower as they released higher. '
             "Set it to your athlete's own if you have it.",
+      ThrowEvent.discus =>
+        'Estimated: set so the best angle lands where elite discus throwers '
+            'release. Leigh et al. (2010) measured discus throwers releasing '
+            'slower as they released higher, by very different amounts from '
+            "one thrower to the next — so set it to your athlete's own if "
+            'you have it.',
       ThrowEvent.hammer =>
         'Estimated: set so the best angle lands where elite hammer throwers '
             'release, which research puts below the flight\'s best because '
@@ -1582,17 +1588,10 @@ class _BestAngle extends StatelessWidget {
           'throwers release under the flight\'s best. With speed held, the flight alone is best '
           'at ${held!.angleDeg.toStringAsFixed(1)}°.'
           '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
-    } else if (speedLoss != null) {
+    } else {
       // The coach has set the loss to nothing.
       note = 'Speed is held, so this is the flight\'s best angle, not an '
           "athlete's: a real one releases slower going higher.";
-    } else {
-      // Only the discus: it has no one number to open on.
-      note = '${_hasAttack(event) ? 'The attack angle is held with it. ' : ''}'
-          'Speed is held too. Discus throwers do release slower going '
-          'higher, but by very different amounts, so there is no typical '
-          'figure to fly with — and this model already puts the best discus '
-          'angle under where elite throwers release.';
     }
     final scheme = theme.colorScheme;
     return Card(
@@ -2347,12 +2346,18 @@ class _Caveat extends StatelessWidget {
     ),
     (
       'Discus',
-      'Its coefficients are shaped like the tunnel curves in the papers '
-          'below and tuned so elite releases land where elite throwers do. '
-          'It holds the tilt it was released at, stalls at 29° and only '
-          'recovers under 25°. The real one turns in roll, which a flight in '
-          'one plane cannot show, and it comes out several meters short at '
-          'elite speeds.',
+      'Its lift and drag are shaped like the tunnel curves in the papers '
+          'below: it stalls at 29° and only recovers under 25°. It is flown '
+          'spinning, in three dimensions: the air pushes its leading edge up, '
+          'and a spinning disc answers that by rolling over rather than '
+          'pitching (Hubbard & Cheng 2007), so it meets the air at a gentler '
+          'angle on the way down and keeps gliding. It leaves the hand '
+          'banked 50° and spinning at seven turns a second — typical values, '
+          'not ones you can set. Nothing is tuned to a distance: a 25 m/s '
+          'release is best at about 38° and lands near 70 m, as in Hubbard & '
+          "Cheng's own model. Elite releases measured at championships still "
+          'come out a few meters short of the marks thrown with them, and a '
+          'headwind is worth more here than in the older 2-D models.',
     ),
     (
       'Hammer',
@@ -2361,15 +2366,14 @@ class _Caveat extends StatelessWidget {
     (
       'Speed lost going higher',
       'Release speed falls as the release angle rises, so the best angle '
-          'for the javelin and the shot is searched with speed falling by the '
-          'amount set on that card, and for the hammer too. It opens on an '
-          'estimate built from academic research — Red & Zogaib (1977) on '
-          'javelin throwers, Linthorne (2001) on shot putters — scaled to '
-          'each event rather than one published number; the hammer\'s is set '
-          'so its best angle lands where elite throwers release. It is best '
-          "replaced by an athlete's own. The discus flies at a held speed: "
-          'Leigh et al. (2010) found the fall differs too much between '
-          'throwers to have a typical figure.',
+          'is searched with speed falling by the amount set on that card. It '
+          'opens on an estimate built from academic research — Red & Zogaib '
+          '(1977) on javelin throwers, Linthorne (2001) on shot putters — '
+          'scaled to each event rather than one published number; the '
+          "hammer's and the discus's are set so the best angle lands where "
+          'elite throwers release. Leigh et al. (2010) found the fall differs '
+          "a lot between discus throwers, so it is best replaced by an "
+          "athlete's own.",
     ),
     (
       'References',

@@ -150,6 +150,18 @@ void main() {
     );
     await shoot('what_if_hammer_full');
 
+    // The whole discus screen: flown rolling, its best angle is in the high
+    // thirties where finals are released, not the twenties.
+    await open(
+      const ReleaseCalculatorScreen(
+        event: ThrowEvent.discus,
+        implementKg: 2,
+        measured: Release(speed: 22, angleDeg: 36, height: 1.6, attackDeg: -8),
+      ),
+      height: 7200,
+    );
+    await shoot('what_if_discus_full');
+
     await open(
       const ReleaseCalculatorScreen(
         event: ThrowEvent.javelin,

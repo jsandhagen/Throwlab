@@ -294,8 +294,7 @@ void main() {
               1e-9));
     });
 
-    test('a hammer thrower\'s best angle is where elite throwers release',
-        () {
+    test('a hammer thrower\'s best angle is where elite throwers release', () {
       // Held, the flight is best in the mid forties; the loss the hammer is
       // backed out with brings it into the 37–42° throwers use.
       for (final field in EliteField.values) {
@@ -309,8 +308,35 @@ void main() {
       }
     });
 
-    test('the discus holds its speed', () {
-      expect(typicalSpeedLossPerDeg(ThrowEvent.discus), 0);
+    test('a discus thrower\'s best angle is where elite throwers release', () {
+      // Flown rolling, the flight alone is best in the high thirties — not
+      // the twenties a discus held level in one plane was best at — and the
+      // loss backed out of it brings it onto a final's typical release.
+      for (final field in EliteField.values) {
+        final flight =
+            finalBest(ThrowEvent.discus, field, speedFalls: false).angleDeg;
+        expect(flight, inInclusiveRange(37, 41), reason: field.name);
+        final range = eliteRanges[ThrowEvent.discus]![field]!;
+        expect(finalBest(ThrowEvent.discus, field).angleDeg,
+            inInclusiveRange(range.angleDeg.$1, range.angleDeg.$2),
+            reason: field.name);
+      }
+    });
+
+    test('a discus flies the way Hubbard and Cheng\'s does', () {
+      // Their 3-D model's best men's release at 25 m/s is 38.4° and 69.4 m.
+      // Nothing here was tuned to it.
+      final spec = _senior(ThrowEvent.discus);
+      var best = (angle: 0.0, attack: 0.0, distance: 0.0);
+      for (var attack = -14.0; attack <= 0; attack += 2) {
+        final b = bestAngle(ThrowEvent.discus, spec,
+            Release(speed: 25, angleDeg: 38, height: 1.7, attackDeg: attack));
+        if (b.distance > best.distance) {
+          best = (angle: b.angleDeg, attack: attack, distance: b.distance);
+        }
+      }
+      expect(best.angle, inInclusiveRange(35, 41));
+      expect(best.distance, closeTo(69.4, 2));
     });
 
     test('matches the closed form for a shot, where air hardly counts', () {
@@ -392,7 +418,7 @@ void main() {
         expect(event.specFor(range.weightKg).weightKg, range.weightKg,
             reason: '${event.label} ${field.name}');
         // What the model makes of the typical release is somewhere near
-        // what those finals throw — within the discus's known shortfall.
+        // what those finals throw.
         final d = flyThrow(
                 event,
                 event.specFor(range.weightKg),
@@ -696,11 +722,13 @@ void main() {
       expect(text(tester, 'bestAngle'), isNot(before));
       expect(find.textContaining("not an athlete's"), findsOneWidget);
 
-      // A discus has no loss to set.
+      // Another event opens on its own estimate, and says what it rests on.
       await tester.scrollUntilVisible(find.text('Discus'), -2000);
       await tester.tap(find.text('Discus'));
       await tester.pump();
-      expect(find.text('Speed lost per 10° steeper'), findsNothing);
+      await tester.scrollUntilVisible(
+          find.text('Speed lost per 10° steeper'), 300);
+      expect(find.textContaining('elite discus throwers'), findsOneWidget);
     });
 
     testWidgets('an angle takes the speed that goes with it', (tester) async {
@@ -722,19 +750,13 @@ void main() {
       expect(find.textContaining('Speed moves with it: −1.0 m/s per 10°'),
           findsOneWidget);
 
-      // The discus holds its speed.
+      // The discus's speed rides with its angle too, by its own estimate.
       await tester.scrollUntilVisible(find.text('Discus'), -2000);
       await tester.tap(find.text('Discus'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
-      await tester.pump();
       await reach(tester, raise);
-      for (var i = 0; i < 2; i++) {
-        await tester.tap(raise);
-        await tester.pumpAndSettle();
-      }
-      expect(find.text('+1.0°'), findsOneWidget);
-      expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
+      expect(find.textContaining('Speed moves with it: −0.5 m/s per 10°'),
+          findsOneWidget);
     });
 
     testWidgets('while the angle is in the hand the speed rides with it',

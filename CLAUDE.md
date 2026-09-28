@@ -1203,15 +1203,26 @@ like the app rather than a bare Material default.
   pitches as a body under the moment measured on it, nose-up under about
   11° of attack and nose-down over it, so it settles there and rides it;
   nothing in it is tuned, and the typical finals land inside their ranges.
-  The discus holds its tilt and stalls with hysteresis, since a flight in
-  one plane has no axis for the roll it really turns in — and says what one
+  The discus stalls with hysteresis and is flown spinning, in three
+  dimensions (`_flySpinning`): the nose-up moment Hubbard and Cheng
+  measured is turned by the spin into roll rather than pitch, released
+  banked 50° against it, so the disc rolls back through level and meets the
+  air on the way down at a shallower angle than a disc held level would.
+  Held level in one plane it stalled the moment a high throw started down,
+  which put its best angle in the twenties and could not reach a final's
+  distances without dragging it lower; rolling, on the same lift and drag
+  and with nothing tuned to a distance, a 25 m/s release is best at 38° and
+  70 m — Hubbard and Cheng's own 38.4° and 69.4 m, which a test holds it
+  to. The bank and the spin are typical values, not dials. The distance is
+  the radial one, since the tape runs from the circle and a rolling discus
+  drifts. It says what one
   more m/s, one more degree and ten more
   centimeters of height are each worth. It is an estimate and says so
   first, in a banner above the number — a guide, not a reference — with
-  how the model is built and where it falls short (above all the discus,
-  which a point-mass model cannot get both to elite distances and to a
-  best angle in the thirties: the angle was kept and the distance errs
-  short) at the foot, over the sources. Every paper the model leans on is
+  how the model is built and where it falls short (the named elite discus
+  releases still land a few meters short of their marks, and a headwind
+  is worth more than in the older 2-D models) at the foot, over the
+  sources. Every paper the model leans on is
   cited there with what it was used for (`whatIfSources`), and every
   report a measured release came out of; a number with nothing to check it
   against does not go on the page. The coefficients are the papers' curve
@@ -1298,11 +1309,10 @@ like the app rather than a bare Material default.
   opens on an estimate (`typicalSpeedLossPerDeg`) labeled one. The
   hammer's is backed out the way the javelin's was — the loss that brings a
   flight best at 44° down to the 37–42° elite throwers release at, since the
-  gap is known and the number unpublished. The discus has none and flies
-  held: the fall is measured there (Leigh et al.) but differs too much by
-  thrower to open on one, and it cannot be backed out, because the model
-  already releases a discus under the thirties and only a speed that rose
-  going higher would bring it up.
+  gap is known and the number unpublished. The discus's is backed out the
+  same way, off a flight best at 38–39° onto the 36–37° finals release at;
+  Leigh et al. measured the fall on discus throwers and found it different
+  for each, so the dial says it is the one most worth setting.
   It reads in the coach's units, flipped by an m / ft switch in its app bar
   that opens on `DistanceField.preferred` and does not write it back. In
   feet the marks are spelled the way a meet writes them, a release height

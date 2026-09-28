@@ -300,8 +300,9 @@ const whatIfSources = <({String citation, String usedFor})>[
     citation: 'Leigh, S., Liu, H., Hubbard, M., & Yu, B. (2010). '
         'Individualized optimal release angles in discus throwing. Journal '
         'of Biomechanics, 43(3), 540–545.',
-    usedFor: 'Why the discus has no speed lost per degree to open on: the '
-        'fall was measured on every thrower, and was different for each.',
+    usedFor: 'That discus throwers release slower as they release higher, '
+        "and by different amounts each — why the discus's speed lost per "
+        'degree is an estimate best replaced by an athlete\'s own.',
   ),
   (
     citation: 'Seo, K., Okuizumi, H., Konishi, Y., Kobayashi, T., Hasegawa, '
@@ -328,7 +329,10 @@ const whatIfSources = <({String citation, String usedFor})>[
   (
     citation: 'Hubbard, M., & Cheng, K. B. (2007). Optimal discus '
         'trajectories. Journal of Biomechanics, 40(16), 3650–3659.',
-    usedFor: 'Where the best discus release and attack angles fall.',
+    usedFor: "The discus's flight in three dimensions: the pitching moment's "
+        'slope (0.007 per degree), the spin and the bank at release, the '
+        'roll the spin turns the moment into, and the best release (38.4°, '
+        '69.4 m at 25 m/s) the model is checked against.',
   ),
   (
     citation: 'Bartlett, R. M., & Best, R. J. (1988). The biomechanics of '
