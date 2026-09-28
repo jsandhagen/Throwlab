@@ -536,19 +536,29 @@ enum Lever { speed, angle, height, attack, wind, pitchRate }
 /// made in (a Shapley split): what they do together is shared between
 /// them, and the rows sum to [to] minus [from] exactly. It costs a flight
 /// for every subset of the levers that moved — sixteen for four.
+///
+/// With [speedLossPerDeg] the angle carries the speed it costs: raising it
+/// takes that much speed off with it, the way the calculator's own angle
+/// does, and the speed lever is only whatever speed changed on top of that.
+/// Split the other way, an angle raised on its own showed as a gain for the
+/// angle and a loss for a speed nobody had touched — a row going red while
+/// the throw went further.
 Map<Lever, double> gapShares(
   ThrowEvent event,
   ImplementSpec spec,
   Release from,
-  Release to,
-) {
+  Release to, {
+  double speedLossPerDeg = 0,
+}) {
   final a = from;
   final b = to;
+  final carried = -speedLossPerDeg * (b.angleDeg - a.angleDeg);
+  final ownSpeed = b.speed - a.speed - carried;
   // Within a hair is the same: an elite thrower's height is the middle of a
   // range, and (1.8 + 2.1) / 2 is not quite the 1.95 a coach typed.
   bool differs(double x, double y) => (x - y).abs() > 1e-9;
   final moved = [
-    if (differs(a.speed, b.speed)) Lever.speed,
+    if (ownSpeed.abs() > 1e-9) Lever.speed,
     if (differs(a.angleDeg, b.angleDeg)) Lever.angle,
     if (differs(a.height, b.height)) Lever.height,
     if (differs(a.attackDeg, b.attackDeg)) Lever.attack,
@@ -566,7 +576,9 @@ Map<Lever, double> gapShares(
         }
 
         final release = Release(
-          speed: takes(Lever.speed) ? b.speed : a.speed,
+          speed: a.speed +
+              (takes(Lever.angle) ? carried : 0) +
+              (takes(Lever.speed) ? ownSpeed : 0),
           angleDeg: takes(Lever.angle) ? b.angleDeg : a.angleDeg,
           height: takes(Lever.height) ? b.height : a.height,
           attackDeg: takes(Lever.attack) ? b.attackDeg : a.attackDeg,

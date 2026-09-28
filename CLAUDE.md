@@ -1233,6 +1233,11 @@ like the app rather than a bare Material default.
   split — each lever's gain averaged over every order the changes could be
   made in — because two changes together are worth more than apart, and
   giving that to whichever came last answers in an order nobody chose. The
+  angle carries the speed it costs (`gapShares(speedLossPerDeg:)`), the
+  same loss the angle's dial moves the speed by, and the speed's row is only
+  what changed on top of that: split as two independent levers, an angle
+  raised on its own showed a gain for the angle and a loss for a speed
+  nobody had touched — a row going red while the throw went further. The
   worth tiles are a different question, one nudge from where the sliders
   are, and are headed 'What a nudge is worth' because a coach added them up
   and they did not come to the gap. Moving the angle moves the speed with

@@ -294,7 +294,8 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         speedLossPerDeg: _loss);
     final shares = !_comparing
         ? null
-        : gapShares(_event, _spec, _one.release, _two!.release);
+        : gapShares(_event, _spec, _one.release, _two!.release,
+            speedLossPerDeg: _loss);
     final from = flyThrow(_event, current.spec, current.release).distance;
     Flight? ghost;
     if (!_comparing) {
@@ -500,19 +501,20 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   /// thrower would have there.
   void _tryAngle(({double angleDeg, double distance, double speed}) best) =>
       setState(() {
+        // Rounded to the tenth the dial reads, and the speed taken off the
+        // rounded angle by the dial's own rule: the search's speed belongs
+        // to the unrounded one, and the difference showed as a speed row
+        // of 0.00 in the breakdown.
         final angle = (best.angleDeg * 10).round() / 10;
+        Release at(Release r) => r.copyWith(
+            angleDeg: angle, speed: r.speed - _loss * (angle - r.angleDeg));
         if (!_comparing) {
           _two = _fit(
-              _Throw(
-                  _one.spec,
-                  _one.release.copyWith(angleDeg: angle, speed: best.speed),
-                  'At the best angle'),
-              _event);
+              _Throw(_one.spec, at(_one.release), 'At the best angle'), _event);
           _editing = 1;
           return;
         }
-        _put(_Throw(_current.spec,
-            _current.release.copyWith(angleDeg: angle, speed: best.speed)));
+        _put(_Throw(_current.spec, at(_current.release)));
       });
 
   void _backToMeasured() => setState(() {
@@ -706,6 +708,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                   : _Settling(
                       stale: stale,
                       child: _GapShares(
+                        speedLossPerDeg: loss,
                         shares: shares,
                         gap: stale ? _sum(shares) : gap,
                         one: _one,
@@ -1934,6 +1937,7 @@ class _GapShares extends StatelessWidget {
     required this.one,
     required this.two,
     required this.units,
+    this.speedLossPerDeg = 0,
   });
 
   final Map<Lever, double> shares;
@@ -1942,12 +1946,19 @@ class _GapShares extends StatelessWidget {
   final _Throw two;
   final _Units units;
 
+  /// The speed an angle carries with it, as the shares were split: the
+  /// angle's row says the speed it cost, and the speed's row only what
+  /// changed on top of that.
+  final double speedLossPerDeg;
+
   String _change(Lever l) {
     final a = one.release;
     final b = two.release;
+    final carried = -speedLossPerDeg * (b.angleDeg - a.angleDeg);
     return switch (l) {
-      Lever.speed => units.speedDelta(b.speed - a.speed),
-      Lever.angle => '${_signed(b.angleDeg - a.angleDeg, 1)}°',
+      Lever.speed => units.speedDelta(b.speed - a.speed - carried),
+      Lever.angle => '${_signed(b.angleDeg - a.angleDeg, 1)}°'
+          '${carried.abs() < 0.005 ? '' : ' at ${units.speedDelta(carried, fine: true)}'}',
       Lever.height => units.heightDelta(b.height - a.height),
       Lever.attack => '${_signed(b.attackDeg - a.attackDeg, 1)}°',
       Lever.wind => units.windDelta(b.wind - a.wind),

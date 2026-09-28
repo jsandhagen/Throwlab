@@ -208,6 +208,33 @@ void main() {
       expect(shares.values.reduce((x, y) => x + y), closeTo(gap, 1e-9));
     });
 
+    test('an angle carries the speed it costs', () {
+      // Raised on its own, with the speed following it the way the
+      // calculator's own angle does: one row, the whole gap, never a speed
+      // row gone red that nobody touched.
+      for (final event in [ThrowEvent.shotPut, ThrowEvent.javelin]) {
+        final spec = _senior(event);
+        final loss = typicalSpeedLossPerDeg(event);
+        const a = Release(speed: 20, angleDeg: 32, height: 1.9, attackDeg: 4);
+        final b = a.copyWith(angleDeg: 35, speed: a.speed - loss * 3);
+        final gap = flyThrow(event, spec, b).distance -
+            flyThrow(event, spec, a).distance;
+        final shares = gapShares(event, spec, a, b, speedLossPerDeg: loss);
+        expect(shares.keys, [Lever.angle], reason: event.name);
+        expect(shares[Lever.angle]!, closeTo(gap, 1e-9));
+
+        // Speed added on top of that is the speed's own, and the two still
+        // add up to the gap.
+        final c = b.copyWith(speed: b.speed + 1);
+        final both = gapShares(event, spec, a, c, speedLossPerDeg: loss);
+        final gap2 = flyThrow(event, spec, c).distance -
+            flyThrow(event, spec, a).distance;
+        expect(both.keys.toSet(), {Lever.speed, Lever.angle});
+        expect(both[Lever.speed]!, greaterThan(0));
+        expect(both.values.reduce((x, y) => x + y), closeTo(gap2, 1e-9));
+      }
+    });
+
     test('nothing moved is nothing to split', () {
       const r = Release(speed: 13, angleDeg: 37, height: 2);
       final spec = _senior(ThrowEvent.shotPut);
@@ -465,6 +492,9 @@ void main() {
           find.byKey(const ValueKey('whatIfGap')), -600);
       expect(text(tester, 'whatIfGap'), startsWith('+'));
       expect(find.textContaining('YOUR MEASURED THROW'), findsNothing);
+      // The angle carries its own speed, so the breakdown is the angle alone.
+      expect(find.byKey(const ValueKey('gapShare-angle')), findsOneWidget);
+      expect(find.byKey(const ValueKey('gapShare-speed')), findsNothing);
     });
 
     testWidgets('a dial steps by its unit and matches the other throw',
