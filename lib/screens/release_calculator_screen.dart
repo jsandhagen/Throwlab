@@ -62,6 +62,9 @@ const _attackSpan = (-20.0, 20.0);
 const _windSpan = (-8.0, 8.0);
 const _pitchSpan = (-30.0, 30.0);
 
+/// m/s per 10°: from holding speed to losing a tenth of a javelin's.
+const _speedLossSpan = (0.0, 3.0);
+
 bool _hasAttack(ThrowEvent event) =>
     event == ThrowEvent.discus || event == ThrowEvent.javelin;
 
@@ -156,6 +159,11 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   static const _measuredLabel = 'Your measured throw';
 
   late ThrowEvent _event = widget.event;
+
+  /// m/s of release speed the athlete gives up per degree steeper, for the
+  /// best-angle search only. Opens on the event's estimate and is the
+  /// coach's to set; an event nobody has measured it for has none.
+  late double _speedLoss = typicalSpeedLossPerDeg(widget.event);
   late _Throw _one = widget.measured == null
       ? _elite(widget.event, EliteField.men)
       : _fit(
@@ -231,6 +239,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     if (event == _event) return;
     setState(() {
       _event = event;
+      _speedLoss = typicalSpeedLossPerDeg(event);
       _one = _elite(event, EliteField.men);
       _two = null;
       _editing = 0;
@@ -361,11 +370,22 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     final twoFlight =
         _two == null ? null : flyThrow(_event, _two!.spec, _two!.release);
     final current = _current;
-    final best = bestAngle(_event, current.spec, current.release);
     final units = _Units(_unit);
-    final unit = _unit;
+    // The athlete's best angle, with speed falling as it rises, and the
+    // flight's own with speed held — the two answers the literature gives,
+    // said side by side so neither is mistaken for the other.
+    final tradesSpeed = typicalSpeedLossPerDeg(_event) > 0;
+    final best = bestAngle(_event, current.spec, current.release,
+        speedLossPerDeg: tradesSpeed ? _speedLoss : 0);
+    final held = tradesSpeed && _speedLoss > 0
+        ? bestAngle(_event, current.spec, current.release)
+        : null;
+    final speedLoss = tradesSpeed ? _speedLoss : 0.0;
     final worth = sensitivity(_event, current.spec, current.release,
-        speedStep: units.speedLever, heightStep: units.heightLever);
+        speedStep: units.speedLever,
+        heightStep: units.heightLever,
+        speedLossPerDeg: speedLoss);
+
     // The baseline steps back to a neutral ink once there is a what-if to
     // stand in front of it.
     final oneColor = _comparing ? scheme.onSurfaceVariant : scheme.primary;
@@ -390,8 +410,11 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 : (name: _source(1), flight: twoFlight, color: twoColor),
             ghost: _comparing || (best.distance - oneFlight.distance) < 0.02
                 ? null
-                : flyThrow(_event, _one.spec,
-                    _one.release.copyWith(angleDeg: best.angleDeg)),
+                : flyThrow(
+                    _event,
+                    _one.spec,
+                    _one.release
+                        .copyWith(angleDeg: best.angleDeg, speed: best.speed)),
           ),
           if (_comparing)
             _GapShares(
@@ -562,13 +585,26 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               onChanged: (v) => _setRelease(current.release.copyWith(wind: v)),
             ),
           _BestAngle(
+            event: _event,
             best: best,
+            held: held,
             gain: best.distance -
                 flyThrow(_event, current.spec, current.release).distance,
             angleDeg: current.release.angleDeg,
-            flies: _hasAttack(_event),
-            unit: unit,
+            speedLoss: tradesSpeed ? _speedLoss : null,
+            units: units,
           ),
+          if (tradesSpeed)
+            _Dial(
+              label: 'Speed lost per 10° steeper',
+              hint: 'An estimate — set it to your athlete\'s own',
+              value: _speedLoss * 10,
+              span: _speedLossSpan,
+              step: units.speedStep,
+              format: units.speed,
+              delta: units.speedDelta,
+              onChanged: (v) => setState(() => _speedLoss = v / 10),
+            ),
           // One nudge each from where the sliders are, not a split of the
           // gap — that is what the list under the result is for, and a
           // heading that let these read as one had coaches adding them up.
@@ -576,7 +612,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               trailing: _comparing
                   ? 'from the ${_role(_editing).toLowerCase()}'
                   : 'from here'),
-          _Worth(worth: worth, units: units),
+          _Worth(worth: worth, units: units, speedLossPerDeg: speedLoss),
           const _Heading('Compare with an elite final'),
           _EliteCards(
             event: _event,
@@ -907,48 +943,78 @@ class _EliteCards extends StatelessWidget {
 
 class _BestAngle extends StatelessWidget {
   const _BestAngle({
+    required this.event,
     required this.best,
+    required this.held,
     required this.gain,
     required this.angleDeg,
-    required this.flies,
-    required this.unit,
+    required this.speedLoss,
+    required this.units,
   });
 
-  final ({double angleDeg, double distance}) best;
+  final ThrowEvent event;
+  final ({double angleDeg, double distance, double speed}) best;
+
+  /// The flight's own best, with speed held, when that differs from [best].
+  final ({double angleDeg, double distance, double speed})? held;
   final double gain;
   final double angleDeg;
-  final bool flies;
-  final DistanceUnit unit;
+
+  /// m/s per degree, or null for an event flown at a held speed.
+  final double? speedLoss;
+  final _Units units;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final unit = units.distance;
     // Within a quarter degree, or a couple of centimeters, of the best angle
     // is at it — saying 'best at 37.1°' under a slider sat on 37.0° is
     // noise.
     final atBest = (best.angleDeg - angleDeg).abs() < 0.25 || gain < 0.02;
+    final forThrower = speedLoss != null && speedLoss! > 0;
+    final String line;
+    if (forThrower) {
+      line = atBest
+          ? "At this thrower's best angle."
+          : "Best angle for this thrower: ${best.angleDeg.toStringAsFixed(1)}°, "
+              // Kept on one line with its unit.
+              '+${formatDistance(gain, unit).replaceAll(' ', ' ')}.';
+    } else {
+      line = atBest
+          ? 'At the best angle for this speed and height.'
+          : 'Best angle with everything else held: '
+              '${best.angleDeg.toStringAsFixed(1)}°, '
+              '+${formatDistance(gain, unit).replaceAll(' ', ' ')}.';
+    }
+    final String note;
+    if (forThrower) {
+      note = 'Speed falls as the angle rises, which is most of why finals '
+          'release in the thirties. With speed held, the flight alone is best '
+          'at ${held!.angleDeg.toStringAsFixed(1)}°.'
+          '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
+    } else if (speedLoss != null) {
+      // The coach has set the loss to nothing.
+      note = 'Speed is held, so this is the flight\'s best angle, not an '
+          "athlete's: a real one releases slower going higher.";
+    } else {
+      note = '${_hasAttack(event) ? 'The attack angle is held with it. ' : ''}'
+          'Speed is held too — nobody has measured how much a '
+          '${event == ThrowEvent.hammer ? 'hammer' : 'discus'} thrower loses '
+          "going higher, so an athlete's own best angle sits somewhat under "
+          'this one.';
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            atBest
-                ? 'At the best angle for this speed and height.'
-                : 'Best angle with everything else held: '
-                    '${best.angleDeg.toStringAsFixed(1)}°, '
-                    // Kept on one line with its unit.
-                    '+${formatDistance(gain, unit).replaceAll(' ', ' ')}.',
-            style: theme.textTheme.bodyMedium,
-          ),
+          Text(line,
+              key: const ValueKey('bestAngle'),
+              style: theme.textTheme.bodyMedium),
           const SizedBox(height: 2),
           Text(
-            flies
-                ? 'The attack angle is held with it. In a real throw the '
-                    'two are found together, so treat this as a direction '
-                    'rather than a target.'
-                : 'A real athlete releases slower as the angle rises, so '
-                    'their own best angle sits a few degrees under that one.',
+            note,
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
@@ -1247,10 +1313,15 @@ class _GapShares extends StatelessWidget {
 }
 
 class _Worth extends StatelessWidget {
-  const _Worth({required this.worth, required this.units});
+  const _Worth(
+      {required this.worth, required this.units, this.speedLossPerDeg = 0});
 
   final ({double perSpeed, double perDegree, double perHeight}) worth;
   final _Units units;
+
+  /// What a degree steeper costs in speed, said on its tile when it costs
+  /// any, since the tile is flown at it.
+  final double speedLossPerDeg;
 
   @override
   Widget build(BuildContext context) {
@@ -1261,7 +1332,11 @@ class _Worth extends StatelessWidget {
         children: [
           _WorthTile(
               lever: units.speedLeverLabel, gain: signed(worth.perSpeed)),
-          _WorthTile(lever: '+1°', gain: signed(worth.perDegree)),
+          _WorthTile(
+              lever: speedLossPerDeg > 0
+                  ? '+1° at ${units.speedDelta(-speedLossPerDeg)}'
+                  : '+1°',
+              gain: signed(worth.perDegree)),
           _WorthTile(
               lever: units.heightLeverLabel, gain: signed(worth.perHeight)),
         ],
@@ -1379,23 +1454,24 @@ class _Caveat extends StatelessWidget {
       child: Text(
         'The implement is flown as a point through still, sea-level air. '
         'Drag acts on every implement and lift on the discus and the '
-        'javelin, with coefficients shaped like the wind-tunnel curves in '
-        'the papers below and then tuned so typical elite releases land '
-        'near where finals are won — not values measured for this app. The '
-        'discus holds the tilt it was released at, stalls at 29° and only '
-        'recovers under 25°; the real one turns in roll, which a flight in '
-        'one plane cannot show, and it comes out several meters short at '
-        'elite speeds. The javelin pitches under its center of pressure '
-        'sitting behind its center of mass, as measured, damped by the '
-        "lift of its own shaft; how heavy it is to turn is an estimate. "
-        'Every angle is flown at the speed on its slider, and a real '
-        'athlete releases slower as the angle rises, so the best angle '
-        "here sits above an athlete's own. The "
-        "hammer's wire is not counted. The javelin's published aerodynamics "
-        "mostly predate the men's 1986 and women's 1999 rule changes, which "
-        'moved the center of mass forward and shortened its flight, so its '
-        "lift is tuned to what today's finals throw, not to those papers. "
-        'Distance runs from the hand, so the '
+        'javelin. The javelin flies on coefficients measured in a wind '
+        "tunnel on a women's 600 g javelin (Seo et al. 2023), with nothing "
+        'tuned; every other weight flies on the same ones with its own '
+        "length and thickness, since no men's javelin has been measured "
+        'that way. It pitches under the moment that was measured — nose-up '
+        'under about 11° of attack, nose-down over it — so it settles there '
+        'and rides it; how heavy it is to turn is an estimate. The discus '
+        'has coefficients shaped like the tunnel curves in the papers below '
+        'and tuned so elite releases land near where finals are won. It '
+        'holds the tilt it was released at, stalls at 29° and only recovers '
+        'under 25°; the real one turns in roll, which a flight in one plane '
+        'cannot show, and it comes out several meters short at elite speeds. '
+        "The hammer's wire is not counted. Release speed falls as the "
+        'release angle rises, so for the javelin and the shot the best angle '
+        'is searched with speed falling by the amount set under it — an '
+        'estimate unless it is set to the athlete\'s own; the hammer and '
+        'discus hold their speed, because nobody has measured how much it '
+        'falls. Distance runs from the hand, so the '
         'few tenths a thrower reaches past the stop board are not in it. A '
         'measured release is only as good as the video: side-on, square to '
         'the throw. The typical elite finals are approximate ranges drawn '

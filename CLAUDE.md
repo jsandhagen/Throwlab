@@ -11,7 +11,7 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `trim_screen` (a clip cut down to the throw), `comparison_screen`, `calculators_screen` (the calculator menu) with `release_calculator_screen` (the what-if calculator) and `unit_converter_screen` behind it |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `flight_field` (a throw side-on across its field), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), `trim_bar` (the clip's stills between two handles), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, `flight_model` (an implement through air, lift and drag), formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
+| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, `flight_model` (an implement through air, lift and drag) with `javelin_aero` (the javelin's measured wind-tunnel table), formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -1197,11 +1197,15 @@ like the app rather than a bare Material default.
 - The what-if calculator (`ReleaseCalculatorScreen`, from the calculators
   and from 'What if…' on the release-metrics sheet) flies a
   release through `flight_model` — drag on everything, lift on a discus and
-  a javelin; the javelin pitches as a body under its center of pressure
-  (Schneeberger's offsets, closing up as the attack grows) from a release
-  pitch rate, and the discus holds its tilt and stalls with hysteresis,
-  since a flight in one plane has no axis for the roll it really turns
-  in — and says what one more m/s, one more degree and ten more
+  a javelin; the javelin flies on a wind-tunnel table (`javelin_aero.dart`,
+  Seo et al. 2023 — a women's 600 g javelin measured with nothing touching
+  it, every weight flown on it with its own length and thickness) and
+  pitches as a body under the moment measured on it, nose-up under about
+  11° of attack and nose-down over it, so it settles there and rides it;
+  nothing in it is tuned, and the typical finals land inside their ranges.
+  The discus holds its tilt and stalls with hysteresis, since a flight in
+  one plane has no axis for the roll it really turns in — and says what one
+  more m/s, one more degree and ten more
   centimeters of height are each worth. It is an estimate and says so
   first, in a banner above the number — a guide, not a reference — with
   how the model is built and where it falls short (above all the discus,
@@ -1231,10 +1235,20 @@ like the app rather than a bare Material default.
   giving that to whichever came last answers in an order nobody chose. The
   worth tiles are a different question, one nudge from where the sliders
   are, and are headed 'What a nudge is worth' because a coach added them up
-  and they did not come to the gap. Every angle is flown at the speed on
-  its slider, which no athlete keeps going higher; that is said on the
-  angle's dial whenever it is raised against the other throw, rather than
-  modeled, since the speed an athlete loses is theirs and not a constant.
+  and they did not come to the gap. Every angle on a slider is flown at
+  the speed on its slider, which no athlete keeps going higher, and the
+  angle's dial says so whenever it is raised against the other throw.
+  The best angle is the one place the loss is modeled, because that is
+  the number a coach reads at a glance, and the literature's 30–37° is an
+  athlete's best, not the flight's: release speed falls as the angle rises
+  (Red and Zogaib on javelin throwers, Linthorne on putters), and that fall
+  is most of why a javelin flown at a held speed is best near 40° while
+  finals release at 35. `bestAngle(speedLossPerDeg:)` lets the speed fall
+  from the release it was handed, anchored so that release keeps its own,
+  and the screen gives both answers — the thrower's, and the flight's with
+  speed held. The loss is the coach's to set, in a dial under it, and
+  opens on an estimate (`typicalSpeedLossPerDeg`) labeled one; the hammer
+  and discus have none, because nobody has measured it, and fly held.
   It reads in the coach's units, flipped by an m / ft switch in its app bar
   that opens on `DistanceField.preferred` and does not write it back. In
   feet the marks are spelled the way a meet writes them, a release height

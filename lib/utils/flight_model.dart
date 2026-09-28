@@ -8,13 +8,13 @@
 /// answers every what-if.
 ///
 /// A point mass with an attitude, in the plane of the throw. The javelin's
-/// attitude is a rigid body's — it pitches under the moment of its center
-/// of pressure sitting behind its center of mass — and the discus's is held,
-/// the way a spinning disc holds it. The aerodynamic coefficients are the
-/// shapes the wind-tunnel literature reports (lift climbing with angle of
-/// attack until the flow separates, drag growing with its square), scaled
-/// against releases measured at championship finals — see [Aero] for how
-/// close each event gets. That makes the answer a good estimate of *how
+/// attitude is a rigid body's, pitching under the moment the wind tunnel
+/// measured on it (`javelin_aero.dart`), and the discus's is held, the way
+/// a spinning disc holds it. The discus's coefficients are the shapes the
+/// wind-tunnel literature reports (lift climbing with angle of attack until
+/// the flow separates, drag growing with its square), scaled against
+/// releases measured at championship finals; the javelin's are measured and
+/// not tuned at all — see [Aero] for how close each event gets. That makes the answer a good estimate of *how
 /// much* a change is worth and an approximate one of the mark itself, and
 /// the screen says so.
 library;
@@ -23,6 +23,7 @@ import 'dart:math' as math;
 import 'dart:ui' show Offset;
 
 import '../models/throw_event.dart';
+import 'javelin_aero.dart';
 import 'projectile.dart' show gravity;
 
 /// Air at a warm afternoon at sea level, kg/m³.
@@ -30,16 +31,12 @@ const double airDensity = 1.2;
 
 double _rad(double deg) => deg * math.pi / 180;
 
-// The three numbers below are tuned rather than looked up: nothing in the
+// The two numbers below are tuned rather than looked up: nothing in the
 // open literature gives them, and each was set so the flights it governs
 // behave the way the rest of this file says they should.
 
 /// What a javelin's moment of inertia is of a uniform rod's.
 const _javelinTaper = 0.8;
-
-/// The attack at which a javelin's center of pressure reaches its center
-/// of mass — halfway there at half of it.
-const _javelinCpZeroDeg = 60.0;
 
 /// The share of a discus's peak lift left once the flow has let go.
 const _discusStalledLift = 0.6;
@@ -101,8 +98,8 @@ class Release {
 /// ([pitchInertia] zero — a spinning discus is a gyroscope, and keeps the
 /// tilt it was released at all the way down; Hubbard and Cheng's discus
 /// turns mainly in roll, which a flight in one plane has no axis for) or
-/// pitches as a rigid body under the moment of its center of pressure,
-/// which is what a javelin's tail does to its nose.
+/// pitches as a rigid body under its measured pitching moment, which is
+/// what a javelin's tail does to its nose.
 class Aero {
   const Aero({
     required this.area,
@@ -114,8 +111,7 @@ class Aero {
     this.stalledLift = 1,
     this.liftZeroDeg = 90,
     this.length = 0,
-    this.cpBehind = 0,
-    this.cpZeroDeg = 90,
+    this.measured = false,
     this.pitchInertia = 0,
     this.pitchDamping = 0,
   }) : recoverDeg = recoverDeg ?? stallDeg;
@@ -150,13 +146,9 @@ class Aero {
   /// Meters from tip to tail, for the pitch damping's lever.
   final double length;
 
-  /// Meters the center of pressure sits behind the center of mass at a
-  /// small angle of attack.
-  final double cpBehind;
-
-  /// The attack at which the center of pressure has closed all the way up
-  /// to the center of mass; it closes on it linearly from [cpBehind].
-  final double cpZeroDeg;
+  /// Whether the coefficients come off the javelin's wind-tunnel table
+  /// rather than the curve-shaped ones above, which then go unused.
+  final bool measured;
 
   /// kg·m² about the center of mass, across the shaft. Zero holds the
   /// attitude fixed.
@@ -166,7 +158,7 @@ class Aero {
   /// [length]².
   final double pitchDamping;
 
-  bool get hasAttitude => liftSlope > 0;
+  bool get hasAttitude => measured || liftSlope > 0;
 
   bool get pitches => hasAttitude && pitchInertia > 0;
 
@@ -175,6 +167,7 @@ class Aero {
   bool recoversAt(double alpha) => alpha.abs() < _rad(recoverDeg);
 
   double drag(double alpha) {
+    if (measured) return javelinDrag(alpha);
     final s = math.sin(alpha);
     return dragBase + dragPerAttack * s * s;
   }
@@ -184,6 +177,7 @@ class Aero {
   /// implement on that second branch down to [recoverDeg] even though the
   /// angle is back under the stall.
   double lift(double alpha, {bool stalled = false}) {
+    if (measured) return javelinLift(alpha);
     final a = alpha.abs();
     final stall = _rad(stallDeg);
     final double magnitude;
@@ -199,10 +193,9 @@ class Aero {
     return alpha.sign * magnitude;
   }
 
-  /// m: how far behind the center of mass the center of pressure is at
-  /// [alpha]. Forward as the implement turns into the flow.
-  double cpOffset(double alpha) =>
-      cpBehind * math.max(0, 1 - alpha.abs() / _rad(cpZeroDeg));
+  /// Pitching moment coefficient about the center of mass, nose up
+  /// positive, referenced to [area] and [length].
+  double moment(double alpha) => measured ? javelinMoment(alpha) : 0;
 
   /// The air an implement of [spec] flies through as.
   ///
@@ -210,10 +203,10 @@ class Aero {
   /// hammer's wire and handle drag too and are not in here, which is the
   /// model erring long.
   ///
-  /// The javelin was set so an 800 g release at 29 m/s and 35° lands in
-  /// the high eighties, where finals are won, with the best angle in the
-  /// mid-thirties and a nose held well above the path costing distance —
-  /// the three things the javelin literature agrees on.
+  /// The javelin is measured rather than set: Seo et al.'s table, with
+  /// nothing tuned to make it land anywhere, puts a typical men's final
+  /// release in the mid-eighties and a women's in the low sixties, which is
+  /// where finals are won.
   ///
   /// The discus is the weak one, and errs short on purpose. A point mass
   /// held at a fixed tilt cannot both throw as far as a championship
@@ -244,36 +237,20 @@ class Aero {
           liftZeroDeg: 90,
         );
       case ThrowEvent.javelin:
-        // Side-on area of the shaft: its length by its thickest diameter,
-        // which grows with the weight the way the rules have it.
+        // The table is referenced to the cross-section at the thickest
+        // point, and its moment to the whole length, about the center of
+        // mass.
         final length = spec.nominalSize;
-        final diameter = 0.020 + 0.010 * spec.weightKg;
-        const dragBase = 0.015;
-        const liftSlope = 0.45;
+        final diameter = javelinDiameter(spec.weightKg);
         return Aero(
-          area: length * diameter,
-          dragBase: dragBase,
-          dragPerAttack: 1.1,
-          liftSlope: liftSlope,
-          stallDeg: 25,
-          liftZeroDeg: 40,
+          area: math.pi * diameter * diameter / 4,
+          dragBase: javelinDrag(0),
+          measured: true,
           length: length,
-          // Schneeberger (2009): 14.3 cm behind for the men's 2.6–2.7 m
-          // javelin and 12.6 cm for the women's 2.2–2.3 m, and on a line
-          // through the two for the lengths between and beyond.
-          cpBehind: 0.126 + (0.143 - 0.126) / (2.65 - 2.25) * (length - 2.25),
-          cpZeroDeg: _javelinCpZeroDeg,
           // A uniform rod is mL²/12; a javelin tapers to both ends, so it is
           // less than that by a share nobody has published.
           pitchInertia: _javelinTaper * spec.weightKg * length * length / 12,
-          // Derived rather than tuned: a shaft turning at ω meets the air at
-          // ωx/u more angle x along it, and summing that normal force's
-          // moment down a uniform shaft gives C_mq = C_Nα / 12, where
-          // C_Nα = C_Lα + C_D0 is the normal force's slope at zero attack.
-          // Tuned by hand to settle the rocking fast, it came out at four
-          // times this, and at that the damping held the nose up off a
-          // falling path — 18° of attack by mid-flight, and a cliff past it.
-          pitchDamping: (liftSlope + dragBase) / 12,
+          pitchDamping: javelinPitchDamping,
         );
     }
   }
@@ -332,8 +309,13 @@ Flight fly(Release release, Aero aero, double mass) {
     aero.pitches ? _rad(release.pitchRate) : 0.0,
   ];
 
-  double alphaOf(List<double> s) =>
-      aero.hasAttitude ? s[4] - math.atan2(s[3], s[2] - release.wind) : 0.0;
+  // Wrapped, so a javelin sent tumbling by a slider at its end reads the
+  // angle it is actually meeting the air at rather than a turn and a half.
+  double alphaOf(List<double> s) {
+    if (!aero.hasAttitude) return 0;
+    final a = s[4] - math.atan2(s[3], s[2] - release.wind);
+    return math.atan2(math.sin(a), math.cos(a));
+  }
 
   // Whether the flow is off the upper surface. It is a memory rather than
   // a function of the angle — that is the hysteresis — so it is held for a
@@ -357,11 +339,15 @@ Flight fly(Release release, Aero aero, double mass) {
       ax += -d * ux - l * uy;
       ay += -d * uy + l * ux;
       if (aero.pitches) {
-        // The force across the shaft, acting at the center of pressure: a
-        // nose above the path is pushed back down onto it.
-        final q = 0.5 * airDensity * aero.area * u * u;
-        final normal = q * (cl * math.cos(alpha) + cd * math.sin(alpha));
-        final moment = -aero.cpOffset(alpha) * normal;
+        // What the tunnel measured: nose-up under about 11° of attack and
+        // nose-down over it, so the javelin settles there and rides it.
+        final moment = 0.5 *
+            airDensity *
+            u *
+            u *
+            aero.area *
+            aero.length *
+            aero.moment(alpha);
         final damping = -0.5 *
             airDensity *
             u *
@@ -415,18 +401,32 @@ Flight fly(Release release, Aero aero, double mass) {
 Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
     fly(release, Aero.of(event, spec), spec.weightKg);
 
-/// The release angle that throws furthest with everything else held, found
-/// by golden-section search between 5° and 60° — every event's best is in
-/// there, and one peak is all the curve has.
+/// The release angle that throws furthest, found by golden-section search
+/// between 5° and 60° — every event's best is in there, and one peak is all
+/// the curve has.
 ///
-/// Everything else held is the catch, and the screen says it: a real
-/// athlete releasing higher releases slower (Linthorne 2001), so the angle
-/// that is best for a person sits a few degrees under this one.
-({double angleDeg, double distance}) bestAngle(
-    ThrowEvent event, ImplementSpec spec, Release release) {
+/// With [speedLossPerDeg] at zero, everything else is held, which answers
+/// what the *flight* is best at: 44° for a shot from shoulder height in a
+/// vacuum, about 40° for a javelin. No athlete throws like that. Release
+/// speed falls as the release angle rises — Red and Zogaib (1977) measured
+/// it falling linearly on javelin throwers, Linthorne (2001) on shot
+/// putters — and that fall, not the flight, is most of why a finals release
+/// sits in the thirties. So the search lets the speed fall by
+/// [speedLossPerDeg] m/s for every degree steeper than the release it was
+/// handed, anchored so that release keeps its own speed: nothing but the
+/// search sees it, and the answer is the athlete's best angle rather than
+/// the implement's.
+({double angleDeg, double distance, double speed}) bestAngle(
+    ThrowEvent event, ImplementSpec spec, Release release,
+    {double speedLossPerDeg = 0}) {
   final aero = Aero.of(event, spec);
-  double at(double deg) =>
-      fly(release.copyWith(angleDeg: deg), aero, spec.weightKg).distance;
+  double speedAt(double deg) =>
+      math.max(0.0, release.speed - speedLossPerDeg * (deg - release.angleDeg));
+  double at(double deg) => fly(
+          release.copyWith(angleDeg: deg, speed: speedAt(deg)),
+          aero,
+          spec.weightKg)
+      .distance;
   const phi = 0.6180339887498949;
   var lo = 5.0;
   var hi = 60.0;
@@ -450,8 +450,26 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
     }
   }
   final angle = (lo + hi) / 2;
-  return (angleDeg: angle, distance: at(angle));
+  return (angleDeg: angle, distance: at(angle), speed: speedAt(angle));
 }
+
+/// How much release speed an athlete gives up per degree steeper, m/s, as
+/// the calculator opens — an estimate for a coach to replace with their
+/// athlete's own, and labeled one on the screen.
+///
+/// Red and Zogaib (1977) and Linthorne (2001) measured the fall and did not
+/// publish one number for everybody, so these are set to scale. A javelin's
+/// distance curve is flat enough near its peak — about 0.1 m lost per
+/// degree² — and a meter a second worth enough, about 6 m, that 1 m/s per
+/// 10° is what moves a flight-only 40° to the 35° finals release at. The
+/// shot's is the 1.7 (m/s)/rad reported for Linthorne's college putters,
+/// read from a secondary summary. Nobody has measured it for the hammer or
+/// the discus, so they fly at a held speed and the screen says so.
+double typicalSpeedLossPerDeg(ThrowEvent event) => switch (event) {
+      ThrowEvent.javelin => 0.1,
+      ThrowEvent.shotPut => 1.7 * math.pi / 180,
+      ThrowEvent.discus || ThrowEvent.hammer => 0,
+    };
 
 /// What each lever is worth from here: meters gained for [speedStep] more
 /// m/s, one more degree, and [heightStep] more meters of height — one m/s
@@ -461,13 +479,20 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
 /// something with.
 ({double perSpeed, double perDegree, double perHeight}) sensitivity(
     ThrowEvent event, ImplementSpec spec, Release release,
-    {double speedStep = 1, double heightStep = 0.1}) {
+    {double speedStep = 1,
+    double heightStep = 0.1,
+    double speedLossPerDeg = 0}) {
   final aero = Aero.of(event, spec);
   double at(Release r) => fly(r, aero, spec.weightKg).distance;
   final base = at(release);
   return (
     perSpeed: at(release.copyWith(speed: release.speed + speedStep)) - base,
-    perDegree: at(release.copyWith(angleDeg: release.angleDeg + 1)) - base,
+    // A degree steeper at the speed the best-angle search would give it, so
+    // the tile and the best angle beside it tell one story.
+    perDegree: at(release.copyWith(
+            angleDeg: release.angleDeg + 1,
+            speed: math.max(0.0, release.speed - speedLossPerDeg))) -
+        base,
     perHeight: at(release.copyWith(height: release.height + heightStep)) - base,
   );
 }

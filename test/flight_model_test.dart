@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/elite_releases.dart';
@@ -53,14 +55,19 @@ void main() {
       expect(tail, lessThan(still));
     });
 
-    test('a javelin nose held well above the path costs distance', () {
+    test('a javelin released nose-up settles to the attack it was measured to',
+        () {
+      // Bartlett and Best have a nose held above the path costing meters.
+      // On the measured moment the javelin trims itself to about 11° of
+      // attack whatever it left the hand at, so ten degrees nose-up costs
+      // little — the tunnel's answer, and the one the model now gives.
       const r = Release(speed: 29, angleDeg: 35, height: 1.8);
       final spec = _senior(ThrowEvent.javelin);
       final flat = flyThrow(ThrowEvent.javelin, spec, r).distance;
       final nosey =
           flyThrow(ThrowEvent.javelin, spec, r.copyWith(attackDeg: 10))
               .distance;
-      expect(nosey, lessThan(flat - 2));
+      expect((nosey - flat).abs(), lessThan(1.5));
     });
 
     test('a javelin released turning moves where it lands', () {
@@ -83,15 +90,46 @@ void main() {
           flyThrow(ThrowEvent.discus, discus, d).distance);
     });
 
-    test('an elite javelin release lands where finals are won', () {
-      final range = eliteRanges[ThrowEvent.javelin]![EliteField.men]!;
-      final r = Release(
-          speed: range.typicalSpeed,
-          angleDeg: range.typicalAngle,
-          height: range.typicalHeight);
-      final d =
-          flyThrow(ThrowEvent.javelin, _senior(ThrowEvent.javelin), r).distance;
-      expect(d, inInclusiveRange(range.marks.$1 - 3, range.marks.$2 + 3));
+    test('an elite javelin release lands where finals are won, untuned', () {
+      // Nothing in the javelin was set to make this pass: it is the
+      // tunnel's table, the rules' dimensions and the typical releases.
+      for (final field in EliteField.values) {
+        final range = eliteRanges[ThrowEvent.javelin]![field]!;
+        final r = Release(
+            speed: range.typicalSpeed,
+            angleDeg: range.typicalAngle,
+            height: range.typicalHeight);
+        final d = flyThrow(ThrowEvent.javelin,
+                ThrowEvent.javelin.specFor(range.weightKg), r)
+            .distance;
+        expect(d, inInclusiveRange(range.marks.$1, range.marks.$2),
+            reason: field.name);
+      }
+    });
+
+    test('no slider setting sends a javelin anywhere impossible', () {
+      // The corners: slow and steep, tumbling on a pitch rate, where the
+      // attack runs far past what the tunnel measured.
+      for (final v in [10.0, 33.0]) {
+        for (final a in [0.0, 60.0]) {
+          for (final attack in [-20.0, 20.0]) {
+            for (final rate in [-30.0, 30.0]) {
+              final d = flyThrow(
+                      ThrowEvent.javelin,
+                      _senior(ThrowEvent.javelin),
+                      Release(
+                          speed: v,
+                          angleDeg: a,
+                          height: 2,
+                          attackDeg: attack,
+                          pitchRate: rate))
+                  .distance;
+              expect(d, inInclusiveRange(0, 140),
+                  reason: '$v m/s $a° $attack° $rate°/s');
+            }
+          }
+        }
+      }
     });
   });
 
@@ -109,30 +147,34 @@ void main() {
       expect(aero.lift(deg(90), stalled: true), closeTo(0, 1e-9));
     });
 
-    test('the javelin\'s center of pressure closes up as it turns', () {
-      final men = Aero.of(ThrowEvent.javelin, _senior(ThrowEvent.javelin));
+    test('the javelin flies on the tunnel\'s table', () {
+      double deg(double d) => d * math.pi / 180;
+      final aero = Aero.of(ThrowEvent.javelin, _senior(ThrowEvent.javelin));
+      expect(aero.drag(0), closeTo(1.30, 1e-9));
+      expect(aero.lift(deg(8)), closeTo(1.40, 1e-9));
+      expect(aero.lift(deg(-8)), closeTo(-1.40, 1e-9));
+      // Nose-up under the trim and nose-down over it: the shape the table
+      // is there for.
+      expect(aero.moment(deg(8)), greaterThan(0));
+      expect(aero.moment(deg(14)), lessThan(0));
+      // Past what was measured the lift runs out by side-on, rather than
+      // holding its 30° value round to flying tail first.
+      expect(aero.lift(deg(60)), lessThan(aero.lift(deg(30))));
+      expect(aero.lift(deg(90)), closeTo(0, 1e-9));
+      // Referenced to the thickest cross-section, as the paper does.
+      expect(aero.area, closeTo(math.pi * 0.0295 * 0.0295 / 4, 1e-12));
       final women =
           Aero.of(ThrowEvent.javelin, ThrowEvent.javelin.specFor(0.6));
-      expect(men.cpOffset(0), closeTo(0.143, 1e-9));
-      expect(women.cpOffset(0), closeTo(0.126, 1e-9));
-      expect(men.cpOffset(0.3), lessThan(men.cpOffset(0.1)));
+      expect(women.area, closeTo(math.pi * 0.0247 * 0.0247 / 4, 1e-12));
     });
   });
 
-  test('a javelin\'s nose follows its path down rather than hanging above it',
-      () {
-    // With the damping as tuned by hand the nose stood 18° above a falling
-    // path by mid-flight. A few degrees is a javelin; that was a wing.
-    final spec = _senior(ThrowEvent.javelin);
-    final aero = Aero.of(ThrowEvent.javelin, spec);
-    expect(aero.pitchDamping, closeTo((0.45 + 0.015) / 12, 1e-12));
-    const r = Release(speed: 29.5, angleDeg: 34.5, height: 1.85);
-    final settled = flyThrow(ThrowEvent.javelin, spec, r).distance;
-    // Released nose-up, it is brought back down onto the path: the throw
-    // still pays for it, but lands within a few meters.
-    final nosey =
-        flyThrow(ThrowEvent.javelin, spec, r.copyWith(attackDeg: 10)).distance;
-    expect(settled - nosey, inInclusiveRange(1, 5));
+  test('a javelin\'s pitch damping comes off the table it flies on', () {
+    // C_Nα / 12 for a uniform shaft, the normal force's slope read as the
+    // secant to 8° — not a number tuned to make the rocking look right.
+    final aero = Aero.of(ThrowEvent.javelin, _senior(ThrowEvent.javelin));
+    expect(aero.pitchDamping,
+        closeTo((1.40 / (8 * math.pi / 180) + 1.30) / 12, 1e-9));
   });
 
   group('gapShares', () {
@@ -182,6 +224,62 @@ void main() {
   });
 
   group('bestAngle', () {
+    ({double angleDeg, double distance, double speed}) finalBest(
+        ThrowEvent event, EliteField field,
+        {bool speedFalls = true}) {
+      final range = eliteRanges[event]![field]!;
+      return bestAngle(
+          event,
+          event.specFor(range.weightKg),
+          Release(
+              speed: range.typicalSpeed,
+              angleDeg: range.typicalAngle,
+              height: range.typicalHeight,
+              attackDeg: range.attackDeg),
+          speedLossPerDeg: speedFalls ? typicalSpeedLossPerDeg(event) : 0);
+    }
+
+    test('a javelin thrower\'s best angle is where finals release', () {
+      for (final field in EliteField.values) {
+        // The flight alone is best near 40°; the speed an athlete gives up
+        // going higher brings it into the thirties, where finals are thrown.
+        expect(finalBest(ThrowEvent.javelin, field, speedFalls: false).angleDeg,
+            inInclusiveRange(38, 43),
+            reason: field.name);
+        expect(finalBest(ThrowEvent.javelin, field).angleDeg,
+            inInclusiveRange(33, 37),
+            reason: field.name);
+      }
+    });
+
+    test('a putter\'s best angle comes down off the flight\'s', () {
+      final flight =
+          finalBest(ThrowEvent.shotPut, EliteField.men, speedFalls: false);
+      final putter = finalBest(ThrowEvent.shotPut, EliteField.men);
+      expect(flight.angleDeg, greaterThan(41));
+      expect(putter.angleDeg, inInclusiveRange(36, 40));
+    });
+
+    test('the speed falls from the release it was handed, and only there', () {
+      const r = Release(speed: 28, angleDeg: 34, height: 1.8);
+      final spec = _senior(ThrowEvent.javelin);
+      final best = bestAngle(ThrowEvent.javelin, spec, r, speedLossPerDeg: 0.1);
+      expect(best.speed, closeTo(28 - 0.1 * (best.angleDeg - 34), 1e-9));
+      // And the distance it reports is that release's, not a held one.
+      expect(
+          best.distance,
+          closeTo(
+              flyThrow(ThrowEvent.javelin, spec,
+                      r.copyWith(angleDeg: best.angleDeg, speed: best.speed))
+                  .distance,
+              1e-9));
+    });
+
+    test('the hammer and discus hold their speed', () {
+      expect(typicalSpeedLossPerDeg(ThrowEvent.hammer), 0);
+      expect(typicalSpeedLossPerDeg(ThrowEvent.discus), 0);
+    });
+
     test('matches the closed form for a shot, where air hardly counts', () {
       const r = Release(speed: 13.5, angleDeg: 37, height: 2.1);
       final best =
@@ -462,6 +560,46 @@ void main() {
       await tester.scrollUntilVisible(find.text('6-06.50'), 100);
       await tester.scrollUntilVisible(find.text('+1 mph'), 200);
       expect(find.text('+4 in higher'), findsOneWidget);
+    });
+
+    testWidgets('a javelin\'s best angle is a thrower\'s, and the loss is set',
+        (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      await tester.tap(find.text('Javelin'));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+          find.text('Speed lost per 10° steeper'), 300);
+      final before = text(tester, 'bestAngle');
+      expect(
+          before,
+          anyOf(startsWith('Best angle for this thrower'),
+              startsWith("At this thrower's best angle")));
+      expect(
+          find.textContaining('the flight alone is best at'), findsOneWidget);
+      expect(find.text('1.0 m/s'), findsOneWidget);
+      // Holding the speed turns it back into the flight's own answer.
+      final lossDial = find.descendant(
+          of: find
+              .ancestor(
+                  of: find.text('Speed lost per 10° steeper'),
+                  matching: find.byType(Column))
+              .first,
+          matching: find.byType(Slider));
+      await tester.ensureVisible(lossDial.first);
+      await tester.pumpAndSettle();
+      await tester.drag(lossDial.first, const Offset(-600, 0));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('bestAngle')), -200);
+      expect(find.text('0.0 m/s'), findsOneWidget);
+      expect(text(tester, 'bestAngle'), isNot(before));
+      expect(find.textContaining("not an athlete's"), findsOneWidget);
+
+      // A hammer has no loss to set.
+      await tester.scrollUntilVisible(find.text('Hammer'), -2000);
+      await tester.tap(find.text('Hammer'));
+      await tester.pump();
+      expect(find.text('Speed lost per 10° steeper'), findsNothing);
     });
 
     testWidgets('switching event shows its own references', (tester) async {

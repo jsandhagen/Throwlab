@@ -227,10 +227,35 @@ List<EliteRelease> eliteReleasesFor(ThrowEvent event, double weightKg) => [
 /// ([EliteRelease.source]); this is the rest.
 const whatIfSources = <({String citation, String usedFor})>[
   (
+    citation: 'Red, W. E., & Zogaib, A. J. (1977). Javelin dynamics '
+        'including body interaction. Journal of Applied Mechanics, 44(3), '
+        '496–498.',
+    usedFor: "Why an athlete's best angle sits below the flight's: release "
+        'speed falls as the release angle rises. Measured on javelin '
+        'throwers, and the method the best-angle search follows. The speed '
+        'lost per degree is an estimate on the screen, not their figure.',
+  ),
+  (
     citation: 'Linthorne, N. P. (2001). Optimum release angle in the shot '
         'put. Journal of Sports Sciences, 19(5), 359–372.',
-    usedFor: "Why an athlete's own best angle sits below the one with "
-        'everything else held: release speed falls as the angle rises.',
+    usedFor: 'The same fall in release speed measured on shot putters, and '
+        'the scale of the shot\'s default.',
+  ),
+  (
+    citation: 'Seo, K., Okuizumi, H., Konishi, Y., Kobayashi, T., Hasegawa, '
+        'H., & Obayashi, S. (2023). Measurement of aerodynamic force and '
+        'moment acting on a javelin using a magnetic suspension and balance '
+        'system. Scientific Reports, 13, 391.',
+    usedFor: 'The javelin\'s drag, lift and pitching moment, read off '
+        "their Fig. 10 for a women's 600 g javelin, unsupported, at 25 m/s. "
+        'Every javelin weight flies on these.',
+  ),
+  (
+    citation: 'Chowdhury, H., Alam, F., Muscara, A., & Mustary, I. (2013). '
+        'An experimental study of new rule javelins. Procedia Engineering, '
+        '60, 485–490.',
+    usedFor: "The men's 800 g javelin's thickness, which sets how much air "
+        'it meets on the measured coefficients.',
   ),
   (
     citation: 'Frohlich, C. (1981). Aerodynamic effects on discus flight. '
@@ -244,20 +269,9 @@ const whatIfSources = <({String citation, String usedFor})>[
     usedFor: 'Where the best discus release and attack angles fall.',
   ),
   (
-    citation: 'Hubbard, M., & Rust, H. J. (1984). Simulation of javelin '
-        'flight using experimental aerodynamic data. Journal of '
-        'Biomechanics, 17(10), 769–776.',
-    usedFor: 'The shape of the javelin lift and drag curves only. Measured '
-        "on the men's javelin before the 1986 rule change moved its center "
-        'of mass 4 cm forward, so it is not the javelin thrown today; the '
-        'coefficients were tuned to modern results rather than taken from it.',
-  ),
-  (
     citation: 'Bartlett, R. M., & Best, R. J. (1988). The biomechanics of '
         'javelin throwing: a review. Journal of Sports Sciences, 6(1), '
         '1–38.',
-    usedFor: 'Javelin release ranges, and the cost of a nose held above '
-        'the flight path. Written two years after the men\'s rule change, '
-        'and drawing on work either side of it.',
+    usedFor: 'Javelin release ranges in the typical finals.',
   ),
 ];
