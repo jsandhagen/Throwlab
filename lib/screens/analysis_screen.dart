@@ -14,6 +14,7 @@ import '../services/javelin_detector.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../utils/frame_seeker.dart';
+import '../utils/flight_model.dart' show Release;
 import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
@@ -32,6 +33,7 @@ import '../widgets/scrub_still.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_picker.dart';
 import 'comparison_screen.dart';
+import 'release_calculator_screen.dart';
 
 /// Typical release heights (m) used for the vacuum-ballistics predictions.
 const _releaseHeights = {
@@ -1217,6 +1219,11 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
+                    onPressed: () => _openWhatIf(metrics, height),
+                    child: const Text('What if…'),
+                  ),
+                  const Spacer(),
+                  TextButton(
                     onPressed: () => _saveToNote(metrics),
                     child: const Text('Save to note'),
                   ),
@@ -1243,6 +1250,27 @@ class _AnalysisScreenState extends State<AnalysisScreen>
           ],
         ),
       );
+
+  /// The measured release, handed to the calculator to be pushed about.
+  /// The height is the event's assumed one, since four taps don't measure
+  /// it; the calculator's slider is where it gets put right.
+  void _openWhatIf(ReleaseMetrics metrics, double height) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReleaseCalculatorScreen(
+          event: widget.video.event,
+          implementKg: widget.video.implementKg,
+          measured: Release(
+            speed: metrics.speed,
+            angleDeg: metrics.releaseAngleDeg,
+            height: height,
+            attackDeg: metrics.attackAngleDeg ?? 0,
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _saveToNote(ReleaseMetrics metrics) async {
     final attack = metrics.attackAngleDeg;

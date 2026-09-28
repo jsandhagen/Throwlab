@@ -31,6 +31,7 @@ import 'group_screen.dart';
 import 'meet_event_screen.dart';
 import 'meet_screen.dart';
 import 'meets_screen.dart';
+import 'calculators_screen.dart';
 
 enum LibraryGrouping { athlete, event, date }
 
@@ -363,9 +364,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _cardTitle(ThrowVideo video) => switch (_grouping) {
         LibraryGrouping.athlete =>
           '${video.event.label} · ${video.implementSpec.weightLabel}',
-        LibraryGrouping.event =>
-          '${_athleteLabel(video.athlete)} '
-              '· ${video.implementSpec.weightLabel}',
+        LibraryGrouping.event => '${_athleteLabel(video.athlete)} '
+            '· ${video.implementSpec.weightLabel}',
         LibraryGrouping.date =>
           '${_athleteLabel(video.athlete)} · ${video.event.label}',
       };
@@ -426,6 +426,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             tooltip: 'Compare two throws',
             icon: const Icon(Icons.compare),
             onPressed: _startComparison,
+          ),
+          IconButton(
+            tooltip: 'Calculators',
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const CalculatorsScreen())),
           ),
         ],
       ),
@@ -798,9 +804,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_grouping != LibraryGrouping.date) {
       return '$count · ${shortThrowDate(videos.first.displayDate)}';
     }
-    final names = {
-      for (final video in videos) _athleteLabel(video.athlete)
-    }.toList();
+    final names =
+        {for (final video in videos) _athleteLabel(video.athlete)}.toList();
     return names.length > 2
         ? '$count · ${names.take(2).join(', ')} +${names.length - 2}'
         : '$count · ${names.join(', ')}';
