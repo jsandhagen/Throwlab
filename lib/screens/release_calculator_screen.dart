@@ -277,6 +277,14 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             _event);
   }
 
+  /// Whose elite throwers the list holds: the implement's own, or the
+  /// men's where a boys' implement borrows them.
+  String _eliteTrailing() {
+    final elite = eliteWeightFor(_event, _spec.weightKg);
+    if (elite == null || elite == _spec.weightKg) return _spec.weightLabel;
+    return "Men's ${_event.specFor(elite).weightLabel}";
+  }
+
   /// Everything back to what the event and implement open on.
   void _startOver() {
     _speedLoss = typicalSpeedLossPerDeg(_event);
@@ -838,8 +846,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                     ? 'from the ${_role(_editing).toLowerCase()}'
                     : 'from here'),
             _Worth(worth: worth, units: units, speedLossPerDeg: speedLoss),
-            _Heading('Compare with elite throwers',
-                trailing: _spec.weightLabel),
+            _Heading('Compare with elite throwers', trailing: _eliteTrailing()),
             _EliteThrowers(
               event: _event,
               spec: _spec,
@@ -1263,7 +1270,13 @@ class _EliteThrowers extends StatelessWidget {
     final scheme = theme.colorScheme;
     final muted =
         theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
-    final named = eliteReleasesFor(event, spec.weightKg);
+    final named = eliteReferencesFor(event, spec.weightKg);
+    // A boys' implement borrows the men's elite throwers: their release,
+    // flown with this implement.
+    final eliteKg = eliteWeightFor(event, spec.weightKg);
+    final borrowed = eliteKg != null && eliteKg != spec.weightKg;
+    final eliteLabel =
+        eliteKg == null ? null : event.specFor(eliteKg).weightLabel;
 
     Widget row({
       required Key key,
@@ -1314,7 +1327,9 @@ class _EliteThrowers extends StatelessWidget {
                     key: ValueKey('elite-${r.athlete}'),
                     t: measured(r),
                     title: r.athlete,
-                    subtitle: '${units.mark(r.mark)} · ${r.meet}\n'
+                    subtitle: '${units.mark(r.mark)}'
+                        '${borrowed ? ' with the $eliteLabel' : ''}'
+                        ' · ${r.meet}\n'
                         '${units.speed(r.speed)}'
                         '${r.angleDeg == null ? '' : ' · ${r.angleDeg!.toStringAsFixed(1)}°'}'
                         '${r.height == null ? '' : ' · ${units.height(r.height!)}'}'
@@ -1327,8 +1342,9 @@ class _EliteThrowers extends StatelessWidget {
                     child: Text(
                       key: const ValueKey('eliteNone'),
                       'Elite throwers throw the ${senior.join(' and the ')}, '
-                      'so there is no one to compare the ${spec.weightLabel} '
-                      'with. Pick one of those as the implement to see them.',
+                      "and the men's stand in for the boys' implements "
+                      'between them, so there is no one to compare the '
+                      '${spec.weightLabel} with.',
                       style: muted,
                     ),
                   ),
@@ -1340,6 +1356,7 @@ class _EliteThrowers extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Text(
+              '${borrowed ? "Elite men's releases, flown with the ${spec.weightLabel}: it is the speed and angle that carry across, not the implement. " : ''}'
               '${typical == null ? '' : 'The typical release is approximate, drawn from the biomechanics literature rather than one report. '}'
               '${named.isEmpty ? '' : 'Named throwers were measured at the championship given. '}'
               'Tap one to compare it with the baseline.',
@@ -2140,7 +2157,9 @@ class _Caveat extends StatelessWidget {
       'A measured release is only as good as the video: side-on, square to '
           'the throw. The typical elite throwers are approximate ranges drawn '
           "from the literature, the women's from the thinner half of it, and "
-          'are only offered with the implement they throw.',
+          "are offered with the implement they throw — and the men's with "
+          "the boys' and junior men's implements between the men's and the "
+          "women's, since it is the release that carries across.",
     ),
   ];
 

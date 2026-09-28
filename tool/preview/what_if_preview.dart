@@ -1,5 +1,6 @@
 // The what-if calculator: a shot put opened on its own; a measured high
-// school put, which no elite thrower throws; a measured 4 kg put with the
+// school 12 lb put against the men's elite throwers, whose release carries
+// across to a boys' implement; a measured 4 kg put with the
 // typical elite thrower laid over it; the discus, the hammer and the
 // javelin compared the same way, the javelin read in feet, which is what
 // the field's markers switch to. Each is shot at a phone's height, and the
@@ -84,7 +85,8 @@ void main() {
     await tap(const ValueKey('tryBestAngle'));
     await shoot('what_if_best_angle');
     await open(measured, height: 7200);
-    await shoot('what_if_no_elite_full');
+    await tap(const ValueKey('elite-typical'));
+    await shoot('what_if_boys_full');
 
     // A women's 4 kg put against the typical elite thrower with the 4 kg.
     const women = ReleaseCalculatorScreen(
@@ -122,8 +124,8 @@ void main() {
 
     await open(const ReleaseCalculatorScreen(
       event: ThrowEvent.discus,
-      implementKg: 2,
-      measured: Release(speed: 21.5, angleDeg: 38, height: 1.5, attackDeg: 4),
+      implementKg: 1.6,
+      measured: Release(speed: 19.5, angleDeg: 38, height: 1.5, attackDeg: 4),
     ));
     await tap(const ValueKey('elite-typical'));
     await shoot('what_if_discus_vs_elite');

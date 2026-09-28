@@ -1301,8 +1301,12 @@ like the app rather than a bare Material default.
   typical elite thrower with the implement on the screen (`eliteRangeFor`,
   marked approximate) and every thrower measured by name with it
   (`eliteReleasesFor`), and a tap lays one in as the what-if over the
-  baseline a coach brought. An implement no elite thrower throws — a 12 lb
-  shot, a 1.6 kg discus — has nobody, and says which implements do.
+  baseline a coach brought. A boys' or junior men's implement — anything
+  lighter than the men's and heavier than the women's, the 12 lb shot and
+  the 1.6 kg discus among them — takes the men's elite throwers
+  (`eliteWeightFor`), their releases flown with the boys' implement: what
+  carries across is the speed and the angle, and the list's heading says
+  whose they are. Lighter than the women's has nobody, and says so.
   `EliteRelease` holds
   releases measured at championships, with the report
   named on each; only what was published goes in, so a row that has only a

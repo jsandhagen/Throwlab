@@ -718,24 +718,35 @@ void main() {
             implementKg: 5.44,
             measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
           ));
-      // Nobody elite throws the 12 lb.
+      // A boys' 12 lb borrows the men's: the typical elite thrower and
+      // Walsh, their releases flown with the 12 lb.
+      final walsh = find.byKey(const ValueKey('elite-Tom Walsh'));
+      await tester.scrollUntilVisible(walsh, 600);
+      expect(find.byKey(const ValueKey('elite-typical')), findsOneWidget);
+      expect(find.text("Men's 16 lb"), findsOneWidget);
+      expect(find.textContaining('22.31 m with the 16 lb'), findsOneWidget);
+      expect(find.textContaining("Elite men's releases, flown with the 12 lb"),
+          findsOneWidget);
+      await reach(tester, walsh);
+      await tester.tap(walsh);
+      await tester.pump();
       await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('eliteNone')), 600);
-      expect(find.byKey(const ValueKey('elite-typical')), findsNothing);
-      expect(find.byKey(const ValueKey('elite-Tom Walsh')), findsNothing);
+          find.byKey(const ValueKey('whatIfGap')), -3000);
+      expect(text(tester, 'whatIfGap'), startsWith('+'));
 
-      // The 16 lb starts the screen over, on the typical elite thrower,
-      // with Walsh measured beside it.
+      // Nobody elite throws anything like a 3 kg, and the screen starts
+      // over on it.
       await tester.scrollUntilVisible(find.text('Hammer'), -3000);
       await tester.tap(find.byKey(const ValueKey('whatIfImplement')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('16 lb').last);
+      await tester.tap(find.text('3 kg').last);
       await tester.pumpAndSettle();
-      expect(find.text('TYPICAL ELITE THROWER'), findsOneWidget);
+      expect(find.byKey(const ValueKey('whatIfGap')), findsNothing);
       expect(find.text('Back to the measured throw'), findsNothing);
       await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('elite-Tom Walsh')), 600);
-      expect(find.byKey(const ValueKey('elite-typical')), findsOneWidget);
+          find.byKey(const ValueKey('eliteNone')), 600);
+      expect(find.byKey(const ValueKey('elite-typical')), findsNothing);
+      expect(walsh, findsNothing);
 
       // And back to the 12 lb is the measured throw again.
       await tester.scrollUntilVisible(find.text('Hammer'), -3000);
@@ -744,6 +755,21 @@ void main() {
       await tester.tap(find.text('12 lb').last);
       await tester.pumpAndSettle();
       expect(find.text('YOUR MEASURED THROW'), findsOneWidget);
+    });
+
+    test("a boys' implement borrows the men's elite throwers", () {
+      expect(eliteWeightFor(ThrowEvent.shotPut, 5.44), 7.26);
+      expect(eliteWeightFor(ThrowEvent.shotPut, 6), 7.26);
+      expect(eliteWeightFor(ThrowEvent.discus, 1.6), 2);
+      expect(eliteWeightFor(ThrowEvent.javelin, 0.7), 0.8);
+      expect(eliteWeightFor(ThrowEvent.hammer, 5), 7.26);
+      // The senior implements are their own.
+      expect(eliteWeightFor(ThrowEvent.shotPut, 4), 4);
+      expect(eliteWeightFor(ThrowEvent.discus, 2), 2);
+      // Lighter than the women's has nobody.
+      expect(eliteWeightFor(ThrowEvent.shotPut, 3), isNull);
+      expect(eliteWeightFor(ThrowEvent.javelin, 0.5), isNull);
+      expect(eliteReferencesFor(ThrowEvent.discus, 1.6), hasLength(3));
     });
 
     testWidgets('changing the implement starts over', (tester) async {

@@ -216,12 +216,32 @@ const eliteRanges = {
   },
 };
 
-/// The typical elite release with [event]'s [weightKg] implement, when
-/// elite throwers throw it — the senior men's and women's implements, and
-/// nothing lighter: a 12 lb shot has no elite throwers to measure.
+/// The elite implement whose throwers stand as the reference for
+/// [event]'s [weightKg] one, or null where there are none.
+///
+/// The senior implements are their own. A boys' or junior men's implement —
+/// anything lighter than the men's and heavier than the women's, the
+/// 12 lb and 5 kg shots, the 1.6 kg discus, the 700 g javelin — takes the
+/// men's: what carries across is the release, its speed and angle, and a
+/// boy is working towards a man's, not a woman's. Lighter than the
+/// women's is masters and the youngest grades, and nobody elite is thrown
+/// with anything like it.
+double? eliteWeightFor(ThrowEvent event, double weightKg) {
+  final ranges = eliteRanges[event]!;
+  final men = ranges[EliteField.men]!.weightKg;
+  final women = ranges[EliteField.women]!.weightKg;
+  if (weightKg == men || weightKg == women) return weightKg;
+  if (weightKg < men && weightKg > women) return men;
+  return null;
+}
+
+/// The typical elite release that stands as the reference for [event]'s
+/// [weightKg] implement (`eliteWeightFor`), or null where there is none.
 EliteRange? eliteRangeFor(ThrowEvent event, double weightKg) {
+  final elite = eliteWeightFor(event, weightKg);
+  if (elite == null) return null;
   for (final r in eliteRanges[event]!.values) {
-    if (r.weightKg == weightKg) return r;
+    if (r.weightKg == elite) return r;
   }
   return null;
 }
@@ -230,15 +250,20 @@ EliteRange? eliteRangeFor(ThrowEvent event, double weightKg) {
 /// release to start from where there is none of its own.
 EliteRange nearestEliteRange(ThrowEvent event, double weightKg) =>
     eliteRanges[event]!.values.reduce((a, b) =>
-        (a.weightKg - weightKg).abs() <= (b.weightKg - weightKg).abs()
-            ? a
-            : b);
+        (a.weightKg - weightKg).abs() <= (b.weightKg - weightKg).abs() ? a : b);
 
 /// The releases measured with [event]'s [weightKg] implement.
 List<EliteRelease> eliteReleasesFor(ThrowEvent event, double weightKg) => [
       for (final r in eliteReleases)
         if (r.event == event && r.weightKg == weightKg) r
     ];
+
+/// The named elite releases that stand as the reference for [event]'s
+/// [weightKg] implement: its own, or the men's for a boys' implement.
+List<EliteRelease> eliteReferencesFor(ThrowEvent event, double weightKg) {
+  final elite = eliteWeightFor(event, weightKg);
+  return elite == null ? const [] : eliteReleasesFor(event, elite);
+}
 
 /// The papers the flight model and the typical ranges lean on, and what
 /// each was used for. The measured releases cite their own reports
