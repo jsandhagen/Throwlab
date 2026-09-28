@@ -15,7 +15,6 @@ import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/flight_model.dart' show Release;
-import '../utils/projectile.dart';
 import '../utils/release_metrics.dart';
 import '../utils/scrub.dart';
 import '../utils/scrub_frames.dart';
@@ -865,6 +864,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
 
   bool get _isJavelin => widget.video.event == ThrowEvent.javelin;
 
+  bool get _isDiscus => widget.video.event == ThrowEvent.discus;
+
   String get _refWord => switch (widget.video.event) {
         ThrowEvent.discus => 'disc',
         ThrowEvent.javelin => 'javelin',
@@ -904,11 +905,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     return switch (_measureStep!) {
       _MeasureStep.refA => _isJavelin
           ? '${scrub}tap ${_manualJavelin ? '' : 'near '}the javelin tip'
-          : '${scrub}tap one edge of the $_refWord',
+          : _isDiscus
+              ? '${scrub}tap the front rim of the disc'
+              : '${scrub}tap one edge of the $_refWord',
       _MeasureStep.refConfirm => 'Drag the tip and tail to fit, then Next',
       _MeasureStep.refB => _isJavelin
           ? 'Tap the javelin tail'
-          : 'Tap the opposite edge of the $_refWord',
+          : _isDiscus
+              // The far end of its long side: that line is both the scale
+              // and the tilt the attack is read off.
+              ? 'Tap the back rim, across its long side'
+              : 'Tap the opposite edge of the $_refWord',
       _MeasureStep.pointA => _isJavelin
           ? 'Tap the javelin tip again'
           : 'Tap the center of the $_refWord',
@@ -1158,15 +1165,16 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       referenceMeters: widget.video.implementSpec.nominalSize,
       dtSeconds: _measureDt,
       javelin: _isJavelin,
+      discus: _isDiscus,
     );
     final event = widget.video.event;
-    final ballistic = event == ThrowEvent.shotPut || event == ThrowEvent.hammer;
-    final height = _releaseHeights[event]!;
-    final optimal = optimalAngleDeg(metrics.speed, releaseHeight: height);
-    final lost = distanceLostToAngle(metrics.speed, metrics.releaseAngleDeg,
-        releaseHeight: height);
-    final predicted = predictedDistance(metrics.speed, metrics.releaseAngleDeg,
-        releaseHeight: height);
+    final (
+      :release,
+      distance: predicted,
+      :bestAngleDeg,
+      lostToAngle: lost,
+    ) = flyMeasured(event, widget.video.implementSpec, metrics,
+        height: _releaseHeights[event]!);
     final attack = metrics.attackAngleDeg;
 
     showModalBottomSheet<void>(
@@ -1195,23 +1203,22 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 _metricRow(
                     'Angle of attack',
                     '${attack >= 0 ? '+' : ''}${attack.toStringAsFixed(1)}° '
-                        '(nose ${attack >= 0 ? 'up' : 'down'})'),
-              if (ballistic) ...[
-                _metricRow(
-                    'Predicted distance', '~${predicted.toStringAsFixed(2)} m'),
-                _metricRow('Optimal angle', '${optimal.toStringAsFixed(1)}°'),
-                _metricRow('Lost to angle', '${lost.toStringAsFixed(2)} m'),
-              ],
+                        '(${_isDiscus ? 'leading edge' : 'nose'} '
+                        '${attack >= 0 ? 'up' : 'down'})'),
+              _metricRow(
+                  'Predicted distance', '~${predicted.toStringAsFixed(2)} m'),
+              _metricRow('Best angle for this thrower',
+                  '${bestAngleDeg.toStringAsFixed(1)}°'),
+              _metricRow('Lost to angle', '${lost.toStringAsFixed(2)} m'),
               const SizedBox(height: 8),
               Text(
                 'Beta. These numbers only hold when the camera is exactly '
                 'side-on — square to the throw, 90° to the direction it '
                 'goes. A few degrees off the line and the speed and angle '
-                'both drift.'
-                '${ballistic ? ' Distance assumes a '
-                    '~${height.toStringAsFixed(1)} m release height.' : ' '
-                    'Distance is left off ${event.label.toLowerCase()} — its '
-                    'aerodynamic lift and drag aren\'t modeled yet.'}',
+                'both drift. Distance is flown through still air from a '
+                '~${release.height.toStringAsFixed(1)} m release height, '
+                'with the same model as What if…, where the height and '
+                'wind can be set.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               const SizedBox(height: 12),
@@ -1219,7 +1226,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    onPressed: () => _openWhatIf(metrics, height),
+                    onPressed: () => _openWhatIf(release),
                     child: const Text('What if…'),
                   ),
                   const Spacer(),
@@ -1251,22 +1258,18 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         ),
       );
 
-  /// The measured release, handed to the calculator to be pushed about.
-  /// The height is the event's assumed one, since four taps don't measure
-  /// it; the calculator's slider is where it gets put right.
-  void _openWhatIf(ReleaseMetrics metrics, double height) {
+  /// The measured release, handed to the calculator to be pushed about —
+  /// the one the sheet flew. The height is the event's assumed one, since
+  /// four taps don't measure it; the calculator's slider is where it gets
+  /// put right.
+  void _openWhatIf(Release release) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ReleaseCalculatorScreen(
           event: widget.video.event,
           implementKg: widget.video.implementKg,
-          measured: Release(
-            speed: metrics.speed,
-            angleDeg: metrics.releaseAngleDeg,
-            height: height,
-            attackDeg: metrics.attackAngleDeg ?? 0,
-          ),
+          measured: release,
         ),
       ),
     );

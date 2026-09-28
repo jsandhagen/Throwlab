@@ -415,9 +415,8 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   void _setRelease(Release r) => setState(() => _put(_Throw(_current.spec, r)));
 
   /// The speed lost per degree steeper as the flight is flown: the coach's
-  /// setting where the event trades speed for angle, nothing where it
-  /// doesn't.
-  double get _loss => typicalSpeedLossPerDeg(_event) > 0 ? _speedLoss : 0;
+  /// setting, which opens on the event's estimate.
+  double get _loss => _speedLoss;
 
   /// An angle, and the speed that goes with it: [_loss] per degree off the
   /// speed for every degree steeper, and back on for every degree flatter.
@@ -622,7 +621,6 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         _two == null ? null : flyThrow(_event, _two!.spec, _two!.release);
     final current = _current;
     final units = _Units(_unit);
-    final tradesSpeed = typicalSpeedLossPerDeg(_event) > 0;
     final speedLoss = _loss;
     final loss = _loss;
     final derived = _derivedFor(units);
@@ -908,23 +906,21 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 held: held,
                 gain: derived.value.gain,
                 angleDeg: derived.value.angleDeg,
-                speedLoss: tradesSpeed ? _speedLoss : null,
+                speedLoss: _speedLoss,
                 units: units,
                 onTry: () => _tryAngle(best),
-                lossDial: !tradesSpeed
-                    ? null
-                    : _Dial(
-                        onSlideStart: () => _slideStart('loss'),
-                        onSlideEnd: _slideEnd,
-                        label: 'Speed lost per 10° steeper',
-                        hint: _speedLossBasis(_event),
-                        value: _speedLoss * 10,
-                        span: _speedLossSpan,
-                        step: units.speedStep,
-                        format: units.speed,
-                        delta: units.speedDelta,
-                        onChanged: (v) => setState(() => _speedLoss = v / 10),
-                      ),
+                lossDial: _Dial(
+                  onSlideStart: () => _slideStart('loss'),
+                  onSlideEnd: _slideEnd,
+                  label: 'Speed lost per 10° steeper',
+                  hint: _speedLossBasis(_event),
+                  value: _speedLoss * 10,
+                  span: _speedLossSpan,
+                  step: units.speedStep,
+                  format: units.speed,
+                  delta: units.speedDelta,
+                  onChanged: (v) => setState(() => _speedLoss = v / 10),
+                ),
                 onResetLoss:
                     (_speedLoss - typicalSpeedLossPerDeg(_event)).abs() < 1e-9
                         ? null
@@ -1077,11 +1073,11 @@ String _speedLossBasis(ThrowEvent event) => switch (event) {
             'javelin throwers releasing slower as they released higher. '
             "Set it to your athlete's own if you have it.",
       ThrowEvent.discus =>
-        'Estimated: set so the best angle lands where elite discus throwers '
-            'release. Leigh et al. (2010) measured discus throwers releasing '
-            'slower as they released higher, by very different amounts from '
-            "one thrower to the next — so set it to your athlete's own if "
-            'you have it.',
+        'Opens at nothing: the flight alone is already best where elite '
+            'discus throwers release. Leigh et al. (2010) did measure discus '
+            'throwers releasing slower as they released higher, by very '
+            "different amounts from one to the next — so set your athlete's "
+            'own if you have it.',
       ThrowEvent.hammer =>
         'Estimated: set so the best angle lands where elite hammer throwers '
             'release, which research puts below the flight\'s best because '
@@ -1587,6 +1583,13 @@ class _BestAngle extends StatelessWidget {
       note = 'Speed falls as the angle rises, which is most of why elite '
           'throwers release under the flight\'s best. With speed held, the flight alone is best '
           'at ${held!.angleDeg.toStringAsFixed(1)}°.'
+          '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
+    } else if (typicalSpeedLossPerDeg(event) == 0) {
+      // The discus at its estimate, which is nothing.
+      note = 'Speed is held: flown this way the discus is already best '
+          'where elite throwers release, so no loss is assumed. A real '
+          'athlete may still release slower going higher — set it below '
+          'if you know by how much.'
           '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
     } else {
       // The coach has set the loss to nothing.
@@ -2370,10 +2373,11 @@ class _Caveat extends StatelessWidget {
           'opens on an estimate built from academic research — Red & Zogaib '
           '(1977) on javelin throwers, Linthorne (2001) on shot putters — '
           'scaled to each event rather than one published number; the '
-          "hammer's and the discus's are set so the best angle lands where "
-          'elite throwers release. Leigh et al. (2010) found the fall differs '
-          "a lot between discus throwers, so it is best replaced by an "
-          "athlete's own.",
+          "hammer's is set so its best angle lands where elite throwers "
+          "release. The discus's opens at nothing, because flown rolling it "
+          'is already best there; Leigh et al. (2010) found the fall differs '
+          "a lot between discus throwers, so it is best set to an athlete's "
+          'own.',
     ),
     (
       'References',

@@ -698,6 +698,16 @@ like the app rather than a bare Material default.
   either end — where it stops, rather than asking for a seek that goes
   nowhere. The frame steps click too, and repeat while held. Nothing asks
   whether haptics are wanted; the phone's touch-feedback setting does.
+- A measured release is read by the same model the what-if calculator
+  flies: `flyMeasured` is the sheet's arithmetic and hands the calculator
+  the release it flew, so the number under a clip is the number 'What if…'
+  opens on, a test holds them equal, and every event gets a distance. Still
+  air, because a clip does not say what the wind was, from an assumed
+  height, because four taps do not measure one; the calculator is where
+  both are put right. The vacuum formulas in `projectile.dart` are only
+  what the flight is checked against. A discus is tapped by its front and
+  back rims — the ends of its long side in the picture, which is the whole
+  diameter at any tilt — so the same two taps are the scale and the attack.
 - Measuring is said as a step and a sentence: which frame and which of the
   four taps (`RELEASE FRAME · 2 / 4`), one short instruction, a segment per
   tap, and Cancel, Undo tap and Next or Calculate. Undo tap walks the last
@@ -1213,9 +1223,13 @@ like the app rather than a bare Material default.
   distances without dragging it lower; rolling, on the same lift and drag
   and with nothing tuned to a distance, a 25 m/s release is best at 38° and
   70 m — Hubbard and Cheng's own 38.4° and 69.4 m, which a test holds it
-  to. The bank and the spin are typical values, not dials. The distance is
-  the radial one, since the tape runs from the circle and a rolling discus
-  drifts. It says what one
+  to. The bank and the spin are typical values, not dials. Its attack is
+  the one seen side on — the disc's attitude in the vertical plane of the
+  throw, less the release angle — because that is what a camera measures
+  and what a report publishes, and a banked disc looks steeper from the
+  side than the air meets it: `_flySpinning` undoes that through the bank.
+  The distance is the radial one, since the tape runs from the circle and
+  a rolling discus drifts. It says what one
   more m/s, one more degree and ten more
   centimeters of height are each worth. It is an estimate and says so
   first, in a banner above the number — a guide, not a reference — with
@@ -1255,7 +1269,7 @@ like the app rather than a bare Material default.
   it, by the loss the best-angle card holds (`_setAngle`), because no
   athlete keeps their speed going higher and a steeper release at the same
   speed flattered the flight; the angle's dial says so under it. Where the
-  loss is nothing — the hammer, the discus, a loss the coach set to zero —
+  loss is nothing — the discus as it opens, a loss the coach set to zero —
   the speed is held, and the dial says that instead whenever the angle is
   raised against the other throw. The speed's dial carries a link to the
   angle's, and is lit — 'with the angle' — while the angle is in the hand
@@ -1310,9 +1324,10 @@ like the app rather than a bare Material default.
   hammer's is backed out the way the javelin's was — the loss that brings a
   flight best at 44° down to the 37–42° elite throwers release at, since the
   gap is known and the number unpublished. The discus's is backed out the
-  same way, off a flight best at 38–39° onto the 36–37° finals release at;
-  Leigh et al. measured the fall on discus throwers and found it different
-  for each, so the dial says it is the one most worth setting.
+  same way and comes to nothing: flown rolling, with its attack read side
+  on, a final's typical release is already the flight's own best. The dial
+  is still there, opening at nothing, because Leigh et al. measured the
+  fall on discus throwers and found it different for each.
   It reads in the coach's units, flipped by an m / ft switch in its app bar
   that opens on `DistanceField.preferred` and does not write it back. In
   feet the marks are spelled the way a meet writes them, a release height

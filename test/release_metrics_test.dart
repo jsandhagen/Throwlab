@@ -52,6 +52,55 @@ void main() {
       expect(m.releaseAngleDeg, closeTo(45, 1e-6));
     });
 
+    test('discus: the rims are the scale and the attack', () {
+      // Front and back rims 110 px apart = a 2 kg discus's 0.22 m; the
+      // line between them leans 30° up while the disc flies out at 38°.
+      final c = math.cos(30 * math.pi / 180) * 55;
+      final r = math.sin(30 * math.pi / 180) * 55;
+      final back = Offset(200 - c, 200 + r);
+      final front = Offset(200 + c, 200 - r);
+      final climb = math.tan(38 * math.pi / 180);
+      Offset later(Offset p) => p + Offset(100, -100 * climb);
+      final m = computeReleaseMetrics(
+        refA: front,
+        refB: back,
+        pointA: const Offset(200, 200),
+        pointB: later(const Offset(200, 200)),
+        referenceMeters: 0.22,
+        dtSeconds: 0.05,
+        discus: true,
+        gravity: 0,
+      );
+      expect(m.releaseAngleDeg, closeTo(38, 1e-6));
+      expect(m.attackAngleDeg, closeTo(-8, 1e-6));
+      // Which rim went first says nothing.
+      final swapped = computeReleaseMetrics(
+        refA: back,
+        refB: front,
+        pointA: const Offset(200, 200),
+        pointB: later(const Offset(200, 200)),
+        referenceMeters: 0.22,
+        dtSeconds: 0.05,
+        discus: true,
+        gravity: 0,
+      );
+      expect(swapped.attackAngleDeg, closeTo(-8, 1e-6));
+      expect(swapped.speed, closeTo(m.speed, 1e-9));
+    });
+
+    test('a ball has no attack', () {
+      final m = computeReleaseMetrics(
+        refA: tip,
+        refB: tail,
+        pointA: const Offset(100, 200),
+        pointB: const Offset(150, 150),
+        referenceMeters: 0.12,
+        dtSeconds: 0.05,
+        gravity: 0,
+      );
+      expect(m.attackAngleDeg, isNull);
+    });
+
     test('javelin: midpoint speed, flight path, and attack angle', () {
       // Axis horizontal on both frames; midpoint moves (50, -50) px →
       // flying up at 45° with the nose 45° below the flight path.
@@ -208,20 +257,16 @@ TAG:com.android.capture.fps=240.000000
     });
 
     test('no average falls back to the frames counted, then the guess', () {
-      expect(
-          VideoOptimizer.readFrameRates('''
+      expect(VideoOptimizer.readFrameRates('''
 avg_frame_rate=0/0
 r_frame_rate=90000/1
 duration=2.000000
 nb_frames=120
-''')!.playback,
-          60);
-      expect(
-          VideoOptimizer.readFrameRates('''
+''')!.playback, 60);
+      expect(VideoOptimizer.readFrameRates('''
 avg_frame_rate=0/0
 r_frame_rate=25/1
-''')!.playback,
-          25);
+''')!.playback, 25);
     });
 
     test('nothing readable is no answer, not 30', () {

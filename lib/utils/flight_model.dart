@@ -84,7 +84,9 @@ class Release {
   final double height;
 
   /// Implement attitude minus flight-path angle — nose (or leading edge)
-  /// above the path is positive. Only a discus and a javelin have one.
+  /// above the path is positive. Only a discus and a javelin have one. It
+  /// is the angle seen side on, square to the throw: what a camera measures
+  /// and what the biomechanics reports publish.
   final double attackDeg;
 
   /// m/s along the throw: positive at the athlete's back, negative in
@@ -558,17 +560,18 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
 /// per 10° is what lands both the men's and the women's typical release in
 /// the middle of that. Nobody has published the number itself.
 ///
-/// The discus's is backed out the same way. Flown rolling, it is best at
-/// 38–39° with speed held, a little over the 36–37° a final's typical
-/// release sits at, and 0.5 m/s per 10° brings the men's and the women's
-/// there. Leigh et al. (2010) measured the fall on elite discus throwers,
-/// and it was steep for some and shallow for others, so it is the dial most
-/// worth setting to the athlete's own.
+/// The discus's is backed out the same way and comes to nothing: flown
+/// rolling, with its attack read side on the way a report publishes it, a
+/// final's typical release is already the flight's own best (36.7° against
+/// the 36.5° the men release at, 34.6° inside the women's 34–40°). Leigh et
+/// al. (2010) did measure the fall on elite discus throwers, steep for some
+/// and shallow for others, so the screen still offers the dial, opening at
+/// nothing, for a coach who knows their athlete's.
 double typicalSpeedLossPerDeg(ThrowEvent event) => switch (event) {
       ThrowEvent.javelin => 0.1,
       ThrowEvent.shotPut => 1.7 * math.pi / 180,
       ThrowEvent.hammer => 0.08,
-      ThrowEvent.discus => 0.05,
+      ThrowEvent.discus => 0,
     };
 
 /// What each lever is worth from here: meters gained for [speedStep] more
@@ -685,10 +688,12 @@ Map<Lever, double> gapShares(
 }
 
 /// [fly] for a spinning implement: a point mass in three dimensions with
-/// its axis precessing under the pitching moment. The attack angle it is
-/// released at is the true one — between the flight path and the disc —
-/// and the bank is about the flight path, so the one the coach sets is the
-/// one it leaves the hand at. A discus drifts a few meters sideways as it
+/// its axis precessing under the pitching moment. It is banked about the
+/// flight path, and the attack it is handed is the one seen side on, which
+/// on a banked disc is steeper than the angle the air actually meets it at:
+/// the long side of the disc's picture leans by the true angle over the
+/// cosine of the bank. That is undone here, so the number a camera measures
+/// and a report publishes is the one the coach sets. A discus drifts a few meters sideways as it
 /// rolls; the tape runs from the circle, so the distance is the radial one
 /// and the path is drawn along it.
 Flight _flySpinning(Release release, Aero aero, double mass) {
@@ -697,8 +702,8 @@ Flight _flySpinning(Release release, Aero aero, double mass) {
   final precession =
       airDensity * aero.area * aero.length / (2 * aero.spinMomentum);
   final gamma = _rad(release.angleDeg);
-  final attack = _rad(release.attackDeg);
   final bank = _rad(aero.bankDeg);
+  final attack = math.atan(math.tan(_rad(release.attackDeg)) * math.cos(bank));
   final ca = math.cos(attack);
   final sa = math.sin(attack);
   final cg = math.cos(gamma);

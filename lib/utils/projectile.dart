@@ -1,8 +1,7 @@
-/// Vacuum-ballistics helpers for the release-metrics features.
-///
-/// Good first approximations for shot put and hammer; discus and javelin
-/// will need aerodynamic corrections (lift/drag) before predictions are
-/// trustworthy — see ROADMAP.md.
+/// Vacuum ballistics: the closed forms a flight through air is checked
+/// against. Nothing the app shows a coach is worked out here — a measured
+/// release is flown through `flight_model` (`flyMeasured`), the same model
+/// as the what-if calculator, so the two can't disagree.
 library;
 
 import 'dart:math' as math;

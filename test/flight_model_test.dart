@@ -3,10 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:throwlab/models/elite_releases.dart';
+import 'package:throwlab/models/throw_video.dart' show DistanceUnit;
 import 'package:throwlab/models/throw_event.dart';
 import 'package:throwlab/screens/release_calculator_screen.dart';
 import 'package:throwlab/utils/flight_model.dart';
 import 'package:throwlab/utils/projectile.dart';
+import 'package:throwlab/utils/release_metrics.dart';
+import 'package:throwlab/widgets/throw_card.dart' show formatDistance;
 
 ImplementSpec _senior(ThrowEvent e) => e.defaultImplement;
 
@@ -308,24 +311,22 @@ void main() {
       }
     });
 
-    test('a discus thrower\'s best angle is where elite throwers release', () {
-      // Flown rolling, the flight alone is best in the high thirties — not
-      // the twenties a discus held level in one plane was best at — and the
-      // loss backed out of it brings it onto a final's typical release.
+    test('a discus flown rolling is best where elite throwers release', () {
+      // Held level in one plane it was best in the twenties. Rolling, with
+      // the attack read side on, a final's typical release is already the
+      // flight's own best — which is why the discus opens on no speed loss.
+      expect(typicalSpeedLossPerDeg(ThrowEvent.discus), 0);
       for (final field in EliteField.values) {
-        final flight =
-            finalBest(ThrowEvent.discus, field, speedFalls: false).angleDeg;
-        expect(flight, inInclusiveRange(37, 41), reason: field.name);
         final range = eliteRanges[ThrowEvent.discus]![field]!;
-        expect(finalBest(ThrowEvent.discus, field).angleDeg,
+        expect(finalBest(ThrowEvent.discus, field, speedFalls: false).angleDeg,
             inInclusiveRange(range.angleDeg.$1, range.angleDeg.$2),
             reason: field.name);
       }
     });
 
     test('a discus flies the way Hubbard and Cheng\'s does', () {
-      // Their 3-D model's best men's release at 25 m/s is 38.4° and 69.4 m.
-      // Nothing here was tuned to it.
+      // Their 3-D model's best men's release at 25 m/s is 38.4° and 69.4 m,
+      // pitched 7.7° under the path. Nothing here was tuned to it.
       final spec = _senior(ThrowEvent.discus);
       var best = (angle: 0.0, attack: 0.0, distance: 0.0);
       for (var attack = -14.0; attack <= 0; attack += 2) {
@@ -336,6 +337,7 @@ void main() {
         }
       }
       expect(best.angle, inInclusiveRange(35, 41));
+      expect(best.attack, inInclusiveRange(-12, -4));
       expect(best.distance, closeTo(69.4, 2));
     });
 
@@ -454,6 +456,42 @@ void main() {
       await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
       await tester.pumpAndSettle();
     }
+
+    testWidgets('opens on exactly what the video sheet said', (tester) async {
+      // The sheet under a measured clip and the calculator its 'What if…'
+      // opens are one model: the release the sheet flew is the one handed
+      // over, and the number on both is the same number.
+      const metrics = {
+        ThrowEvent.shotPut: ReleaseMetrics(speed: 12.5, releaseAngleDeg: 37),
+        ThrowEvent.discus:
+            ReleaseMetrics(speed: 22, releaseAngleDeg: 36, attackAngleDeg: -9),
+        ThrowEvent.hammer: ReleaseMetrics(speed: 25, releaseAngleDeg: 40),
+        ThrowEvent.javelin:
+            ReleaseMetrics(speed: 26, releaseAngleDeg: 34, attackAngleDeg: 5),
+      };
+      for (final MapEntry(key: event, value: m) in metrics.entries) {
+        final spec = event.defaultImplement;
+        final sheet = flyMeasured(event, spec, m, height: 1.8);
+        await pump(
+            tester,
+            ReleaseCalculatorScreen(
+              key: ValueKey(event),
+              event: event,
+              implementKg: spec.weightKg,
+              measured: sheet.release,
+            ));
+        expect(text(tester, 'whatIfDistance'),
+            formatDistance(sheet.distance, DistanceUnit.meters),
+            reason: event.name);
+        await tester.scrollUntilVisible(
+            find.byKey(const ValueKey('bestAngle')), 300);
+        final best = text(tester, 'bestAngle');
+        if (best.startsWith('Best angle')) {
+          expect(best, contains('${sheet.bestAngleDeg.toStringAsFixed(1)}°'),
+              reason: event.name);
+        }
+      }
+    });
 
     testWidgets('opens on a measured release and can go back to it',
         (tester) async {
@@ -728,7 +766,9 @@ void main() {
       await tester.pump();
       await tester.scrollUntilVisible(
           find.text('Speed lost per 10° steeper'), 300);
+      // The discus's opens at nothing, and says why.
       expect(find.textContaining('elite discus throwers'), findsOneWidget);
+      expect(find.text('0.0 m/s'), findsOneWidget);
     });
 
     testWidgets('an angle takes the speed that goes with it', (tester) async {
@@ -750,13 +790,20 @@ void main() {
       expect(find.textContaining('Speed moves with it: −1.0 m/s per 10°'),
           findsOneWidget);
 
-      // The discus's speed rides with its angle too, by its own estimate.
+      // The discus opens holding its speed — its flight is already best
+      // where finals release — so its angle moves alone.
       await tester.scrollUntilVisible(find.text('Discus'), -2000);
       await tester.tap(find.text('Discus'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
+      await tester.pump();
       await reach(tester, raise);
-      expect(find.textContaining('Speed moves with it: −0.5 m/s per 10°'),
-          findsOneWidget);
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(raise);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('+1.0°'), findsOneWidget);
+      expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
     });
 
     testWidgets('while the angle is in the hand the speed rides with it',
