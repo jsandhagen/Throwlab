@@ -64,7 +64,7 @@ void main() {
     });
 
     test('an elite javelin release lands where finals are won', () {
-      final range = eliteRanges[ThrowEvent.javelin]!;
+      final range = eliteRanges[ThrowEvent.javelin]![EliteField.men]!;
       final r = Release(
           speed: range.typicalSpeed,
           angleDeg: range.typicalAngle,
@@ -86,12 +86,12 @@ void main() {
 
     test('no neighboring angle throws further', () {
       for (final event in ThrowEvent.values) {
-        final range = eliteRanges[event]!;
+        final range = eliteRanges[event]![EliteField.men]!;
         final r = Release(
             speed: range.typicalSpeed,
             angleDeg: range.typicalAngle,
             height: range.typicalHeight,
-            attackDeg: event == ThrowEvent.discus ? -8 : 0);
+            attackDeg: range.attackDeg);
         final spec = _senior(event);
         final best = bestAngle(event, spec, r);
         for (final d in [-1.0, 1.0]) {
@@ -109,7 +109,7 @@ void main() {
 
   test('a meter a second is worth far more than a degree', () {
     for (final event in ThrowEvent.values) {
-      final range = eliteRanges[event]!;
+      final range = eliteRanges[event]![EliteField.men]!;
       final r = Release(
           speed: range.typicalSpeed,
           angleDeg: range.typicalAngle,
@@ -124,7 +124,7 @@ void main() {
   group('elite releases', () {
     test('every measured speed sits inside its event\'s typical range', () {
       for (final r in eliteReleases) {
-        final range = eliteRanges[r.event]!;
+        final range = eliteRanges[r.event]![EliteField.men]!;
         expect(r.speed, inInclusiveRange(range.speed.$1, range.speed.$2),
             reason: r.athlete);
         expect(r.event.specFor(r.weightKg).weightKg, r.weightKg,
@@ -146,6 +146,31 @@ void main() {
     });
   });
 
+  test('every event has a men\'s and a women\'s final on its own implement',
+      () {
+    for (final event in ThrowEvent.values) {
+      for (final field in EliteField.values) {
+        final range = eliteRanges[event]![field]!;
+        expect(range.field, field);
+        expect(event.specFor(range.weightKg).weightKg, range.weightKg,
+            reason: '${event.label} ${field.name}');
+        // What the model makes of the typical release is somewhere near
+        // what those finals throw — within the discus's known shortfall.
+        final d = flyThrow(
+                event,
+                event.specFor(range.weightKg),
+                Release(
+                    speed: range.typicalSpeed,
+                    angleDeg: range.typicalAngle,
+                    height: range.typicalHeight,
+                    attackDeg: range.attackDeg))
+            .distance;
+        expect(d, inInclusiveRange(range.marks.$1 - 8, range.marks.$2 + 3),
+            reason: '${event.label} ${field.name}');
+      }
+    }
+  });
+
   group('ReleaseCalculatorScreen', () {
     Future<void> pump(WidgetTester tester, Widget screen) async {
       tester.view.physicalSize = const Size(1080, 2280);
@@ -154,8 +179,8 @@ void main() {
       await tester.pumpWidget(MaterialApp(home: screen));
     }
 
-    String distance(WidgetTester tester) =>
-        tester.widget<Text>(find.byKey(const ValueKey('whatIfDistance'))).data!;
+    String text(WidgetTester tester, String key) =>
+        tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
     testWidgets('opens on a measured release and can go back to it',
         (tester) async {
@@ -167,18 +192,70 @@ void main() {
             measured: Release(speed: 12, angleDeg: 38, height: 2.0),
           ));
       expect(find.text('YOUR MEASURED THROW'), findsOneWidget);
+      final measured = text(tester, 'whatIfDistance');
+      // Far enough that the whole speed slider is on screen, not only its
+      // label.
+      await tester.scrollUntilVisible(find.text('Angle'), 200);
       expect(find.text('12.0 m/s'), findsOneWidget);
-      final measured = distance(tester);
-
-      await tester.scrollUntilVisible(find.text('Try'), 300);
-      await tester.tap(find.text('Try'));
+      await tester.drag(find.byType(Slider).first, const Offset(60, 0));
       await tester.pump();
-      await tester.scrollUntilVisible(find.text("TOM WALSH'S RELEASE"), -300);
-      expect(distance(tester), isNot(measured));
-
+      await tester.scrollUntilVisible(
+          find.text('Back to the measured throw'), -200);
+      expect(text(tester, 'whatIfDistance'), isNot(measured));
       await tester.tap(find.text('Back to the measured throw'));
       await tester.pump();
-      expect(distance(tester), measured);
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('whatIfDistance')), -300);
+      expect(text(tester, 'whatIfDistance'), measured);
+    });
+
+    testWidgets('an elite final lays a second throw over the first',
+        (tester) async {
+      await pump(
+          tester,
+          const ReleaseCalculatorScreen(
+            event: ThrowEvent.shotPut,
+            implementKg: 5.44,
+            measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
+          ));
+      await tester.tap(find.byKey(const ValueKey('elite-women')));
+      await tester.pump();
+
+      expect(find.text('THROW 2 AGAINST THROW 1'), findsOneWidget);
+      expect(find.textContaining('Elite women · 4 kg'), findsWidgets);
+      expect(text(tester, 'whatIfGap'), startsWith('+'));
+      // Throw 2 is the one on the sliders, with throw 1 ticked on each
+      // track and the difference beside the value.
+      await tester.scrollUntilVisible(find.text('+2.1 m/s'), 200);
+      expect(find.byKey(const ValueKey('other-Speed')), findsOneWidget);
+      expect(find.text('+2.1 m/s'), findsOneWidget);
+
+      // Tapping it again puts it away.
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('elite-women')), -200);
+      await tester.tap(find.byKey(const ValueKey('elite-women')));
+      await tester.pump();
+      await tester.scrollUntilVisible(find.text('YOUR MEASURED THROW'), -300);
+      expect(find.text('THROW 2 AGAINST THROW 1'), findsNothing);
+      expect(find.text('YOUR MEASURED THROW'), findsOneWidget);
+    });
+
+    testWidgets('a second throw starts as a copy and moves on its own',
+        (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      await tester.scrollUntilVisible(find.text('Second throw'), 200);
+      await tester.tap(find.text('Second throw'));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('whatIfGap')), -300);
+      expect(text(tester, 'whatIfGap'), '+0.00 m');
+
+      await tester.scrollUntilVisible(find.text('Angle'), 200);
+      await tester.drag(find.byType(Slider).first, const Offset(-80, 0));
+      await tester.pump();
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('whatIfGap')), -300);
+      expect(text(tester, 'whatIfGap'), startsWith('−'));
     });
 
     testWidgets('switching event shows its own references', (tester) async {

@@ -181,9 +181,10 @@ class Flight {
     required this.path,
   });
 
-  /// Measured along the ground from the release point, meters. What the
-  /// tape reads, less the few centimeters between the hand and the stop
-  /// board or the circle's edge.
+  /// Measured along the ground from the release point, meters. The tape is
+  /// run from the inside of the stop board, and the hand is usually a few
+  /// tenths out past it at release, so a mark reads a little further than
+  /// this.
   final double distance;
 
   /// Seconds in the air.

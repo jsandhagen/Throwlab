@@ -1187,11 +1187,24 @@ like the app rather than a bare Material default.
   centimeters of height are each worth. It is an estimate and says so on
   the screen, above all for the discus, which a point-mass model cannot get
   both to elite distances and to a best angle in the thirties: the angle
-  was kept and the distance errs short. `EliteRelease` holds releases
-  measured at finals, with the report named on each; only what was
-  published goes in, so a row that has only a speed leaves the angle and
-  height sliders where they were rather than filling them with a guess
-  under somebody's name.
+  was kept and the distance errs short.
+  It compares, because the question is always this throw against that one:
+  throw 1 is what it opened on, throw 2 is laid over it, and the sliders
+  move whichever is picked — the other ticked on each track and the
+  difference beside each value, the gap between the two landings lit on
+  the ground and set large over the field. Each throw carries its own
+  implement, since a 12 lb put against a men's final is the comparison a
+  high school coach wants. `FlightField` draws them side-on across a field
+  to one scale both ways — the circle's stop board or the javelin's foul
+  line, the grass, a marker every round number of meters or feet — with each
+  distance beside its divot on the side the flight is not coming in from.
+  Every event has an elite men's and women's final one tap away
+  (`eliteRanges`, typical releases marked approximate), and a tap lays it
+  in as throw 2 — any reference goes in second, over the throw a coach
+  brought. `EliteRelease` holds releases measured at finals, with the report
+  named on each; only what was published goes in, so a row that has only a
+  speed takes its angle and height from throw 1 rather than filling them
+  with a guess under somebody's name.
 - A modal bottom sheet is only safe at the top. `useSafeArea` insets the
   top and leaves the bottom to the sheet, which is right — a sheet runs to
   the bottom edge — but it means anything at the foot of one has to add
