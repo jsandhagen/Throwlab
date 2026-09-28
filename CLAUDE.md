@@ -1184,10 +1184,19 @@ like the app rather than a bare Material default.
   library's app bar and 'What if…' on the release-metrics sheet) flies a
   release through `flight_model` — drag on everything, lift on a discus and
   a javelin — and says what one more m/s, one more degree and ten more
-  centimeters of height are each worth. It is an estimate and says so on
-  the screen, above all for the discus, which a point-mass model cannot get
-  both to elite distances and to a best angle in the thirties: the angle
-  was kept and the distance errs short.
+  centimeters of height are each worth. It is an estimate and says so
+  first, in a banner above the number — a guide, not a reference — with
+  how the model is built and where it falls short (above all the discus,
+  which a point-mass model cannot get both to elite distances and to a
+  best angle in the thirties: the angle was kept and the distance errs
+  short) at the foot, over the sources. Every paper the model leans on is
+  cited there with what it was used for (`whatIfSources`), and every
+  report a measured release came out of; a number with nothing to check it
+  against does not go on the page. The coefficients are the papers' curve
+  shapes tuned by hand, and the page says so rather than claiming them.
+  The order is the order of the questions: what nudging a number does —
+  the result, the sliders, what each is worth — before any elite final,
+  which is the rarer question and waits underneath.
   It compares, because the question is always this throw against that one:
   throw 1 is what it opened on, throw 2 is laid over it, and the sliders
   move whichever is picked — the other ticked on each track and the

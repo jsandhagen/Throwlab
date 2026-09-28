@@ -42,13 +42,30 @@ void main() {
     Future<void> shoot(String name) => expectLater(
         find.byType(MaterialApp), matchesGoldenFile('$_out/$name.png'));
 
+    // The elite cards sit under the sliders: tap one where it is, then go
+    // back to the top, which is what a coach looks at after tapping it.
     Future<void> tap(Key key) async {
+      await tester.scrollUntilVisible(find.byKey(key), 300);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(key));
       await tester.pumpAndSettle();
+      // Back to the top. A jump lands on an estimate of the rows above that
+      // were never built, so it is repeated until the list says it is
+      // really there.
+      final position = tester
+          .state<ScrollableState>(find.descendant(
+              of: find.byType(ListView), matching: find.byType(Scrollable)))
+          .position;
+      for (var i = 0; i < 5 && position.pixels != 0; i++) {
+        position.jumpTo(0);
+        await tester.pumpAndSettle();
+      }
     }
 
     await open(const ReleaseCalculatorScreen());
     await shoot('what_if_shot');
+    await open(const ReleaseCalculatorScreen(), height: 7200);
+    await shoot('what_if_shot_full');
 
     const measured = ReleaseCalculatorScreen(
       event: ThrowEvent.shotPut,

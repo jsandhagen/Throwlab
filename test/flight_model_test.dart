@@ -209,6 +209,18 @@ void main() {
       expect(text(tester, 'whatIfDistance'), measured);
     });
 
+    testWidgets('says it is a guide before anything else', (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      final banner =
+          tester.getRect(find.byKey(const ValueKey('whatIfDisclaimer')));
+      final number =
+          tester.getRect(find.byKey(const ValueKey('whatIfDistance')));
+      expect(banner.bottom, lessThan(number.top));
+      expect(find.textContaining('guide, not a reference'), findsOneWidget);
+      await tester.scrollUntilVisible(find.text('SOURCES'), 600);
+      await tester.scrollUntilVisible(find.textContaining('Linthorne'), 200);
+    });
+
     testWidgets('an elite final lays a second throw over the first',
         (tester) async {
       await pump(
@@ -218,26 +230,27 @@ void main() {
             implementKg: 5.44,
             measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
           ));
-      await tester.tap(find.byKey(const ValueKey('elite-women')));
+      final women = find.byKey(const ValueKey('elite-women'));
+      await tester.scrollUntilVisible(women, 300);
+      await tester.tap(women);
       await tester.pump();
 
-      expect(find.text('THROW 2 AGAINST THROW 1'), findsOneWidget);
-      expect(find.textContaining('Elite women · 4 kg'), findsWidgets);
-      expect(text(tester, 'whatIfGap'), startsWith('+'));
       // Throw 2 is the one on the sliders, with throw 1 ticked on each
       // track and the difference beside the value.
-      await tester.scrollUntilVisible(find.text('+2.1 m/s'), 200);
+      await tester.scrollUntilVisible(find.text('+2.1 m/s'), -300);
       expect(find.byKey(const ValueKey('other-Speed')), findsOneWidget);
-      expect(find.text('+2.1 m/s'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+          find.text('THROW 2 AGAINST THROW 1'), -300);
+      expect(find.textContaining('Elite women · 4 kg'), findsWidgets);
+      expect(text(tester, 'whatIfGap'), startsWith('+'));
 
       // Tapping it again puts it away.
-      await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('elite-women')), -200);
-      await tester.tap(find.byKey(const ValueKey('elite-women')));
+      await tester.scrollUntilVisible(women, 300);
+      await tester.tap(women);
       await tester.pump();
       await tester.scrollUntilVisible(find.text('YOUR MEASURED THROW'), -300);
       expect(find.text('THROW 2 AGAINST THROW 1'), findsNothing);
-      expect(find.text('YOUR MEASURED THROW'), findsOneWidget);
     });
 
     testWidgets('a second throw starts as a copy and moves on its own',

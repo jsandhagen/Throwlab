@@ -221,3 +221,39 @@ List<EliteRelease> eliteReleasesFor(ThrowEvent event, double weightKg) => [
       for (final r in eliteReleases)
         if (r.event == event && r.weightKg == weightKg) r
     ];
+
+/// The papers the flight model and the typical ranges lean on, and what
+/// each was used for. The measured releases cite their own reports
+/// ([EliteRelease.source]); this is the rest.
+const whatIfSources = <({String citation, String usedFor})>[
+  (
+    citation: 'Linthorne, N. P. (2001). Optimum release angle in the shot '
+        'put. Journal of Sports Sciences, 19(5), 359–372.',
+    usedFor: "Why an athlete's own best angle sits below the one with "
+        'everything else held: release speed falls as the angle rises.',
+  ),
+  (
+    citation: 'Frohlich, C. (1981). Aerodynamic effects on discus flight. '
+        'American Journal of Physics, 49(12), 1125–1132.',
+    usedFor: 'The shape of the discus lift and drag curves, and why a '
+        'headwind helps a discus.',
+  ),
+  (
+    citation: 'Hubbard, M., & Cheng, K. B. (2007). Optimal discus '
+        'trajectories. Journal of Biomechanics, 40(16), 3650–3659.',
+    usedFor: 'Where the best discus release and attack angles fall.',
+  ),
+  (
+    citation: 'Hubbard, M., & Rust, H. J. (1984). Simulation of javelin '
+        'flight using experimental aerodynamic data. Journal of '
+        'Biomechanics, 17(10), 769–776.',
+    usedFor: 'The shape of the javelin lift and drag curves.',
+  ),
+  (
+    citation: 'Bartlett, R. M., & Best, R. J. (1988). The biomechanics of '
+        'javelin throwing: a review. Journal of Sports Sciences, 6(1), '
+        '1–38.',
+    usedFor: 'Javelin release ranges, and the cost of a nose held above '
+        'the flight path.',
+  ),
+];

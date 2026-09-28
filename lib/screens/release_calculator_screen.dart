@@ -230,6 +230,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: _EventPicker(event: _event, onEvent: _pickEvent),
             ),
+            const _Disclaimer(),
             _ResultCard(
               event: _event,
               unit: unit,
@@ -254,14 +255,6 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                   ),
                 ),
               ),
-            const _Heading('Compare with'),
-            _EliteCards(
-              event: _event,
-              unit: unit,
-              selected: _two?.label,
-              throwFor: (field) => _elite(_event, field),
-              onTap: _compareWith,
-            ),
             _Heading('Release',
                 action: _comparing
                     ? IconButton(
@@ -407,6 +400,14 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 ? 'What each is worth to throw ${_editing + 1}'
                 : 'What each is worth'),
             _Worth(worth: worth, unit: unit),
+            const _Heading('Compare with an elite final'),
+            _EliteCards(
+              event: _event,
+              unit: unit,
+              selected: _two?.label,
+              throwFor: (field) => _elite(_event, field),
+              onTap: _compareWith,
+            ),
             _Heading('Measured at finals', trailing: _event.label),
             _References(
               event: _event,
@@ -427,7 +428,10 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 ));
               },
             ),
+            const _Heading('About the model'),
             const _Caveat(),
+            const _Heading('Sources'),
+            const _Sources(),
           ],
         ),
       ),
@@ -582,11 +586,6 @@ class _ResultCard extends StatelessWidget {
               ],
               ghost: ghost,
             ),
-            const SizedBox(height: 8),
-            Text(
-                'Estimates from a flight model — see the note at the foot '
-                'of the page.',
-                style: muted),
           ],
         ),
       ),
@@ -1059,31 +1058,107 @@ class _Caveat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Text(
+        'The implement is flown as a point through still, sea-level air. '
+        'Drag acts on every implement and lift on the discus and the '
+        'javelin, with coefficients shaped like the wind-tunnel curves in '
+        'the papers below and then tuned so typical elite releases land '
+        'near where finals are won — not values measured for this app. The '
+        'discus comes out several meters short at elite speeds, and the '
+        "hammer's wire is not counted. Distance runs from the hand, so the "
+        'few tenths a thrower reaches past the stop board are not in it. A '
+        'measured release is only as good as the video: side-on, square to '
+        'the throw. The typical elite finals are approximate ranges drawn '
+        "from the literature, the women's from the thinner half of it.",
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}
+
+/// Said once, at the top, where nobody can scroll past it on the way to a
+/// number.
+class _Disclaimer extends StatelessWidget {
+  const _Disclaimer();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      key: const ValueKey('whatIfDisclaimer'),
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.info_outline,
-              size: 18, color: theme.colorScheme.onSurfaceVariant),
+              size: 20, color: scheme.onSecondaryContainer),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'These are estimates, not predictions of a mark. The model '
-              'flies the implement through still, sea-level air with lift '
-              'and drag taken from wind-tunnel studies, and treats a discus '
-              'and a javelin more simply than they really fly — the discus '
-              'comes out several meters short of what elite releases were '
-              'measured to throw. Distance is from the hand, so the few '
-              'tenths a thrower reaches past the stop board are not in it. '
-              'Trust how much a change is worth more than the distance '
-              'itself. A measured release is only as good as the video: '
-              'side-on, square to the throw.',
-              style: muted,
+              'Numbers are based on ideal, simplified flight mechanics and '
+              'should be used as a guide, not a reference.',
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: scheme.onSecondaryContainer),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the model and the reference numbers are drawn from, and what each
+/// was used for — so a coach can go and check any number on the page.
+class _Sources extends StatelessWidget {
+  const _Sources();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final sources = [
+      ...whatIfSources,
+      // Each measured release names the report it came out of.
+      for (final report in {for (final r in eliteReleases) r.source})
+        (
+          citation: report,
+          usedFor: 'Release speeds under Measured at finals, and the angle '
+              'and height where they were published.',
+        ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final (i, source) in sources.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(width: 22, child: Text('${i + 1}.', style: muted)),
+                  Expanded(
+                    child: Text.rich(TextSpan(children: [
+                      TextSpan(
+                          text: source.citation,
+                          style: theme.textTheme.bodySmall),
+                      TextSpan(text: '\n${source.usedFor}', style: muted),
+                    ])),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
