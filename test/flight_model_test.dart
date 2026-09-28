@@ -312,14 +312,18 @@ void main() {
     });
 
     test('a discus flown rolling is best where elite throwers release', () {
-      // Held level in one plane it was best in the twenties. Rolling, with
-      // the attack read side on, a final's typical release is already the
-      // flight's own best — which is why the discus opens on no speed loss.
-      expect(typicalSpeedLossPerDeg(ThrowEvent.discus), 0);
+      // Held level in one plane it was best in the twenties. Rolling, the
+      // flight's own best is where finals release, and the speed a thrower
+      // gives up going higher keeps it there, lower in the range.
+      expect(typicalSpeedLossPerDeg(ThrowEvent.discus), greaterThan(0));
       for (final field in EliteField.values) {
         final range = eliteRanges[ThrowEvent.discus]![field]!;
-        expect(finalBest(ThrowEvent.discus, field, speedFalls: false).angleDeg,
-            inInclusiveRange(range.angleDeg.$1, range.angleDeg.$2),
+        final flight =
+            finalBest(ThrowEvent.discus, field, speedFalls: false).angleDeg;
+        final thrower = finalBest(ThrowEvent.discus, field).angleDeg;
+        expect(flight, inInclusiveRange(range.angleDeg.$1, range.angleDeg.$2),
+            reason: field.name);
+        expect(thrower, inInclusiveRange(range.angleDeg.$1, range.angleDeg.$2),
             reason: field.name);
       }
     });
@@ -766,9 +770,9 @@ void main() {
       await tester.pump();
       await tester.scrollUntilVisible(
           find.text('Speed lost per 10° steeper'), 300);
-      // The discus's opens at nothing, and says why.
-      expect(find.textContaining('elite discus throwers'), findsOneWidget);
-      expect(find.text('0.0 m/s'), findsOneWidget);
+      // The discus's says where its estimate comes from.
+      expect(find.textContaining('Leigh et al. (2010) measured discus'),
+          findsOneWidget);
     });
 
     testWidgets('an angle takes the speed that goes with it', (tester) async {
@@ -790,20 +794,13 @@ void main() {
       expect(find.textContaining('Speed moves with it: −1.0 m/s per 10°'),
           findsOneWidget);
 
-      // The discus opens holding its speed — its flight is already best
-      // where finals release — so its angle moves alone.
+      // The discus's speed rides with its angle too, by its own estimate.
       await tester.scrollUntilVisible(find.text('Discus'), -2000);
       await tester.tap(find.text('Discus'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
-      await tester.pump();
       await reach(tester, raise);
-      for (var i = 0; i < 2; i++) {
-        await tester.tap(raise);
-        await tester.pumpAndSettle();
-      }
-      expect(find.text('+1.0°'), findsOneWidget);
-      expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
+      expect(find.textContaining('Speed moves with it: −0.5 m/s per 10°'),
+          findsOneWidget);
     });
 
     testWidgets('while the angle is in the hand the speed rides with it',

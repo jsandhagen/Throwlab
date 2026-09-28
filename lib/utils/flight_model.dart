@@ -560,18 +560,22 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
 /// per 10° is what lands both the men's and the women's typical release in
 /// the middle of that. Nobody has published the number itself.
 ///
-/// The discus's is backed out the same way and comes to nothing: flown
-/// rolling, with its attack read side on the way a report publishes it, a
-/// final's typical release is already the flight's own best (36.7° against
-/// the 36.5° the men release at, 34.6° inside the women's 34–40°). Leigh et
-/// al. (2010) did measure the fall on elite discus throwers, steep for some
-/// and shallow for others, so the screen still offers the dial, opening at
-/// nothing, for a coach who knows their athlete's.
+/// The discus's cannot be backed out: flown rolling, with its attack read
+/// side on, a final's typical release is already the flight's own best, so
+/// that sum comes to nothing. But the fall is there — Leigh et al. (2010)
+/// measured it on every elite discus thrower they filmed, linear and
+/// steeper for some than others — and a model that leaves it out tells an
+/// athlete to go higher than they should. So it is carried across from the
+/// one event where it was published as a number: Linthorne's putters lost
+/// about a quarter of a percent of their release speed per degree, and the
+/// discus is thrown from a circle by turning too. At a discus's 24.5 m/s
+/// that share is 0.5 m/s per 10°, which puts the men's and the women's
+/// best angles at 34–35°, inside where finals are thrown.
 double typicalSpeedLossPerDeg(ThrowEvent event) => switch (event) {
       ThrowEvent.javelin => 0.1,
       ThrowEvent.shotPut => 1.7 * math.pi / 180,
       ThrowEvent.hammer => 0.08,
-      ThrowEvent.discus => 0,
+      ThrowEvent.discus => 0.05,
     };
 
 /// What each lever is worth from here: meters gained for [speedStep] more

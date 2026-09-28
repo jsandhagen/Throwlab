@@ -284,7 +284,8 @@ const whatIfSources = <({String citation, String usedFor})>[
         'put. Journal of Sports Sciences, 19(5), 359–372.',
     usedFor: 'The same fall in release speed measured on shot putters. The '
         "shot's speed lost per degree is estimated from the 1.7 (m/s)/rad "
-        'reported for his college putters.',
+        "reported for his college putters, and the discus's from the same "
+        'share of release speed, at a discus\'s speed.',
   ),
   (
     citation: 'Castaldi, G. M., Borzuola, R., Camomilla, V., Bergamini, E., '

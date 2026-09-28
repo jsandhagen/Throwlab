@@ -1269,8 +1269,7 @@ like the app rather than a bare Material default.
   it, by the loss the best-angle card holds (`_setAngle`), because no
   athlete keeps their speed going higher and a steeper release at the same
   speed flattered the flight; the angle's dial says so under it. Where the
-  loss is nothing — the discus as it opens, a loss the coach set to zero —
-  the speed is held, and the dial says that instead whenever the angle is
+  loss is nothing — a loss the coach set to zero — the speed is held, and the dial says that instead whenever the angle is
   raised against the other throw. The speed's dial carries a link to the
   angle's, and is lit — 'with the angle' — while the angle is in the hand
   and for a moment after it is stepped: the step it takes is a few percent
@@ -1323,11 +1322,14 @@ like the app rather than a bare Material default.
   opens on an estimate (`typicalSpeedLossPerDeg`) labeled one. The
   hammer's is backed out the way the javelin's was — the loss that brings a
   flight best at 44° down to the 37–42° elite throwers release at, since the
-  gap is known and the number unpublished. The discus's is backed out the
-  same way and comes to nothing: flown rolling, with its attack read side
-  on, a final's typical release is already the flight's own best. The dial
-  is still there, opening at nothing, because Leigh et al. measured the
-  fall on discus throwers and found it different for each.
+  gap is known and the number unpublished. The discus's cannot be backed
+  out — flown rolling, with its attack read side on, a final's typical
+  release is already the flight's own best, so the sum comes to nothing —
+  but Leigh et al. measured the fall on every discus thrower they filmed,
+  and leaving it out tells an athlete to go higher than they should. So it
+  is carried across from the putters: the same share of release speed per
+  degree, at a discus's speed, 0.5 m/s per 10°, which lands the thrower's
+  best angle at 34–35°, inside the finals' range.
   It reads in the coach's units, flipped by an m / ft switch in its app bar
   that opens on `DistanceField.preferred` and does not write it back. In
   feet the marks are spelled the way a meet writes them, a release height

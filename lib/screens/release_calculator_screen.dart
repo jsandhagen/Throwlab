@@ -1073,11 +1073,11 @@ String _speedLossBasis(ThrowEvent event) => switch (event) {
             'javelin throwers releasing slower as they released higher. '
             "Set it to your athlete's own if you have it.",
       ThrowEvent.discus =>
-        'Opens at nothing: the flight alone is already best where elite '
-            'discus throwers release. Leigh et al. (2010) did measure discus '
-            'throwers releasing slower as they released higher, by very '
-            "different amounts from one to the next — so set your athlete's "
-            'own if you have it.',
+        'Estimated: Leigh et al. (2010) measured discus throwers releasing '
+            'slower as they released higher, by different amounts for each, '
+            'and published no one figure — so this is the share of speed '
+            "Linthorne's shot putters lost, at a discus's speed. Set it to "
+            "your athlete's own if you have it.",
       ThrowEvent.hammer =>
         'Estimated: set so the best angle lands where elite hammer throwers '
             'release, which research puts below the flight\'s best because '
@@ -1583,13 +1583,6 @@ class _BestAngle extends StatelessWidget {
       note = 'Speed falls as the angle rises, which is most of why elite '
           'throwers release under the flight\'s best. With speed held, the flight alone is best '
           'at ${held!.angleDeg.toStringAsFixed(1)}°.'
-          '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
-    } else if (typicalSpeedLossPerDeg(event) == 0) {
-      // The discus at its estimate, which is nothing.
-      note = 'Speed is held: flown this way the discus is already best '
-          'where elite throwers release, so no loss is assumed. A real '
-          'athlete may still release slower going higher — set it below '
-          'if you know by how much.'
           '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
     } else {
       // The coach has set the loss to nothing.
@@ -2374,10 +2367,10 @@ class _Caveat extends StatelessWidget {
           '(1977) on javelin throwers, Linthorne (2001) on shot putters — '
           'scaled to each event rather than one published number; the '
           "hammer's is set so its best angle lands where elite throwers "
-          "release. The discus's opens at nothing, because flown rolling it "
-          'is already best there; Leigh et al. (2010) found the fall differs '
-          "a lot between discus throwers, so it is best set to an athlete's "
-          'own.',
+          "release. The discus's is the share of speed the putters lost, at "
+          'a discus\'s speed: Leigh et al. (2010) measured the fall on '
+          'discus throwers but it differs a lot between them, so it is best '
+          "set to an athlete's own.",
     ),
     (
       'References',
