@@ -977,23 +977,22 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
           list,
           // The result, kept in sight while the dials that move it are
           // being turned: once the card has scrolled off, a small copy of
-          // it — the number and the flight — hangs at the top of the page,
-          // so a slider halfway down it is never turned blind.
+          // it — the number and the flight — is pinned to the header, so a
+          // slider halfway down the page is never turned blind. It unfolds
+          // out of the header over the top of the list rather than taking
+          // room from it: a list that gave up the room would jump by the
+          // band's height under the thumb scrolling it, every time the
+          // band came or went.
           Positioned(
             left: 0,
             right: 0,
             top: 0,
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 180),
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween(
-                    begin: const Offset(0, -0.25),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
+              transitionBuilder: (child, animation) => SizeTransition(
+                sizeFactor: animation,
+                axisAlignment: -1,
+                child: FadeTransition(opacity: animation, child: child),
               ),
               child: !_floating
                   ? const SizedBox.shrink()
@@ -2120,7 +2119,9 @@ class _FloatingResult extends StatelessWidget {
         theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
     final number = theme.textTheme.titleLarge
         ?.copyWith(fontWeight: FontWeight.w700, height: 1.1);
-    final surface = solidCardOverSector(scheme);
+    // The header's own surface: pinned, it is the header carried on down,
+    // not a card floating over the list.
+    final surface = scheme.surface;
 
     final Widget headline;
     if (two == null) {
@@ -2163,86 +2164,70 @@ class _FloatingResult extends StatelessWidget {
     }
     final rows = shares == null ? null : _shareRows(shares!, gap, units);
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-      child: DecoratedBox(
-        // A soft shadow and a hairline: lifted off the page it floats over,
-        // without a dark ring round it.
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Material(
-          color: surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side:
-                BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    // Full width, flush under the event and implement, on the same opaque
+    // surface, with a hairline where the list starts: nothing scrolls past
+    // behind it, or round it, the way it did past a card with a margin and
+    // a shadow.
+    return Material(
+      color: surface,
+      shape: Border(
+          bottom:
+              BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6))),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 10, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(child: headline),
-                      Tooltip(
-                        message: 'Back to the result',
-                        child: Icon(Icons.keyboard_arrow_up,
-                            color: scheme.onSurfaceVariant),
-                      ),
-                    ],
+                  Expanded(child: headline),
+                  Tooltip(
+                    message: 'Back to the result',
+                    child: Icon(Icons.keyboard_arrow_up,
+                        color: scheme.onSurfaceVariant),
                   ),
-                  const SizedBox(height: 4),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: FlightField(
-                      event: event,
-                      flights: [
-                        FieldFlight(one.flight, one.color),
-                        if (two != null) FieldFlight(two!.flight, two!.color),
-                      ],
-                      unit: unit,
-                      backdrop: surface,
-                      maxHeight: 116,
-                    ),
-                  ),
-                  if (rows != null && rows.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, right: 6),
-                      child: Wrap(
-                        spacing: 12,
-                        runSpacing: 2,
-                        children: [
-                          for (final r in rows)
-                            Text.rich(
-                              TextSpan(children: [
-                                TextSpan(text: '${_leverLabel(r.lever)} '),
-                                TextSpan(
-                                  text: r.text,
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: _shareColor(r.sign, scheme)),
-                                ),
-                              ]),
-                              style: muted,
-                            ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
-            ),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: FlightField(
+                  event: event,
+                  flights: [
+                    FieldFlight(one.flight, one.color),
+                    if (two != null) FieldFlight(two!.flight, two!.color),
+                  ],
+                  unit: unit,
+                  backdrop: surface,
+                  maxHeight: 116,
+                ),
+              ),
+              if (rows != null && rows.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 6),
+                  child: Wrap(
+                    spacing: 12,
+                    runSpacing: 2,
+                    children: [
+                      for (final r in rows)
+                        Text.rich(
+                          TextSpan(children: [
+                            TextSpan(text: '${_leverLabel(r.lever)} '),
+                            TextSpan(
+                              text: r.text,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: _shareColor(r.sign, scheme)),
+                            ),
+                          ]),
+                          style: muted,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
           ),
         ),
       ),

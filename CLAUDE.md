@@ -1299,12 +1299,17 @@ like the app rather than a bare Material default.
   rather than a section of its own further down. And the result follows
   the dials down the page: once the card's flight has scrolled away, a
   small copy of it (`_FloatingResult`) — the number, both flights and the
-  breakdown in a line — hangs at the top, and a tap goes back up to the
-  card. Keyed to the flight rather than the card, since the breakdown under
-  it kept the card in sight long after there was anything in it to watch.
-  It floats over the list rather than taking room from it, so a test that
-  scrolls something to the top edge before tapping it has to bring it to
-  the middle instead.
+  breakdown in a line — is pinned to the header, and a tap goes back up to
+  the card. Keyed to the flight rather than the card, since the breakdown
+  under it kept the card in sight long after there was anything in it to
+  watch. Pinned, not floated: full width, on the header's own opaque
+  surface, flush under the implement and ruled off from the list with a
+  hairline — as a card with a margin and a shadow it had the list scrolling
+  past behind it and round its edges. It unfolds out of the header over the
+  top of the list rather than taking room from it, because a list that gave
+  up the room would jump by the band's height under the scrolling thumb
+  every time it came or went; so a test that scrolls something to the top
+  edge before tapping it has to bring it to the middle instead.
   The best angle is its own card with 'Try it' on it, which goes in as the
   what-if over the throw it was worked out for, and the speed-loss dial
   lives on that card rather than among the release's dials, because it
