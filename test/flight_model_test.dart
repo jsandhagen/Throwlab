@@ -67,9 +67,8 @@ void main() {
       const r = Release(speed: 29, angleDeg: 35, height: 1.8);
       final spec = _senior(ThrowEvent.javelin);
       final still = flyThrow(ThrowEvent.javelin, spec, r).distance;
-      final up =
-          flyThrow(ThrowEvent.javelin, spec, r.copyWith(pitchRate: 20))
-              .distance;
+      final up = flyThrow(ThrowEvent.javelin, spec, r.copyWith(pitchRate: 20))
+          .distance;
       final down =
           flyThrow(ThrowEvent.javelin, spec, r.copyWith(pitchRate: -20))
               .distance;
@@ -97,13 +96,11 @@ void main() {
   });
 
   group('Aero', () {
-    test('a stalled discus keeps its lost lift until well under the stall',
-        () {
+    test('a stalled discus keeps its lost lift until well under the stall', () {
       final aero = Aero.of(ThrowEvent.discus, _senior(ThrowEvent.discus));
       double deg(double d) => d * 3.141592653589793 / 180;
       // Attached below the stall, and less once the flow has let go.
-      expect(aero.lift(deg(27), stalled: true),
-          lessThan(aero.lift(deg(27))));
+      expect(aero.lift(deg(27), stalled: true), lessThan(aero.lift(deg(27))));
       expect(aero.stallsAt(deg(30)), isTrue);
       expect(aero.recoversAt(deg(27)), isFalse);
       expect(aero.recoversAt(deg(24)), isTrue);
@@ -119,6 +116,68 @@ void main() {
       expect(men.cpOffset(0), closeTo(0.143, 1e-9));
       expect(women.cpOffset(0), closeTo(0.126, 1e-9));
       expect(men.cpOffset(0.3), lessThan(men.cpOffset(0.1)));
+    });
+  });
+
+  test('a javelin\'s nose follows its path down rather than hanging above it',
+      () {
+    // With the damping as tuned by hand the nose stood 18° above a falling
+    // path by mid-flight. A few degrees is a javelin; that was a wing.
+    final spec = _senior(ThrowEvent.javelin);
+    final aero = Aero.of(ThrowEvent.javelin, spec);
+    expect(aero.pitchDamping, closeTo((0.45 + 0.015) / 12, 1e-12));
+    const r = Release(speed: 29.5, angleDeg: 34.5, height: 1.85);
+    final settled = flyThrow(ThrowEvent.javelin, spec, r).distance;
+    // Released nose-up, it is brought back down onto the path: the throw
+    // still pays for it, but lands within a few meters.
+    final nosey =
+        flyThrow(ThrowEvent.javelin, spec, r.copyWith(attackDeg: 10)).distance;
+    expect(settled - nosey, inInclusiveRange(1, 5));
+  });
+
+  group('gapShares', () {
+    test('the shares add up to the gap, and only what moved gets one', () {
+      final spec12 = ThrowEvent.shotPut.specFor(5.44);
+      final spec4 = ThrowEvent.shotPut.specFor(4);
+      const a = Release(speed: 11.4, angleDeg: 33.5, height: 1.95);
+      const b = Release(speed: 13.5, angleDeg: 36, height: 1.95);
+      final shares = gapShares(ThrowEvent.shotPut, (spec: spec12, release: a),
+          (spec: spec4, release: b));
+      expect(shares.keys.toSet(), {Lever.speed, Lever.angle, Lever.implement});
+      final gap = flyThrow(ThrowEvent.shotPut, spec4, b).distance -
+          flyThrow(ThrowEvent.shotPut, spec12, a).distance;
+      expect(shares.values.reduce((x, y) => x + y), closeTo(gap, 1e-9));
+      // Speed is nearly all of it, which is the point of the list.
+      expect(shares[Lever.speed]!, greaterThan(gap * 0.9));
+    });
+
+    test('adds up with every lever moved, wind and pitch included', () {
+      final spec = _senior(ThrowEvent.javelin);
+      const a = Release(speed: 26, angleDeg: 32, height: 1.8);
+      const b = Release(
+          speed: 28,
+          angleDeg: 35,
+          height: 1.9,
+          attackDeg: 4,
+          wind: -2,
+          pitchRate: -10);
+      final shares = gapShares(ThrowEvent.javelin, (spec: spec, release: a),
+          (spec: ThrowEvent.javelin.specFor(0.7), release: b));
+      expect(shares, hasLength(Lever.values.length));
+      final gap =
+          flyThrow(ThrowEvent.javelin, ThrowEvent.javelin.specFor(0.7), b)
+                  .distance -
+              flyThrow(ThrowEvent.javelin, spec, a).distance;
+      expect(shares.values.reduce((x, y) => x + y), closeTo(gap, 1e-9));
+    });
+
+    test('nothing moved is nothing to split', () {
+      const r = Release(speed: 13, angleDeg: 37, height: 2);
+      final spec = _senior(ThrowEvent.shotPut);
+      expect(
+          gapShares(ThrowEvent.shotPut, (spec: spec, release: r),
+              (spec: spec, release: r)),
+          isEmpty);
     });
   });
 
@@ -304,6 +363,60 @@ void main() {
       await tester.pump();
       await tester.scrollUntilVisible(find.text('YOUR MEASURED THROW'), -300);
       expect(find.byKey(const ValueKey('whatIfGap')), findsNothing);
+    });
+
+    testWidgets('where the gap comes from adds up to the gap as printed',
+        (tester) async {
+      await pump(
+          tester,
+          const ReleaseCalculatorScreen(
+            event: ThrowEvent.shotPut,
+            implementKg: 5.44,
+            measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
+          ));
+      final women = find.byKey(const ValueKey('elite-women'));
+      await tester.scrollUntilVisible(women, 300);
+      await tester.ensureVisible(women);
+      await tester.pumpAndSettle();
+      await tester.tap(women);
+      await tester.pump();
+
+      // Signed hundredths in meters, signed quarter inches in feet.
+      int steps(String s, bool feet) {
+        final sign = s.startsWith('−') ? -1 : 1;
+        final body = s.replaceAll(RegExp(r'^[+−]'), '').replaceAll(' m', '');
+        if (!feet) return sign * (double.parse(body) * 100).round();
+        final [ft, inches] = body.split('-');
+        return sign * (int.parse(ft) * 48 + (double.parse(inches) * 4).round());
+      }
+
+      Future<void> check(bool feet) async {
+        await tester.scrollUntilVisible(
+            find.byKey(const ValueKey('whatIfGap')), -300);
+        final gap = steps(text(tester, 'whatIfGap'), feet);
+        await tester.scrollUntilVisible(
+            find.text('WHERE THE GAP COMES FROM'), 200);
+        var sum = 0;
+        for (final l in [Lever.speed, Lever.angle, Lever.implement]) {
+          sum += steps(text(tester, 'gapShare-${l.name}'), feet);
+        }
+        expect(sum, gap, reason: feet ? 'in feet' : 'in meters');
+        // Height did not move, so it gets no row.
+        expect(find.byKey(const ValueKey('gapShare-height')), findsNothing);
+      }
+
+      await check(false);
+      await tester.scrollUntilVisible(find.text('ft'), -600);
+      await tester.tap(find.text('ft'));
+      await tester.pump();
+      await check(true);
+
+      // The what-if is steeper than the baseline, and the angle's dial says
+      // what holding the speed flatters.
+      await tester.scrollUntilVisible(
+          find.textContaining('Steeper than the baseline'), 300);
+      await tester.scrollUntilVisible(find.text('WHAT A NUDGE IS WORTH'), 300);
+      expect(find.text('from the what if'), findsOneWidget);
     });
 
     testWidgets(

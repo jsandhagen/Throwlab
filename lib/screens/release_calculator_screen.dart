@@ -393,6 +393,18 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                 : flyThrow(_event, _one.spec,
                     _one.release.copyWith(angleDeg: best.angleDeg)),
           ),
+          if (_comparing)
+            _GapShares(
+              shares: gapShares(
+                _event,
+                (spec: _one.spec, release: _one.release),
+                (spec: _two!.spec, release: _two!.release),
+              ),
+              gap: twoFlight!.distance - oneFlight.distance,
+              one: _one,
+              two: _two!,
+              units: units,
+            ),
           if (showBack)
             Align(
               alignment: Alignment.centerLeft,
@@ -480,6 +492,16 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
           ),
           _Dial(
             label: 'Angle',
+            // Every angle here is flown at the speed on the slider above
+            // it, and no athlete keeps that: going higher costs release
+            // speed (Linthorne 2001). Said where the angle is being raised
+            // against the other throw, which is where the model's answer
+            // flatters it.
+            hint: other != null && current.release.angleDeg > other.angleDeg
+                ? 'Steeper than the ${_role(1 - _editing).toLowerCase()}. '
+                    'Speed is held here, but a real athlete usually '
+                    'releases slower when they release higher.'
+                : null,
             value: current.release.angleDeg,
             other: other?.angleDeg,
             span: _angleSpan,
@@ -547,10 +569,13 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
             flies: _hasAttack(_event),
             unit: unit,
           ),
-          _Heading('What each is worth',
+          // One nudge each from where the sliders are, not a split of the
+          // gap — that is what the list under the result is for, and a
+          // heading that let these read as one had coaches adding them up.
+          _Heading('What a nudge is worth',
               trailing: _comparing
-                  ? 'to the ${_role(_editing).toLowerCase()}'
-                  : null),
+                  ? 'from the ${_role(_editing).toLowerCase()}'
+                  : 'from here'),
           _Worth(worth: worth, units: units),
           const _Heading('Compare with an elite final'),
           _EliteCards(
@@ -1078,6 +1103,149 @@ class _Dial extends StatelessWidget {
   }
 }
 
+/// [shares] rounded to what the screen shows — hundredths of a meter, or
+/// quarter inches floored the way a mark in feet is — so the rows add up
+/// to the headline as printed and not just as computed. Each share is
+/// rounded, and what that leaves over or short is moved one step at a time
+/// onto the rows the rounding treated worst.
+Map<Lever, int> _shownSteps(
+    Map<Lever, double> shares, double gap, double step, bool floor) {
+  final int target = floor
+      ? gap.sign.toInt() * (gap.abs() / step + 1e-6).floor()
+      : (gap / step).round();
+  final raw = {for (final e in shares.entries) e.key: e.value / step};
+  final shown = {for (final e in raw.entries) e.key: e.value.round()};
+  var over = target - shown.values.fold<int>(0, (a, b) => a + b);
+  while (over != 0 && shown.isNotEmpty) {
+    final dir = over.sign;
+    final worst = shown.keys.reduce((x, y) =>
+        (raw[x]! - shown[x]!) * dir >= (raw[y]! - shown[y]!) * dir ? x : y);
+    shown[worst] = shown[worst]! + dir;
+    over -= dir;
+  }
+  return shown;
+}
+
+/// Where the gap between the baseline and the what-if comes from: one row
+/// per lever that differs between them, largest first, adding up to the
+/// headline.
+class _GapShares extends StatelessWidget {
+  const _GapShares({
+    required this.shares,
+    required this.gap,
+    required this.one,
+    required this.two,
+    required this.units,
+  });
+
+  final Map<Lever, double> shares;
+  final double gap;
+  final _Throw one;
+  final _Throw two;
+  final _Units units;
+
+  String _label(Lever l) => switch (l) {
+        Lever.speed => 'Speed',
+        Lever.angle => 'Angle',
+        Lever.height => 'Height',
+        Lever.attack => 'Attack',
+        Lever.wind => 'Wind',
+        Lever.pitchRate => 'Pitch rate',
+        Lever.implement => 'Implement',
+      };
+
+  String _change(Lever l) {
+    final a = one.release;
+    final b = two.release;
+    return switch (l) {
+      Lever.speed => units.speedDelta(b.speed - a.speed),
+      Lever.angle => '${_signed(b.angleDeg - a.angleDeg, 1)}°',
+      Lever.height => units.heightDelta(b.height - a.height),
+      Lever.attack => '${_signed(b.attackDeg - a.attackDeg, 1)}°',
+      Lever.wind => units.windDelta(b.wind - a.wind),
+      Lever.pitchRate => '${_signed(b.pitchRate - a.pitchRate, 0)}°/s',
+      // Spelled out: the bundled Barlow has no arrow, and one drawn as a box
+      // reads as a missing character.
+      Lever.implement => '${one.spec.weightLabel} to ${two.spec.weightLabel}',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (shares.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final feet = units.imperial;
+    final step = feet ? metersPerFoot / 48 : 0.01;
+    final shown = _shownSteps(shares, gap, step, feet);
+    final order = shares.keys.toList()
+      ..sort((x, y) => shares[y]!.abs().compareTo(shares[x]!.abs()));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Heading('Where the gap comes from'),
+        Card(
+          color: cardOverSector(scheme),
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Column(
+              children: [
+                for (final l in order)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              TextSpan(text: _label(l)),
+                              TextSpan(text: '  ${_change(l)}', style: muted),
+                            ]),
+                            style: theme.textTheme.bodyMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Builder(builder: (context) {
+                          final k = shown[l]!;
+                          final size =
+                              formatDistance(k.abs() * step, units.distance);
+                          return Text(
+                            k == 0 ? size : '${k > 0 ? '+' : '−'}$size',
+                            key: ValueKey('gapShare-${l.name}'),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: k == 0
+                                  ? null
+                                  : k > 0
+                                      ? scheme.primary
+                                      : scheme.error,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Text(
+            'These add up to the gap. What two changes do together is '
+            'shared between them, so a row is not what that change would '
+            'be worth on its own.',
+            style: muted,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _Worth extends StatelessWidget {
   const _Worth({required this.worth, required this.units});
 
@@ -1218,8 +1386,11 @@ class _Caveat extends StatelessWidget {
         'recovers under 25°; the real one turns in roll, which a flight in '
         'one plane cannot show, and it comes out several meters short at '
         'elite speeds. The javelin pitches under its center of pressure '
-        'sitting behind its center of mass, as measured; how heavy it is '
-        'to turn and how quickly the rocking dies away are estimates. The '
+        'sitting behind its center of mass, as measured, damped by the '
+        "lift of its own shaft; how heavy it is to turn is an estimate. "
+        'Every angle is flown at the speed on its slider, and a real '
+        'athlete releases slower as the angle rises, so the best angle '
+        "here sits above an athlete's own. The "
         "hammer's wire is not counted. The javelin's published aerodynamics "
         "mostly predate the men's 1986 and women's 1999 rule changes, which "
         'moved the center of mass forward and shortened its flight, so its '

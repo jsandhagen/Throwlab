@@ -1224,6 +1224,17 @@ like the app rather than a bare Material default.
   move whichever is picked — the other ticked on each track and the
   difference beside each value, the gap between the two landings lit on
   the ground.
+  Under the headline, where the gap comes from (`gapShares`): a row per
+  lever that differs, adding up to the headline as printed. A Shapley
+  split — each lever's gain averaged over every order the changes could be
+  made in — because two changes together are worth more than apart, and
+  giving that to whichever came last answers in an order nobody chose. The
+  worth tiles are a different question, one nudge from where the sliders
+  are, and are headed 'What a nudge is worth' because a coach added them up
+  and they did not come to the gap. Every angle is flown at the speed on
+  its slider, which no athlete keeps going higher; that is said on the
+  angle's dial whenever it is raised against the other throw, rather than
+  modeled, since the speed an athlete loses is theirs and not a constant.
   It reads in the coach's units, flipped by an m / ft switch in its app bar
   that opens on `DistanceField.preferred` and does not write it back. In
   feet the marks are spelled the way a meet writes them, a release height

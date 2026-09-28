@@ -30,16 +30,12 @@ const double airDensity = 1.2;
 
 double _rad(double deg) => deg * math.pi / 180;
 
-// The four numbers below are tuned rather than looked up: nothing in the
+// The three numbers below are tuned rather than looked up: nothing in the
 // open literature gives them, and each was set so the flights it governs
 // behave the way the rest of this file says they should.
 
 /// What a javelin's moment of inertia is of a uniform rod's.
 const _javelinTaper = 0.8;
-
-/// C_mq, set so a javelin's pitch oscillation has died away within a
-/// second or two rather than rocking it all the way down the field.
-const _javelinPitchDamping = 0.15;
 
 /// The attack at which a javelin's center of pressure reaches its center
 /// of mass — halfway there at half of it.
@@ -252,11 +248,13 @@ class Aero {
         // which grows with the weight the way the rules have it.
         final length = spec.nominalSize;
         final diameter = 0.020 + 0.010 * spec.weightKg;
+        const dragBase = 0.015;
+        const liftSlope = 0.45;
         return Aero(
           area: length * diameter,
-          dragBase: 0.015,
+          dragBase: dragBase,
           dragPerAttack: 1.1,
-          liftSlope: 0.45,
+          liftSlope: liftSlope,
           stallDeg: 25,
           liftZeroDeg: 40,
           length: length,
@@ -268,7 +266,14 @@ class Aero {
           // A uniform rod is mL²/12; a javelin tapers to both ends, so it is
           // less than that by a share nobody has published.
           pitchInertia: _javelinTaper * spec.weightKg * length * length / 12,
-          pitchDamping: _javelinPitchDamping,
+          // Derived rather than tuned: a shaft turning at ω meets the air at
+          // ωx/u more angle x along it, and summing that normal force's
+          // moment down a uniform shaft gives C_mq = C_Nα / 12, where
+          // C_Nα = C_Lα + C_D0 is the normal force's slope at zero attack.
+          // Tuned by hand to settle the rocking fast, it came out at four
+          // times this, and at that the damping held the nose up off a
+          // falling path — 18° of attack by mid-flight, and a cliff past it.
+          pitchDamping: (liftSlope + dragBase) / 12,
         );
     }
   }
@@ -465,4 +470,78 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
     perDegree: at(release.copyWith(angleDeg: release.angleDeg + 1)) - base,
     perHeight: at(release.copyWith(height: release.height + heightStep)) - base,
   );
+}
+
+/// One of the things a what-if can change about a throw.
+enum Lever { speed, angle, height, attack, wind, pitchRate, implement }
+
+/// How far apart two throws land, split between the levers that differ
+/// between them, so the shares add up to the whole gap.
+///
+/// A share is not what that change is worth on its own. Two changes made
+/// together throw further or shorter than the two made one at a time — a
+/// faster release gains more from a steeper angle — so the gain they make
+/// together has to be given to somebody, and handing it to whichever was
+/// changed last would make the answer depend on an order nobody chose. So
+/// each lever gets its gain averaged over every order the changes could be
+/// made in (a Shapley split): what they do together is shared between
+/// them, and the rows sum to [to] minus [from] exactly. It costs a flight
+/// for every subset of the levers that moved — sixteen for four.
+Map<Lever, double> gapShares(
+  ThrowEvent event,
+  ({ImplementSpec spec, Release release}) from,
+  ({ImplementSpec spec, Release release}) to,
+) {
+  final a = from.release;
+  final b = to.release;
+  // Within a hair is the same: an elite final's height is the middle of a
+  // range, and (1.8 + 2.1) / 2 is not quite the 1.95 a coach typed.
+  bool differs(double x, double y) => (x - y).abs() > 1e-9;
+  final moved = [
+    if (differs(a.speed, b.speed)) Lever.speed,
+    if (differs(a.angleDeg, b.angleDeg)) Lever.angle,
+    if (differs(a.height, b.height)) Lever.height,
+    if (differs(a.attackDeg, b.attackDeg)) Lever.attack,
+    if (differs(a.wind, b.wind)) Lever.wind,
+    if (differs(a.pitchRate, b.pitchRate)) Lever.pitchRate,
+    if (from.spec.weightKg != to.spec.weightKg) Lever.implement,
+  ];
+  final n = moved.length;
+  final distance = <int, double>{};
+  // The throw with the levers in [mask] taken from [to] and the rest from
+  // [from].
+  double at(int mask) => distance.putIfAbsent(mask, () {
+        bool takes(Lever l) {
+          final i = moved.indexOf(l);
+          return i >= 0 && mask & (1 << i) != 0;
+        }
+
+        final release = Release(
+          speed: takes(Lever.speed) ? b.speed : a.speed,
+          angleDeg: takes(Lever.angle) ? b.angleDeg : a.angleDeg,
+          height: takes(Lever.height) ? b.height : a.height,
+          attackDeg: takes(Lever.attack) ? b.attackDeg : a.attackDeg,
+          wind: takes(Lever.wind) ? b.wind : a.wind,
+          pitchRate: takes(Lever.pitchRate) ? b.pitchRate : a.pitchRate,
+        );
+        final spec = takes(Lever.implement) ? to.spec : from.spec;
+        return flyThrow(event, spec, release).distance;
+      });
+
+  double factorial(int k) => k <= 1 ? 1 : k * factorial(k - 1);
+  final shares = <Lever, double>{};
+  for (var i = 0; i < n; i++) {
+    var share = 0.0;
+    for (var mask = 0; mask < 1 << n; mask++) {
+      if (mask & (1 << i) != 0) continue;
+      var size = 0;
+      for (var m = mask; m != 0; m &= m - 1) {
+        size++;
+      }
+      final weight = factorial(size) * factorial(n - size - 1) / factorial(n);
+      share += weight * (at(mask | (1 << i)) - at(mask));
+    }
+    shares[moved[i]] = share;
+  }
+  return shares;
 }
