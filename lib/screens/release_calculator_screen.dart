@@ -149,7 +149,10 @@ class _Units {
 }
 
 /// One throw on the screen: the implement, the release, and whose it is
-/// when it is somebody's. A throw that is moved on a slider is nobody's any
+/// when it is somebody's. The implement is the screen's, never the
+/// throw's: both are flown with the one being studied, because a change of
+/// implement is not something a release can be asked about — the model
+/// has no athlete in it to throw a heavier ball slower. A throw that is moved on a slider is nobody's any
 /// more — Walsh's release with another meter a second on it is not Walsh's.
 class _Throw {
   const _Throw(this.spec, this.release, [this.label]);
@@ -158,13 +161,22 @@ class _Throw {
   final String? label;
 }
 
-String _eliteLabel(EliteRange r, ImplementSpec spec) =>
-    '${r.field.label} · ${spec.weightLabel}';
+String _eliteLabel(EliteRange r) => r.field.label;
 
 class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   static const _measuredLabel = 'Your measured throw';
 
   late ThrowEvent _event = widget.event;
+
+  /// What both throws are flown with: the measured throw's implement, or
+  /// the event's own. Fixed — a reference brings its release and nothing
+  /// else, so what the gap measures is the release.
+  late ImplementSpec _spec = _specFor(widget.event);
+
+  ImplementSpec _specFor(ThrowEvent event) =>
+      event == widget.event && widget.implementKg != null
+          ? event.specFor(widget.implementKg!)
+          : event.defaultImplement;
 
   /// m/s of release speed the athlete gives up per degree steeper, for the
   /// best-angle search only. Opens on the event's estimate and is the
@@ -172,15 +184,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   late double _speedLoss = typicalSpeedLossPerDeg(widget.event);
   late _Throw _one = widget.measured == null
       ? _elite(widget.event, EliteField.men)
-      : _fit(
-          _Throw(
-            widget.implementKg == null
-                ? widget.event.defaultImplement
-                : widget.event.specFor(widget.implementKg!),
-            widget.measured!,
-            _measuredLabel,
-          ),
-          widget.event);
+      : _fit(_Throw(_spec, widget.measured!, _measuredLabel), widget.event);
   _Throw? _two;
 
   /// Which throw the sliders move: 0, the baseline, or 1, the what-if.
@@ -236,16 +240,15 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
 
   _Throw _elite(ThrowEvent event, EliteField field) {
     final range = eliteRanges[event]![field]!;
-    final spec = event.specFor(range.weightKg);
     return _Throw(
-      spec,
+      _spec,
       Release(
         speed: range.typicalSpeed,
         angleDeg: range.typicalAngle,
         height: range.typicalHeight,
         attackDeg: range.attackDeg,
       ),
-      _eliteLabel(range, spec),
+      _eliteLabel(range),
     );
   }
 
@@ -292,14 +295,12 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     ));
   }
 
-  void _setSpec(ImplementSpec spec) =>
-      setState(() => _put(_Throw(spec, _current.release)));
-
   void _pickEvent(ThrowEvent event) {
     if (event == _event) return;
     setState(() {
       _event = event;
       _speedLoss = typicalSpeedLossPerDeg(event);
+      _spec = _specFor(event);
       _one = _elite(event, EliteField.men);
       _two = null;
       _editing = 0;
@@ -376,14 +377,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
       });
 
   void _backToMeasured() => setState(() {
-        _one = _fit(
-            _Throw(
-                widget.implementKg == null
-                    ? widget.event.defaultImplement
-                    : widget.event.specFor(widget.implementKg!),
-                widget.measured!,
-                _measuredLabel),
-            _event);
+        _one = _fit(_Throw(_spec, widget.measured!, _measuredLabel), _event);
       });
 
   /// Two roles rather than two numbers. The baseline is whatever the
@@ -504,11 +498,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     final otherRole = _comparing ? _role(1 - _editing).toLowerCase() : null;
     final shares = !_comparing
         ? null
-        : gapShares(
-            _event,
-            (spec: _one.spec, release: _one.release),
-            (spec: _two!.spec, release: _two!.release),
-          );
+        : gapShares(_event, _spec, _one.release, _two!.release);
     final gap =
         twoFlight == null ? 0.0 : twoFlight.distance - oneFlight.distance;
     final shown = (
@@ -660,20 +650,15 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                       icon: const Icon(Icons.restart_alt),
                       onPressed: _differs ? _resetToBaseline : null,
                     ),
-                  // The implement is part of the throw: a 12 lb put is not a
-                  // 16 lb one at the same release, so it sits with the dials.
-                  DropdownButton<ImplementSpec>(
-                    key: const ValueKey('whatIfImplement'),
-                    value: current.spec,
-                    underline: const SizedBox(),
-                    borderRadius: BorderRadius.circular(12),
-                    items: [
-                      for (final s in _event.implements)
-                        DropdownMenuItem(value: s, child: Text(s.weightLabel)),
-                    ],
-                    onChanged: (s) {
-                      if (s != null) _setSpec(s);
-                    },
+                  // Said, not offered: both throws are flown with it.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 12, 8, 12),
+                    child: Text(_spec.weightLabel,
+                        key: const ValueKey('whatIfImplement'),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(color: scheme.onSurfaceVariant)),
                   ),
                 ],
               ),
@@ -825,11 +810,11 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               selected: _two?.label,
               units: units,
               onTry: (r) {
-                final spec = _event.specFor(r.weightKg);
                 // Only what was published: a row with a speed alone takes
-                // the angle and height from the throw it is laid over.
+                // the angle and height from the throw it is laid over. The
+                // implement stays the screen's.
                 _compareWith(_Throw(
-                  spec,
+                  _spec,
                   _one.release.copyWith(
                     speed: r.speed,
                     angleDeg: r.angleDeg,
@@ -1232,7 +1217,7 @@ class _EliteCards extends StatelessWidget {
                                           : scheme.onSurfaceVariant),
                                 ],
                               ),
-                              Text(t.spec.weightLabel,
+                              Text('Their release, ${t.spec.weightLabel}',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                       color: scheme.onSurfaceVariant)),
                               const SizedBox(height: 6),
@@ -1258,8 +1243,9 @@ class _EliteCards extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Text(
             'A typical release in a senior final — approximate, drawn from '
-            'the biomechanics literature rather than one report. Tap one to '
-            'compare it with the baseline.',
+            'the biomechanics literature rather than one report — thrown '
+            'with the same implement as the baseline. Tap one to compare '
+            'it.',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant),
           ),
@@ -1652,9 +1638,6 @@ class _GapShares extends StatelessWidget {
       Lever.attack => '${_signed(b.attackDeg - a.attackDeg, 1)}°',
       Lever.wind => units.windDelta(b.wind - a.wind),
       Lever.pitchRate => '${_signed(b.pitchRate - a.pitchRate, 0)}°/s',
-      // Spelled out: the bundled Barlow has no arrow, and one drawn as a box
-      // reads as a missing character.
-      Lever.implement => '${one.spec.weightLabel} to ${two.spec.weightLabel}',
     };
   }
 
@@ -1748,7 +1731,6 @@ String _leverLabel(Lever l) => switch (l) {
       Lever.attack => 'Attack',
       Lever.wind => 'Wind',
       Lever.pitchRate => 'Pitch rate',
-      Lever.implement => 'Implement',
     };
 
 Color? _shareColor(int sign, ColorScheme scheme) => sign == 0

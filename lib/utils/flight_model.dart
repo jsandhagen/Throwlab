@@ -497,11 +497,13 @@ double typicalSpeedLossPerDeg(ThrowEvent event) => switch (event) {
   );
 }
 
-/// One of the things a what-if can change about a throw.
-enum Lever { speed, angle, height, attack, wind, pitchRate, implement }
+/// One of the things a what-if can change about a throw. The implement is
+/// not one: both throws are the same implement, since the model has no
+/// athlete in it to throw a heavier one slower.
+enum Lever { speed, angle, height, attack, wind, pitchRate }
 
-/// How far apart two throws land, split between the levers that differ
-/// between them, so the shares add up to the whole gap.
+/// How far apart two releases of [spec] land, split between the levers
+/// that differ between them, so the shares add up to the whole gap.
 ///
 /// A share is not what that change is worth on its own. Two changes made
 /// together throw further or shorter than the two made one at a time — a
@@ -514,11 +516,12 @@ enum Lever { speed, angle, height, attack, wind, pitchRate, implement }
 /// for every subset of the levers that moved — sixteen for four.
 Map<Lever, double> gapShares(
   ThrowEvent event,
-  ({ImplementSpec spec, Release release}) from,
-  ({ImplementSpec spec, Release release}) to,
+  ImplementSpec spec,
+  Release from,
+  Release to,
 ) {
-  final a = from.release;
-  final b = to.release;
+  final a = from;
+  final b = to;
   // Within a hair is the same: an elite final's height is the middle of a
   // range, and (1.8 + 2.1) / 2 is not quite the 1.95 a coach typed.
   bool differs(double x, double y) => (x - y).abs() > 1e-9;
@@ -529,7 +532,6 @@ Map<Lever, double> gapShares(
     if (differs(a.attackDeg, b.attackDeg)) Lever.attack,
     if (differs(a.wind, b.wind)) Lever.wind,
     if (differs(a.pitchRate, b.pitchRate)) Lever.pitchRate,
-    if (from.spec.weightKg != to.spec.weightKg) Lever.implement,
   ];
   final n = moved.length;
   final distance = <int, double>{};
@@ -549,7 +551,6 @@ Map<Lever, double> gapShares(
           wind: takes(Lever.wind) ? b.wind : a.wind,
           pitchRate: takes(Lever.pitchRate) ? b.pitchRate : a.pitchRate,
         );
-        final spec = takes(Lever.implement) ? to.spec : from.spec;
         return flyThrow(event, spec, release).distance;
       });
 

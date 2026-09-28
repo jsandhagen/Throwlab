@@ -180,13 +180,11 @@ void main() {
   group('gapShares', () {
     test('the shares add up to the gap, and only what moved gets one', () {
       final spec12 = ThrowEvent.shotPut.specFor(5.44);
-      final spec4 = ThrowEvent.shotPut.specFor(4);
       const a = Release(speed: 11.4, angleDeg: 33.5, height: 1.95);
       const b = Release(speed: 13.5, angleDeg: 36, height: 1.95);
-      final shares = gapShares(ThrowEvent.shotPut, (spec: spec12, release: a),
-          (spec: spec4, release: b));
-      expect(shares.keys.toSet(), {Lever.speed, Lever.angle, Lever.implement});
-      final gap = flyThrow(ThrowEvent.shotPut, spec4, b).distance -
+      final shares = gapShares(ThrowEvent.shotPut, spec12, a, b);
+      expect(shares.keys.toSet(), {Lever.speed, Lever.angle});
+      final gap = flyThrow(ThrowEvent.shotPut, spec12, b).distance -
           flyThrow(ThrowEvent.shotPut, spec12, a).distance;
       expect(shares.values.reduce((x, y) => x + y), closeTo(gap, 1e-9));
       // Speed is nearly all of it, which is the point of the list.
@@ -203,23 +201,17 @@ void main() {
           attackDeg: 4,
           wind: -2,
           pitchRate: -10);
-      final shares = gapShares(ThrowEvent.javelin, (spec: spec, release: a),
-          (spec: ThrowEvent.javelin.specFor(0.7), release: b));
+      final shares = gapShares(ThrowEvent.javelin, spec, a, b);
       expect(shares, hasLength(Lever.values.length));
-      final gap =
-          flyThrow(ThrowEvent.javelin, ThrowEvent.javelin.specFor(0.7), b)
-                  .distance -
-              flyThrow(ThrowEvent.javelin, spec, a).distance;
+      final gap = flyThrow(ThrowEvent.javelin, spec, b).distance -
+          flyThrow(ThrowEvent.javelin, spec, a).distance;
       expect(shares.values.reduce((x, y) => x + y), closeTo(gap, 1e-9));
     });
 
     test('nothing moved is nothing to split', () {
       const r = Release(speed: 13, angleDeg: 37, height: 2);
       final spec = _senior(ThrowEvent.shotPut);
-      expect(
-          gapShares(ThrowEvent.shotPut, (spec: spec, release: r),
-              (spec: spec, release: r)),
-          isEmpty);
+      expect(gapShares(ThrowEvent.shotPut, spec, r, r), isEmpty);
     });
   });
 
@@ -520,7 +512,12 @@ void main() {
 
       await tester.scrollUntilVisible(
           find.text('further than the baseline'), -300);
-      expect(find.textContaining('Elite women · 4 kg'), findsWidgets);
+      expect(find.textContaining('Elite women'), findsWidgets);
+      // Flown with the baseline's own 12 lb, never the final's 4 kg.
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('whatIfImplement')), 300);
+      expect(text(tester, 'whatIfImplement'), '12 lb');
+      expect(find.byType(DropdownButton<ImplementSpec>), findsNothing);
       expect(text(tester, 'whatIfGap'), startsWith('+'));
 
       // Tapping it again puts it away.
@@ -562,7 +559,7 @@ void main() {
         await tester.scrollUntilVisible(
             find.text('WHERE THE GAP COMES FROM'), 200);
         var sum = 0;
-        for (final l in [Lever.speed, Lever.angle, Lever.implement]) {
+        for (final l in [Lever.speed, Lever.angle]) {
           sum += steps(text(tester, 'gapShare-${l.name}'), feet);
         }
         expect(sum, gap, reason: feet ? 'in feet' : 'in meters');
