@@ -485,12 +485,25 @@ Flight flyThrow(ThrowEvent event, ImplementSpec spec, Release release) =>
 /// degree² — and a meter a second worth enough, about 6 m, that 1 m/s per
 /// 10° is what moves a flight-only 40° to the 35° finals release at. The
 /// shot's is the 1.7 (m/s)/rad reported for Linthorne's college putters,
-/// read from a secondary summary. Nobody has measured it for the hammer or
-/// the discus, so they fly at a held speed and the screen says so.
+/// read from a secondary summary.
+///
+/// The hammer's is backed out the javelin's way: flown with speed held it
+/// is best at 44°, where elite throwers release at 37–42° — a gap Castaldi
+/// et al. (2022) put down to the speed a steeper orbit costs — and 0.8 m/s
+/// per 10° is what lands both the men's and the women's typical release in
+/// the middle of that. Nobody has published the number itself.
+///
+/// The discus has none, and not for want of measuring: Leigh et al. (2010)
+/// found the fall on every elite thrower they filmed, but steep for some and
+/// shallow for others, with best angles from 35° to 44° — no one number to
+/// open on. It cannot be backed out either, since flown with speed held the
+/// model already releases a discus under the thirties, and only a speed
+/// that *rose* going higher would bring it up to where finals are thrown.
 double typicalSpeedLossPerDeg(ThrowEvent event) => switch (event) {
       ThrowEvent.javelin => 0.1,
       ThrowEvent.shotPut => 1.7 * math.pi / 180,
-      ThrowEvent.discus || ThrowEvent.hammer => 0,
+      ThrowEvent.hammer => 0.08,
+      ThrowEvent.discus => 0,
     };
 
 /// What each lever is worth from here: meters gained for [speedStep] more

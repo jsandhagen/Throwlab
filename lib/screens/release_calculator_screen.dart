@@ -193,7 +193,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
 
   /// m/s of release speed the athlete gives up per degree steeper, for the
   /// best-angle search only. Opens on the event's estimate and is the
-  /// coach's to set; an event nobody has measured it for has none.
+  /// coach's to set; the discus, which has no one number, has none.
   late double _speedLoss = typicalSpeedLossPerDeg(widget.event);
   late _Throw _one = _baseline();
   _Throw? _two;
@@ -819,8 +819,8 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               // Linthorne 2001), so where the loss is modeled the speed moves
               // with the angle, by the amount on the best-angle card: a
               // steeper release at the same speed is a throw nobody makes,
-              // and the flight flattered it. Where it isn't — the hammer, the
-              // discus, a loss set to nothing — the speed is held, and that
+              // and the flight flattered it. Where it isn't — the discus, a
+              // loss set to nothing — the speed is held, and that
               // is said where the angle is raised against the other throw.
               hint: loss > 0
                   ? 'Speed moves with it: '
@@ -1075,6 +1075,11 @@ String _speedLossBasis(ThrowEvent event) => switch (event) {
       ThrowEvent.javelin =>
         'Estimated from academic research: Red & Zogaib (1977) measured '
             'javelin throwers releasing slower as they released higher. '
+            "Set it to your athlete's own if you have it.",
+      ThrowEvent.hammer =>
+        'Estimated: set so the best angle lands where elite hammer throwers '
+            'release, which research puts below the flight\'s best because '
+            'a steeper orbit costs speed. No study has published the number. '
             "Set it to your athlete's own if you have it.",
       _ => 'Estimated from academic research: Linthorne (2001) measured '
           'shot putters releasing slower as they released higher. '
@@ -1574,7 +1579,7 @@ class _BestAngle extends StatelessWidget {
     final String note;
     if (forThrower) {
       note = 'Speed falls as the angle rises, which is most of why elite '
-          'throwers release in the thirties. With speed held, the flight alone is best '
+          'throwers release under the flight\'s best. With speed held, the flight alone is best '
           'at ${held!.angleDeg.toStringAsFixed(1)}°.'
           '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
     } else if (speedLoss != null) {
@@ -1582,11 +1587,12 @@ class _BestAngle extends StatelessWidget {
       note = 'Speed is held, so this is the flight\'s best angle, not an '
           "athlete's: a real one releases slower going higher.";
     } else {
+      // Only the discus: it has no one number to open on.
       note = '${_hasAttack(event) ? 'The attack angle is held with it. ' : ''}'
-          'Speed is held too — nobody has measured how much a '
-          '${event == ThrowEvent.hammer ? 'hammer' : 'discus'} thrower loses '
-          "going higher, so an athlete's own best angle sits somewhat under "
-          'this one.';
+          'Speed is held too. Discus throwers do release slower going '
+          'higher, but by very different amounts, so there is no typical '
+          'figure to fly with — and this model already puts the best discus '
+          'angle under where elite throwers release.';
     }
     final scheme = theme.colorScheme;
     return Card(
@@ -2350,19 +2356,20 @@ class _Caveat extends StatelessWidget {
     ),
     (
       'Hammer',
-      'The wire is not counted, and speed is held when the best angle is '
-          'searched for, because nobody has measured how much a hammer '
-          'thrower loses going higher.',
+      'The wire is not counted.',
     ),
     (
       'Speed lost going higher',
       'Release speed falls as the release angle rises, so the best angle '
           'for the javelin and the shot is searched with speed falling by the '
-          'amount set on that card. It opens on an estimate built from '
-          'academic research — Red & Zogaib (1977) on javelin throwers, '
-          'Linthorne (2001) on shot putters — scaled to each event rather '
-          "than one published number, and is best replaced by an athlete's "
-          'own.',
+          'amount set on that card, and for the hammer too. It opens on an '
+          'estimate built from academic research — Red & Zogaib (1977) on '
+          'javelin throwers, Linthorne (2001) on shot putters — scaled to '
+          'each event rather than one published number; the hammer\'s is set '
+          'so its best angle lands where elite throwers release. It is best '
+          "replaced by an athlete's own. The discus flies at a held speed: "
+          'Leigh et al. (2010) found the fall differs too much between '
+          'throwers to have a typical figure.',
     ),
     (
       'References',

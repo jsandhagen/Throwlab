@@ -287,6 +287,23 @@ const whatIfSources = <({String citation, String usedFor})>[
         'reported for his college putters.',
   ),
   (
+    citation: 'Castaldi, G. M., Borzuola, R., Camomilla, V., Bergamini, E., '
+        'Vannozzi, G., & Macaluso, A. (2022). Biomechanics of the hammer '
+        'throw: narrative review. Frontiers in Sports and Active Living, 4, '
+        '853536.',
+    usedFor: 'Why elite hammer throwers release under the flight\'s best '
+        'angle: a steeper release costs speed. The hammer\'s speed lost per '
+        'degree is set so its best angle lands where they release, not a '
+        'figure the review gives.',
+  ),
+  (
+    citation: 'Leigh, S., Liu, H., Hubbard, M., & Yu, B. (2010). '
+        'Individualized optimal release angles in discus throwing. Journal '
+        'of Biomechanics, 43(3), 540–545.',
+    usedFor: 'Why the discus has no speed lost per degree to open on: the '
+        'fall was measured on every thrower, and was different for each.',
+  ),
+  (
     citation: 'Seo, K., Okuizumi, H., Konishi, Y., Kobayashi, T., Hasegawa, '
         'H., & Obayashi, S. (2023). Measurement of aerodynamic force and '
         'moment acting on a javelin using a magnetic suspension and balance '

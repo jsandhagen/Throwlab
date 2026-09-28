@@ -294,8 +294,22 @@ void main() {
               1e-9));
     });
 
-    test('the hammer and discus hold their speed', () {
-      expect(typicalSpeedLossPerDeg(ThrowEvent.hammer), 0);
+    test('a hammer thrower\'s best angle is where elite throwers release',
+        () {
+      // Held, the flight is best in the mid forties; the loss the hammer is
+      // backed out with brings it into the 37–42° throwers use.
+      for (final field in EliteField.values) {
+        expect(finalBest(ThrowEvent.hammer, field, speedFalls: false).angleDeg,
+            greaterThan(43),
+            reason: field.name);
+        final range = eliteRanges[ThrowEvent.hammer]![field]!;
+        expect(finalBest(ThrowEvent.hammer, field).angleDeg,
+            inInclusiveRange(range.angleDeg.$1, range.angleDeg.$2),
+            reason: field.name);
+      }
+    });
+
+    test('the discus holds its speed', () {
       expect(typicalSpeedLossPerDeg(ThrowEvent.discus), 0);
     });
 
@@ -682,9 +696,9 @@ void main() {
       expect(text(tester, 'bestAngle'), isNot(before));
       expect(find.textContaining("not an athlete's"), findsOneWidget);
 
-      // A hammer has no loss to set.
-      await tester.scrollUntilVisible(find.text('Hammer'), -2000);
-      await tester.tap(find.text('Hammer'));
+      // A discus has no loss to set.
+      await tester.scrollUntilVisible(find.text('Discus'), -2000);
+      await tester.tap(find.text('Discus'));
       await tester.pump();
       expect(find.text('Speed lost per 10° steeper'), findsNothing);
     });
@@ -708,9 +722,9 @@ void main() {
       expect(find.textContaining('Speed moves with it: −1.0 m/s per 10°'),
           findsOneWidget);
 
-      // The hammer holds its speed.
-      await tester.scrollUntilVisible(find.text('Hammer'), -2000);
-      await tester.tap(find.text('Hammer'));
+      // The discus holds its speed.
+      await tester.scrollUntilVisible(find.text('Discus'), -2000);
+      await tester.tap(find.text('Discus'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('whatIfTry')));
       await tester.pump();

@@ -1295,8 +1295,14 @@ like the app rather than a bare Material default.
   from the release it was handed, anchored so that release keeps its own,
   and the screen gives both answers — the thrower's, and the flight's with
   speed held. The loss is the coach's to set, in a dial under it, and
-  opens on an estimate (`typicalSpeedLossPerDeg`) labeled one; the hammer
-  and discus have none, because nobody has measured it, and fly held.
+  opens on an estimate (`typicalSpeedLossPerDeg`) labeled one. The
+  hammer's is backed out the way the javelin's was — the loss that brings a
+  flight best at 44° down to the 37–42° elite throwers release at, since the
+  gap is known and the number unpublished. The discus has none and flies
+  held: the fall is measured there (Leigh et al.) but differs too much by
+  thrower to open on one, and it cannot be backed out, because the model
+  already releases a discus under the thirties and only a speed that rose
+  going higher would bring it up.
   It reads in the coach's units, flipped by an m / ft switch in its app bar
   that opens on `DistanceField.preferred` and does not write it back. In
   feet the marks are spelled the way a meet writes them, a release height

@@ -138,6 +138,18 @@ void main() {
     await tap(const ValueKey('elite-typical'));
     await shoot('what_if_hammer_vs_elite');
 
+    // The whole hammer screen: its best angle is a thrower's now, with the
+    // speed it gives up going higher on the card under it.
+    await open(
+      const ReleaseCalculatorScreen(
+        event: ThrowEvent.hammer,
+        implementKg: 7.26,
+        measured: Release(speed: 26, angleDeg: 41, height: 1.5),
+      ),
+      height: 7200,
+    );
+    await shoot('what_if_hammer_full');
+
     await open(
       const ReleaseCalculatorScreen(
         event: ThrowEvent.javelin,
