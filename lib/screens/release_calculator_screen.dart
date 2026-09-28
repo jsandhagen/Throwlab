@@ -60,9 +60,14 @@ const _spans = {
 const _angleSpan = (0.0, 60.0);
 const _attackSpan = (-20.0, 20.0);
 const _windSpan = (-8.0, 8.0);
+const _pitchSpan = (-30.0, 30.0);
 
 bool _hasAttack(ThrowEvent event) =>
     event == ThrowEvent.discus || event == ThrowEvent.javelin;
+
+/// Only the javelin is flown as a body that turns in pitch; a discus holds
+/// its tilt, and a rate given to it would be a dial that does nothing.
+bool _hasPitchRate(ThrowEvent event) => event == ThrowEvent.javelin;
 
 /// A shot is in the air two seconds at a third of a discus's speed; wind
 /// moves it centimeters, and a dial that does nothing reads as a broken one.
@@ -202,6 +207,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         height: _clamp(r.height, span.height),
         attackDeg: _hasAttack(event) ? _clamp(r.attackDeg, _attackSpan) : 0,
         wind: _hasWind(event) ? _clamp(r.wind, _windSpan) : 0,
+        pitchRate: _hasPitchRate(event) ? _clamp(r.pitchRate, _pitchSpan) : 0,
       ),
       t.label,
     );
@@ -507,6 +513,19 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               delta: (d) => '${_signed(d, 1)}°',
               onChanged: (v) =>
                   _setRelease(current.release.copyWith(attackDeg: v)),
+            ),
+          if (_hasPitchRate(_event))
+            _Dial(
+              label: 'Pitch rate',
+              hint: 'Nose turning up (+) or down (−) as it leaves the hand',
+              value: current.release.pitchRate,
+              other: other?.pitchRate,
+              span: _pitchSpan,
+              step: 1,
+              format: (v) => '${_signed(v, 0)}°/s',
+              delta: (d) => '${_signed(d, 0)}°/s',
+              onChanged: (v) =>
+                  _setRelease(current.release.copyWith(pitchRate: v)),
             ),
           if (_hasWind(_event))
             _Dial(
@@ -1195,7 +1214,12 @@ class _Caveat extends StatelessWidget {
         'javelin, with coefficients shaped like the wind-tunnel curves in '
         'the papers below and then tuned so typical elite releases land '
         'near where finals are won — not values measured for this app. The '
-        'discus comes out several meters short at elite speeds, and the '
+        'discus holds the tilt it was released at, stalls at 29° and only '
+        'recovers under 25°; the real one turns in roll, which a flight in '
+        'one plane cannot show, and it comes out several meters short at '
+        'elite speeds. The javelin pitches under its center of pressure '
+        'sitting behind its center of mass, as measured; how heavy it is '
+        'to turn and how quickly the rocking dies away are estimates. The '
         "hammer's wire is not counted. The javelin's published aerodynamics "
         "mostly predate the men's 1986 and women's 1999 rule changes, which "
         'moved the center of mass forward and shortened its flight, so its '

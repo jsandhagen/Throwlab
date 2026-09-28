@@ -103,6 +103,19 @@ void main() {
     await tap(const ValueKey('elite-men'));
     await shoot('what_if_javelin_feet');
 
+    // The javelin's own dial: the pitch rate it leaves the hand turning at,
+    // under the attack, and nothing like it on any other event.
+    await open(
+      const ReleaseCalculatorScreen(
+        event: ThrowEvent.javelin,
+        implementKg: 0.8,
+        measured: Release(
+            speed: 27, angleDeg: 34, height: 1.8, attackDeg: 4, pitchRate: -8),
+      ),
+      height: 7200,
+    );
+    await shoot('what_if_javelin_full');
+
     // The whole page in feet: mph on the sliders, heights in feet and
     // inches, and the worth tiles priced in a mile an hour and four inches.
     await open(measured, height: 7200, unit: DistanceUnit.feet);

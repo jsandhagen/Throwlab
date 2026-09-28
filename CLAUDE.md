@@ -1197,7 +1197,11 @@ like the app rather than a bare Material default.
 - The what-if calculator (`ReleaseCalculatorScreen`, from the calculators
   and from 'What if…' on the release-metrics sheet) flies a
   release through `flight_model` — drag on everything, lift on a discus and
-  a javelin — and says what one more m/s, one more degree and ten more
+  a javelin; the javelin pitches as a body under its center of pressure
+  (Schneeberger's offsets, closing up as the attack grows) from a release
+  pitch rate, and the discus holds its tilt and stalls with hysteresis,
+  since a flight in one plane has no axis for the roll it really turns
+  in — and says what one more m/s, one more degree and ten more
   centimeters of height are each worth. It is an estimate and says so
   first, in a banner above the number — a guide, not a reference — with
   how the model is built and where it falls short (above all the discus,

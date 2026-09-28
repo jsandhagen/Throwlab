@@ -63,6 +63,27 @@ void main() {
       expect(nosey, lessThan(flat - 2));
     });
 
+    test('a javelin released turning moves where it lands', () {
+      const r = Release(speed: 29, angleDeg: 35, height: 1.8);
+      final spec = _senior(ThrowEvent.javelin);
+      final still = flyThrow(ThrowEvent.javelin, spec, r).distance;
+      final up =
+          flyThrow(ThrowEvent.javelin, spec, r.copyWith(pitchRate: 20))
+              .distance;
+      final down =
+          flyThrow(ThrowEvent.javelin, spec, r.copyWith(pitchRate: -20))
+              .distance;
+      expect(up, isNot(closeTo(still, 0.1)));
+      expect(down, isNot(closeTo(still, 0.1)));
+      // A pitch rate is ignored by what doesn't pitch.
+      final discus = _senior(ThrowEvent.discus);
+      const d = Release(speed: 24, angleDeg: 36, height: 1.7, attackDeg: -8);
+      expect(
+          flyThrow(ThrowEvent.discus, discus, d.copyWith(pitchRate: 20))
+              .distance,
+          flyThrow(ThrowEvent.discus, discus, d).distance);
+    });
+
     test('an elite javelin release lands where finals are won', () {
       final range = eliteRanges[ThrowEvent.javelin]![EliteField.men]!;
       final r = Release(
@@ -72,6 +93,32 @@ void main() {
       final d =
           flyThrow(ThrowEvent.javelin, _senior(ThrowEvent.javelin), r).distance;
       expect(d, inInclusiveRange(range.marks.$1 - 3, range.marks.$2 + 3));
+    });
+  });
+
+  group('Aero', () {
+    test('a stalled discus keeps its lost lift until well under the stall',
+        () {
+      final aero = Aero.of(ThrowEvent.discus, _senior(ThrowEvent.discus));
+      double deg(double d) => d * 3.141592653589793 / 180;
+      // Attached below the stall, and less once the flow has let go.
+      expect(aero.lift(deg(27), stalled: true),
+          lessThan(aero.lift(deg(27))));
+      expect(aero.stallsAt(deg(30)), isTrue);
+      expect(aero.recoversAt(deg(27)), isFalse);
+      expect(aero.recoversAt(deg(24)), isTrue);
+      // Lift is gone only face on to the air, not 15° past the stall.
+      expect(aero.lift(deg(60), stalled: true), greaterThan(0));
+      expect(aero.lift(deg(90), stalled: true), closeTo(0, 1e-9));
+    });
+
+    test('the javelin\'s center of pressure closes up as it turns', () {
+      final men = Aero.of(ThrowEvent.javelin, _senior(ThrowEvent.javelin));
+      final women =
+          Aero.of(ThrowEvent.javelin, ThrowEvent.javelin.specFor(0.6));
+      expect(men.cpOffset(0), closeTo(0.143, 1e-9));
+      expect(women.cpOffset(0), closeTo(0.126, 1e-9));
+      expect(men.cpOffset(0.3), lessThan(men.cpOffset(0.1)));
     });
   });
 
