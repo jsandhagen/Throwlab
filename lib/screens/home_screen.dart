@@ -31,6 +31,7 @@ import 'group_screen.dart';
 import 'meet_event_screen.dart';
 import 'meet_screen.dart';
 import 'meets_screen.dart';
+import 'release_calculator_screen.dart';
 
 enum LibraryGrouping { athlete, event, date }
 
@@ -426,6 +427,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             tooltip: 'Compare two throws',
             icon: const Icon(Icons.compare),
             onPressed: _startComparison,
+          ),
+          IconButton(
+            tooltip: 'What if',
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const ReleaseCalculatorScreen())),
           ),
         ],
       ),

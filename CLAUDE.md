@@ -7,11 +7,11 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 
 | Path | What lives there |
 | --- | --- |
-| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests) |
+| `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests), `EliteRelease` (a release measured at a championship final, and the typical ranges) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `trim_screen` (a clip cut down to the throw), `comparison_screen` |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `trim_screen` (a clip cut down to the throw), `comparison_screen`, `release_calculator_screen` (the what-if calculator) |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), `trim_bar` (the clip's stills between two handles), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
+| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, `flight_model` (an implement through air, lift and drag), formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
 | `tool/preview/` | Headless UI preview harness (below) |
@@ -57,7 +57,8 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/logo_preview.dart \
                               tool/preview/distance_preview.dart \
                               tool/preview/progress_preview.dart \
-                              tool/preview/trim_preview.dart
+                              tool/preview/trim_preview.dart \
+                              tool/preview/what_if_preview.dart
 ```
 
 `share_preview` writes a second artifact beside its PNGs:
@@ -1179,6 +1180,18 @@ like the app rather than a bare Material default.
   fourth control there cut the title to 'Javelin:…' on a narrow phone,
   while the transport wraps and so can never be the thing that runs off the
   edge.
+- The what-if calculator (`ReleaseCalculatorScreen`, the calculator in the
+  library's app bar and 'What if…' on the release-metrics sheet) flies a
+  release through `flight_model` — drag on everything, lift on a discus and
+  a javelin — and says what one more m/s, one more degree and ten more
+  centimeters of height are each worth. It is an estimate and says so on
+  the screen, above all for the discus, which a point-mass model cannot get
+  both to elite distances and to a best angle in the thirties: the angle
+  was kept and the distance errs short. `EliteRelease` holds releases
+  measured at finals, with the report named on each; only what was
+  published goes in, so a row that has only a speed leaves the angle and
+  height sliders where they were rather than filling them with a guess
+  under somebody's name.
 - A modal bottom sheet is only safe at the top. `useSafeArea` insets the
   top and leaves the bottom to the sheet, which is right — a sheet runs to
   the bottom edge — but it means anything at the foot of one has to add
