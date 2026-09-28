@@ -490,16 +490,16 @@ void main() {
       expect(text(tester, 'whatIfGap'), '0.00 m');
     });
 
-    testWidgets('an elite final is laid over the baseline as the what-if',
+    testWidgets('an elite thrower is laid over the baseline as the what-if',
         (tester) async {
       await pump(
           tester,
           const ReleaseCalculatorScreen(
             event: ThrowEvent.shotPut,
-            implementKg: 5.44,
+            implementKg: 4,
             measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
           ));
-      final women = find.byKey(const ValueKey('elite-women'));
+      final women = find.byKey(const ValueKey('elite-typical'));
       // Built is not on screen: bring it all the way in before tapping.
       await reach(tester, women, 300);
       await tester.tap(women);
@@ -512,12 +512,7 @@ void main() {
 
       await tester.scrollUntilVisible(
           find.text('further than the baseline'), -300);
-      expect(find.textContaining('Elite women'), findsWidgets);
-      // Flown with the baseline's own 12 lb, never the final's 4 kg.
-      await tester.scrollUntilVisible(
-          find.byKey(const ValueKey('whatIfImplement')), 300);
-      expect(text(tester, 'whatIfImplement'), '12 lb');
-      expect(find.byType(DropdownButton<ImplementSpec>), findsNothing);
+      expect(find.textContaining('Typical elite thrower'), findsWidgets);
       expect(text(tester, 'whatIfGap'), startsWith('+'));
 
       // Tapping it again puts it away.
@@ -535,10 +530,10 @@ void main() {
           tester,
           const ReleaseCalculatorScreen(
             event: ThrowEvent.shotPut,
-            implementKg: 5.44,
+            implementKg: 4,
             measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
           ));
-      final women = find.byKey(const ValueKey('elite-women'));
+      final women = find.byKey(const ValueKey('elite-typical'));
       await reach(tester, women, 300);
       await tester.tap(women);
       await tester.pump();
@@ -712,6 +707,56 @@ void main() {
       expect(floating, findsNothing);
       expect(find.byKey(const ValueKey('whatIfDistance')).hitTestable(),
           findsOneWidget);
+    });
+
+    testWidgets('elite throwers are offered by the implement they throw',
+        (tester) async {
+      await pump(
+          tester,
+          const ReleaseCalculatorScreen(
+            event: ThrowEvent.shotPut,
+            implementKg: 5.44,
+            measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
+          ));
+      // Nobody elite throws the 12 lb.
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('eliteNone')), 600);
+      expect(find.byKey(const ValueKey('elite-typical')), findsNothing);
+      expect(find.byKey(const ValueKey('elite-Tom Walsh')), findsNothing);
+
+      // The 16 lb starts the screen over, on the typical elite thrower,
+      // with Walsh measured beside it.
+      await tester.scrollUntilVisible(find.text('Hammer'), -3000);
+      await tester.tap(find.byKey(const ValueKey('whatIfImplement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('16 lb').last);
+      await tester.pumpAndSettle();
+      expect(find.text('TYPICAL ELITE THROWER'), findsOneWidget);
+      expect(find.text('Back to the measured throw'), findsNothing);
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('elite-Tom Walsh')), 600);
+      expect(find.byKey(const ValueKey('elite-typical')), findsOneWidget);
+
+      // And back to the 12 lb is the measured throw again.
+      await tester.scrollUntilVisible(find.text('Hammer'), -3000);
+      await tester.tap(find.byKey(const ValueKey('whatIfImplement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('12 lb').last);
+      await tester.pumpAndSettle();
+      expect(find.text('YOUR MEASURED THROW'), findsOneWidget);
+    });
+
+    testWidgets('changing the implement starts over', (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('whatIfGap')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('whatIfImplement')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('4 kg').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('whatIfGap')), findsNothing);
+      expect(find.text('TYPICAL ELITE THROWER'), findsOneWidget);
     });
 
     testWidgets('switching event shows its own references', (tester) async {

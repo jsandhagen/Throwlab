@@ -1,7 +1,8 @@
 // The what-if calculator: a shot put opened on its own; a measured high
-// school put with each elite final laid over it; the discus and the hammer
-// compared the same way; and the javelin read in feet, which is what the
-// field's markers switch to. Each is shot at a phone's height, and the
+// school put, which no elite thrower throws; a measured 4 kg put with the
+// typical elite thrower laid over it; the discus, the hammer and the
+// javelin compared the same way, the javelin read in feet, which is what
+// the field's markers switch to. Each is shot at a phone's height, and the
 // busiest again at the full length of the page. See CLAUDE.md.
 
 import 'package:flutter/material.dart';
@@ -82,8 +83,18 @@ void main() {
     // throw, so the headline is what the angle alone is worth.
     await tap(const ValueKey('tryBestAngle'));
     await shoot('what_if_best_angle');
-    await tap(const ValueKey('elite-men'));
-    await shoot('what_if_vs_men');
+    await open(measured, height: 7200);
+    await shoot('what_if_no_elite_full');
+
+    // A women's 4 kg put against the typical elite thrower with the 4 kg.
+    const women = ReleaseCalculatorScreen(
+      event: ThrowEvent.shotPut,
+      implementKg: 4,
+      measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
+    );
+    await open(women);
+    await tap(const ValueKey('elite-typical'));
+    await shoot('what_if_vs_elite');
     // Down among the dials, with the result hanging over them: the number,
     // the two flights and what the gap is made of, while a slider moves.
     await tester.scrollUntilVisible(
@@ -100,21 +111,30 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('Raise-Angle')));
     await tester.pumpAndSettle();
     await shoot('what_if_floating_angle');
-    await open(measured, height: 5600);
-    await tap(const ValueKey('elite-women'));
-    await shoot('what_if_vs_women_full');
+    await open(women, height: 5600);
+    await tap(const ValueKey('elite-typical'));
+    await shoot('what_if_vs_elite_full');
+
+    // The 16 lb, with Walsh measured by name beside the typical thrower.
+    await open(const ReleaseCalculatorScreen(), height: 7200);
+    await tap(const ValueKey('elite-Tom Walsh'));
+    await shoot('what_if_vs_walsh_full');
 
     await open(const ReleaseCalculatorScreen(
       event: ThrowEvent.discus,
-      implementKg: 1.6,
-      measured: Release(speed: 19.5, angleDeg: 38, height: 1.5, attackDeg: 4),
+      implementKg: 2,
+      measured: Release(speed: 21.5, angleDeg: 38, height: 1.5, attackDeg: 4),
     ));
-    await tap(const ValueKey('elite-men'));
-    await shoot('what_if_discus_vs_men');
+    await tap(const ValueKey('elite-typical'));
+    await shoot('what_if_discus_vs_elite');
 
-    await open(const ReleaseCalculatorScreen(event: ThrowEvent.hammer));
-    await tap(const ValueKey('elite-women'));
-    await shoot('what_if_hammer_men_vs_women');
+    await open(const ReleaseCalculatorScreen(
+      event: ThrowEvent.hammer,
+      implementKg: 4,
+      measured: Release(speed: 23, angleDeg: 38, height: 1.4),
+    ));
+    await tap(const ValueKey('elite-typical'));
+    await shoot('what_if_hammer_vs_elite');
 
     await open(
       const ReleaseCalculatorScreen(
@@ -124,7 +144,7 @@ void main() {
       ),
       unit: DistanceUnit.feet,
     );
-    await tap(const ValueKey('elite-men'));
+    await tap(const ValueKey('elite-typical'));
     await shoot('what_if_javelin_feet');
 
     // The javelin's own dial: the pitch rate it leaves the hand turning at,
@@ -142,8 +162,8 @@ void main() {
 
     // The whole page in feet: mph on the sliders, heights in feet and
     // inches, and the worth tiles priced in a mile an hour and four inches.
-    await open(measured, height: 7200, unit: DistanceUnit.feet);
-    await tap(const ValueKey('elite-men'));
+    await open(women, height: 7200, unit: DistanceUnit.feet);
+    await tap(const ValueKey('elite-typical'));
     await shoot('what_if_feet_full');
     DistanceField.preferred = DistanceUnit.meters;
   });

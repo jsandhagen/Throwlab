@@ -522,7 +522,7 @@ Map<Lever, double> gapShares(
 ) {
   final a = from;
   final b = to;
-  // Within a hair is the same: an elite final's height is the middle of a
+  // Within a hair is the same: an elite thrower's height is the middle of a
   // range, and (1.8 + 2.1) / 2 is not quite the 1.95 a coach typed.
   bool differs(double x, double y) => (x - y).abs() > 1e-9;
   final moved = [

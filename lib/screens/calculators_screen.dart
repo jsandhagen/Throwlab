@@ -37,7 +37,7 @@ class CalculatorsScreen extends StatelessWidget {
                 icon: Icons.insights,
                 title: 'What if',
                 subtitle: 'Nudge a release — speed, angle, height — and see '
-                    'what it is worth, or hold it against an elite final.',
+                    'what it is worth, or hold it against elite throwers.',
                 open: () => const ReleaseCalculatorScreen(),
               ),
               _Tool(

@@ -161,7 +161,9 @@ class _Throw {
   final String? label;
 }
 
-String _eliteLabel(EliteRange r) => r.field.label;
+/// What the typical elite release is called wherever it is named: after
+/// the throwers, not after a competition, since it is drawn from many.
+const _eliteLabel = 'Typical elite thrower';
 
 class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   static const _measuredLabel = 'Your measured throw';
@@ -169,9 +171,18 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   late ThrowEvent _event = widget.event;
 
   /// What both throws are flown with: the measured throw's implement, or
-  /// the event's own. Fixed — a reference brings its release and nothing
-  /// else, so what the gap measures is the release.
+  /// the event's own. The same for both — a reference brings its release
+  /// and nothing else, so what the gap measures is the release — and
+  /// changing it starts the screen over (`_pickImplement`), since nothing
+  /// on it was thrown with the new one.
   late ImplementSpec _spec = _specFor(widget.event);
+
+  /// The implement the measured throw was thrown with, when there is one.
+  ImplementSpec? get _measuredSpec => widget.measured == null
+      ? null
+      : widget.implementKg == null
+          ? widget.event.defaultImplement
+          : widget.event.specFor(widget.implementKg!);
 
   ImplementSpec _specFor(ThrowEvent event) =>
       event == widget.event && widget.implementKg != null
@@ -182,9 +193,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   /// best-angle search only. Opens on the event's estimate and is the
   /// coach's to set; an event nobody has measured it for has none.
   late double _speedLoss = typicalSpeedLossPerDeg(widget.event);
-  late _Throw _one = widget.measured == null
-      ? _elite(widget.event, EliteField.men)
-      : _fit(_Throw(_spec, widget.measured!, _measuredLabel), widget.event);
+  late _Throw _one = _baseline();
   _Throw? _two;
 
   /// Which throw the sliders move: 0, the baseline, or 1, the what-if.
@@ -238,18 +247,58 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   _Throw get _current => _editing == 1 ? _two! : _one;
   _Throw? get _other => !_comparing ? null : (_editing == 1 ? _one : _two);
 
-  _Throw _elite(ThrowEvent event, EliteField field) {
-    final range = eliteRanges[event]![field]!;
-    return _Throw(
-      _spec,
-      Release(
+  /// The typical elite release with this implement, or null where elite
+  /// throwers don't throw it.
+  _Throw? _elite() {
+    final range = eliteRangeFor(_event, _spec.weightKg);
+    return range == null ? null : _Throw(_spec, _typical(range), _eliteLabel);
+  }
+
+  static Release _typical(EliteRange range) => Release(
         speed: range.typicalSpeed,
         angleDeg: range.typicalAngle,
         height: range.typicalHeight,
         attackDeg: range.attackDeg,
-      ),
-      _eliteLabel(range),
-    );
+      );
+
+  /// What the screen opens on for the event and implement it is on: the
+  /// measured throw where it was thrown with this implement, else the
+  /// typical elite thrower with it, else — for an implement no elite
+  /// thrower throws — the nearest one's release as numbers to start from,
+  /// under nobody's name.
+  _Throw _baseline() {
+    if (widget.measured != null &&
+        _event == widget.event &&
+        _spec == _measuredSpec) {
+      return _fit(_Throw(_spec, widget.measured!, _measuredLabel), _event);
+    }
+    return _elite() ??
+        _fit(_Throw(_spec, _typical(nearestEliteRange(_event, _spec.weightKg))),
+            _event);
+  }
+
+  /// Everything back to what the event and implement open on.
+  void _startOver() {
+    _speedLoss = typicalSpeedLossPerDeg(_event);
+    _one = _baseline();
+    _two = null;
+    _editing = 0;
+    if (_scroll.hasClients && _scroll.offset > 0) {
+      _scroll.animateTo(0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic);
+    }
+  }
+
+  /// A new implement starts over: every number on the screen was flown with
+  /// the old one, and carrying a release across to a heavier ball at the
+  /// same speed is the what-if the model can't answer.
+  void _pickImplement(ImplementSpec spec) {
+    if (spec == _spec) return;
+    setState(() {
+      _spec = spec;
+      _startOver();
+    });
   }
 
   _Throw _fit(_Throw t, ThrowEvent event) {
@@ -297,20 +346,12 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
 
   void _pickEvent(ThrowEvent event) {
     if (event == _event) return;
+    // A new event is a new throw: its result is what to look at first.
     setState(() {
       _event = event;
-      _speedLoss = typicalSpeedLossPerDeg(event);
       _spec = _specFor(event);
-      _one = _elite(event, EliteField.men);
-      _two = null;
-      _editing = 0;
+      _startOver();
     });
-    // A new event is a new throw: its result is what to look at first.
-    if (_scroll.hasClients && _scroll.offset > 0) {
-      _scroll.animateTo(0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic);
-    }
   }
 
   /// A reference goes in as the what-if, over whatever the baseline is —
@@ -381,7 +422,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
       });
 
   /// Two roles rather than two numbers. The baseline is whatever the
-  /// comparison is measured from — a measured throw, an elite final, or
+  /// comparison is measured from — a measured throw, a typical elite thrower, or
   /// numbers typed in — and the what-if is the change being asked about;
   /// 'throw 1' and 'throw 2' said neither, and a baseline that was never
   /// thrown is no less a baseline.
@@ -441,17 +482,27 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
               HeaderBand(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                  child: AngularSegmentedBar<ThrowEvent>(
-                    value: _event,
-                    onChanged: _pickEvent,
-                    segments: [
-                      for (final e in ThrowEvent.values)
-                        AngularSegment(
-                          value: e,
-                          glyph: (color) =>
-                              EventGlyph(e, size: 16, color: color),
-                          label: e == ThrowEvent.shotPut ? 'Shot' : e.label,
-                        ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AngularSegmentedBar<ThrowEvent>(
+                        value: _event,
+                        onChanged: _pickEvent,
+                        segments: [
+                          for (final e in ThrowEvent.values)
+                            AngularSegment(
+                              value: e,
+                              glyph: (color) =>
+                                  EventGlyph(e, size: 16, color: color),
+                              label: e == ThrowEvent.shotPut ? 'Shot' : e.label,
+                            ),
+                        ],
+                      ),
+                      _ImplementPicker(
+                        event: _event,
+                        value: _spec,
+                        onChanged: _pickImplement,
+                      ),
                     ],
                   ),
                 ),
@@ -493,6 +544,7 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     final twoColor = scheme.primary;
     final showBack = widget.measured != null &&
         _event == widget.event &&
+        _spec == _measuredSpec &&
         _one.label != _measuredLabel;
     final other = _other?.release;
     final otherRole = _comparing ? _role(1 - _editing).toLowerCase() : null;
@@ -650,16 +702,6 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                       icon: const Icon(Icons.restart_alt),
                       onPressed: _differs ? _resetToBaseline : null,
                     ),
-                  // Said, not offered: both throws are flown with it.
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 12, 8, 12),
-                    child: Text(_spec.weightLabel,
-                        key: const ValueKey('whatIfImplement'),
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
-                  ),
                 ],
               ),
             ),
@@ -796,33 +838,26 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
                     ? 'from the ${_role(_editing).toLowerCase()}'
                     : 'from here'),
             _Worth(worth: worth, units: units, speedLossPerDeg: speedLoss),
-            const _Heading('Compare with an elite final'),
-            _EliteCards(
+            _Heading('Compare with elite throwers',
+                trailing: _spec.weightLabel),
+            _EliteThrowers(
               event: _event,
+              spec: _spec,
               units: units,
               selected: _two?.label,
-              throwFor: (field) => _elite(_event, field),
+              typical: _elite(),
+              // Only what was published: a row with a speed alone takes the
+              // angle and height from the throw it is laid over.
+              measured: (r) => _Throw(
+                _spec,
+                _one.release.copyWith(
+                  speed: r.speed,
+                  angleDeg: r.angleDeg,
+                  height: r.height,
+                ),
+                r.athlete,
+              ),
               onTap: _compareWith,
-            ),
-            _Heading('Measured at finals', trailing: _event.label),
-            _References(
-              event: _event,
-              selected: _two?.label,
-              units: units,
-              onTry: (r) {
-                // Only what was published: a row with a speed alone takes
-                // the angle and height from the throw it is laid over. The
-                // implement stays the screen's.
-                _compareWith(_Throw(
-                  _spec,
-                  _one.release.copyWith(
-                    speed: r.speed,
-                    angleDeg: r.angleDeg,
-                    height: r.height,
-                  ),
-                  r.athlete,
-                ));
-              },
             ),
             const _Heading('About the model'),
             const _Caveat(),
@@ -877,6 +912,53 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The implement both throws are flown with, set with the event rather
+/// than with either throw: it belongs to the whole screen, and changing it
+/// starts the screen over, which it says.
+class _ImplementPicker extends StatelessWidget {
+  const _ImplementPicker({
+    required this.event,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final ThrowEvent event;
+  final ImplementSpec value;
+  final ValueChanged<ImplementSpec> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Row(
+      children: [
+        Text('Implement', style: theme.textTheme.bodyMedium),
+        const SizedBox(width: 12),
+        DropdownButton<ImplementSpec>(
+          key: const ValueKey('whatIfImplement'),
+          value: value,
+          underline: const SizedBox(),
+          borderRadius: BorderRadius.circular(12),
+          style: theme.textTheme.titleSmall,
+          items: [
+            for (final s in event.implements)
+              DropdownMenuItem(value: s, child: Text(s.weightLabel)),
+          ],
+          onChanged: (s) {
+            if (s != null) onChanged(s);
+          },
+        ),
+        const Spacer(),
+        Flexible(
+          child: Text('Changing it resets',
+              overflow: TextOverflow.ellipsis, style: muted),
+        ),
+      ],
     );
   }
 }
@@ -1151,105 +1233,119 @@ class _Approx extends StatelessWidget {
   }
 }
 
-/// The two senior finals, one tap each, with what the model makes of a
-/// typical release in them.
-class _EliteCards extends StatelessWidget {
-  const _EliteCards({
+/// The elite throwers who throw this implement, one tap each: the typical
+/// release first, approximate and drawn from the literature, then the
+/// throwers measured by name. Only this implement's — an elite thrower's
+/// release flown with somebody else's implement is a throw nobody made —
+/// so a lighter implement than the senior ones has nobody, and says so.
+class _EliteThrowers extends StatelessWidget {
+  const _EliteThrowers({
     required this.event,
+    required this.spec,
     required this.units,
     required this.selected,
-    required this.throwFor,
+    required this.typical,
+    required this.measured,
     required this.onTap,
   });
 
   final ThrowEvent event;
+  final ImplementSpec spec;
   final _Units units;
   final String? selected;
-  final _Throw Function(EliteField) throwFor;
+  final _Throw? typical;
+  final _Throw Function(EliteRelease) measured;
   final ValueChanged<_Throw> onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final named = eliteReleasesFor(event, spec.weightKg);
+
+    Widget row({
+      required Key key,
+      required _Throw t,
+      required String title,
+      required String subtitle,
+      bool threeLine = false,
+    }) {
+      final on = selected == t.label;
+      return ListTile(
+        key: key,
+        onTap: () => onTap(t),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        isThreeLine: threeLine,
+        trailing: Icon(on ? Icons.check_circle : Icons.add_circle_outline,
+            color: on ? scheme.primary : scheme.onSurfaceVariant),
+      );
+    }
+
+    final senior = [
+      for (final r in eliteRanges[event]!.values)
+        event.specFor(r.weightKg).weightLabel
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              for (final field in EliteField.values)
-                Expanded(
-                  child: Builder(builder: (context) {
-                    final t = throwFor(field);
-                    final on = selected == t.label;
-                    final d = flyThrow(event, t.spec, t.release).distance;
-                    return Card(
-                      color: cardOverSector(scheme),
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(
-                          color: on ? scheme.primary : Colors.transparent,
-                          width: 1.5,
-                        ),
-                      ),
-                      child: InkWell(
-                        key: ValueKey('elite-${field.name}'),
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => onTap(t),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(field.label,
-                                        style: theme.textTheme.titleSmall),
-                                  ),
-                                  Icon(on ? Icons.check : Icons.add,
-                                      size: 18,
-                                      color: on
-                                          ? scheme.primary
-                                          : scheme.onSurfaceVariant),
-                                ],
-                              ),
-                              Text('Their release, ${t.spec.weightLabel}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                      color: scheme.onSurfaceVariant)),
-                              const SizedBox(height: 6),
-                              Text('≈ ${units.mark(d)}',
-                                  style: theme.textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w700)),
-                              Text(
-                                units.release(t.release),
-                                style: theme.textTheme.bodySmall
-                                    ?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-            ],
+        Card(
+          color: cardOverSector(scheme),
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (typical != null)
+                  row(
+                    key: const ValueKey('elite-typical'),
+                    t: typical!,
+                    title: _eliteLabel,
+                    subtitle:
+                        '≈ ${units.mark(flyThrow(event, spec, typical!.release).distance)}'
+                        ' · ${units.release(typical!.release)}',
+                  ),
+                for (final r in named)
+                  row(
+                    key: ValueKey('elite-${r.athlete}'),
+                    t: measured(r),
+                    title: r.athlete,
+                    subtitle: '${units.mark(r.mark)} · ${r.meet}\n'
+                        '${units.speed(r.speed)}'
+                        '${r.angleDeg == null ? '' : ' · ${r.angleDeg!.toStringAsFixed(1)}°'}'
+                        '${r.height == null ? '' : ' · ${units.height(r.height!)}'}'
+                        '${r.complete ? '' : ' · speed only published'}',
+                    threeLine: true,
+                  ),
+                if (typical == null && named.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                    child: Text(
+                      key: const ValueKey('eliteNone'),
+                      'Elite throwers throw the ${senior.join(' and the ')}, '
+                      'so there is no one to compare the ${spec.weightLabel} '
+                      'with. Pick one of those as the implement to see them.',
+                      style: muted,
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Text(
-            'A typical release in a senior final — approximate, drawn from '
-            'the biomechanics literature rather than one report — thrown '
-            'with the same implement as the baseline. Tap one to compare '
-            'it.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: scheme.onSurfaceVariant),
+        if (typical != null || named.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              '${typical == null ? '' : 'The typical release is approximate, drawn from the biomechanics literature rather than one report. '}'
+              '${named.isEmpty ? '' : 'Named throwers were measured at the championship given. '}'
+              'Tap one to compare it with the baseline.',
+              style: muted,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1318,8 +1414,8 @@ class _BestAngle extends StatelessWidget {
     }
     final String note;
     if (forThrower) {
-      note = 'Speed falls as the angle rises, which is most of why finals '
-          'release in the thirties. With speed held, the flight alone is best '
+      note = 'Speed falls as the angle rises, which is most of why elite '
+          'throwers release in the thirties. With speed held, the flight alone is best '
           'at ${held!.angleDeg.toStringAsFixed(1)}°.'
           '${_hasAttack(event) ? ' The attack angle is held with it.' : ''}';
     } else if (speedLoss != null) {
@@ -1990,71 +2086,6 @@ class _WorthTile extends StatelessWidget {
   }
 }
 
-class _References extends StatelessWidget {
-  const _References({
-    required this.event,
-    required this.selected,
-    required this.units,
-    required this.onTry,
-  });
-
-  final ThrowEvent event;
-  final String? selected;
-  final _Units units;
-  final ValueChanged<EliteRelease> onTry;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    final rows = [
-      for (final r in eliteReleases)
-        if (r.event == event) r
-    ];
-
-    return Card(
-      color: cardOverSector(theme.colorScheme),
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final r in rows)
-              ListTile(
-                title: Text(r.athlete),
-                subtitle: Text(
-                  '${units.mark(r.mark)} · '
-                  '${event.specFor(r.weightKg).weightLabel} · ${r.meet}\n'
-                  '${units.speed(r.speed)}'
-                  '${r.angleDeg == null ? '' : ' · ${r.angleDeg!.toStringAsFixed(1)}°'}'
-                  '${r.height == null ? '' : ' · ${units.height(r.height!)}'}'
-                  '${r.complete ? '' : ' · speed only published'}',
-                ),
-                isThreeLine: true,
-                trailing: selected == r.athlete
-                    ? Icon(Icons.check, color: theme.colorScheme.primary)
-                    : TextButton(
-                        onPressed: () => onTry(r),
-                        child: const Text('Try'),
-                      ),
-              ),
-            if (rows.isEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                child: Text(
-                    'No individual releases for this event in the app yet — '
-                    'the typical finals above are the reference for now.',
-                    style: muted),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// How the model is built and where it falls short, a point to a
 /// paragraph: one block of it was a page nobody read to the end, and the
 /// end was where the javelin's and the discus's caveats were.
@@ -2082,7 +2113,7 @@ class _Caveat extends StatelessWidget {
     (
       'Discus',
       'Its coefficients are shaped like the tunnel curves in the papers '
-          'below and tuned so elite releases land near where finals are won. '
+          'below and tuned so elite releases land where elite throwers do. '
           'It holds the tilt it was released at, stalls at 29° and only '
           'recovers under 25°. The real one turns in roll, which a flight in '
           'one plane cannot show, and it comes out several meters short at '
@@ -2107,8 +2138,9 @@ class _Caveat extends StatelessWidget {
     (
       'References',
       'A measured release is only as good as the video: side-on, square to '
-          'the throw. The typical elite finals are approximate ranges drawn '
-          "from the literature, the women's from the thinner half of it.",
+          'the throw. The typical elite throwers are approximate ranges drawn '
+          "from the literature, the women's from the thinner half of it, and "
+          'are only offered with the implement they throw.',
     ),
   ];
 
@@ -2200,7 +2232,7 @@ class _Sources extends StatelessWidget {
       for (final report in {for (final r in eliteReleases) r.source})
         (
           citation: report,
-          usedFor: 'Release speeds under Measured at finals, and the angle '
+          usedFor: 'Release speeds of the named elite throwers, and the angle '
               'and height where they were published.',
         ),
     ];

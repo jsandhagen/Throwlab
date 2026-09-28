@@ -1285,21 +1285,26 @@ like the app rather than a bare Material default.
   in a meter a second spelled in the wrong unit (`_Units`). Everything is
   still stored and flown in meters; the unit is only how it is read and how
   far a slider's step goes. Both throws are flown with one
-  implement — the measured throw's, else the event's own — and it cannot
-  be changed on the screen: the model has no athlete in it to throw a
-  heavier implement slower, so a what-if across implements would be a
-  number nothing stands behind. A reference brings its release and nothing
-  else, which is also what makes a men's final against a 12 lb put a
-  question about the release rather than about the ball, and there is no
-  implement row in the gap's breakdown (`Lever` has none). `FlightField` draws them side-on across a field
+  implement, and it is the screen's rather than either throw's: picked
+  beside the event (`_ImplementPicker`), opening on the measured throw's,
+  and changing it starts the screen over (`_pickImplement`) — back to the
+  measured throw if it was thrown with that implement, else the typical
+  elite thrower with it. The model has no athlete in it to throw a heavier
+  implement slower, so a what-if across implements would be a number
+  nothing stands behind, and there is no implement row in the gap's
+  breakdown (`Lever` has none). `FlightField` draws them side-on across a field
   to one scale both ways — the circle's stop board or the javelin's foul
   line, the grass, a marker every round number of meters or feet — with each
   distance beside its divot on the side the flight is not coming in from.
-  Every event has an elite men's and women's final one tap away
-  (`eliteRanges`, typical releases marked approximate), and a tap lays it
-  in as the what-if — any reference goes over the baseline a coach
-  brought, thrown with the baseline's implement. `EliteRelease` holds
-  releases measured at finals, with the report
+  Elite throwers are offered by implement, and called elite throwers
+  rather than a final, since a typical release is drawn from many: the
+  typical elite thrower with the implement on the screen (`eliteRangeFor`,
+  marked approximate) and every thrower measured by name with it
+  (`eliteReleasesFor`), and a tap lays one in as the what-if over the
+  baseline a coach brought. An implement no elite thrower throws — a 12 lb
+  shot, a 1.6 kg discus — has nobody, and says which implements do.
+  `EliteRelease` holds
+  releases measured at championships, with the report
   named on each; only what was published goes in, so a row that has only a
   speed takes its angle and height from the baseline rather than filling them
   with a guess under somebody's name.

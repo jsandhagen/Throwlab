@@ -1,6 +1,6 @@
 import 'throw_event.dart';
 
-/// A release measured on a real throw at a championship final, for the
+/// A release measured on a real elite thrower at a championship, for the
 /// what-if calculator to hold a coach's numbers against.
 ///
 /// Only what was measured goes in. Most of the published figures that
@@ -216,6 +216,24 @@ const eliteRanges = {
   },
 };
 
+/// The typical elite release with [event]'s [weightKg] implement, when
+/// elite throwers throw it — the senior men's and women's implements, and
+/// nothing lighter: a 12 lb shot has no elite throwers to measure.
+EliteRange? eliteRangeFor(ThrowEvent event, double weightKg) {
+  for (final r in eliteRanges[event]!.values) {
+    if (r.weightKg == weightKg) return r;
+  }
+  return null;
+}
+
+/// The elite range thrown with the implement nearest [weightKg], for a
+/// release to start from where there is none of its own.
+EliteRange nearestEliteRange(ThrowEvent event, double weightKg) =>
+    eliteRanges[event]!.values.reduce((a, b) =>
+        (a.weightKg - weightKg).abs() <= (b.weightKg - weightKg).abs()
+            ? a
+            : b);
+
 /// The releases measured with [event]'s [weightKg] implement.
 List<EliteRelease> eliteReleasesFor(ThrowEvent event, double weightKg) => [
       for (final r in eliteReleases)
@@ -274,6 +292,6 @@ const whatIfSources = <({String citation, String usedFor})>[
     citation: 'Bartlett, R. M., & Best, R. J. (1988). The biomechanics of '
         'javelin throwing: a review. Journal of Sports Sciences, 6(1), '
         '1–38.',
-    usedFor: 'Javelin release ranges in the typical finals.',
+    usedFor: 'Javelin release ranges for the typical elite thrower.',
   ),
 ];
