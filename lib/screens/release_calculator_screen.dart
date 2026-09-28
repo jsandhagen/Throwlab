@@ -111,8 +111,14 @@ class _Units {
   String speed(double mps) => imperial
       ? '${(mps / _mph).toStringAsFixed(1)} mph'
       : '${mps.toStringAsFixed(1)} m/s';
-  String speedDelta(double d) =>
-      imperial ? '${_signed(d / _mph, 1)} mph' : '${_signed(d, 1)} m/s';
+
+  /// [fine] for a change under a tenth, which a tenth would print as
+  /// nothing — a shot putter's 0.03 m/s a degree read as '0.0 m/s'.
+  String speedDelta(double d, {bool fine = false}) {
+    final v = imperial ? d / _mph : d;
+    final digits = fine && v.abs() < 0.1 ? 2 : 1;
+    return '${_signed(v, digits)} ${imperial ? 'mph' : 'm/s'}';
+  }
 
   // A release height is a mark like any other on this screen: 6-11 in feet,
   // the way the throw it comes from is written.
@@ -185,6 +191,45 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
   /// unit is not a change of mind about the next mark.
   late DistanceUnit _unit = DistanceField.preferred;
 
+  final _scroll = ScrollController();
+
+  /// The picture in the result card: once it is out of sight the result
+  /// floats, whatever of the card's text is still showing under it.
+  final _fieldKey = GlobalKey();
+  final _stackKey = GlobalKey();
+
+  /// Whether the result card has scrolled out of sight, and its small copy
+  /// is hanging at the top instead.
+  bool _floating = false;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Floats the result once the flight in the card has gone up under the
+  /// top of the page. Not the whole card: the gap's breakdown hangs under
+  /// the flight, and waiting for that to go too left the dials a screen
+  /// long with nothing to watch but a footnote. Not sooner either, since
+  /// while the flight is in sight a second copy of it is the same picture
+  /// twice.
+  void _checkFloating() {
+    bool off() {
+      if (!_scroll.hasClients || _scroll.offset <= 0) return false;
+      final field = _fieldKey.currentContext?.findRenderObject();
+      final stack = _stackKey.currentContext?.findRenderObject();
+      // Scrolled far enough that the list has let the card go.
+      if (field is! RenderBox || !field.attached) return true;
+      if (stack is! RenderBox) return false;
+      final foot = field.localToGlobal(Offset(0, field.size.height)).dy;
+      return foot < stack.localToGlobal(Offset.zero).dy + 8;
+    }
+
+    final next = off();
+    if (next != _floating) setState(() => _floating = next);
+  }
+
   bool get _comparing => _two != null;
   _Throw get _current => _editing == 1 ? _two! : _one;
   _Throw? get _other => !_comparing ? null : (_editing == 1 ? _one : _two);
@@ -232,6 +277,21 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
 
   void _setRelease(Release r) => setState(() => _put(_Throw(_current.spec, r)));
 
+  /// The speed lost per degree steeper as the flight is flown: the coach's
+  /// setting where the event trades speed for angle, nothing where it
+  /// doesn't.
+  double get _loss => typicalSpeedLossPerDeg(_event) > 0 ? _speedLoss : 0;
+
+  /// An angle, and the speed that goes with it: [_loss] per degree off the
+  /// speed for every degree steeper, and back on for every degree flatter.
+  void _setAngle(double angle) {
+    final r = _current.release;
+    _setRelease(r.copyWith(
+      angleDeg: angle,
+      speed: r.speed - _loss * (angle - r.angleDeg),
+    ));
+  }
+
   void _setSpec(ImplementSpec spec) =>
       setState(() => _put(_Throw(spec, _current.release)));
 
@@ -244,6 +304,12 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
       _two = null;
       _editing = 0;
     });
+    // A new event is a new throw: its result is what to look at first.
+    if (_scroll.hasClients && _scroll.offset > 0) {
+      _scroll.animateTo(0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic);
+    }
   }
 
   /// A reference goes in as the what-if, over whatever the baseline is —
@@ -420,7 +486,8 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
     final held = tradesSpeed && _speedLoss > 0
         ? bestAngle(_event, current.spec, current.release)
         : null;
-    final speedLoss = tradesSpeed ? _speedLoss : 0.0;
+    final speedLoss = _loss;
+    final loss = _loss;
     final worth = sensitivity(_event, current.spec, current.release,
         speedStep: units.speedLever,
         heightStep: units.heightLever,
@@ -435,6 +502,21 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
         _one.label != _measuredLabel;
     final other = _other?.release;
     final otherRole = _comparing ? _role(1 - _editing).toLowerCase() : null;
+    final shares = !_comparing
+        ? null
+        : gapShares(
+            _event,
+            (spec: _one.spec, release: _one.release),
+            (spec: _two!.spec, release: _two!.release),
+          );
+    final gap =
+        twoFlight == null ? 0.0 : twoFlight.distance - oneFlight.distance;
+    final shown = (
+      one: (name: _source(0), flight: oneFlight, color: oneColor),
+      two: twoFlight == null
+          ? null
+          : (name: _source(1), flight: twoFlight, color: twoColor),
+    );
     Widget dial({
       required String label,
       required double value,
@@ -459,296 +541,355 @@ class _ReleaseCalculatorScreenState extends State<ReleaseCalculatorScreen> {
           hint: hint,
         );
 
-    return SafeArea(
-      top: false,
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
-        children: [
-          const _Disclaimer(),
-          _ResultCard(
-            event: _event,
-            units: units,
-            one: (name: _source(0), flight: oneFlight, color: oneColor),
-            two: twoFlight == null
-                ? null
-                : (name: _source(1), flight: twoFlight, color: twoColor),
-            ghost: _comparing || (best.distance - oneFlight.distance) < 0.02
-                ? null
-                : flyThrow(
-                    _event,
-                    _one.spec,
-                    _one.release
-                        .copyWith(angleDeg: best.angleDeg, speed: best.speed)),
-            // The two ways off the number: ask what a change would do, or
-            // go back to the throw that was measured.
-            actions: [
-              if (!_comparing)
-                FilledButton.tonalIcon(
-                  key: const ValueKey('whatIfTry'),
-                  onPressed: _addSecond,
-                  icon: const Icon(Icons.tune, size: 18),
-                  label: const Text('Try a change'),
-                ),
-              if (showBack)
-                TextButton.icon(
-                  onPressed: _backToMeasured,
-                  icon: const Icon(Icons.undo, size: 18),
-                  label: const Text('Back to the measured throw'),
-                ),
-            ],
-          ),
-          if (_comparing)
-            _GapShares(
-              shares: gapShares(
-                _event,
-                (spec: _one.spec, release: _one.release),
-                (spec: _two!.spec, release: _two!.release),
-              ),
-              gap: twoFlight!.distance - oneFlight.distance,
-              one: _one,
-              two: _two!,
+    final list = NotificationListener<ScrollMetricsNotification>(
+      onNotification: (_) {
+        _checkFloating();
+        return false;
+      },
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (_) {
+          _checkFloating();
+          return false;
+        },
+        child: ListView(
+          controller: _scroll,
+          padding: const EdgeInsets.only(bottom: 24),
+          children: [
+            const _Disclaimer(),
+            _ResultCard(
+              fieldKey: _fieldKey,
+              event: _event,
               units: units,
-            ),
-          _Heading('Release',
-              action: _comparing
-                  ? IconButton(
-                      tooltip: 'Remove the what-if',
-                      visualDensity: VisualDensity.compact,
-                      icon: const Icon(Icons.close),
-                      onPressed: _removeSecond,
-                    )
-                  : null),
-          if (_comparing)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: AngularSegmentedBar<int>(
-                value: _editing,
-                onChanged: (i) => setState(() => _editing = i),
-                segments: [
-                  for (final i in [0, 1])
-                    AngularSegment(
-                      value: i,
-                      // The throw's own ink, so the switch is also the key
-                      // to the two lines on the field above it.
-                      glyph: (_) => Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: i == 0 ? oneColor : twoColor,
-                        ),
-                      ),
-                      label: _role(i),
+              one: shown.one,
+              two: shown.two,
+              // What changed, under the picture of what it did.
+              breakdown: shares == null
+                  ? null
+                  : _GapShares(
+                      shares: shares,
+                      gap: gap,
+                      one: _one,
+                      two: _two!,
+                      units: units,
                     ),
+              ghost: _comparing || (best.distance - oneFlight.distance) < 0.02
+                  ? null
+                  : flyThrow(
+                      _event,
+                      _one.spec,
+                      _one.release.copyWith(
+                          angleDeg: best.angleDeg, speed: best.speed)),
+              // The two ways off the number: ask what a change would do, or
+              // go back to the throw that was measured.
+              actions: [
+                if (!_comparing)
+                  FilledButton.tonalIcon(
+                    key: const ValueKey('whatIfTry'),
+                    onPressed: _addSecond,
+                    icon: const Icon(Icons.tune, size: 18),
+                    label: const Text('Try a change'),
+                  ),
+                if (showBack)
+                  TextButton.icon(
+                    onPressed: _backToMeasured,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Back to the measured throw'),
+                  ),
+              ],
+            ),
+            _Heading('Release',
+                action: _comparing
+                    ? IconButton(
+                        tooltip: 'Remove the what-if',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.close),
+                        onPressed: _removeSecond,
+                      )
+                    : null),
+            if (_comparing)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: AngularSegmentedBar<int>(
+                  value: _editing,
+                  onChanged: (i) => setState(() => _editing = i),
+                  segments: [
+                    for (final i in [0, 1])
+                      AngularSegment(
+                        value: i,
+                        // The throw's own ink, so the switch is also the key
+                        // to the two lines on the field above it.
+                        glyph: (_) => Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i == 0 ? oneColor : twoColor,
+                          ),
+                        ),
+                        label: _role(i),
+                      ),
+                  ],
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(children: [
+                        if (_comparing)
+                          TextSpan(
+                              text:
+                                  'Moving the ${_role(_editing).toLowerCase()} · ',
+                              style: TextStyle(color: scheme.onSurfaceVariant)),
+                        TextSpan(text: _source(_editing)),
+                      ]),
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  // Always there while the what-if is on the sliders, and only
+                  // lit once it has moved: appearing on the first nudge pushed
+                  // every dial under it down a row, out from under the thumb.
+                  if (_comparing && _editing == 1)
+                    IconButton(
+                      key: const ValueKey('whatIfReset'),
+                      tooltip: 'Start again from the baseline',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.restart_alt),
+                      onPressed: _differs ? _resetToBaseline : null,
+                    ),
+                  // The implement is part of the throw: a 12 lb put is not a
+                  // 16 lb one at the same release, so it sits with the dials.
+                  DropdownButton<ImplementSpec>(
+                    key: const ValueKey('whatIfImplement'),
+                    value: current.spec,
+                    underline: const SizedBox(),
+                    borderRadius: BorderRadius.circular(12),
+                    items: [
+                      for (final s in _event.implements)
+                        DropdownMenuItem(value: s, child: Text(s.weightLabel)),
+                    ],
+                    onChanged: (s) {
+                      if (s != null) _setSpec(s);
+                    },
+                  ),
                 ],
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(children: [
-                      if (_comparing)
-                        TextSpan(
-                            text:
-                                'Moving the ${_role(_editing).toLowerCase()} · ',
-                            style: TextStyle(color: scheme.onSurfaceVariant)),
-                      TextSpan(text: _source(_editing)),
-                    ]),
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
-                // Always there while the what-if is on the sliders, and only
-                // lit once it has moved: appearing on the first nudge pushed
-                // every dial under it down a row, out from under the thumb.
-                if (_comparing && _editing == 1)
-                  IconButton(
-                    key: const ValueKey('whatIfReset'),
-                    tooltip: 'Start again from the baseline',
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.restart_alt),
-                    onPressed: _differs ? _resetToBaseline : null,
-                  ),
-                // The implement is part of the throw: a 12 lb put is not a
-                // 16 lb one at the same release, so it sits with the dials.
-                DropdownButton<ImplementSpec>(
-                  key: const ValueKey('whatIfImplement'),
-                  value: current.spec,
-                  underline: const SizedBox(),
-                  borderRadius: BorderRadius.circular(12),
-                  items: [
-                    for (final s in _event.implements)
-                      DropdownMenuItem(value: s, child: Text(s.weightLabel)),
-                  ],
-                  onChanged: (s) {
-                    if (s != null) _setSpec(s);
-                  },
-                ),
-              ],
-            ),
-          ),
-          dial(
-            label: 'Speed',
-            value: current.release.speed,
-            other: other?.speed,
-            span: _spans[_event]!.speed,
-            step: units.speedStep,
-            format: units.speed,
-            delta: units.speedDelta,
-            onChanged: (v) => _setRelease(current.release.copyWith(speed: v)),
-          ),
-          dial(
-            label: 'Angle',
-            // Every angle here is flown at the speed on the slider above
-            // it, and no athlete keeps that: going higher costs release
-            // speed (Linthorne 2001). Said where the angle is being raised
-            // against the other throw, which is where the model's answer
-            // flatters it.
-            hint: other != null && current.release.angleDeg > other.angleDeg
-                ? 'Steeper than the ${_role(1 - _editing).toLowerCase()}. '
-                    'Speed is held here, but a real athlete usually '
-                    'releases slower when they release higher.'
-                : null,
-            value: current.release.angleDeg,
-            other: other?.angleDeg,
-            span: _angleSpan,
-            step: 0.5,
-            format: (v) => '${v.toStringAsFixed(1)}°',
-            delta: (d) => '${_signed(d, 1)}°',
-            onChanged: (v) =>
-                _setRelease(current.release.copyWith(angleDeg: v)),
-          ),
-          dial(
-            label: 'Height',
-            value: current.release.height,
-            other: other?.height,
-            span: _spans[_event]!.height,
-            step: units.heightStep,
-            format: units.height,
-            delta: units.heightDelta,
-            onChanged: (v) => _setRelease(current.release.copyWith(height: v)),
-          ),
-          // What the implement does once it has left the hand, apart from
-          // the three numbers every release has: a coach reading a shot put
-          // never sees this heading, and one reading a javelin sees where
-          // the release stops and the flight starts.
-          if (_hasAttack(_event) || _hasWind(_event))
-            const _Heading('In the air'),
-          if (_hasAttack(_event))
             dial(
-              label: 'Attack',
-              hint: _event == ThrowEvent.discus
-                  ? 'Leading edge above (+) or below (−) the path'
-                  : 'Nose above (+) or below (−) the path',
-              value: current.release.attackDeg,
-              other: other?.attackDeg,
-              span: _attackSpan,
+              label: 'Speed',
+              value: current.release.speed,
+              other: other?.speed,
+              span: _spans[_event]!.speed,
+              step: units.speedStep,
+              format: units.speed,
+              delta: units.speedDelta,
+              onChanged: (v) => _setRelease(current.release.copyWith(speed: v)),
+            ),
+            dial(
+              label: 'Angle',
+              // Going higher costs release speed (Red and Zogaib 1977,
+              // Linthorne 2001), so where the loss is modeled the speed moves
+              // with the angle, by the amount on the best-angle card: a
+              // steeper release at the same speed is a throw nobody makes,
+              // and the flight flattered it. Where it isn't — the hammer, the
+              // discus, a loss set to nothing — the speed is held, and that
+              // is said where the angle is raised against the other throw.
+              hint: loss > 0
+                  ? 'Speed moves with it: '
+                      '${units.speedDelta(-loss * 10)} per 10° steeper'
+                  : other != null && current.release.angleDeg > other.angleDeg
+                      ? 'Steeper than the ${_role(1 - _editing).toLowerCase()}. '
+                          'Speed is held here, but a real athlete usually '
+                          'releases slower when they release higher.'
+                      : null,
+              value: current.release.angleDeg,
+              other: other?.angleDeg,
+              span: _angleSpan,
               step: 0.5,
-              format: (v) => '${_signed(v, 1)}°',
+              format: (v) => '${v.toStringAsFixed(1)}°',
               delta: (d) => '${_signed(d, 1)}°',
-              onChanged: (v) =>
-                  _setRelease(current.release.copyWith(attackDeg: v)),
+              onChanged: _setAngle,
             ),
-          if (_hasPitchRate(_event))
             dial(
-              label: 'Pitch rate',
-              hint: 'Nose turning up (+) or down (−) as it leaves the hand',
-              value: current.release.pitchRate,
-              other: other?.pitchRate,
-              span: _pitchSpan,
-              step: 1,
-              format: (v) => '${_signed(v, 0)}°/s',
-              delta: (d) => '${_signed(d, 0)}°/s',
+              label: 'Height',
+              value: current.release.height,
+              other: other?.height,
+              span: _spans[_event]!.height,
+              step: units.heightStep,
+              format: units.height,
+              delta: units.heightDelta,
               onChanged: (v) =>
-                  _setRelease(current.release.copyWith(pitchRate: v)),
+                  _setRelease(current.release.copyWith(height: v)),
             ),
-          if (_hasWind(_event))
-            dial(
-              label: 'Wind',
-              hint: 'Behind the thrower (+) or in their face (−)',
-              value: current.release.wind,
-              other: other?.wind,
-              span: _windSpan,
-              step: units.windStep,
-              format: units.wind,
-              delta: units.windDelta,
-              onChanged: (v) => _setRelease(current.release.copyWith(wind: v)),
+            // What the implement does once it has left the hand, apart from
+            // the three numbers every release has: a coach reading a shot put
+            // never sees this heading, and one reading a javelin sees where
+            // the release stops and the flight starts.
+            if (_hasAttack(_event) || _hasWind(_event))
+              const _Heading('In the air'),
+            if (_hasAttack(_event))
+              dial(
+                label: 'Attack',
+                hint: _event == ThrowEvent.discus
+                    ? 'Leading edge above (+) or below (−) the path'
+                    : 'Nose above (+) or below (−) the path',
+                value: current.release.attackDeg,
+                other: other?.attackDeg,
+                span: _attackSpan,
+                step: 0.5,
+                format: (v) => '${_signed(v, 1)}°',
+                delta: (d) => '${_signed(d, 1)}°',
+                onChanged: (v) =>
+                    _setRelease(current.release.copyWith(attackDeg: v)),
+              ),
+            if (_hasPitchRate(_event))
+              dial(
+                label: 'Pitch rate',
+                hint: 'Nose turning up (+) or down (−) as it leaves the hand',
+                value: current.release.pitchRate,
+                other: other?.pitchRate,
+                span: _pitchSpan,
+                step: 1,
+                format: (v) => '${_signed(v, 0)}°/s',
+                delta: (d) => '${_signed(d, 0)}°/s',
+                onChanged: (v) =>
+                    _setRelease(current.release.copyWith(pitchRate: v)),
+              ),
+            if (_hasWind(_event))
+              dial(
+                label: 'Wind',
+                hint: 'Behind the thrower (+) or in their face (−)',
+                value: current.release.wind,
+                other: other?.wind,
+                span: _windSpan,
+                step: units.windStep,
+                format: units.wind,
+                delta: units.windDelta,
+                onChanged: (v) =>
+                    _setRelease(current.release.copyWith(wind: v)),
+              ),
+            _Heading('Best angle',
+                trailing: _comparing
+                    ? 'for the ${_role(_editing).toLowerCase()}'
+                    : null),
+            _BestAngle(
+              event: _event,
+              best: best,
+              held: held,
+              gain: best.distance -
+                  flyThrow(_event, current.spec, current.release).distance,
+              angleDeg: current.release.angleDeg,
+              speedLoss: tradesSpeed ? _speedLoss : null,
+              units: units,
+              onTry: () => _tryAngle(best),
+              lossDial: !tradesSpeed
+                  ? null
+                  : _Dial(
+                      label: 'Speed lost per 10° steeper',
+                      hint: _speedLossBasis(_event),
+                      value: _speedLoss * 10,
+                      span: _speedLossSpan,
+                      step: units.speedStep,
+                      format: units.speed,
+                      delta: units.speedDelta,
+                      onChanged: (v) => setState(() => _speedLoss = v / 10),
+                    ),
+              onResetLoss:
+                  (_speedLoss - typicalSpeedLossPerDeg(_event)).abs() < 1e-9
+                      ? null
+                      : () => setState(
+                          () => _speedLoss = typicalSpeedLossPerDeg(_event)),
             ),
-          _Heading('Best angle',
-              trailing: _comparing
-                  ? 'for the ${_role(_editing).toLowerCase()}'
-                  : null),
-          _BestAngle(
-            event: _event,
-            best: best,
-            held: held,
-            gain: best.distance -
-                flyThrow(_event, current.spec, current.release).distance,
-            angleDeg: current.release.angleDeg,
-            speedLoss: tradesSpeed ? _speedLoss : null,
-            units: units,
-            onTry: () => _tryAngle(best),
-            lossDial: !tradesSpeed
-                ? null
-                : _Dial(
-                    label: 'Speed lost per 10° steeper',
-                    hint: _speedLossBasis(_event),
-                    value: _speedLoss * 10,
-                    span: _speedLossSpan,
-                    step: units.speedStep,
-                    format: units.speed,
-                    delta: units.speedDelta,
-                    onChanged: (v) => setState(() => _speedLoss = v / 10),
+            // One nudge each from where the sliders are, not a split of the
+            // gap — that is what the list under the result is for, and a
+            // heading that let these read as one had coaches adding them up.
+            _Heading('What a nudge is worth',
+                trailing: _comparing
+                    ? 'from the ${_role(_editing).toLowerCase()}'
+                    : 'from here'),
+            _Worth(worth: worth, units: units, speedLossPerDeg: speedLoss),
+            const _Heading('Compare with an elite final'),
+            _EliteCards(
+              event: _event,
+              units: units,
+              selected: _two?.label,
+              throwFor: (field) => _elite(_event, field),
+              onTap: _compareWith,
+            ),
+            _Heading('Measured at finals', trailing: _event.label),
+            _References(
+              event: _event,
+              selected: _two?.label,
+              units: units,
+              onTry: (r) {
+                final spec = _event.specFor(r.weightKg);
+                // Only what was published: a row with a speed alone takes
+                // the angle and height from the throw it is laid over.
+                _compareWith(_Throw(
+                  spec,
+                  _one.release.copyWith(
+                    speed: r.speed,
+                    angleDeg: r.angleDeg,
+                    height: r.height,
                   ),
-            onResetLoss: (_speedLoss - typicalSpeedLossPerDeg(_event)).abs() <
-                    1e-9
-                ? null
-                : () =>
-                    setState(() => _speedLoss = typicalSpeedLossPerDeg(_event)),
-          ),
-          // One nudge each from where the sliders are, not a split of the
-          // gap — that is what the list under the result is for, and a
-          // heading that let these read as one had coaches adding them up.
-          _Heading('What a nudge is worth',
-              trailing: _comparing
-                  ? 'from the ${_role(_editing).toLowerCase()}'
-                  : 'from here'),
-          _Worth(worth: worth, units: units, speedLossPerDeg: speedLoss),
-          const _Heading('Compare with an elite final'),
-          _EliteCards(
-            event: _event,
-            units: units,
-            selected: _two?.label,
-            throwFor: (field) => _elite(_event, field),
-            onTap: _compareWith,
-          ),
-          _Heading('Measured at finals', trailing: _event.label),
-          _References(
-            event: _event,
-            selected: _two?.label,
-            units: units,
-            onTry: (r) {
-              final spec = _event.specFor(r.weightKg);
-              // Only what was published: a row with a speed alone takes
-              // the angle and height from the throw it is laid over.
-              _compareWith(_Throw(
-                spec,
-                _one.release.copyWith(
-                  speed: r.speed,
-                  angleDeg: r.angleDeg,
-                  height: r.height,
+                  r.athlete,
+                ));
+              },
+            ),
+            const _Heading('About the model'),
+            const _Caveat(),
+            const _Heading('Sources'),
+            const _Sources(),
+          ],
+        ),
+      ),
+    );
+
+    return SafeArea(
+      top: false,
+      child: Stack(
+        key: _stackKey,
+        children: [
+          list,
+          // The result, kept in sight while the dials that move it are
+          // being turned: once the card has scrolled off, a small copy of
+          // it — the number and the flight — hangs at the top of the page,
+          // so a slider halfway down it is never turned blind.
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween(
+                    begin: const Offset(0, -0.25),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
                 ),
-                r.athlete,
-              ));
-            },
+              ),
+              child: !_floating
+                  ? const SizedBox.shrink()
+                  : _FloatingResult(
+                      key: const ValueKey('whatIfFloating'),
+                      event: _event,
+                      units: units,
+                      one: shown.one,
+                      two: shown.two,
+                      shares: shares,
+                      gap: gap,
+                      onTap: () => _scroll.animateTo(0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic),
+                    ),
+            ),
           ),
-          const _Heading('About the model'),
-          const _Caveat(),
-          const _Heading('Sources'),
-          const _Sources(),
         ],
       ),
     );
@@ -778,6 +919,24 @@ String _signed(double v, int digits) {
 
 typedef _Shown = ({String name, Flight flight, Color color});
 
+/// The gap said the way a coach would say it: how much further or shorter
+/// the change throws than what it was measured from.
+({String gapText, String verdict, bool same}) _gapWords(
+    double gap, DistanceUnit unit) {
+  final same = formatDistance(gap.abs(), unit) == formatDistance(0, unit);
+  return (
+    gapText: same
+        ? formatDistance(0, unit)
+        : '${gap > 0 ? '+' : '−'}${formatDistance(gap.abs(), unit)}',
+    verdict: same
+        ? 'the same as the baseline'
+        : gap > 0
+            ? 'further than the baseline'
+            : 'shorter than the baseline',
+    same: same,
+  );
+}
+
 class _ResultCard extends StatelessWidget {
   const _ResultCard({
     required this.event,
@@ -786,7 +945,12 @@ class _ResultCard extends StatelessWidget {
     required this.two,
     required this.ghost,
     this.actions = const [],
+    this.breakdown,
+    this.fieldKey,
   });
+
+  /// On the flight, so the screen can tell when it has scrolled away.
+  final Key? fieldKey;
 
   final ThrowEvent event;
   final _Units units;
@@ -794,6 +958,9 @@ class _ResultCard extends StatelessWidget {
   final _Shown? two;
   final Flight? ghost;
   final List<Widget> actions;
+
+  /// Where the gap comes from, when there are two throws.
+  final Widget? breakdown;
 
   @override
   Widget build(BuildContext context) {
@@ -826,18 +993,9 @@ class _ResultCard extends StatelessWidget {
           ],
         );
       }
+      final (:gapText, :verdict, :same) =
+          _gapWords(two!.flight.distance - one.flight.distance, unit);
       final gap = two!.flight.distance - one.flight.distance;
-      // Said the way a coach would say it: how much further or shorter the
-      // change throws than what it was measured from.
-      final same = formatDistance(gap.abs(), unit) == formatDistance(0, unit);
-      final gapText = same
-          ? formatDistance(0, unit)
-          : '${gap > 0 ? '+' : '−'}${formatDistance(gap.abs(), unit)}';
-      final verdict = same
-          ? 'the same as the baseline'
-          : gap > 0
-              ? 'further than the baseline'
-              : 'shorter than the baseline';
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -911,6 +1069,7 @@ class _ResultCard extends StatelessWidget {
             headline(),
             const SizedBox(height: 12),
             FlightField(
+              key: fieldKey,
               event: event,
               flights: [
                 FieldFlight(one.flight, one.color),
@@ -940,6 +1099,7 @@ class _ResultCard extends StatelessWidget {
                   ],
                 ),
               ),
+            if (breakdown != null) breakdown!,
             if (actions.isNotEmpty) ...[
               const SizedBox(height: 10),
               Wrap(
@@ -1482,16 +1642,6 @@ class _GapShares extends StatelessWidget {
   final _Throw two;
   final _Units units;
 
-  String _label(Lever l) => switch (l) {
-        Lever.speed => 'Speed',
-        Lever.angle => 'Angle',
-        Lever.height => 'Height',
-        Lever.attack => 'Attack',
-        Lever.wind => 'Wind',
-        Lever.pitchRate => 'Pitch rate',
-        Lever.implement => 'Implement',
-      };
-
   String _change(Lever l) {
     final a = one.release;
     final b = two.release;
@@ -1514,93 +1664,280 @@ class _GapShares extends StatelessWidget {
     final scheme = theme.colorScheme;
     final muted =
         theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
-    final feet = units.imperial;
-    final step = feet ? metersPerFoot / 48 : 0.01;
-    final shown = _shownSteps(shares, gap, step, feet);
-    final order = shares.keys.toList()
-      ..sort((x, y) => shares[y]!.abs().compareTo(shares[x]!.abs()));
+    final rows = _shareRows(shares, gap, units);
+    // Inside the result card, under the flight: what changed sits with the
+    // picture of what it did, rather than a heading further down the page.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _Heading('Where the gap comes from'),
-        Card(
-          color: cardOverSector(scheme),
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: Column(
+        const SizedBox(height: 12),
+        const Divider(height: 1),
+        const SizedBox(height: 10),
+        Text('WHERE THE GAP COMES FROM',
+            style: theme.textTheme.labelSmall?.copyWith(
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w600,
+                color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        // Said as a prompt, and at a row's height, rather than the rows
+        // turning up on the first nudge and pushing every dial under the
+        // card down out from under the thumb.
+        if (rows.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
               children: [
-                // Said as a prompt, and at a row's height, rather than the
-                // card turning up on the first nudge and pushing every dial
-                // under it down out from under the thumb.
-                if (order.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(Icons.tune,
-                            size: 18, color: scheme.onSurfaceVariant),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Move a dial below to change the what-if.',
-                            key: const ValueKey('gapEmpty'),
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ),
-                      ],
-                    ),
+                Icon(Icons.tune, size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Move a dial below to change the what-if.',
+                    key: const ValueKey('gapEmpty'),
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: scheme.onSurfaceVariant),
                   ),
-                for (final l in order)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text.rich(
-                            TextSpan(children: [
-                              TextSpan(text: _label(l)),
-                              TextSpan(text: '  ${_change(l)}', style: muted),
-                            ]),
-                            style: theme.textTheme.bodyMedium,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Builder(builder: (context) {
-                          final k = shown[l]!;
-                          final size =
-                              formatDistance(k.abs() * step, units.distance);
-                          return Text(
-                            k == 0 ? size : '${k > 0 ? '+' : '−'}$size',
-                            key: ValueKey('gapShare-${l.name}'),
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: k == 0
-                                  ? null
-                                  : k > 0
-                                      ? scheme.primary
-                                      : scheme.error,
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
+        for (final r in rows)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(children: [
+                      TextSpan(text: _leverLabel(r.lever)),
+                      TextSpan(text: '  ${_change(r.lever)}', style: muted),
+                    ]),
+                    style: theme.textTheme.bodyMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  r.text,
+                  key: ValueKey('gapShare-${r.lever.name}'),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: _shareColor(r.sign, scheme),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (rows.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'These add up to the gap. What two changes do together is '
+              'shared between them, so a row is not what that change would '
+              'be worth on its own.',
+              style: muted,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+String _leverLabel(Lever l) => switch (l) {
+      Lever.speed => 'Speed',
+      Lever.angle => 'Angle',
+      Lever.height => 'Height',
+      Lever.attack => 'Attack',
+      Lever.wind => 'Wind',
+      Lever.pitchRate => 'Pitch rate',
+      Lever.implement => 'Implement',
+    };
+
+Color? _shareColor(int sign, ColorScheme scheme) => sign == 0
+    ? null
+    : sign > 0
+        ? scheme.primary
+        : scheme.error;
+
+/// The gap's shares as printed, largest first: each lever, its share
+/// spelled in the reading unit, and which way it went.
+List<({Lever lever, String text, int sign})> _shareRows(
+    Map<Lever, double> shares, double gap, _Units units) {
+  final feet = units.imperial;
+  final step = feet ? metersPerFoot / 48 : 0.01;
+  final shown = _shownSteps(shares, gap, step, feet);
+  final order = shares.keys.toList()
+    ..sort((x, y) => shares[y]!.abs().compareTo(shares[x]!.abs()));
+  return [
+    for (final l in order)
+      (
+        lever: l,
+        text: () {
+          final k = shown[l]!;
+          final size = formatDistance(k.abs() * step, units.distance);
+          return k == 0 ? size : '${k > 0 ? '+' : '−'}$size';
+        }(),
+        sign: shown[l]!.sign,
+      ),
+  ];
+}
+
+/// The result, small, for while the card itself is scrolled out of sight:
+/// the number, the flight under it, and — comparing — what the gap is made
+/// of in a line. A tap goes back up to the card.
+class _FloatingResult extends StatelessWidget {
+  const _FloatingResult({
+    super.key,
+    required this.event,
+    required this.units,
+    required this.one,
+    required this.two,
+    required this.shares,
+    required this.gap,
+    required this.onTap,
+  });
+
+  final ThrowEvent event;
+  final _Units units;
+  final _Shown one;
+  final _Shown? two;
+  final Map<Lever, double>? shares;
+  final double gap;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final unit = units.distance;
+    final muted =
+        theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant);
+    final number = theme.textTheme.titleLarge
+        ?.copyWith(fontWeight: FontWeight.w700, height: 1.1);
+    final surface = solidCardOverSector(scheme);
+
+    final Widget headline;
+    if (two == null) {
+      headline = Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text('≈ ${formatDistance(one.flight.distance, unit)}', style: number),
+          const SizedBox(width: 8),
+          Expanded(
+            child:
+                Text(one.name, overflow: TextOverflow.ellipsis, style: muted),
+          ),
+        ],
+      );
+    } else {
+      final words = _gapWords(gap, unit);
+      headline = Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text('≈ ${words.gapText}',
+              style: number?.copyWith(
+                  color: words.same
+                      ? null
+                      : gap > 0
+                          ? scheme.primary
+                          : scheme.error)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${formatDistance(two!.flight.distance, unit)} against '
+              '${formatDistance(one.flight.distance, unit)}',
+              overflow: TextOverflow.ellipsis,
+              style: muted,
+            ),
+          ),
+        ],
+      );
+    }
+    final rows = shares == null ? null : _shareRows(shares!, gap, units);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: DecoratedBox(
+        // A soft shadow and a hairline: lifted off the page it floats over,
+        // without a dark ring round it.
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Text(
-            'These add up to the gap. What two changes do together is '
-            'shared between them, so a row is not what that change would '
-            'be worth on its own.',
-            style: muted,
+        child: Material(
+          color: surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side:
+                BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(child: headline),
+                      Tooltip(
+                        message: 'Back to the result',
+                        child: Icon(Icons.keyboard_arrow_up,
+                            color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: FlightField(
+                      event: event,
+                      flights: [
+                        FieldFlight(one.flight, one.color),
+                        if (two != null) FieldFlight(two!.flight, two!.color),
+                      ],
+                      unit: unit,
+                      backdrop: surface,
+                      maxHeight: 116,
+                    ),
+                  ),
+                  if (rows != null && rows.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4, right: 6),
+                      child: Wrap(
+                        spacing: 12,
+                        runSpacing: 2,
+                        children: [
+                          for (final r in rows)
+                            Text.rich(
+                              TextSpan(children: [
+                                TextSpan(text: '${_leverLabel(r.lever)} '),
+                                TextSpan(
+                                  text: r.text,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: _shareColor(r.sign, scheme)),
+                                ),
+                              ]),
+                              style: muted,
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -1627,7 +1964,7 @@ class _Worth extends StatelessWidget {
               lever: units.speedLeverLabel, gain: signed(worth.perSpeed)),
           _WorthTile(
               lever: speedLossPerDeg > 0
-                  ? '+1° at ${units.speedDelta(-speedLossPerDeg)}'
+                  ? '+1° at ${units.speedDelta(-speedLossPerDeg, fine: true)}'
                   : '+1°',
               gain: signed(worth.perDegree)),
           _WorthTile(

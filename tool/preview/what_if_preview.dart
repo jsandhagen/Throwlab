@@ -47,6 +47,10 @@ void main() {
     Future<void> tap(Key key) async {
       await tester.scrollUntilVisible(find.byKey(key), 300);
       await tester.pumpAndSettle();
+      // To the middle: the top edge is where the floating result hangs.
+      await Scrollable.ensureVisible(tester.element(find.byKey(key)),
+          alignment: 0.5);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(key));
       await tester.pumpAndSettle();
       // Back to the top. A jump lands on an estimate of the rows above that
@@ -80,6 +84,22 @@ void main() {
     await shoot('what_if_best_angle');
     await tap(const ValueKey('elite-men'));
     await shoot('what_if_vs_men');
+    // Down among the dials, with the result hanging over them: the number,
+    // the two flights and what the gap is made of, while a slider moves.
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('Raise-Height')), 300);
+    await tester.pumpAndSettle();
+    await Scrollable.ensureVisible(
+        tester.element(find.byKey(const ValueKey('Raise-Height'))),
+        alignment: 0.6);
+    await tester.pumpAndSettle();
+    await shoot('what_if_floating');
+    // And an angle raised from there: the speed comes down with it.
+    await tester.tap(find.byKey(const ValueKey('Raise-Angle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('Raise-Angle')));
+    await tester.pumpAndSettle();
+    await shoot('what_if_floating_angle');
     await open(measured, height: 5600);
     await tap(const ValueKey('elite-women'));
     await shoot('what_if_vs_women_full');

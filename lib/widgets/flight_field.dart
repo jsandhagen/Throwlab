@@ -32,9 +32,15 @@ class FlightField extends StatelessWidget {
     required this.unit,
     this.ghost,
     this.backdrop,
+    this.maxHeight = 200,
   });
 
   final ThrowEvent event;
+
+  /// The tallest the field is drawn. The flight is scaled to fit under it
+  /// and the field keeps one scale both ways, so a short field is a
+  /// narrower picture of the same throw rather than a squashed one.
+  final double maxHeight;
 
   /// What the markers are counted in and the landings spelled in.
   final DistanceUnit unit;
@@ -55,7 +61,8 @@ class FlightField extends StatelessWidget {
     final theme = Theme.of(context);
     return LayoutBuilder(builder: (context, box) {
       final all = [...flights.map((f) => f.flight), if (ghost != null) ghost!];
-      final layout = _FieldLayout.of(all, box.maxWidth, unit, event);
+      final layout =
+          _FieldLayout.of(all, box.maxWidth, unit, event, maxHeight);
       return SizedBox(
         height: layout.height,
         child: CustomPaint(
@@ -109,7 +116,8 @@ class _FieldLayout {
       Offset(origin + meters.dx * scale, ground - meters.dy * scale);
 
   static _FieldLayout of(
-      List<Flight> flights, double width, DistanceUnit unit, ThrowEvent event) {
+      List<Flight> flights, double width, DistanceUnit unit, ThrowEvent event,
+      [double maxHeight = 200]) {
     final far = flights.fold(1.0, (m, f) => math.max(m, f.distance));
     final high = flights.fold(0.5, (m, f) => math.max(m, f.apex));
     // Room at the left for the circle, or a stretch of runway, drawn to the
@@ -118,9 +126,11 @@ class _FieldLayout {
     final behind = event == ThrowEvent.javelin ? 4.0 : _circleDiameter(event);
     final span = far * 1.08 + behind;
     final scale0 = width / span;
-    final scale = math.min(scale0, 150 / high);
-    final height =
-        (high * scale + _sky + _groundBand).clamp(110.0, 200.0).toDouble();
+    final scale =
+        math.min(scale0, (maxHeight - _sky - _groundBand + 2) / high);
+    final height = (high * scale + _sky + _groundBand)
+        .clamp(math.min(110.0, maxHeight), maxHeight)
+        .toDouble();
     return _FieldLayout(
       origin: behind * scale,
       scale: scale,

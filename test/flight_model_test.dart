@@ -386,6 +386,16 @@ void main() {
     String text(WidgetTester tester, String key) =>
         tester.widget<Text>(find.byKey(ValueKey(key))).data!;
 
+    // Scrolled to and then brought to the middle of the list, since the
+    // edge a scroll stops at is where the floating result hangs.
+    Future<void> reach(WidgetTester tester, Finder finder,
+        [double delta = 200]) async {
+      await tester.scrollUntilVisible(finder, delta);
+      await tester.pumpAndSettle();
+      await Scrollable.ensureVisible(tester.element(finder), alignment: 0.5);
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('opens on a measured release and can go back to it',
         (tester) async {
       await pump(
@@ -399,12 +409,11 @@ void main() {
       final measured = text(tester, 'whatIfDistance');
       // Far enough that the whole speed slider is on screen, not only its
       // label.
-      await tester.scrollUntilVisible(find.text('Angle'), 200);
+      await reach(tester, find.byType(Slider).first);
       expect(find.text('12.0 m/s'), findsOneWidget);
       await tester.drag(find.byType(Slider).first, const Offset(60, 0));
       await tester.pump();
-      await tester.scrollUntilVisible(
-          find.text('Back to the measured throw'), -200);
+      await reach(tester, find.text('Back to the measured throw'), -200);
       expect(text(tester, 'whatIfDistance'), isNot(measured));
       await tester.tap(find.text('Back to the measured throw'));
       await tester.pump();
@@ -454,9 +463,7 @@ void main() {
             measured: Release(speed: 12, angleDeg: 30, height: 2.0),
           ));
       final button = find.byKey(const ValueKey('tryBestAngle'));
-      await tester.scrollUntilVisible(button, 300);
-      await tester.ensureVisible(button);
-      await tester.pumpAndSettle();
+      await reach(tester, button, 300);
       await tester.tap(button);
       await tester.pump();
       // Tried, it is at its best and asks no more.
@@ -474,7 +481,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('whatIfTry')));
       await tester.pump();
       final raise = find.byKey(const ValueKey('Raise-Speed'));
-      await tester.scrollUntilVisible(raise, 200);
+      await reach(tester, raise);
       for (var i = 0; i < 2; i++) {
         await tester.tap(raise);
         await tester.pumpAndSettle();
@@ -482,9 +489,7 @@ void main() {
       expect(find.text('+0.2 m/s'), findsOneWidget);
       // The difference is the way back level with the baseline.
       final match = find.byKey(const ValueKey('match-Speed'));
-      await tester.scrollUntilVisible(match, -100);
-      await tester.ensureVisible(match);
-      await tester.pumpAndSettle();
+      await reach(tester, match, -100);
       await tester.tap(match);
       await tester.pump();
       expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
@@ -504,9 +509,7 @@ void main() {
           ));
       final women = find.byKey(const ValueKey('elite-women'));
       // Built is not on screen: bring it all the way in before tapping.
-      await tester.scrollUntilVisible(women, 300);
-      await tester.ensureVisible(women);
-      await tester.pumpAndSettle();
+      await reach(tester, women, 300);
       await tester.tap(women);
       await tester.pump();
 
@@ -522,9 +525,7 @@ void main() {
 
       // Tapping it again puts it away.
       // Built is not on screen: bring it all the way in before tapping.
-      await tester.scrollUntilVisible(women, 300);
-      await tester.ensureVisible(women);
-      await tester.pumpAndSettle();
+      await reach(tester, women, 300);
       await tester.tap(women);
       await tester.pump();
       await tester.scrollUntilVisible(find.text('YOUR MEASURED THROW'), -300);
@@ -541,9 +542,7 @@ void main() {
             measured: Release(speed: 11.4, angleDeg: 33.5, height: 1.95),
           ));
       final women = find.byKey(const ValueKey('elite-women'));
-      await tester.scrollUntilVisible(women, 300);
-      await tester.ensureVisible(women);
-      await tester.pumpAndSettle();
+      await reach(tester, women, 300);
       await tester.tap(women);
       await tester.pump();
 
@@ -577,10 +576,9 @@ void main() {
       await tester.pump();
       await check(true);
 
-      // The what-if is steeper than the baseline, and the angle's dial says
-      // what holding the speed flatters.
+      // The shot trades speed for angle, and the angle's dial says so.
       await tester.scrollUntilVisible(
-          find.textContaining('Steeper than the baseline'), 300);
+          find.textContaining('Speed moves with it'), 300);
       await tester.scrollUntilVisible(find.text('WHAT A NUDGE IS WORTH'), 300);
       expect(find.text('from the what if'), findsOneWidget);
     });
@@ -597,7 +595,7 @@ void main() {
       expect(text(tester, 'whatIfGap'), '0.00 m');
       expect(text(tester, 'whatIfVerdict'), 'the same as the baseline');
 
-      await tester.scrollUntilVisible(find.text('Angle'), 200);
+      await reach(tester, find.byType(Slider).first);
       await tester.drag(find.byType(Slider).first, const Offset(-80, 0));
       await tester.pump();
       await tester.scrollUntilVisible(
@@ -653,8 +651,7 @@ void main() {
                   matching: find.byType(Column))
               .first,
           matching: find.byType(Slider));
-      await tester.ensureVisible(lossDial.first);
-      await tester.pumpAndSettle();
+      await reach(tester, lossDial.first);
       await tester.drag(lossDial.first, const Offset(-600, 0));
       await tester.pump();
       await tester.scrollUntilVisible(
@@ -668,6 +665,56 @@ void main() {
       await tester.tap(find.text('Hammer'));
       await tester.pump();
       expect(find.text('Speed lost per 10° steeper'), findsNothing);
+    });
+
+    testWidgets('an angle takes the speed that goes with it', (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      await tester.tap(find.text('Javelin'));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
+      await tester.pump();
+      final raise = find.byKey(const ValueKey('Raise-Angle'));
+      await reach(tester, raise);
+      // Two half-degree steps: a degree steeper, a tenth of a meter a
+      // second slower at the javelin's estimate.
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(raise);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('+1.0°'), findsOneWidget);
+      expect(find.text('−0.1 m/s'), findsOneWidget);
+      expect(find.textContaining('Speed moves with it: −1.0 m/s per 10°'),
+          findsOneWidget);
+
+      // The hammer holds its speed.
+      await tester.scrollUntilVisible(find.text('Hammer'), -2000);
+      await tester.tap(find.text('Hammer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('whatIfTry')));
+      await tester.pump();
+      await reach(tester, raise);
+      for (var i = 0; i < 2; i++) {
+        await tester.tap(raise);
+        await tester.pumpAndSettle();
+      }
+      expect(find.text('+1.0°'), findsOneWidget);
+      expect(find.byKey(const ValueKey('match-Speed')), findsNothing);
+    });
+
+    testWidgets('the result floats over the dials once scrolled past',
+        (tester) async {
+      await pump(tester, const ReleaseCalculatorScreen());
+      final floating = find.byKey(const ValueKey('whatIfFloating'));
+      expect(floating, findsNothing);
+      await tester.scrollUntilVisible(find.text('Height'), 200);
+      await tester.pumpAndSettle();
+      expect(floating, findsOneWidget);
+      // A tap goes back up to the card, and the copy goes away.
+      await tester.tap(floating);
+      await tester.pumpAndSettle();
+      expect(floating, findsNothing);
+      expect(find.byKey(const ValueKey('whatIfDistance')).hitTestable(),
+          findsOneWidget);
     });
 
     testWidgets('switching event shows its own references', (tester) async {

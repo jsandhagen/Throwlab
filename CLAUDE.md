@@ -1235,9 +1235,13 @@ like the app rather than a bare Material default.
   giving that to whichever came last answers in an order nobody chose. The
   worth tiles are a different question, one nudge from where the sliders
   are, and are headed 'What a nudge is worth' because a coach added them up
-  and they did not come to the gap. Every angle on a slider is flown at
-  the speed on its slider, which no athlete keeps going higher, and the
-  angle's dial says so whenever it is raised against the other throw.
+  and they did not come to the gap. Moving the angle moves the speed with
+  it, by the loss the best-angle card holds (`_setAngle`), because no
+  athlete keeps their speed going higher and a steeper release at the same
+  speed flattered the flight; the angle's dial says so under it. Where the
+  loss is nothing — the hammer, the discus, a loss the coach set to zero —
+  the speed is held, and the dial says that instead whenever the angle is
+  raised against the other throw.
   Every dial carries a step either way at the ends of its track, since a
   thumb is a blunt tool for a tenth of a meter a second, and its
   difference from the other throw is a button that puts it back level.
@@ -1247,6 +1251,16 @@ like the app rather than a bare Material default.
   that pushes the dials down moves them out from under the thumb on the
   first tap. The attack, the pitch rate and the wind sit under their own
   heading, In the air, apart from the three numbers every release has.
+  What changed is inside the result card, under the flight it changed,
+  rather than a section of its own further down. And the result follows
+  the dials down the page: once the card's flight has scrolled away, a
+  small copy of it (`_FloatingResult`) — the number, both flights and the
+  breakdown in a line — hangs at the top, and a tap goes back up to the
+  card. Keyed to the flight rather than the card, since the breakdown under
+  it kept the card in sight long after there was anything in it to watch.
+  It floats over the list rather than taking room from it, so a test that
+  scrolls something to the top edge before tapping it has to bring it to
+  the middle instead.
   The best angle is its own card with 'Try it' on it, which goes in as the
   what-if over the throw it was worked out for, and the speed-loss dial
   lives on that card rather than among the release's dials, because it
