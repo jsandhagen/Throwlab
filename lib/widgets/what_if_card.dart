@@ -38,6 +38,7 @@ class WhatIfCard extends StatelessWidget {
     required this.whatIf,
     required this.shares,
     this.speedLossPerDeg = 0,
+    this.speedLossEstimated = true,
     this.date,
   });
 
@@ -52,6 +53,11 @@ class WhatIfCard extends StatelessWidget {
   final WhatIfSide whatIf;
   final Map<Lever, double> shares;
   final double speedLossPerDeg;
+
+  /// Whether [speedLossPerDeg] is the event's own estimate rather than a
+  /// number the coach set, which the card has to say: it is the assumption
+  /// that moves an angle's row the most.
+  final bool speedLossEstimated;
   final DateTime? date;
 
   bool get _feet => unit == DistanceUnit.feet;
@@ -108,6 +114,78 @@ class WhatIfCard extends StatelessWidget {
         Lever.wind => 'Wind',
         Lever.pitchRate => 'Pitch rate',
       };
+
+  /// What the answer rests on, said in the order it matters. The trade
+  /// between speed and angle leads, since it decides whether a change of
+  /// angle reads as a gain at all, and it is the one a reader cannot see
+  /// in the two releases printed above it.
+  List<(String, String)> _assumptions() {
+    final perSpeed = _feet ? 0.44704 : 1.0;
+    final speedUnit = _feet ? 'mph' : 'm/s';
+    final a = baseline.release;
+    final b = whatIf.release;
+    final String trade;
+    if (speedLossPerDeg == 0) {
+      trade = 'Speed is held whatever the angle. No athlete keeps their '
+          'speed going higher, so a steeper what-if reads long.';
+    } else {
+      final per10 = (speedLossPerDeg * 10 / perSpeed).toStringAsFixed(1);
+      final turned = b.angleDeg - a.angleDeg;
+      final carried = (speedLossPerDeg * turned / perSpeed).abs();
+      final here = turned.abs() < 0.05
+          ? ''
+          : ' Here ${_signed(turned, 1)}° ${turned < 0 ? 'gave back' : 'cost'} '
+              '${carried.toStringAsFixed(1)} $speedUnit, which is in the '
+              "angle's row above.";
+      // Whose measurement the number is scaled from, per event: nobody
+      // published one figure, so the card names where it came from.
+      final source = switch (event) {
+        ThrowEvent.javelin => 'scaled from Red and Zogaib on javelin throwers',
+        ThrowEvent.shotPut => "from Linthorne's college shot putters",
+        ThrowEvent.discus => "carried across from Linthorne's shot putters",
+        ThrowEvent.hammer =>
+          'backed out of the angles elite throwers release at',
+      };
+      trade = 'Every 10° steeper costs $per10 $speedUnit of release speed, '
+          'so a flatter release is a faster one.$here '
+          '${speedLossEstimated ? 'An estimate $source, not measured on this '
+              'athlete.' : 'Set by the coach.'}';
+    }
+    final wind = a.wind == 0 && b.wind == 0
+        ? 'Still air. A head or tail wind would move both throws.'
+        : 'Wind along the throw: ${_windWords(a.wind)} for the baseline, '
+            '${_windWords(b.wind)} for the what-if.';
+    final implement = switch (event) {
+      ThrowEvent.javelin => 'Drag, lift and pitch measured in a wind tunnel '
+          "on a women's 600 g javelin (Seo et al. 2023). Every weight flies "
+          'on that table at its own length and thickness.',
+      ThrowEvent.discus => 'Flown spinning and released banked, with lift '
+          'and drag after Hubbard and Cheng. The spin and bank are typical '
+          "values, not this athlete's.",
+      ThrowEvent.shotPut =>
+        'A sphere with drag. At a shot\'s speed the air costs it little.',
+      ThrowEvent.hammer => 'The head as a sphere with drag. The wire and '
+          "handle's drag is left out, so it reads a little long.",
+    };
+    return [
+      ('Speed and angle', trade),
+      ('Air', wind),
+      ('Implement', implement),
+      (
+        'Distance',
+        'Measured from the hand at release. A tape run from the stop board '
+            'or foul line reads a little further.'
+      ),
+    ];
+  }
+
+  String _windWords(double v) {
+    if (v == 0) return 'still';
+    final size = _feet
+        ? '${(v.abs() / 0.44704).toStringAsFixed(0)} mph'
+        : '${v.abs().toStringAsFixed(1)} m/s';
+    return '$size ${v > 0 ? 'tail' : 'head'}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +352,26 @@ class WhatIfCard extends StatelessWidget {
                               ),
                             ),
                         ],
+                        const SizedBox(height: 10),
+                        const Divider(height: 1),
+                        const SizedBox(height: 10),
+                        Text('ASSUMPTIONS', style: label),
+                        const SizedBox(height: 4),
+                        for (final (title, body) in _assumptions())
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 3),
+                            child: Text.rich(
+                              TextSpan(children: [
+                                TextSpan(
+                                    text: '$title  ',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: scheme.onSurface)),
+                                TextSpan(text: body),
+                              ]),
+                              style: muted,
+                            ),
+                          ),
                       ],
                     ),
                   ),

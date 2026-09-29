@@ -19,7 +19,7 @@ void main() {
   testWidgets('what if card', (tester) async {
     await loadPreviewFonts();
     tester.view.devicePixelRatio = 3;
-    tester.view.physicalSize = const Size(WhatIfCard.width * 3, 2400);
+    tester.view.physicalSize = const Size(WhatIfCard.width * 3, 3600);
     addTearDown(tester.view.reset);
 
     Future<void> shoot(
