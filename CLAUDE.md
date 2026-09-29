@@ -59,6 +59,7 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/progress_preview.dart \
                               tool/preview/trim_preview.dart \
                               tool/preview/what_if_preview.dart \
+                              tool/preview/what_if_card_preview.dart \
                               tool/preview/calculators_preview.dart
 ```
 
