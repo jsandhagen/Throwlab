@@ -1,6 +1,7 @@
 // The what-if written down to be sent: a javelin measured against a faster,
-// flatter release in meters, and a high school 12 lb shot in feet with a
-// wind on it. Shot at the card's own size, which is the image a share
+// flatter release in meters, a high school 12 lb shot in feet, and a
+// discus thrown into a headwind with its attack changed, which is what
+// brings the rows only a difference earns onto the card. Shot at the card's own size, which is the image a share
 // would write. See CLAUDE.md.
 
 import 'package:flutter/material.dart';
@@ -79,6 +80,16 @@ void main() {
       DistanceUnit.feet,
       (s) => measured(ThrowEvent.shotPut, s, shot),
       shot.copyWith(speed: 11.9, angleDeg: 36.0, height: 2.05),
+    );
+
+    const discus = Release(speed: 24.0, angleDeg: 36.0, height: 1.6);
+    await shoot(
+      'what_if_card_discus_wind',
+      ThrowEvent.discus,
+      2.0,
+      DistanceUnit.meters,
+      (s) => measured(ThrowEvent.discus, s, discus),
+      discus.copyWith(attackDeg: -8, wind: -3),
     );
   });
 }

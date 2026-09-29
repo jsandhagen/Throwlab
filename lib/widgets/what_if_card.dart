@@ -69,9 +69,33 @@ class WhatIfCard extends StatelessWidget {
   String _height(double m) =>
       _feet ? formatDistance(m, unit) : '${m.toStringAsFixed(2)} m';
 
-  String _release(Release r) =>
-      '${_speed(r.speed)} · ${r.angleDeg.toStringAsFixed(1)}° · '
-      '${_height(r.height)}';
+  String _wind(double v) {
+    if (v == 0) return 'Still';
+    final size = _feet
+        ? '${(v.abs() / 0.44704).toStringAsFixed(0)} mph'
+        : '${v.abs().toStringAsFixed(1)} m/s';
+    return '$size ${v > 0 ? 'tail' : 'head'}';
+  }
+
+  /// The release, a row a number. Speed, angle and height are every
+  /// release's and are always there; the rest are in the air and only earn
+  /// a row when the two throws differ in them, since a row of two equal
+  /// zeros is a question nobody asked.
+  List<(String, String Function(Release), bool)> _parameters() {
+    final a = baseline.release;
+    final b = whatIf.release;
+    bool differs(double x, double y) => (x - y).abs() > 1e-9;
+    return [
+      ('Speed', (r) => _speed(r.speed), true),
+      ('Angle', (r) => '${r.angleDeg.toStringAsFixed(1)}°', true),
+      ('Height', (r) => _height(r.height), true),
+      if (differs(a.attackDeg, b.attackDeg))
+        ('Attack', (r) => '${r.attackDeg.toStringAsFixed(1)}°', false),
+      if (differs(a.wind, b.wind)) ('Wind', (r) => _wind(r.wind), false),
+      if (differs(a.pitchRate, b.pitchRate))
+        ('Pitch rate', (r) => '${r.pitchRate.toStringAsFixed(0)}°/s', false),
+    ];
+  }
 
   String _signed(double v, int digits) {
     final s = v.abs().toStringAsFixed(digits);
@@ -179,13 +203,7 @@ class WhatIfCard extends StatelessWidget {
     ];
   }
 
-  String _windWords(double v) {
-    if (v == 0) return 'still';
-    final size = _feet
-        ? '${(v.abs() / 0.44704).toStringAsFixed(0)} mph'
-        : '${v.abs().toStringAsFixed(1)} m/s';
-    return '$size ${v > 0 ? 'tail' : 'head'}';
-  }
+  String _windWords(double v) => _wind(v).toLowerCase();
 
   @override
   Widget build(BuildContext context) {
@@ -208,49 +226,90 @@ class WhatIfCard extends StatelessWidget {
     final order = shares.keys.toList()
       ..sort((x, y) => shares[y]!.abs().compareTo(shares[x]!.abs()));
 
-    Widget side(WhatIfSide s, String role, Color color) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 5),
-                child: Container(
-                  width: 10,
-                  height: 10,
+    final body = theme.textTheme.bodyMedium;
+    Widget cell(String text,
+            {TextStyle? style, bool end = true, double top = 3}) =>
+        Padding(
+          padding: EdgeInsets.only(top: top, bottom: 3),
+          child: Text(text,
+              textAlign: end ? TextAlign.right : TextAlign.left,
+              overflow: TextOverflow.ellipsis,
+              style: style ?? body),
+        );
+    Widget heading(String role, String name, Color color) => Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
                   decoration:
                       BoxDecoration(shape: BoxShape.circle, color: color),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text.rich(
-                      TextSpan(children: [
-                        TextSpan(
-                            text: role,
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w600)),
-                        TextSpan(
-                            text: ' · ${s.name}',
-                            style: TextStyle(color: scheme.onSurfaceVariant)),
-                      ]),
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    Text(_release(s.release), style: muted),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text('≈ ${formatDistance(s.flight.distance, unit)}',
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(fontWeight: FontWeight.w700)),
-            ],
-          ),
+                const SizedBox(width: 6),
+                Text(role, style: body?.copyWith(fontWeight: FontWeight.w600)),
+              ],
+            ),
+            Text(name,
+                textAlign: TextAlign.right,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: muted),
+            const SizedBox(height: 4),
+          ],
         );
+    final a = baseline.release;
+    final b = whatIf.release;
+    final parameters = Table(
+      columnWidths: const {
+        0: FixedColumnWidth(64),
+        1: FlexColumnWidth(1),
+        2: FlexColumnWidth(1),
+      },
+      defaultVerticalAlignment: TableCellVerticalAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        TableRow(children: [
+          const SizedBox(),
+          heading('Baseline', baseline.name, scheme.onSurfaceVariant),
+          heading('What if', whatIf.name, scheme.primary),
+        ]),
+        for (final (name, read, _) in _parameters())
+          TableRow(children: [
+            cell(name,
+                style: muted?.copyWith(fontSize: body?.fontSize), end: false),
+            cell(read(a)),
+            // What the what-if changed is in its own ink, so the eye goes
+            // to the numbers that were moved.
+            cell(read(b),
+                style: read(a) == read(b)
+                    ? body
+                    : body?.copyWith(
+                        color: scheme.primary, fontWeight: FontWeight.w600)),
+          ]),
+        TableRow(
+          decoration: BoxDecoration(
+              border: Border(
+                  top: BorderSide(color: scheme.outlineVariant, width: 1))),
+          children: [
+            cell('Lands',
+                top: 7,
+                style: body?.copyWith(fontWeight: FontWeight.w600),
+                end: false),
+            cell('≈ ${formatDistance(baseline.flight.distance, unit)}',
+                top: 7,
+                style: theme.textTheme.bodyLarge
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            cell('≈ ${formatDistance(whatIf.flight.distance, unit)}',
+                top: 7,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w700, color: scheme.primary)),
+          ],
+        ),
+      ],
+    );
 
     return SizedBox(
       width: width,
@@ -315,8 +374,7 @@ class WhatIfCard extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        side(baseline, 'Baseline', scheme.onSurfaceVariant),
-                        side(whatIf, 'What if', scheme.primary),
+                        parameters,
                         if (order.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           const Divider(height: 1),
