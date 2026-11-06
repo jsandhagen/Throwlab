@@ -9,20 +9,30 @@ import 'package:throwlab_camera/throwlab_camera.dart';
 /// release that lasts a few hundredths of a second. 240 is offered and not
 /// the default, because it halves the light each frame gets and a cloudy
 /// evening at a track turns it to grain.
-CameraMode? pickMode(List<CameraMode> modes, {int? preferredFps}) {
+///
+/// The size is remembered with the rate, since 4K at 120 and 1080p at 120
+/// are two choices a coach made differently.
+CameraMode? pickMode(List<CameraMode> modes,
+    {int? preferredFps, int? preferredHeight}) {
   if (modes.isEmpty) return null;
   int rank(CameraMode mode) {
     var score = 0;
-    if (mode.fps == preferredFps) score += 10000;
+    if (mode.fps == preferredFps) {
+      score += 10000;
+      if (_short(mode) == preferredHeight) score += 20000;
+    }
     if (mode.fps == 120) score += 5000;
     // Otherwise the fastest, and of two the same speed the sharper.
     score += mode.fps * 10;
-    if (mode.height == 1080 || mode.width == 1080) score += 5;
+    if (_short(mode) == 1080) score += 5;
     return score;
   }
 
   return modes.reduce((a, b) => rank(b) > rank(a) ? b : a);
 }
+
+int _short(CameraMode mode) =>
+    mode.height < mode.width ? mode.height : mode.width;
 
 /// The modes as a coach chooses between them: fastest first, one per rate
 /// and size.

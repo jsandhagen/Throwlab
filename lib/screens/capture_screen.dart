@@ -50,6 +50,7 @@ class CaptureScreen extends StatefulWidget {
   static const useSystemCamera = 'system';
 
   static const _fpsKey = 'throwlab.capture.fps';
+  static const _heightKey = 'throwlab.capture.height';
   static const _countdownKey = 'throwlab.capture.countdown';
   static const _stopKey = 'throwlab.capture.stopAfter';
 
@@ -95,9 +96,11 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   Future<void> _boot() async {
     int? preferredFps;
+    int? preferredHeight;
     try {
       final prefs = await SharedPreferences.getInstance();
       preferredFps = prefs.getInt(CaptureScreen._fpsKey);
+      preferredHeight = prefs.getInt(CaptureScreen._heightKey);
       _timings = CaptureTimings(
         countdown: prefs.getInt(CaptureScreen._countdownKey) ?? 0,
         stopAfter: prefs.getInt(CaptureScreen._stopKey) ?? 0,
@@ -108,7 +111,8 @@ class _CaptureScreenState extends State<CaptureScreen>
     try {
       final offered = await ThrowCamera.modes();
       _modes = offeredModes(offered.modes);
-      final mode = pickMode(_modes, preferredFps: preferredFps);
+      final mode = pickMode(_modes,
+          preferredFps: preferredFps, preferredHeight: preferredHeight);
       if (mode == null) throw StateError('no modes');
       await _open(mode);
     } catch (e) {
@@ -226,7 +230,12 @@ class _CaptureScreenState extends State<CaptureScreen>
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(CaptureScreen._countdownKey, _timings.countdown);
       await prefs.setInt(CaptureScreen._stopKey, _timings.stopAfter);
-      if (_mode != null) await prefs.setInt(CaptureScreen._fpsKey, _mode!.fps);
+      final mode = _mode;
+      if (mode != null) {
+        await prefs.setInt(CaptureScreen._fpsKey, mode.fps);
+        await prefs.setInt(CaptureScreen._heightKey,
+            mode.height < mode.width ? mode.height : mode.width);
+      }
     } catch (_) {}
   }
 
@@ -235,23 +244,28 @@ class _CaptureScreenState extends State<CaptureScreen>
       context: context,
       showDragHandle: true,
       useSafeArea: true,
-      builder: (context) => Padding(
-        padding:
-            EdgeInsets.only(bottom: 8 + MediaQuery.paddingOf(context).bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final mode in _modes)
-              ListTile(
-                key: ValueKey('mode-${mode.fps}-${mode.height}'),
-                leading: Icon(mode == _mode
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked),
-                title: Text('${mode.fps} fps'),
-                subtitle: Text(_modeNote(mode)),
-                onTap: () => Navigator.pop(context, mode),
-              ),
-          ],
+      // A phone that films at every rate at every size lists more than half
+      // a screen of them.
+      isScrollControlled: true,
+      builder: (context) => SingleChildScrollView(
+        child: Padding(
+          padding:
+              EdgeInsets.only(bottom: 8 + MediaQuery.paddingOf(context).bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final mode in _modes)
+                ListTile(
+                  key: ValueKey('mode-${mode.fps}-${mode.height}'),
+                  leading: Icon(mode == _mode
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked),
+                  title: Text('${mode.resolution} · ${mode.fps} fps'),
+                  subtitle: Text(_modeNote(mode)),
+                  onTap: () => Navigator.pop(context, mode),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -272,7 +286,11 @@ class _CaptureScreenState extends State<CaptureScreen>
       >= 60 => 'Twice the frames of normal video.',
       _ => 'Normal video.',
     };
-    return '${mode.resolution} · $speed';
+    // The library keeps a clip at 1440p for scrubbing, so 4K buys the
+    // sharpest copy there is rather than four times the detail.
+    return mode.resolution == '4K'
+        ? '$speed Sharpest copy, biggest files.'
+        : speed;
   }
 
   @override
@@ -428,7 +446,11 @@ class _Controls extends StatelessWidget {
       _Chip(
         key: const ValueKey('capture-mode'),
         icon: Icons.slow_motion_video,
-        label: mode == null ? '…' : '${mode!.fps} fps',
+        label: mode == null
+            ? '…'
+            : mode!.resolution == '4K'
+                ? '4K ${mode!.fps}'
+                : '${mode!.fps} fps',
         onTap: idle ? onMode : null,
       ),
       _Chip(

@@ -20,7 +20,26 @@ void main() {
   const sd240 = CameraMode(width: 1280, height: 720, fps: 240, highSpeed: true);
   const hd30 = CameraMode(width: 1920, height: 1080, fps: 30, highSpeed: false);
 
+  const uhd120 =
+      CameraMode(width: 3840, height: 2160, fps: 120, highSpeed: true);
+  const uhd60 =
+      CameraMode(width: 3840, height: 2160, fps: 60, highSpeed: false);
+
   group('mode', () {
+    test('4K at 120 is offered first and chosen only once picked', () {
+      final modes = [hd30, hd60, uhd60, hd120, uhd120, hd240];
+      expect(offeredModes(modes).take(3), [hd240, uhd120, hd120]);
+      // 1080p is where it opens: the library keeps 1440p, so 4K is the
+      // bigger file for a little more of the picture.
+      expect(pickMode(modes), hd120);
+      expect(pickMode(modes, preferredFps: 120, preferredHeight: 2160), uhd120);
+      expect(pickMode(modes, preferredFps: 60, preferredHeight: 2160), uhd60);
+      // A phone that stopped offering 4K at 120 opens on 1080p at it.
+      expect(pickMode([hd30, hd120], preferredFps: 120, preferredHeight: 2160),
+          hd120);
+      expect(uhd120.toString(), '4K · 120 fps');
+    });
+
     test('opens on 120 where the phone has it', () {
       expect(pickMode([hd30, hd60, hd120, hd240, sd240]), hd120);
     });

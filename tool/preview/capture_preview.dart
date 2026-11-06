@@ -28,6 +28,8 @@ void main() {
     CameraMode(width: 1920, height: 1080, fps: 60, highSpeed: false),
     CameraMode(width: 1920, height: 1080, fps: 120, highSpeed: true),
     CameraMode(width: 1920, height: 1080, fps: 240, highSpeed: true),
+    CameraMode(width: 3840, height: 2160, fps: 60, highSpeed: false),
+    CameraMode(width: 3840, height: 2160, fps: 120, highSpeed: true),
   ];
 
   setUp(() {

@@ -189,8 +189,10 @@ class ThrowlabCameraPlugin :
 
     /**
      * Every rate this camera will really record at, and at what size: the
-     * high-speed session's own fixed rates, and the ordinary session's 30
-     * and 60 at 1080p and 720p where the encoder can keep up.
+     * high-speed session's own fixed rates at every size it lists (4K
+     * included, on a phone that gives it to apps), and the ordinary
+     * session's 30 and 60 at 4K, 1080p and 720p where the camera can keep
+     * up.
      */
     private fun listModes(): Map<String, Any> {
         val id = backCamera() ?: return mapOf("modes" to emptyList<Any>())
@@ -212,7 +214,7 @@ class ThrowlabCameraPlugin :
             .map { it.upper }
             .toSet()
         val recordable = map.getOutputSizes(MediaRecorder::class.java)?.toList() ?: emptyList()
-        for (size in listOf(Size(1920, 1080), Size(1280, 720))) {
+        for (size in listOf(Size(3840, 2160), Size(1920, 1080), Size(1280, 720))) {
             if (size !in recordable) continue
             val minFrame = map.getOutputMinFrameDuration(MediaRecorder::class.java, size)
             val fastest = if (minFrame > 0) 1_000_000_000L / minFrame else 30L
@@ -314,6 +316,14 @@ class ThrowlabCameraPlugin :
         private var recorder: MediaRecorder? = null
         private var path: String? = null
         private var deviceDegrees = 0
+        /**
+         * Past 1080p at 120 the pixels come faster than a phone's H.264
+         * encoder takes them — 4K at 120 is four times that — and the phone's
+         * own camera records them in HEVC, so this does too. Below it, H.264,
+         * which every player and every editor opens.
+         */
+        private val hevc = size.width.toLong() * size.height * fps > 1920L * 1080 * 120
+
         private val sensorOrientation =
             manager.getCameraCharacteristics(id).get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
 
@@ -479,12 +489,14 @@ class ThrowlabCameraPlugin :
                 // fast frames are the point, and starving them of bits blurs
                 // exactly the arm and the implement they were taken for.
                 setVideoEncodingBitRate(
-                    (size.width.toLong() * size.height * fps / 5)
-                        .coerceIn(8_000_000L, 120_000_000L).toInt(),
+                    (size.width.toLong() * size.height * fps / (if (hevc) 8 else 5))
+                        .coerceIn(8_000_000L, 200_000_000L).toInt(),
                 )
                 setVideoFrameRate(fps)
                 setVideoSize(size.width, size.height)
-                setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                setVideoEncoder(
+                    if (hevc) MediaRecorder.VideoEncoder.HEVC else MediaRecorder.VideoEncoder.H264,
+                )
                 setInputSurface(surface)
                 setOrientationHint(hint)
                 prepare()

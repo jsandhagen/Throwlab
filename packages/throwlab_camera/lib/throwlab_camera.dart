@@ -31,8 +31,11 @@ class CameraMode {
         'highSpeed': highSpeed,
       };
 
-  /// '1080p' — what a phone's own camera calls the size.
-  String get resolution => '${height < width ? height : width}p';
+  /// '1080p', '4K' — what a phone's own camera calls the size.
+  String get resolution {
+    final short = height < width ? height : width;
+    return short >= 2160 ? '4K' : '${short}p';
+  }
 
   @override
   bool operator ==(Object other) =>

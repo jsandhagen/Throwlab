@@ -831,7 +831,15 @@ like the app rather than a bare Material default.
   frames of a throw are not spent setting a camera up. It opens on the rate
   it was last left on, else 120 at 1080p (`pickMode`): four times the frames
   across a release, where 240 halves the light and an evening at a track
-  turns it to grain. No sound, so no microphone permission: a high-speed
+  turns it to grain. The size is remembered with the rate
+  (`throwlab.capture.height`), since 4K at 120 and 1080p at 120 are two
+  choices. 4K is offered wherever the camera lists it, at 30 and 60 in an
+  ordinary session and at 120 in a high-speed one on a phone that gives it
+  to apps, but never opened on by default: the playback copy is cut at
+  1440p, so it buys the sharpest copy rather than four times the detail.
+  Past 1080p at 120 the pixels come faster than a phone's H.264 encoder
+  takes them, so those are recorded in HEVC, as the phone's own camera
+  does; ffmpeg reads either. No sound, so no microphone permission: a high-speed
   session records none on most phones. The orientation is read off the
   accelerometer, not the screen, so a phone on a tripod with rotation
   locked still films the right way up; the preview is turned in Dart
