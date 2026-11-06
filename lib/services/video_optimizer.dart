@@ -773,6 +773,9 @@ class VideoOptimizer {
   /// [jpegColorFilter] for the clip at [path], read off the clip itself. A
   /// file that won't probe falls back to what ffmpeg would have read it as,
   /// which is no worse than before it was asked.
+  static Future<String> jpegColorFilterFor(String path) =>
+      _jpegColorFilterFor(path);
+
   static Future<String> _jpegColorFilterFor(String path) async {
     try {
       final info = (await _probe(path)).getMediaInformation();

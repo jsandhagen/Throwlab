@@ -12,6 +12,7 @@ import '../models/throw_event.dart';
 import '../models/throw_video.dart';
 import '../services/javelin_detector.dart';
 import '../services/video_library.dart';
+import '../services/clip_export.dart';
 import '../services/video_optimizer.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/flight_model.dart' show Release;
@@ -29,6 +30,7 @@ import '../widgets/drawing_rail.dart';
 import '../widgets/event_glyph.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/scrub_still.dart';
+import '../widgets/share_throw.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_picker.dart';
 import 'comparison_screen.dart';
@@ -1717,9 +1719,32 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     );
   }
 
+  /// Shares the throw as it is on screen: the drawings, the frame size they
+  /// were laid out at, and where the clip is.
+  Future<void> _share() async {
+    await _controller.pause();
+    if (!mounted) return;
+    final value = _controller.value;
+    final layout = _canvasKey.currentContext?.size ??
+        Size(390, 390 / (value.aspectRatio == 0 ? 16 / 9 : value.aspectRatio));
+    await shareThrow(
+      context,
+      widget.video,
+      drawing: ThrowDrawing(
+        annotations: _drawing.annotations,
+        layout: layout,
+        position: value.position,
+        labelStyle: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(),
+      ),
+      pixels: value.size,
+      duration: value.duration,
+    );
+  }
+
   /// Scrolls the strip so the open throw sits in the middle of it.
   Future<void> _showThrowInfo() async {
-    final replaced = await showThrowActions(context, widget.video);
+    final replaced =
+        await showThrowActions(context, widget.video, onShare: _share);
     if (!mounted) return;
     // A trim put a new file under the throw: the player, the stills and the
     // frame count this screen was built on are all of the old one, so it

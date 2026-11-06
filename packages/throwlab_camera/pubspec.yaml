@@ -1,0 +1,25 @@
+name: throwlab_camera
+description: >-
+  ThrowLab's own camera: Camera2's high-speed session, so a phone that films
+  at 120 or 240 fps in its own camera app films at it here too.
+version: 0.1.0
+publish_to: "none"
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.throwlab.camera
+        pluginClass: ThrowlabCameraPlugin

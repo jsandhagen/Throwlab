@@ -7,6 +7,7 @@ import '../screens/trim_screen.dart';
 import '../services/video_library.dart';
 import 'athlete_picker.dart';
 import 'distance_field.dart';
+import 'share_throw.dart';
 import 'throw_picker.dart';
 
 enum _ThrowAction {
@@ -16,6 +17,7 @@ enum _ThrowAction {
   note,
   frameRate,
   trim,
+  share,
   delete
 }
 
@@ -30,7 +32,12 @@ enum _ThrowAction {
 ///
 /// Returns true when the clip's file was replaced — a trim — which a screen
 /// playing it has to reopen on, since its player still holds the old one.
-Future<bool> showThrowActions(BuildContext context, ThrowVideo video) async {
+///
+/// [onShare] is how a screen with more to share than the clip — the
+/// analysis screen, with its drawings and the frame it is on — takes the
+/// Share row over; everywhere else it shares the clip.
+Future<bool> showThrowActions(BuildContext context, ThrowVideo video,
+    {Future<void> Function()? onShare}) async {
   final library = context.read<VideoLibrary>();
   final scheme = Theme.of(context).colorScheme;
   final action = await showModalBottomSheet<_ThrowAction>(
@@ -87,6 +94,12 @@ Future<bool> showThrowActions(BuildContext context, ThrowVideo video) async {
               onTap: () => Navigator.pop(context, _ThrowAction.trim),
             ),
             ListTile(
+              key: const ValueKey('throw-share'),
+              leading: const Icon(Icons.share_outlined),
+              title: const Text('Share'),
+              onTap: () => Navigator.pop(context, _ThrowAction.share),
+            ),
+            ListTile(
               leading: Icon(Icons.delete_outline, color: scheme.error),
               title:
                   Text('Delete throw', style: TextStyle(color: scheme.error)),
@@ -115,6 +128,8 @@ Future<bool> showThrowActions(BuildContext context, ThrowVideo video) async {
         MaterialPageRoute(builder: (_) => TrimScreen(video: video)),
       );
       return trimmed ?? false;
+    case _ThrowAction.share:
+      await (onShare?.call() ?? shareThrow(context, video));
     case _ThrowAction.delete:
       // remove() reclaims the clip, its still and the scrub frames itself.
       await library.remove(video.id);

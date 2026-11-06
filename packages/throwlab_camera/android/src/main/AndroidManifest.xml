@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Merged into the app's manifest. No microphone: a high-speed session
+         records no sound on most phones, and a coach should not be asked
+         for one they get nothing for. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+</manifest>
