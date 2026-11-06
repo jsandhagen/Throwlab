@@ -143,9 +143,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               key: const ValueKey('add-film'),
               leading: const Icon(Icons.videocam),
               title: const Text('Film a throw'),
-              subtitle: const Text(
-                  'Filming yourself? Leave it running — the throw is found '
-                  'and the waiting cut.'),
+              subtitle: const Text('Filming yourself? Leave it running. '
+                  'The throw is found and the waiting is cut out.'),
               onTap: () => Navigator.pop(context, true),
             ),
             ListTile(
