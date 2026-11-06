@@ -125,6 +125,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  /// Asks which way the throw is coming in: filmed now, or out of the
+  /// gallery.
+  Future<void> _addThrow() async {
+    final filmed = await showModalBottomSheet<bool>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => Padding(
+        // The foot of a sheet is the sheet's to keep clear of the
+        // navigation bar.
+        padding: EdgeInsets.only(
+            top: 8, bottom: 8 + MediaQuery.paddingOf(context).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const ValueKey('add-film'),
+              leading: const Icon(Icons.videocam),
+              title: const Text('Film a throw'),
+              subtitle: const Text(
+                  'Filming yourself? Leave it running — the throw is found '
+                  'and the waiting cut.'),
+              onTap: () => Navigator.pop(context, true),
+            ),
+            ListTile(
+              key: const ValueKey('add-import'),
+              leading: const Icon(Icons.video_library),
+              title: const Text('Import from gallery'),
+              onTap: () => Navigator.pop(context, false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (filmed == null || !mounted) return;
+    await _importVideo(filmed: filmed);
+  }
+
   /// Brings a throw into the library — out of the gallery, or [filmed] with
   /// the phone's camera there and then.
   ///
@@ -513,25 +550,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.small(
-            key: const ValueKey('film-throw'),
-            heroTag: 'film-throw',
-            tooltip: 'Film a throw',
-            onPressed: () => _importVideo(filmed: true),
-            child: const Icon(Icons.videocam),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'import-throw',
-            icon: const Icon(Icons.video_library),
-            label: const Text('Import throw'),
-            onPressed: _importVideo,
-          ),
-        ],
+      // One button for both ways a throw comes in. Two stacked up the
+      // corner sat over a card and a half of the library they are a
+      // shortcut into.
+      floatingActionButton: FloatingActionButton(
+        key: const ValueKey('add-throw'),
+        tooltip: 'Add a throw',
+        onPressed: _addThrow,
+        child: const Icon(Icons.add),
       ),
     );
   }

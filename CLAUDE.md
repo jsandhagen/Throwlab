@@ -778,7 +778,7 @@ like the app rather than a bare Material default.
   `worthSearching` (somebody stopped it themselves) is left alone. Every
   length is a length of the throw (`throwTiming`, per event), measured in
   real seconds and stretched for a slow-motion file. It is asked, never
-  done: `offerCutToThrow` runs on the library's import, its Film button and
+  done: `offerCutToThrow` runs on both ways the library's one add button brings a throw in and
   a meet capture, and puts the frame it picked up in `FoundThrowSheet`
   before anything is cut — saying whether the uncut clip survives, since a
   camera's own file does not. Accepted, the encode the clip was owed is of
