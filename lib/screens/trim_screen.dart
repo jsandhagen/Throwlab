@@ -11,6 +11,7 @@ import '../utils/clip_trim.dart';
 import '../utils/frame_seeker.dart';
 import '../utils/scrub_frames.dart';
 import '../utils/scrub_shuttle.dart';
+import '../utils/throw_finder.dart';
 import '../widgets/playback_controls.dart';
 import '../widgets/scrub_still.dart';
 import '../widgets/trim_bar.dart';
@@ -40,8 +41,7 @@ class TrimScreen extends StatefulWidget {
   State<TrimScreen> createState() => _TrimScreenState();
 }
 
-class _TrimScreenState extends State<TrimScreen>
-    with TickerProviderStateMixin {
+class _TrimScreenState extends State<TrimScreen> with TickerProviderStateMixin {
   late final VideoPlayerController _controller;
   late final FrameSeeker _seeker;
 
@@ -288,6 +288,54 @@ class _TrimScreenState extends State<TrimScreen>
       ..pop(true);
   }
 
+  /// Puts both ends on the throw the finder picks out of the clip, and the
+  /// picture on the moment it moved most, for the ends to be judged from
+  /// there — the same search a long clip gets on its way in, for one
+  /// that came in before it, or was kept whole then.
+  Future<void> _findThrow() async {
+    final video = widget.video;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    await _controller.pause();
+    if (!mounted) return;
+    final progress = ValueNotifier<double?>(null);
+    var open = true;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => OptimizingDialog(
+        progress: progress,
+        stage: ValueNotifier('Looking for the throw.'),
+        title: 'Finding the throw',
+      ),
+    ).whenComplete(() => open = false);
+    final window = await VideoOptimizer.findThrowIn(
+      video.path,
+      event: video.event,
+      fps: video.fps,
+      captureFps: video.captureFps,
+      onProgress: (p) => progress.value = p,
+    );
+    if (open) navigator.pop();
+    if (!mounted) return;
+    if (window == null) {
+      final slowdown = video.captureFps / video.fps;
+      final short = _controller.value.duration.inMilliseconds /
+              1000 /
+              (slowdown < 1 ? 1 : slowdown) <
+          worthSearching;
+      messenger.showSnackBar(SnackBar(
+          content: Text(short
+              ? 'This clip is short enough already.'
+              : "Couldn't pick a throw out of this clip — set the ends "
+                  'by hand.')));
+      return;
+    }
+    final range = window.toRange(_controller.value.duration, video.fps);
+    setState(() => _range = range);
+    _seek(range.frameAt(Duration(microseconds: (window.peak * 1e6).round())));
+  }
+
   static String _seconds(Duration d) =>
       '${(d.inMicroseconds / 1e6).toStringAsFixed(2)} s';
 
@@ -300,6 +348,12 @@ class _TrimScreenState extends State<TrimScreen>
         backgroundColor: Colors.black,
         title: const Text('Trim clip'),
         actions: [
+          TextButton.icon(
+            key: const ValueKey('trim-find-throw'),
+            onPressed: range == null || _saving ? null : _findThrow,
+            icon: const Icon(Icons.auto_awesome),
+            label: const Text('Find throw'),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilledButton(

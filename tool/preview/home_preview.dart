@@ -47,6 +47,13 @@ void main() {
     await settle(tester);
     await _shoot(tester, 'home_by_athlete');
 
+    // The one button's two ways in.
+    await tester.tap(find.byKey(const ValueKey('add-throw')));
+    await settle(tester);
+    await _shoot(tester, 'home_add_throw');
+    await tester.tapAt(const Offset(180, 100));
+    await settle(tester);
+
     await tester.tap(find.text('Event'));
     await settle(tester);
     await _shoot(tester, 'home_by_event');

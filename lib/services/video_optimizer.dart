@@ -10,7 +10,9 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/throw_event.dart';
 import '../utils/clip_trim.dart';
+import '../utils/throw_finder.dart';
 import '../utils/zoom_detail.dart';
 
 /// Re-encodes an imported clip with a keyframe every few frames.
@@ -23,11 +25,13 @@ class VideoOptimizer {
   /// Returns the path of the optimized copy, or [srcPath] if encoding
   /// fails or is canceled — the original still plays, scrubbing is just
   /// slower. [onProgress] gets 0..1 while encoding (null when the clip's
-  /// duration is unknown).
+  /// duration is unknown). With [trim], only that part of the clip is
+  /// encoded — see [trimClip] — which is also most of the time saved.
   static Future<String> optimizeForScrubbing(
     String srcPath,
     String id, {
     ValueChanged<double?>? onProgress,
+    TrimRange? trim,
   }) async {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.path}/throws');
@@ -45,7 +49,7 @@ class VideoOptimizer {
     }
 
     if (!await _encodePlaybackCopy(srcPath, outPath, onProgress,
-        totalMs: totalMs)) {
+        totalMs: totalMs, trim: trim)) {
       File(outPath).delete().ignore();
       return srcPath;
     }
@@ -165,6 +169,90 @@ class VideoOptimizer {
       },
     );
     return done.future;
+  }
+
+  /// Finds the throw in the clip at [path] (see throw_finder.dart), or null
+  /// when there isn't one to tell apart, the scan failed or it was
+  /// canceled. [onProgress] gets 0..1 through the clip.
+  ///
+  /// One decode of the whole clip, shrunk to a postage stamp of gray as it
+  /// comes off the decoder — and the deblocking skipped, since nothing is
+  /// looked at but whether a pixel moved. That makes it the cheap half of an
+  /// import: the encode it saves, of everything either side of the throw,
+  /// costs several times as much.
+  static Future<ThrowWindow?> findThrowIn(
+    String path, {
+    required ThrowEvent event,
+    required double fps,
+    required double captureFps,
+    ValueChanged<double?>? onProgress,
+  }) async {
+    final temp = await getTemporaryDirectory();
+    final out =
+        '${temp.path}/motion_${DateTime.now().microsecondsSinceEpoch}.gray';
+    double? totalMs;
+    try {
+      final seconds = double.tryParse(
+          (await _probe(path)).getMediaInformation()?.getDuration() ?? '');
+      if (seconds != null && seconds > 0) totalMs = seconds * 1000;
+    } catch (_) {
+      // Progress stays indeterminate.
+    }
+    // Too short to have anything worth cutting: no decode at all.
+    final slowdown = fps > 0 ? math.max(1.0, captureFps / fps) : 1.0;
+    if (totalMs != null && totalMs / 1000 / slowdown < worthSearching) {
+      return null;
+    }
+    final done = Completer<bool>();
+    await FFmpegKit.executeAsync(
+      motionCommand(path, out),
+      (session) async =>
+          done.complete(ReturnCode.isSuccess(await session.getReturnCode())),
+      null,
+      (statistics) {
+        final total = totalMs;
+        if (total == null) return;
+        onProgress?.call((statistics.getTime() / total).clamp(0.0, 1.0));
+      },
+    );
+    try {
+      if (!await done.future) return null;
+      final frames = await File(out).readAsBytes();
+      final activity = await compute(motionActivity, frames);
+      return findThrow(activity,
+          rate: motionSampleRate, event: event, slowdown: slowdown);
+    } catch (_) {
+      return null;
+    } finally {
+      File(out).delete().ignore();
+    }
+  }
+
+  /// The ffmpeg that writes the clip at [src] out as [motionSampleRate]
+  /// gray squares of [motionSide], end to end, for [motionActivity].
+  @visibleForTesting
+  static String motionCommand(String src, String out) =>
+      '-y -skip_loop_filter all -flags2 +fast -an -sn -i "$src" '
+      '-vf fps=${motionSampleRate.round()},'
+      'scale=$motionSide:$motionSide:flags=area,format=gray '
+      '-f rawvideo "$out"';
+
+  /// A still of the clip at [path], [seconds] in, for looking at rather than
+  /// keeping: in the temporary directory and small. Null when it fails.
+  static Future<String?> grabStill(String path, double seconds) async {
+    final temp = await getTemporaryDirectory();
+    final out =
+        '${temp.path}/still_${DateTime.now().microsecondsSinceEpoch}.jpg';
+    final color = await _jpegColorFilterFor(path);
+    final session = await FFmpegKit.execute(
+      '-y -ss ${seconds.toStringAsFixed(3)} -i "$path" -frames:v 1 '
+      '-vf scale=-2:360:$color -q:v 5 "$out"',
+    );
+    if (!ReturnCode.isSuccess(await session.getReturnCode())) {
+      File(out).delete().ignore();
+      return null;
+    }
+    return out;
   }
 
   /// Abandons the in-flight optimization; the import then keeps the

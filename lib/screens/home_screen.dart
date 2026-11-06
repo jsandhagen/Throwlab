@@ -20,6 +20,7 @@ import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
 import '../widgets/distance_field.dart';
 import '../widgets/event_glyph.dart';
+import '../widgets/found_throw.dart';
 import '../widgets/gold.dart';
 import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
@@ -124,9 +125,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _importVideo() async {
+  /// Asks which way the throw is coming in: filmed now, or out of the
+  /// gallery.
+  Future<void> _addThrow() async {
+    final filmed = await showModalBottomSheet<bool>(
+      context: context,
+      useSafeArea: true,
+      builder: (context) => Padding(
+        // The foot of a sheet is the sheet's to keep clear of the
+        // navigation bar.
+        padding: EdgeInsets.only(
+            top: 8, bottom: 8 + MediaQuery.paddingOf(context).bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const ValueKey('add-film'),
+              leading: const Icon(Icons.videocam),
+              title: const Text('Film a throw'),
+              subtitle: const Text('Filming yourself? Leave it running. '
+                  'The throw is found and the waiting is cut out.'),
+              onTap: () => Navigator.pop(context, true),
+            ),
+            ListTile(
+              key: const ValueKey('add-import'),
+              leading: const Icon(Icons.video_library),
+              title: const Text('Import from gallery'),
+              onTap: () => Navigator.pop(context, false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (filmed == null || !mounted) return;
+    await _importVideo(filmed: filmed);
+  }
+
+  /// Brings a throw into the library — out of the gallery, or [filmed] with
+  /// the phone's camera there and then.
+  ///
+  /// Filming is the case an athlete on their own is in: the phone on a
+  /// bag, record, walk out, throw, walk back. So a long clip is searched
+  /// for the throw before anything is encoded, and cutting to it is offered
+  /// — which also makes the import a few seconds of encoding rather than a
+  /// couple of minutes of it.
+  Future<void> _importVideo({bool filmed = false}) async {
     final library = context.read<VideoLibrary>();
-    final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
+    final picked = await ImagePicker().pickVideo(
+      source: filmed ? ImageSource.camera : ImageSource.gallery,
+      preferredCameraDevice: CameraDevice.rear,
+    );
     if (picked == null || !mounted) return;
 
     final details = await showDialog<
@@ -138,16 +186,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           DistanceUnit distanceUnit
         })>(
       context: context,
-      builder: (context) => const _ImportDialog(),
+      builder: (context) => _ImportDialog(action: filmed ? 'Save' : 'Import'),
     );
     if (details == null || !mounted) return;
+
+    // Probe the original file: the re-encode preserves frame timing but
+    // drops the slow-mo capture-fps metadata tag.
+    final rates = await VideoOptimizer.probeFrameRates(picked.path);
+    final fps = rates?.playback ?? 30;
+    if (!mounted) return;
+    final found = await offerCutToThrow(
+      context,
+      path: picked.path,
+      event: details.event,
+      fps: fps,
+      captureFps: rates?.capture ?? fps,
+      keepsOriginal: !filmed,
+    );
+    final trim = found?.toRange(
+        Duration(microseconds: (found.duration * 1e6).round()), fps);
+    if (!mounted) return;
 
     // Re-encode for instant frame seeks, then pre-extract frames for smooth
     // scrubbing; this is the slow part of importing.
     final encodeProgress = ValueNotifier<double?>(null);
-    final stage = ValueNotifier<String>(
-        'Re-encoding for instant frame-by-frame scrubbing. Long or '
-        'high-fps clips take a few minutes.');
+    final stage = ValueNotifier<String>(trim != null
+        ? 'Cutting to the throw and re-encoding it for instant '
+            'frame-by-frame scrubbing.'
+        : 'Re-encoding for instant frame-by-frame scrubbing. Long or '
+            'high-fps clips take a few minutes.');
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -155,16 +222,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           OptimizingDialog(progress: encodeProgress, stage: stage),
     );
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    // Probe the original file: the re-encode preserves frame timing but
-    // drops the slow-mo capture-fps metadata tag.
-    final rates = await VideoOptimizer.probeFrameRates(picked.path);
-    final fps = rates?.playback ?? 30;
-    final path = await VideoOptimizer.optimizeForScrubbing(
+    var path = await VideoOptimizer.optimizeForScrubbing(
       picked.path,
       id,
+      trim: trim,
       onProgress: (p) =>
           encodeProgress.value = p == null ? null : p * _encodeShare,
     );
+    // The encode failed or was skipped. A gallery clip is still in the
+    // gallery; the camera's file is in a cache the OS will clear, so it is
+    // kept as shot and owes the encode, the way a meet capture does.
+    var pending = false;
+    if (filmed && path == picked.path) {
+      final kept = await VideoOptimizer.stashCapture(picked.path, id);
+      if (kept != null) {
+        path = kept;
+        pending = true;
+      }
+    }
     stage.value = 'Extracting frames for smooth scrubbing…';
     encodeProgress.value = _encodeShare;
     final frames = await VideoOptimizer.extractScrubFrames(
@@ -183,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       event: details.event,
       implementKg: details.implementKg,
       importedAt: DateTime.now(),
-      recordedAt: rates?.recordedAt,
+      recordedAt: rates?.recordedAt ?? (filmed ? DateTime.now() : null),
       fps: fps,
       captureFps: rates?.capture,
       athlete: details.athlete,
@@ -198,7 +273,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           frames != null ? VideoOptimizer.scrubFramesVersion : 0,
       // Only a copy we made carries the current geometry; when the encode
       // failed the original file stands in and still needs remaking.
-      playbackVersion: path == picked.path ? 0 : VideoOptimizer.playbackVersion,
+      playbackVersion:
+          path == picked.path || pending ? 0 : VideoOptimizer.playbackVersion,
+      optimizePending: pending,
     );
     await library.add(video);
     if (mounted) {
@@ -472,10 +549,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        icon: const Icon(Icons.video_library),
-        label: const Text('Import throw'),
-        onPressed: _importVideo,
+      // One button for both ways a throw comes in. Two stacked up the
+      // corner sat over a card and a half of the library they are a
+      // shortcut into.
+      floatingActionButton: FloatingActionButton(
+        key: const ValueKey('add-throw'),
+        tooltip: 'Add a throw',
+        onPressed: _addThrow,
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -951,7 +1032,9 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _ImportDialog extends StatefulWidget {
-  const _ImportDialog();
+  const _ImportDialog({this.action = 'Import'});
+
+  final String action;
 
   @override
   State<_ImportDialog> createState() => _ImportDialogState();
@@ -1042,7 +1125,7 @@ class _ImportDialogState extends State<_ImportDialog> {
             distance: _distance,
             distanceUnit: _distanceUnit,
           )),
-          child: const Text('Import'),
+          child: Text(widget.action),
         ),
       ],
     );

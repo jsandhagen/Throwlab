@@ -77,6 +77,20 @@ void main() {
     await pumpFrames(tester, 8);
   }
 
+  testWidgets('one button adds a throw, filmed or from the gallery',
+      (tester) async {
+    await mountHome(tester);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('add-throw')));
+    await pumpFrames(tester, 8);
+    expect(find.text('Film a throw'), findsOneWidget);
+    expect(find.text('Import from gallery'), findsOneWidget);
+    // Dismissed, nothing is picked.
+    await tester.tapAt(const Offset(200, 50));
+    await pumpFrames(tester, 8);
+    expect(find.text('Film a throw'), findsNothing);
+  });
+
   group('shelves', () {
     testWidgets('one heading per athlete, with a card per throw',
         (tester) async {

@@ -14,10 +14,12 @@ import '../services/athlete_library.dart';
 import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
+import '../utils/clip_trim.dart';
 import '../widgets/angular.dart';
 import '../widgets/attempt_entry.dart';
 import '../widgets/entry_dialog.dart';
 import '../widgets/event_glyph.dart';
+import '../widgets/found_throw.dart';
 import '../widgets/gold.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/sector_board.dart';
@@ -25,6 +27,7 @@ import '../widgets/share_meet.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'home_screen.dart' show OptimizingDialog;
 import 'meet_screen.dart';
 
 /// Films the round that is about to be thrown. Injected so a test can drive
@@ -759,24 +762,73 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       }
       return null;
     }
-    final thumbnail = await VideoOptimizer.extractThumbnail(path, id);
+    // A coach filming somebody else stops the camera themselves, and the
+    // clip is too short to be searched. One left running by an athlete on
+    // their own is two minutes of walking with a throw in it — cut to now,
+    // in an encode of a few seconds that also settles the one it was owed.
+    final fps = rates?.playback ?? 30;
+    var kept = path;
+    var pending = true;
+    if (!mounted) return null;
+    final found = await offerCutToThrow(
+      context,
+      path: path,
+      event: entry.event,
+      fps: fps,
+      captureFps: rates?.capture ?? fps,
+      keepsOriginal: false,
+    );
+    if (found != null && mounted) {
+      final trimmed = await _cutToThrow(
+          path,
+          id,
+          found.toRange(
+              Duration(microseconds: (found.duration * 1e6).round()), fps));
+      if (trimmed != null) {
+        kept = trimmed;
+        pending = false;
+      }
+    }
+    final thumbnail = await VideoOptimizer.extractThumbnail(kept, id);
     final now = DateTime.now();
     final video = ThrowVideo(
       id: id,
-      path: path,
+      path: kept,
       event: entry.event,
       implementKg: entry.implementKg,
       importedAt: now,
       recordedAt: now,
-      fps: rates?.playback ?? 30,
+      fps: fps,
       captureFps: rates?.capture,
       athlete: entry.athlete,
       note: meetName,
       thumbnailPath: thumbnail,
-      optimizePending: true,
+      optimizePending: pending,
+      playbackVersion: pending ? 0 : VideoOptimizer.playbackVersion,
     );
     await library.add(video);
     return video;
+  }
+
+  /// Cuts a capture down to [range] behind the flask; the new path, or null
+  /// when it stopped and the capture is as it was shot.
+  Future<String?> _cutToThrow(String path, String id, TrimRange range) async {
+    final progress = ValueNotifier<double?>(null);
+    final navigator = Navigator.of(context);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => OptimizingDialog(
+        progress: progress,
+        stage: ValueNotifier('Cutting to the throw.'),
+        title: 'Trimming clip',
+        action: 'Cancel',
+      ),
+    );
+    final trimmed = await VideoOptimizer.trimClip(path, id, range,
+        onProgress: (p) => progress.value = p);
+    navigator.pop();
+    return trimmed;
   }
 
   void _openThrow(ThrowVideo video) => Navigator.push(
