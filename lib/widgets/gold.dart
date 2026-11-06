@@ -394,8 +394,7 @@ class StrikeFrame {
       ((t - from) / (to - from)).clamp(0.0, 1.0).toDouble();
 
   /// How much of the frame is traced.
-  double get drawn =>
-      Curves.easeInOutCubic.transform(_span(t, 0, 0.42));
+  double get drawn => Curves.easeInOutCubic.transform(_span(t, 0, 0.42));
 
   /// The medal: how far it has dropped, how hard it is still swinging, and
   /// whether it is there yet.
@@ -407,6 +406,7 @@ class StrikeFrame {
     final p = _span(t, 0.22, 0.58) - 1;
     return 1 + 2.70158 * p * p * p + 1.70158 * p * p;
   }
+
   double get medalOpacity => _span(t, 0.22, 0.3);
   double get swing {
     final p = _span(t, 0.4, 0.95);
@@ -454,8 +454,8 @@ class StrikeFrame {
 Future<Uint8List> medalPng(Medal medal, {int size = 48}) async {
   final recorder = ui.PictureRecorder();
   final height = (size * _MedalPainter.aspect).round();
-  _MedalPainter(medal).paint(
-      Canvas(recorder), Size(size.toDouble(), height.toDouble()));
+  _MedalPainter(medal)
+      .paint(Canvas(recorder), Size(size.toDouble(), height.toDouble()));
   final image = await recorder.endRecording().toImage(size, height);
   try {
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -551,8 +551,7 @@ class _MedalPainter extends CustomPainter {
         ribbon,
       )
       ..drawPath(
-        Path.combine(
-            PathOperation.intersect, band, beyond(_slot + _slotWidth)),
+        Path.combine(PathOperation.intersect, band, beyond(_slot + _slotWidth)),
         ribbon,
       )
       // The disc takes the ramp across its own square rather than across the

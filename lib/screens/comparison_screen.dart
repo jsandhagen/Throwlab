@@ -745,20 +745,20 @@ class _ComparisonScreenState extends State<ComparisonScreen>
           ? (landscape
               ? Row(
                   children: [
-                    Expanded(child: _player(_shuttleA, _drawA,
-                        mirrored: _mirrorA)),
+                    Expanded(
+                        child: _player(_shuttleA, _drawA, mirrored: _mirrorA)),
                     const VerticalDivider(width: 2),
-                    Expanded(child: _player(_shuttleB, _drawB,
-                        mirrored: _mirrorB)),
+                    Expanded(
+                        child: _player(_shuttleB, _drawB, mirrored: _mirrorB)),
                   ],
                 )
               : Column(
                   children: [
-                    Expanded(child: _player(_shuttleA, _drawA,
-                        mirrored: _mirrorA)),
+                    Expanded(
+                        child: _player(_shuttleA, _drawA, mirrored: _mirrorA)),
                     const Divider(height: 2),
-                    Expanded(child: _player(_shuttleB, _drawB,
-                        mirrored: _mirrorB)),
+                    Expanded(
+                        child: _player(_shuttleB, _drawB, mirrored: _mirrorB)),
                   ],
                 ))
           : Stack(
@@ -835,9 +835,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                             child: DrawingRail(
                               controller: _activeDrawing,
                               initiallyOpen: false,
-                              axis: landscape
-                                  ? Axis.vertical
-                                  : Axis.horizontal,
+                              axis: landscape ? Axis.vertical : Axis.horizontal,
                             ),
                           ),
                         ),

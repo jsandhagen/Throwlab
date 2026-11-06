@@ -15,6 +15,7 @@ import '../services/meet_library.dart';
 import '../services/video_library.dart';
 import '../services/video_optimizer.dart';
 import '../widgets/angular.dart';
+import '../widgets/backup_flow.dart';
 import '../widgets/logo_mark.dart';
 import '../widgets/sector_art.dart';
 import '../widgets/athlete_picker.dart';
@@ -488,9 +489,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           children: [
             const LogoMark(height: 32),
             const SizedBox(width: 10),
-            const Text('ThrowLab',
-                style:
-                    TextStyle(fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+            // Gives way to the actions on a narrow phone rather than
+            // pushing them off it: the mark beside it already says whose
+            // app this is.
+            const Flexible(
+              child: Text('ThrowLab',
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+            ),
           ],
         ),
         actions: [
@@ -509,6 +518,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: const Icon(Icons.calculate_outlined),
             onPressed: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const CalculatorsScreen())),
+          ),
+          // Behind a menu rather than an icon each: two things done once a
+          // month have no business taking room from three done every day.
+          PopupMenuButton<VoidCallback>(
+            key: const ValueKey('library-menu'),
+            tooltip: 'More',
+            onSelected: (action) => action(),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                key: const ValueKey('menu-backup'),
+                value: () => backUpLibrary(this.context),
+                child: const ListTile(
+                  leading: Icon(Icons.cloud_upload_outlined),
+                  title: Text('Back up library'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+              PopupMenuItem(
+                key: const ValueKey('menu-restore'),
+                value: () => restoreLibrary(this.context),
+                child: const ListTile(
+                  leading: Icon(Icons.settings_backup_restore),
+                  title: Text('Restore a backup'),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -1218,6 +1254,7 @@ class OptimizingDialog extends StatelessWidget {
     required this.stage,
     this.title = 'Optimizing video',
     this.action = 'Skip',
+    this.onAction,
   });
 
   /// 0..1 over the whole import, null before the first reading.
@@ -1227,7 +1264,12 @@ class OptimizingDialog extends StatelessWidget {
   /// A trim is the same wait under another name, and stopping it keeps the
   /// clip as it was rather than skipping a step.
   final String title;
-  final String action;
+
+  /// The button's label; none for a wait that cannot be stopped.
+  final String? action;
+
+  /// What [action] does; stopping ffmpeg where nothing else is said.
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1260,12 +1302,14 @@ class OptimizingDialog extends StatelessWidget {
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: VideoOptimizer.cancel,
-          child: Text(action),
-        ),
-      ],
+      actions: action == null
+          ? null
+          : [
+              TextButton(
+                onPressed: onAction ?? VideoOptimizer.cancel,
+                child: Text(action!),
+              ),
+            ],
     );
   }
 }

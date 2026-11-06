@@ -112,7 +112,9 @@ class AthleteRecord {
       return AthleteRecord(
         name: (json['name'] as String?)?.trim() ?? '',
         nickname: (json['nickname'] as String?)?.trim() ?? '',
-        firstName: words.length > 1 ? words.sublist(0, words.length - 1).join(' ') : '',
+        firstName: words.length > 1
+            ? words.sublist(0, words.length - 1).join(' ')
+            : '',
         lastName: words.isEmpty ? '' : words.last,
         school: (json['school'] as String?)?.trim() ?? '',
       );

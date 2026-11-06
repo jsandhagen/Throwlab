@@ -78,7 +78,6 @@ Map<String, dynamic> competitionFeed(
       following: followed,
       boardNames: boardNames);
 
-
   return {
     'meet': meet.name.isEmpty ? 'Meet' : meet.name,
     'date': longThrowDate(meet.date),
@@ -123,9 +122,8 @@ Map<String, dynamic> competitionFeed(
       'made': standings.cutMade,
       // What the app writes over its own table: the cut as a promise
       // before it is made, and as a fact afterwards.
-      'label': standings.cutMade
-          ? 'the final'
-          : 'top ${meet.advancing} advance',
+      'label':
+          standings.cutMade ? 'the final' : 'top ${meet.advancing} advance',
       if (standings.cutMark != null)
         'mark': formatDistance(standings.cutMark!, _unitOfCut(standings)),
     },
@@ -187,7 +185,8 @@ Map<String, dynamic> _flight(MeetCompetition competition, MeetFlight flight,
     return {
       'label': label,
       'name': entry.athlete,
-      if (place != null && best != null) 'placeLabel': ordinalPlace(place.place),
+      if (place != null && best != null)
+        'placeLabel': ordinalPlace(place.place),
       if (place != null && best != null)
         'mark': formatDistance(best, place.series.unit),
     };
@@ -257,8 +256,8 @@ Map<String, dynamic> _flight(MeetCompetition competition, MeetFlight flight,
 /// the app's colors each is set in rather than a hex: the page already
 /// holds the palette, and a caption that carried its own would be the one
 /// place on it spelling a color of its own.
-List<Map<String, dynamic>> _caption(MeetFlight flight,
-    MeetStandings standings, bool Function(MeetEntry entry) mine) {
+List<Map<String, dynamic>> _caption(MeetFlight flight, MeetStandings standings,
+    bool Function(MeetEntry entry) mine) {
   final lines = <Map<String, dynamic>>[];
   final leader = standings.places.isEmpty ? null : standings.places.first;
   final up = flight.inTheCircle;
@@ -348,14 +347,16 @@ Map<String, dynamic> _place(
     'throwsInFinal': standings.throwsInFinal(place.entry.id),
     if (place.best != null) 'best': formatDistance(place.best!, unit),
     if (series.bestRound != null) 'bestRound': series.bestRound! + 1,
-    if (series.average != null) 'average': formatDistance(series.average!, unit),
+    if (series.average != null)
+      'average': formatDistance(series.average!, unit),
     'fouls': series.fouls,
     'passes': series.passes,
     // 'averaging 42.13 m from 2 · 1 foul' — the reader's question rather
     // than the competition's, and only for the athlete they are here for,
     // exactly as the app's own table asks it. A mean of one throw is that
     // throw, which the row already gives.
-    if (ours && _consistency(series) != null) 'consistency': _consistency(series),
+    if (ours && _consistency(series) != null)
+      'consistency': _consistency(series),
     // And what they are short of, which is the other line the app's table
     // prints under its own athletes. Only theirs, and only while the cut
     // is still to be made: what the rest of the field needs is not the

@@ -111,18 +111,25 @@ String spectatorPage(
                   'anywhere else.'
               : "Live from the coach's phone. Held only while the "
                   'competition is on, and not kept afterwards.')
-      .replaceFirst('/*METALS*/', [
-        for (final entry in metals.entries)
-          '--${entry.key}: ${hex(entry.value.flat)};',
-      ].join(' '))
-      .replaceFirst('/*METAL_DEFS*/', [
-        for (final entry in metals.entries)
-          "<linearGradient id='m-${entry.key}' x1='0' y1='0' x2='1' y2='1'>"
-              "${stops(entry.value)}</linearGradient>",
-      ].join())
-      .replaceFirst('/*PALETTE*/', [
-        for (final entry in palette.entries) '--${entry.key}: ${entry.value};',
-      ].join(' '))
+      .replaceFirst(
+          '/*METALS*/',
+          [
+            for (final entry in metals.entries)
+              '--${entry.key}: ${hex(entry.value.flat)};',
+          ].join(' '))
+      .replaceFirst(
+          '/*METAL_DEFS*/',
+          [
+            for (final entry in metals.entries)
+              "<linearGradient id='m-${entry.key}' x1='0' y1='0' x2='1' y2='1'>"
+                  "${stops(entry.value)}</linearGradient>",
+          ].join())
+      .replaceFirst(
+          '/*PALETTE*/',
+          [
+            for (final entry in palette.entries)
+              '--${entry.key}: ${entry.value};',
+          ].join(' '))
       // The slant every leaning edge on the page uses, which is the one the
       // sector opens at — the same number the app's own bar leans by.
       .replaceFirst('/*LEAN*/', sectorHalfAngleDeg.toStringAsFixed(2))

@@ -99,8 +99,8 @@ class _ConditionsSheetState extends State<_ConditionsSheet> {
                       selected: _sky == sky,
                       // Tapping the chosen one clears it: a coach who
                       // picked wrong should not have to leave it wrong.
-                      onSelected: (on) => setState(
-                          () => _sky = on ? sky : MeetSky.unknown),
+                      onSelected: (on) =>
+                          setState(() => _sky = on ? sky : MeetSky.unknown),
                     ),
               ],
             ),
@@ -115,8 +115,8 @@ class _ConditionsSheetState extends State<_ConditionsSheet> {
                     ChoiceChip(
                       label: Text(wind.label),
                       selected: _wind == wind,
-                      onSelected: (on) => setState(
-                          () => _wind = on ? wind : MeetWind.unknown),
+                      onSelected: (on) =>
+                          setState(() => _wind = on ? wind : MeetWind.unknown),
                     ),
               ],
             ),
@@ -187,8 +187,10 @@ class _Label extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 6),
         child: Text(
           text,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant),
+          style: Theme.of(context)
+              .textTheme
+              .labelMedium
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       );
 }

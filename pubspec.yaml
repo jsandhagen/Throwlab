@@ -29,6 +29,8 @@ dependencies:
   # APK build the way the note below describes. The painting is ours
   # (QrPainter), so the same matrix can go on paper later.
   qr: ^3.0.2
+  share_plus: ^12.0.2
+  archive: ^4.6.0
 
 dev_dependencies:
   flutter_test:

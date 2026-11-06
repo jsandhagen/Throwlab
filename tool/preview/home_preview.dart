@@ -54,6 +54,16 @@ void main() {
     await tester.tapAt(const Offset(180, 100));
     await settle(tester);
 
+    // Backing up and restoring, behind the app bar's menu.
+    await tester.tap(find.byKey(const ValueKey('library-menu')));
+    await settle(tester);
+    await _shoot(tester, 'home_menu');
+    await tester.tap(find.byKey(const ValueKey('menu-backup')));
+    await settle(tester);
+    await _shoot(tester, 'home_backup');
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+
     await tester.tap(find.text('Event'));
     await settle(tester);
     await _shoot(tester, 'home_by_event');

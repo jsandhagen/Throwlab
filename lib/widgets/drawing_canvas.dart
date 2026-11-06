@@ -451,6 +451,20 @@ class DrawingCanvas extends StatelessWidget {
   }
 }
 
+/// Paints [annotations] onto [canvas] laid out at [size], the way the frame
+/// shows them at no zoom with the clip at [position] — for drawings that
+/// leave the app burned into a clip or a still. The same painter as the
+/// screen's, so a shared timer or angle reads exactly as it did on it.
+void paintAnnotations(
+  Canvas canvas,
+  Size size,
+  List<Annotation> annotations, {
+  required Duration position,
+  required TextStyle labelStyle,
+}) =>
+    _AnnotationPainter(annotations, 1, position, labelStyle, false)
+        .paint(canvas, size);
+
 class _AnnotationPainter extends CustomPainter {
   _AnnotationPainter(this.annotations, this.zoomScale, this.position,
       this.labelStyle, this.mirrored);

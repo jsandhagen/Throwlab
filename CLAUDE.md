@@ -8,9 +8,9 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | Path | What lives there |
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests), `EliteRelease` (a release measured at a championship final, and the typical ranges) |
-| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
+| `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `LibraryBackup` (the whole library as one zip, and merged back), `ClipExport` (a throw with its drawings burned in, as a clip or a still), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
 | `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `trim_screen` (a clip cut down to the throw), `comparison_screen`, `calculators_screen` (the calculator menu) with `release_calculator_screen` (the what-if calculator) and `unit_converter_screen` behind it |
-| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `flight_field` (a throw side-on across its field), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), `trim_bar` (the clip's stills between two handles), `found_throw` (the throw found in a long clip, offered as the cut), playback controls, pickers |
+| `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `flight_field` (a throw side-on across its field), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), `trim_bar` (the clip's stills between two handles), `found_throw` (the throw found in a long clip, offered as the cut), `share_throw` (what a throw is sent out as), `backup_flow` (backing up and restoring, from the library's menu), playback controls, pickers |
 | `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, `flight_model` (an implement through air, lift and drag) with `javelin_aero` (the javelin's measured wind-tunnel table), `throw_finder` (the throw found in a clip somebody filmed of themselves), formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
@@ -59,6 +59,7 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/progress_preview.dart \
                               tool/preview/trim_preview.dart \
                               tool/preview/found_throw_preview.dart \
+                              tool/preview/export_preview.dart \
                               tool/preview/what_if_preview.dart \
                               tool/preview/calculators_preview.dart
 ```
@@ -784,6 +785,37 @@ like the app rather than a bare Material default.
   camera's own file does not. Accepted, the encode the clip was owed is of
   the throw only, which is most of the import's minutes gone too. The trim
   screen's Find throw sets both handles from the same search.
+- Everything ThrowLab knows lives on the phone, so the library's menu
+  backs it up (`LibraryBackup`): one zip of every `throwlab.*` stored value
+  and every file any of them names — found by reading the data, not the
+  directory, which also holds the scrub stills: hundreds of megabytes a
+  clip, cut again on the first open, so a restored clip comes back owing
+  them (`scrubFrameCount` 0). Stored, not deflated, since a clip is already
+  as small as it gets. Paths are kept relative to the documents directory
+  and moved onto whatever the new phone gives the app; a file from outside
+  it lands under `restored/`. It goes out through the share sheet, because
+  the point is that it ends up somewhere that isn't the phone. A restore
+  *merges*: an entry the phone lacks comes back, by id (athletes by name),
+  and nothing the phone holds is changed, removed or overwritten — a
+  setting included — so last month's file can never wipe this month's
+  season, and restoring twice adds nothing the second time. The zip's
+  names are not trusted: anything but `files/` and `external/`, or a name
+  that climbs out with `..`, turns the whole file away before anything is
+  written. Every library then reads itself again.
+- A throw is shared from its sheet. Off the analysis screen it is offered
+  three ways — the clip with the drawings burned in, the frame on screen as
+  a picture, or the clip as filmed — and anywhere else it is the clip. The
+  drawings are painted by the canvas's own painter (`paintAnnotations`)
+  onto a transparent frame at the clip's pixels, laid out at the size the
+  frame was on screen and scaled up, so ink and labels keep their
+  proportion to the athlete; ffmpeg lays that over the video (`scale2ref`,
+  since a capture still carrying a rotation flag is the other way round to
+  what the player reported). A timer counts, so a drawing with one is
+  painted per frame and read as an image sequence at the clip's rate; one
+  without is painted once. The frame goes through `jpegColorFilter` like
+  every other JPEG. Files are named for whose throw it is and when, and
+  the latest export is cleared by the next one rather than straight away,
+  since the app it was handed to may still be reading it.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

@@ -35,8 +35,8 @@ Future<PdfImage?> sheetLogo({int size = 192}) async {
       // alpha in two images and composites them itself, so color already
       // multiplied by its own alpha would draw the logo's antialiased
       // edges over again and leave a dark fringe around every stroke.
-      final data =
-          await frame.image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
+      final data = await frame.image
+          .toByteData(format: ui.ImageByteFormat.rawStraightRgba);
       if (data == null) return null;
       _held = PdfImage(
         width: frame.image.width,

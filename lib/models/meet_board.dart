@@ -189,7 +189,8 @@ class MeetBoardThrow {
       place: place?.best == null ? null : place!.place,
       improved: distance != null && place?.series.bestRound == previous.round,
       mine: mine,
-      personalBest: attempt.kind == AttemptKind.mark && result != null &&
+      personalBest: attempt.kind == AttemptKind.mark &&
+          result != null &&
           (isPersonalBest?.call(result) ?? false),
       // Inside the middle two thirds for a legal throw, where most of them
       // land; a foul is put a fifth of the sector outside a line, far
@@ -512,9 +513,13 @@ class MeetBoard {
 /// read for, because a board that lost them is no board at all — the same
 /// reason a zoom is not allowed to lose them either.
 bool _worthTheEdge(BoardLine line) => switch (line) {
-  BoardLine.first || BoardLine.cut || BoardLine.upNow || BoardLine.mine => true,
-  BoardLine.second || BoardLine.third => false,
-};
+      BoardLine.first ||
+      BoardLine.cut ||
+      BoardLine.upNow ||
+      BoardLine.mine =>
+        true,
+      BoardLine.second || BoardLine.third => false,
+    };
 
 /// The depths the band can be drawn at, in meters — what zooming steps
 /// through, shallowest first.

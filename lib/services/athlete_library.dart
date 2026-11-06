@@ -76,8 +76,7 @@ class AthleteLibrary extends ChangeNotifier {
   /// The counterpart of [displayName], and looked up the same way — a name
   /// is shortened in one place so a surname set once reads through every
   /// board, the app's own and the one a stand is holding.
-  String boardName(String name) =>
-      athleteBoardName(name, _records[_key(name)]);
+  String boardName(String name) => athleteBoardName(name, _records[_key(name)]);
 
   /// Files [record] under its name, or drops it when the coach has cleared
   /// every field — an empty record is nothing worth keeping.

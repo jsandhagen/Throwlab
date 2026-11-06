@@ -435,8 +435,8 @@ class _SectorBoardPainter extends CustomPainter {
   /// lifted off its own shadow and swelling as it climbs, which is how a
   /// camera on a gantry sees one. The throw starts at the bottom edge,
   /// because the circle is below the box.
-  void _lastThrow(Canvas canvas, Size size, Offset apex,
-      double Function(double) yOf) {
+  void _lastThrow(
+      Canvas canvas, Size size, Offset apex, double Function(double) yOf) {
     final last = board.last;
     if (last == null || last.kind == AttemptKind.pass) return;
     final t = flight.value;
@@ -521,7 +521,9 @@ class _SectorBoardPainter extends CustomPainter {
         ..drawLine(land - Offset(arm, -arm), land + Offset(arm, -arm), cross);
     } else {
       canvas
-        ..drawCircle(land, 6.5,
+        ..drawCircle(
+            land,
+            6.5,
             Paint()
               ..style = PaintingStyle.stroke
               ..strokeWidth = 1.2
@@ -534,8 +536,8 @@ class _SectorBoardPainter extends CustomPainter {
         final strike = StrikeFrame(0.22 + 0.76 * settle);
         const width = 11.0;
         final lift = width * 1.4 * (1 - strike.drop);
-        canvas.saveLayer(
-            null, Paint()..color = Color.fromRGBO(0, 0, 0, strike.medalOpacity));
+        canvas.saveLayer(null,
+            Paint()..color = Color.fromRGBO(0, 0, 0, strike.medalOpacity));
         canvas.translate(land.dx + 7 + width / 2, land.dy - 22 - lift);
         canvas.rotate(strike.swing);
         paintMedal(canvas, const Offset(-width / 2, 0), width, Medal.gold,
@@ -583,8 +585,8 @@ class _SectorBoardPainter extends CustomPainter {
       maxLines: 1,
       ellipsis: '…',
     )..layout(maxWidth: size.width * 0.55);
-    final at =
-        Offset(size.width - caption.width - 8, size.height - caption.height - 5);
+    final at = Offset(
+        size.width - caption.width - 8, size.height - caption.height - 5);
     caption.paint(canvas, at);
     // Beside the caption as it is beside a mark everywhere else in the app.
     if (last.personalBest) {
@@ -604,8 +606,11 @@ class _SectorBoardPainter extends CustomPainter {
   ///
   /// A personal best is in gold whoever threw it: it is the one throw on the
   /// board that means the same thing to everybody watching.
-  Color _throwColor(MeetBoardThrow last) =>
-      last.personalBest ? personalBestGold : last.mine ? accent : ink;
+  Color _throwColor(MeetBoardThrow last) => last.personalBest
+      ? personalBestGold
+      : last.mine
+          ? accent
+          : ink;
 
   /// Whether a mark falls inside the band, and so has a line on the board
   /// rather than an arrow at the edge of it.
