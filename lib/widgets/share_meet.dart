@@ -128,8 +128,7 @@ class _ShareSheetState extends State<_ShareSheet> {
               height: 4,
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color:
-                    theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -170,9 +169,8 @@ class _ShareSheetState extends State<_ShareSheet> {
             if (!relay.reaching) ...[
               const SizedBox(height: 12),
               Text(
-                relay.error ??
-                    'Not reaching the page — it is showing what '
-                        'it last had.',
+                relay.error ?? 'Not reaching the page — it is showing what '
+                    'it last had.',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.error),
               ),
@@ -218,10 +216,10 @@ class _Sharing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final url = relay.urlFor(
-            meet.id, competition.event, competition.implementKg,
-            division: competition.division) ??
-        '';
+    final url =
+        relay.urlFor(meet.id, competition.event, competition.implementKg,
+                division: competition.division) ??
+            '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -237,10 +235,11 @@ class _Sharing extends StatelessWidget {
             ),
             child: CustomPaint(
               size: const Size.square(232),
-              painter: QrPainter(relay.qrFor(
-                      meet.id, competition.event, competition.implementKg,
-                      division: competition.division) ??
-                  url),
+              painter: QrPainter(
+                  relay.qrFor(meet.id, competition.event,
+                          competition.implementKg,
+                          division: competition.division) ??
+                      url),
             ),
           ),
         ),
@@ -297,8 +296,8 @@ class QrPainter extends CustomPainter {
     try {
       // Level M: enough redundancy for a fingerprint on the glass without
       // spending modules a sunlit screen needs to keep fat.
-      return QrImage(QrCode.fromData(
-          data: data, errorCorrectLevel: QrErrorCorrectLevel.M));
+      return QrImage(
+          QrCode.fromData(data: data, errorCorrectLevel: QrErrorCorrectLevel.M));
     } catch (_) {
       // A link too long to encode is not worth taking the sheet down for;
       // the link itself is printed underneath either way.

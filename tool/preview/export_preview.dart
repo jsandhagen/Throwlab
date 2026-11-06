@@ -78,6 +78,7 @@ void main() {
 
   testWidgets('the share sheet and the library menu', (tester) async {
     await loadPreviewFonts();
+    // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({});
     tester.view.physicalSize = const Size(1179, 2556);
     tester.view.devicePixelRatio = 3;

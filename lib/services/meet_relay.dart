@@ -149,7 +149,8 @@ class MeetRelay extends ChangeNotifier {
   _Share? _find(String meetId, ThrowEvent event, double implementKg,
       {Division? division}) {
     for (final share in _byToken.values) {
-      if (share.source.covers(meetId, event, implementKg, division: division)) {
+      if (share.source
+          .covers(meetId, event, implementKg, division: division)) {
         return share;
       }
     }
@@ -378,8 +379,8 @@ class MeetRelay extends ChangeNotifier {
     // around each set somebody at the ring is following — all at one
     // instant, so an overlay holds the difference the set makes and not
     // the clock.
-    final packaged = share.source
-        .packaged(following: [for (final key in share.wanted) key.split(',')]);
+    final packaged = share.source.packaged(
+        following: [for (final key in share.wanted) key.split(',')]);
     if (packaged == null) {
       // The meet is gone, or everybody in this event is. Nothing to say
       // and nothing to fix — it ages out.
@@ -387,7 +388,8 @@ class MeetRelay extends ChangeNotifier {
     }
     final payload = packaged.base;
     final answers = {
-      for (final overlay in packaged.overlays) overlay.key: overlay.fingerprint,
+      for (final overlay in packaged.overlays)
+        overlay.key: overlay.fingerprint,
     };
     // A round nobody threw in still moves this the moment somebody ticks a
     // name: the feed is the feed it was, and there is now an answer owed
@@ -406,8 +408,7 @@ class MeetRelay extends ChangeNotifier {
         // is standing behind, so a set nobody is asking for any more is
         // one the relay stops holding rather than goes on serving.
         'overlays': {
-          for (final overlay in packaged.overlays)
-            overlay.key: overlay.toJson(),
+          for (final overlay in packaged.overlays) overlay.key: overlay.toJson(),
         },
         ...await _statics(share, whole: whole),
         ...await _sheet(share),

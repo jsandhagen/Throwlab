@@ -851,8 +851,8 @@ class _AveragesTile extends StatelessWidget {
             const SizedBox(height: 1),
             Text(
               formatDistance(averages.on(line)!, averages.unit),
-              style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w700, color: accent),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700, color: accent),
             ),
             Row(
               children: [
@@ -945,7 +945,8 @@ class _AveragesTile extends StatelessWidget {
   /// answers is that they are plainly subordinate and say, in words, what
   /// they were taken over.
   List<Widget> _asides(ThemeData theme, ColorScheme scheme) {
-    final other = averages.on(_byBest ? MeetLine.average : MeetLine.best);
+    final other = averages
+        .on(_byBest ? MeetLine.average : MeetLine.best);
     final best = averages.best;
     return [
       const SizedBox(height: 10),
@@ -1627,7 +1628,9 @@ class _MarkTile extends StatelessWidget {
               const SizedBox(width: 8),
               if (isPersonalBest)
                 PersonalBestMedal(
-                    size: 16, celebrate: celebrate, onCelebrated: onCelebrated),
+                    size: 16,
+                    celebrate: celebrate,
+                    onCelebrated: onCelebrated),
               const SizedBox(width: 6),
               Text(
                 formatDistance(mark.distance, mark.distanceUnit),

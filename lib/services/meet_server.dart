@@ -84,8 +84,8 @@ class MeetServer extends ChangeNotifier {
   /// Where the page's typeface comes from. Swapped out in a test, which
   /// runs without an asset bundle behind it.
   @visibleForTesting
-  static Future<Uint8List> Function(String asset) loadFont =
-      (asset) async => (await rootBundle.load(asset)).buffer.asUint8List();
+  static Future<Uint8List> Function(String asset) loadFont = (asset) async =>
+      (await rootBundle.load(asset)).buffer.asUint8List();
 
   /// Whether anything at all is being served.
   bool get isSharing => _byToken.isNotEmpty;
@@ -123,7 +123,8 @@ class MeetServer extends ChangeNotifier {
   _Share? _find(String meetId, ThrowEvent event, double implementKg,
       {Division? division}) {
     for (final share in _byToken.values) {
-      if (share.source.covers(meetId, event, implementKg, division: division)) {
+      if (share.source
+          .covers(meetId, event, implementKg, division: division)) {
         return share;
       }
     }
@@ -306,9 +307,8 @@ class MeetServer extends ChangeNotifier {
       // /M/<token>[/...] and nothing else exists. A wrong or missing token
       // is a 404 rather than a 403: a link that has stopped being shared
       // should look like a link that was never there.
-      final share = segments.length >= 2 && segments[0] == 'M'
-          ? _byToken[segments[1]]
-          : null;
+      final share =
+          segments.length >= 2 && segments[0] == 'M' ? _byToken[segments[1]] : null;
       if (share == null) {
         await _plain(response, HttpStatus.notFound, 'Nothing here.');
         return;

@@ -61,7 +61,8 @@ class FlightField extends StatelessWidget {
     final theme = Theme.of(context);
     return LayoutBuilder(builder: (context, box) {
       final all = [...flights.map((f) => f.flight), if (ghost != null) ghost!];
-      final layout = _FieldLayout.of(all, box.maxWidth, unit, event, maxHeight);
+      final layout =
+          _FieldLayout.of(all, box.maxWidth, unit, event, maxHeight);
       return SizedBox(
         height: layout.height,
         child: CustomPaint(
@@ -125,7 +126,8 @@ class _FieldLayout {
     final behind = event == ThrowEvent.javelin ? 4.0 : _circleDiameter(event);
     final span = far * 1.08 + behind;
     final scale0 = width / span;
-    final scale = math.min(scale0, (maxHeight - _sky - _groundBand + 2) / high);
+    final scale =
+        math.min(scale0, (maxHeight - _sky - _groundBand + 2) / high);
     final height = (high * scale + _sky + _groundBand)
         .clamp(math.min(110.0, maxHeight), maxHeight)
         .toDouble();

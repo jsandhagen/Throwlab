@@ -142,11 +142,9 @@ Map<int, double> _widths(String font, Map<int, String> objects) {
   if (array == null) {
     // Long fonts keep the array in an object of its own.
     final ref = RegExp(r'/Widths\s+(\d+)\s+\d+\s+R').firstMatch(font);
-    final body =
-        ref == null ? null : objects[int.tryParse(ref.group(1)!) ?? -1];
-    array = body == null
-        ? null
-        : RegExp(r'\[([^\]]*)\]').firstMatch(body)?.group(1);
+    final body = ref == null ? null : objects[int.tryParse(ref.group(1)!) ?? -1];
+    array =
+        body == null ? null : RegExp(r'\[([^\]]*)\]').firstMatch(body)?.group(1);
   }
   if (array == null) return const {};
 

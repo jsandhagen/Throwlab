@@ -287,7 +287,8 @@ class LogoPainter extends CustomPainter {
       const steps = 24;
       for (var i = 0; i <= steps; i++) {
         final x = b.left - 0.01 + (b.width + 0.02) * i / steps;
-        surface.lineTo(x, level + ripple * 0.007 * math.sin(x * 38 + phase));
+        surface.lineTo(
+            x, level + ripple * 0.007 * math.sin(x * 38 + phase));
       }
       surface
         ..lineTo(b.right + 0.01, b.bottom + 0.01)
@@ -412,8 +413,7 @@ class _FillingFlaskState extends State<FillingFlask>
           painter: LogoPainter(
             // Never quite full while it is still going: full is the mark,
             // and the meniscus coming in is what says it is done.
-            fill:
-                progress != null && progress >= 1 ? 1 : math.min(_shown, 0.995),
+            fill: progress != null && progress >= 1 ? 1 : math.min(_shown, 0.995),
             ripple: _ripple,
             phase: _phase,
           ),

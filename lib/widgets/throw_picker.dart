@@ -251,9 +251,7 @@ class _ComparePickerSheetState extends State<_ComparePickerSheet> {
     final query = _query.trim().toLowerCase();
     return [
       for (final video in widget.candidates)
-        if ((reference == null ||
-                !_sameEvent ||
-                video.event == reference.event) &&
+        if ((reference == null || !_sameEvent || video.event == reference.event) &&
             (reference == null ||
                 !_sameAthlete ||
                 video.athlete == reference.athlete) &&
@@ -288,8 +286,7 @@ class _ComparePickerSheetState extends State<_ComparePickerSheet> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
-                        anchor == null ? 'Pick two throws' : 'Compare with',
+                    child: Text(anchor == null ? 'Pick two throws' : 'Compare with',
                         style: theme.textTheme.titleMedium),
                   ),
                   if (anchor == null)

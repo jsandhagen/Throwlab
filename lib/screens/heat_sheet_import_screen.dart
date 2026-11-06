@@ -146,7 +146,8 @@ class _HeatSheetImportScreenState extends State<HeatSheetImportScreen> {
     // with none counts too — [_nameDivisions] gives it the sheet's.
     bool already(String name, MeetCompetition competition) =>
         [...meet.entries, ...entries].any((entry) =>
-            (competition.holds(entry) || _undivided(entry, competition)) &&
+            (competition.holds(entry) ||
+                _undivided(entry, competition)) &&
             sameAthlete(entry.athlete, name));
 
     var order = meet.entries.length;

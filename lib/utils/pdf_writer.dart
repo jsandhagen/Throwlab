@@ -172,7 +172,8 @@ class PdfSheet {
     final imageBase = fontBase + PdfFace.values.length;
     // A picture and the alpha that cuts it out, which is two objects each.
     final xobjects = [
-      for (var i = 0; i < _images.length; i++) '/Im$i ${imageBase + i * 2} 0 R'
+      for (var i = 0; i < _images.length; i++)
+        '/Im$i ${imageBase + i * 2} 0 R'
     ].join(' ');
 
     object(1, '<< /Type /Catalog /Pages 2 0 R >>');

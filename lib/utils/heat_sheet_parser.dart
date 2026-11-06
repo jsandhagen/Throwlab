@@ -586,8 +586,7 @@ String? matchAthlete(String sheet, String team, List<KnownAthlete> known) {
 /// makes 'Anna van der Berg' a Berg and never matches the sheet that prints
 /// her in full. Without a record it is the last word, as it always was.
 bool _surnameMatches(String sheet, KnownAthlete athlete) {
-  if (athlete.lastName.isNotEmpty)
-    return _endsOnSurname(sheet, athlete.lastName);
+  if (athlete.lastName.isNotEmpty) return _endsOnSurname(sheet, athlete.lastName);
   return _sharesSurname(sheet, athlete.name) ||
       (athlete.fullName.isNotEmpty && _sharesSurname(sheet, athlete.fullName));
 }
