@@ -1,7 +1,7 @@
+import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -27,6 +27,7 @@ import '../widgets/share_meet.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'capture_screen.dart';
 import 'home_screen.dart' show OptimizingDialog;
 import 'meet_screen.dart';
 
@@ -739,22 +740,21 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
     await _enter(meet, entry, round);
   }
 
-  /// Records a throw with the phone's camera and files it as it was shot.
+  /// Records a throw with the app's camera and files it as it was shot.
   ///
   /// Deliberately not the import's re-encode: that runs for minutes, and
   /// the next athlete is up. The clip is stamped as owing one instead, and
   /// the analyzer does it the first time the throw is opened.
   Future<ThrowVideo?> _capture(MeetEntry entry, String meetName) async {
     final library = context.read<VideoLibrary>();
-    final picked = await ImagePicker().pickVideo(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.rear,
-    );
-    if (picked == null || !mounted) return null;
+    final filmed = await filmThrow(context);
+    if (filmed == null || !mounted) return null;
 
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final rates = await VideoOptimizer.probeFrameRates(picked.path);
-    final path = await VideoOptimizer.stashCapture(picked.path, id);
+    final rates = await VideoOptimizer.probeFrameRates(filmed.path);
+    final path = await VideoOptimizer.stashCapture(filmed.path, id);
+    // The camera's own file is a temporary one; the library has its copy.
+    if (path != null) File(filmed.path).delete().ignore();
     if (path == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

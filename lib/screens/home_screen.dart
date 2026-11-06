@@ -27,6 +27,7 @@ import '../widgets/throw_actions.dart';
 import '../widgets/throw_card.dart';
 import '../widgets/throw_picker.dart';
 import 'analysis_screen.dart';
+import 'capture_screen.dart';
 import 'athlete_screen.dart';
 import 'comparison_screen.dart';
 import 'group_screen.dart';
@@ -172,11 +173,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// couple of minutes of it.
   Future<void> _importVideo({bool filmed = false}) async {
     final library = context.read<VideoLibrary>();
-    final picked = await ImagePicker().pickVideo(
-      source: filmed ? ImageSource.camera : ImageSource.gallery,
-      preferredCameraDevice: CameraDevice.rear,
-    );
-    if (picked == null || !mounted) return;
+    // Filmed in the app's own camera, which reaches the 120 and 240 fps the
+    // phone's camera app does; picked out of the gallery otherwise.
+    final String? source = filmed
+        ? (await filmThrow(context))?.path
+        : (await ImagePicker().pickVideo(source: ImageSource.gallery))?.path;
+    if (source == null || !mounted) return;
 
     final details = await showDialog<
         ({
@@ -193,12 +195,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     // Probe the original file: the re-encode preserves frame timing but
     // drops the slow-mo capture-fps metadata tag.
-    final rates = await VideoOptimizer.probeFrameRates(picked.path);
+    final rates = await VideoOptimizer.probeFrameRates(source);
     final fps = rates?.playback ?? 30;
     if (!mounted) return;
     final found = await offerCutToThrow(
       context,
-      path: picked.path,
+      path: source,
       event: details.event,
       fps: fps,
       captureFps: rates?.capture ?? fps,
@@ -224,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
     final id = DateTime.now().microsecondsSinceEpoch.toString();
     var path = await VideoOptimizer.optimizeForScrubbing(
-      picked.path,
+      source,
       id,
       trim: trim,
       onProgress: (p) =>
@@ -234,13 +236,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     // gallery; the camera's file is in a cache the OS will clear, so it is
     // kept as shot and owes the encode, the way a meet capture does.
     var pending = false;
-    if (filmed && path == picked.path) {
-      final kept = await VideoOptimizer.stashCapture(picked.path, id);
+    if (filmed && path == source) {
+      final kept = await VideoOptimizer.stashCapture(source, id);
       if (kept != null) {
         path = kept;
         pending = true;
       }
     }
+    // What the camera wrote is a temporary file the size of the whole take —
+    // three quarters of a gigabyte for two minutes at 120 — and the library
+    // now has its own copy of what was kept.
+    if (filmed && path != source) File(source).delete().ignore();
     stage.value = 'Extracting frames for smooth scrubbing…';
     encodeProgress.value = _encodeShare;
     final frames = await VideoOptimizer.extractScrubFrames(
@@ -275,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // Only a copy we made carries the current geometry; when the encode
       // failed the original file stands in and still needs remaking.
       playbackVersion:
-          path == picked.path || pending ? 0 : VideoOptimizer.playbackVersion,
+          path == source || pending ? 0 : VideoOptimizer.playbackVersion,
       optimizePending: pending,
     );
     await library.add(video);

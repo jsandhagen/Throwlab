@@ -9,10 +9,11 @@ frame by frame, draw on it, measure release metrics, compare two throws.
 | --- | --- |
 | `lib/models/` | `ThrowVideo` (a clip + its metadata), `ThrowMark` (a throw nobody filmed), `ThrowEvent` and the implement specs, `AthleteProfile` and personal bests, `AthleteRecord` (the editable half — a nickname, the first and last name a heat sheet is matched against, and the school), `TrainingNote`, `Meet` (a competition and its series, plus `MeetFlight` — the flight being thrown and where it has got to), `Division` (who a competition is for — girls, boys, women, men), `MeetConditions` (what the day was like), `MeetBoard` (the competition as lines across the sector), `MeetOuting` (a season read from the athlete's side), `SeasonAverages` (what it averages between the bests), `EliteRelease` (a release measured at a championship final, and the typical ranges) |
 | `lib/services/` | `VideoLibrary` (clips and marks), `NotesLibrary` (training notes), `MeetLibrary` (meets), `AthleteLibrary` (athlete records — the display name every screen resolves through it), `VideoOptimizer` (ffmpeg re-encode/thumbnails), `LibraryBackup` (the whole library as one zip, and merged back), `ClipExport` (a throw with its drawings burned in, as a clip or a still), `ResultsSheet` (a meet's results as a PDF on the phone), `MeetServer` (the phone serving a meet to the people standing at it), `MeetRelay` (the same competition pushed to the Cloudflare relay in `worker/`, so a link reaches anybody rather than only the wifi), `JavelinDetector`, `AppUpdater` and `UpdateKeepAlive` (the foreground service that holds the process up while it downloads) |
-| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `trim_screen` (a clip cut down to the throw), `comparison_screen`, `calculators_screen` (the calculator menu) with `release_calculator_screen` (the what-if calculator) and `unit_converter_screen` behind it |
+| `lib/screens/` | `home_screen` (the library), `athlete_screen` (one athlete's profile), `note_editor_screen`, `group_screen`, `meets_screen` (the season, as a list or a calendar), `meet_screen` (a meet's events) and `meet_event_screen` (one competition, where the throwing is recorded), `schedule_import_screen` (a fixture list, read onto the calendar), `heat_sheet_import_screen` (a meet's program, read into its field), `analysis_screen`, `capture_screen` (the app's own camera), `trim_screen` (a clip cut down to the throw), `comparison_screen`, `calculators_screen` (the calculator menu) with `release_calculator_screen` (the what-if calculator) and `unit_converter_screen` behind it |
 | `lib/widgets/` | `throw_card`, `gold` (the medal and the frame), `event_glyph`, `logo_mark` (the app's own mark), `sector_art`, `mark_editor`, `attempt_entry` (one round of a meet), `entry_dialog` (an athlete into a meet), `note_text`, `conditions_sheet` (the weather, written down), `progression` (a season as a line), `sector_board` (the competition drawn on the sector), `import_source` (the page a schedule or a heat sheet is handed over on), `share_meet` (the link and its QR), `flight_field` (a throw side-on across its field), `drawing_canvas` and `drawing_rail` (the tools, run along whichever edge of the frame costs least), `trim_bar` (the clip's stills between two handles), `found_throw` (the throw found in a long clip, offered as the cut), `share_throw` (what a throw is sent out as), `backup_flow` (backing up and restoring, from the library's menu), playback controls, pickers |
-| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, `flight_model` (an implement through air, lift and drag) with `javelin_aero` (the javelin's measured wind-tunnel table), `throw_finder` (the throw found in a clip somebody filmed of themselves), formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
+| `lib/utils/` | Scrubbing, frame timing, `clip_trim` (the frames a trim keeps), projectile and release math, `flight_model` (an implement through air, lift and drag) with `javelin_aero` (the javelin's measured wind-tunnel table), `throw_finder` (the throw found in a clip somebody filmed of themselves), `capture_plan` (the rate the camera opens on, and a take's countdown and stop), formatting, a zoomed frame drawn sharp once it settles (`zoom_detail`), reading a schedule (`schedule_parser`), reading a meet's program (`heat_sheet_parser`), `pdf_text` to get the words out of either as a PDF, `pdf_writer`/`meet_report` to put a results sheet back into one, and `meet_feed`/`spectator_page` — one competition worked out for somebody watching it, and the page it is read on, with `share_payload` holding that competition packaged for whoever carries it and the fingerprint that says whether it has moved |
 | `test/` | Unit and widget tests — what CI runs |
+| `packages/throwlab_camera/` | The app's own camera, a plugin kept in the repo: Camera2's high-speed session, which is the only way to 120 and 240 fps on a Samsung (its own README) |
 | `worker/` | The Cloudflare Worker and Durable Object a competition is relayed through — routes only, and no understanding of a competition (its own README) |
 | `tool/preview/` | Headless UI preview harness (below) |
 
@@ -25,7 +26,7 @@ before building, so platform config changes belong in
 ```sh
 flutter pub get
 flutter test        # unit + widget tests; CI gate
-flutter analyze     # expect infos, plus one pre-existing unused-import warning
+flutter analyze     # expect infos, plus one pre-existing unused-element warning
 ```
 
 A Claude Code on the web session has no Flutter to run those with, so
@@ -60,6 +61,7 @@ flutter test --update-goldens tool/preview/home_preview.dart \
                               tool/preview/trim_preview.dart \
                               tool/preview/found_throw_preview.dart \
                               tool/preview/export_preview.dart \
+                              tool/preview/capture_preview.dart \
                               tool/preview/what_if_preview.dart \
                               tool/preview/calculators_preview.dart
 ```
@@ -816,6 +818,36 @@ like the app rather than a bare Material default.
   every other JPEG. Files are named for whose throw it is and when, and
   the latest export is cleared by the next one rather than straight away,
   since the app it was handed to may still be reading it.
+- Throws are filmed in the app's own camera (`CaptureScreen`, through
+  `filmThrow`), from the library's add button and a meet's camera alike,
+  because the phone's camera app opened by intent films at whatever it was
+  left on and offers no frame rate — and the frame rate is the point. The
+  stock Flutter camera asks an ordinary Camera2 session for a rate, which on
+  a Samsung tops out at 60, so `packages/throwlab_camera` is ours: it opens
+  the *constrained high-speed* session for 120 and 240, an ordinary one for
+  30 and 60, and lists only what the camera says it can record. The
+  encoder's surface is a persistent one kept in the session from the start,
+  so recording is a change of request rather than a new session — the first
+  frames of a throw are not spent setting a camera up. It opens on the rate
+  it was last left on, else 120 at 1080p (`pickMode`): four times the frames
+  across a release, where 240 halves the light and an evening at a track
+  turns it to grain. No sound, so no microphone permission: a high-speed
+  session records none on most phones. The orientation is read off the
+  accelerometer, not the screen, so a phone on a tripod with rotation
+  locked still films the right way up; the preview is turned in Dart
+  (`previewQuarterTurns`), since a camera hands frames over the way its
+  sensor is mounted. Where the camera will not open, the screen says why
+  and offers the phone's own camera instead.
+  It is built for filming oneself (`CaptureRun`): a countdown to walk out
+  on, a stop after so many seconds so nobody walks back to end it, a beep
+  for each on the alarm stream — the person it is for is at the ring, not
+  at the screen — the volume buttons as the shutter, which is also what a
+  Bluetooth selfie remote presses, and the screen held on while the camera
+  is up, since a screen that times out takes the take with it. Both timings
+  are remembered (`throwlab.capture.*`). The plugin's Kotlin cannot be built
+  in a session without the Android SDK; it is compiled against Robolectric's
+  `android-all` jar and the engine's `flutter.jar` with `kotlinc` instead,
+  which is a real type check of everything but the Gradle wiring.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

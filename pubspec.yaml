@@ -30,11 +30,18 @@ dependencies:
   # (QrPainter), so the same matrix can go on paper later.
   qr: ^3.0.2
   share_plus: ^12.0.2
+  # The in-app camera. In the repo rather than on pub.dev because what it
+  # does no published camera does: film through Camera2's high-speed
+  # session, which is the only way to 120 and 240 fps on a Samsung.
+  throwlab_camera:
+    path: packages/throwlab_camera
   archive: ^4.6.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Runs a take's countdown and its stop on a fake clock.
+  fake_async: ^1.3.1
   flutter_lints: ^4.0.0
   # Used by the widget tests to stand in for the real video platform.
   plugin_platform_interface: ^2.1.8
