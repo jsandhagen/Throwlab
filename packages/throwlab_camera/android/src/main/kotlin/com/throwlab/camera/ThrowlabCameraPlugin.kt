@@ -3,7 +3,9 @@ package com.throwlab.camera
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ContentUris
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
@@ -23,6 +25,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.provider.MediaStore
+import android.net.Uri
 import android.util.Range
 import android.util.Size
 import android.view.OrientationEventListener
@@ -41,6 +45,7 @@ import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 import java.io.File
+import java.util.concurrent.Executors
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -143,6 +148,42 @@ class ThrowlabCameraPlugin :
                     result.success(null)
                 }
                 "displayRotation" -> result.success(displayDegrees())
+                "phoneCamera" -> result.success(phoneCamera())
+                "openPhoneCamera" -> result.success(openPhoneCamera())
+                "videosSince" -> withPermission(result, mediaPermission) {
+                    io.execute {
+                        val found = try {
+                            videosSince(call.argument<Number>("since")!!.toLong())
+                        } catch (e: Exception) {
+                            null
+                        }
+                        main.post {
+                            if (found == null) {
+                                result.error("media", "The phone's videos couldn't be read.", null)
+                            } else {
+                                result.success(found)
+                            }
+                        }
+                    }
+                }
+                "copyVideo" -> {
+                    val uri = Uri.parse(call.argument<String>("uri")!!)
+                    val dest = call.argument<String>("path")!!
+                    io.execute {
+                        val ok = try {
+                            context.contentResolver.openInputStream(uri)!!.use { input ->
+                                File(dest).outputStream().use { input.copyTo(it, 1 shl 20) }
+                            }
+                            true
+                        } catch (e: Exception) {
+                            File(dest).delete()
+                            false
+                        }
+                        main.post {
+                            if (ok) result.success(dest) else result.error("media", "The clip couldn't be copied.", null)
+                        }
+                    }
+                }
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
@@ -152,18 +193,106 @@ class ThrowlabCameraPlugin :
 
     // --- Permission ---------------------------------------------------------
 
-    private fun withPermission(result: MethodChannel.Result, then: () -> Unit) {
-        if (context.checkSelfPermission(Manifest.permission.CAMERA) ==
-            PackageManager.PERMISSION_GRANTED
-        ) {
+    private fun withPermission(
+        result: MethodChannel.Result,
+        permission: String = Manifest.permission.CAMERA,
+        then: () -> Unit,
+    ) {
+        if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
             then()
             return
         }
         val host = activity ?: return result.error("permission", "No activity to ask from.", null)
         pendingPermission = { granted ->
-            if (granted) then() else result.error("permission", "Camera permission denied.", null)
+            if (granted) then() else result.error("permission", "$permission denied.", null)
         }
-        host.requestPermissions(arrayOf(Manifest.permission.CAMERA), PERMISSION_REQUEST)
+        host.requestPermissions(arrayOf(permission), PERMISSION_REQUEST)
+    }
+
+    /** Reading the phone's own videos: one permission from Android 13, another before. */
+    private val mediaPermission: String
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_VIDEO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+
+    // --- The phone's own camera ---------------------------------------------
+
+    /** Copies and queries run off the main thread: a 4K clip is gigabytes. */
+    private val io = Executors.newSingleThreadExecutor()
+
+    /**
+     * Which camera app the phone has for what ThrowLab's own can't film:
+     * 'samsung' where Samsung's is there — it films 4K at 120 in Pro Video,
+     * which it keeps to itself — 'other' for any camera app, or null.
+     */
+    private fun phoneCamera(): String? {
+        val pm = context.packageManager
+        if (pm.getLaunchIntentForPackage(SAMSUNG_CAMERA) != null) return "samsung"
+        val video = Intent(MediaStore.INTENT_ACTION_VIDEO_CAMERA)
+        return if (video.resolveActivity(pm) != null) "other" else null
+    }
+
+    /**
+     * Opens the phone's camera app the way its own icon does, not as a
+     * capture for ThrowLab: launched from its icon, Samsung's comes back in
+     * the mode it was last left in, so Pro Video set to 4K at 120 once is
+     * where it opens every time. A capture request would open it in plain
+     * video, which is what made 4K at 120 so hard to get to.
+     */
+    private fun openPhoneCamera(): Boolean {
+        val host = activity ?: return false
+        val pm = context.packageManager
+        val intent = pm.getLaunchIntentForPackage(SAMSUNG_CAMERA)
+            ?: Intent(MediaStore.INTENT_ACTION_VIDEO_CAMERA)
+        return try {
+            host.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Videos the phone has added since [sinceMillis], newest first — what
+     * was just filmed in its camera app, to bring straight in.
+     */
+    private fun videosSince(sinceMillis: Long): List<Map<String, Any>> {
+        val found = mutableListOf<Map<String, Any>>()
+        val projection = arrayOf(
+            MediaStore.Video.Media._ID,
+            MediaStore.Video.Media.DATE_ADDED,
+            MediaStore.Video.Media.DURATION,
+            MediaStore.Video.Media.WIDTH,
+            MediaStore.Video.Media.HEIGHT,
+            MediaStore.Video.Media.DISPLAY_NAME,
+        )
+        context.contentResolver.query(
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            "${MediaStore.Video.Media.DATE_ADDED} >= ?",
+            arrayOf((sinceMillis / 1000).toString()),
+            "${MediaStore.Video.Media.DATE_ADDED} DESC",
+        )?.use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                found.add(
+                    mapOf(
+                        "uri" to ContentUris.withAppendedId(
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            id,
+                        ).toString(),
+                        "addedMillis" to cursor.getLong(1) * 1000,
+                        "durationMillis" to cursor.getLong(2),
+                        "width" to cursor.getInt(3),
+                        "height" to cursor.getInt(4),
+                        "name" to (cursor.getString(5) ?: ""),
+                    ),
+                )
+            }
+        }
+        return found
     }
 
     override fun onRequestPermissionsResult(
@@ -789,5 +918,6 @@ class ThrowlabCameraPlugin :
     companion object {
         private const val PERMISSION_REQUEST = 4721
         private const val PREVIEW_VIEW = "throwlab_camera/preview"
+        private const val SAMSUNG_CAMERA = "com.sec.android.app.camera"
     }
 }

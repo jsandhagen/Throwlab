@@ -776,7 +776,7 @@ class _MeetEventScreenState extends State<MeetEventScreen> {
       event: entry.event,
       fps: fps,
       captureFps: rates?.capture ?? fps,
-      keepsOriginal: false,
+      keepsOriginal: filmed.inGallery,
     );
     if (found != null && mounted) {
       final trimmed = await _cutToThrow(

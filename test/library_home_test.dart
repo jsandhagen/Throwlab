@@ -15,6 +15,7 @@ import 'package:throwlab/services/notes_library.dart';
 import 'package:throwlab/services/video_library.dart';
 import 'package:throwlab/widgets/gold.dart';
 import 'package:throwlab/widgets/throw_card.dart';
+import 'package:throwlab_camera/throwlab_camera.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import 'analysis_harness.dart';
@@ -89,6 +90,38 @@ void main() {
     await tester.tapAt(const Offset(200, 50));
     await pumpFrames(tester, 8);
     expect(find.text('Film a throw'), findsNothing);
+  });
+
+  testWidgets("a Galaxy is offered Samsung's camera for 4K at 120",
+      (tester) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(ThrowCamera.channel,
+        (call) async => call.method == 'phoneCamera' ? 'samsung' : null);
+    addTearDown(
+        () => messenger.setMockMethodCallHandler(ThrowCamera.channel, null));
+    await mountHome(tester);
+    await tester.tap(find.byKey(const ValueKey('add-throw')));
+    await pumpFrames(tester, 8);
+    expect(find.text("Film in Samsung's camera"), findsOneWidget);
+    expect(find.text('Film a throw'), findsOneWidget);
+    await tester.tapAt(const Offset(200, 50));
+    await pumpFrames(tester, 8);
+  });
+
+  testWidgets("anywhere else it isn't", (tester) async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(ThrowCamera.channel,
+        (call) async => call.method == 'phoneCamera' ? 'other' : null);
+    addTearDown(
+        () => messenger.setMockMethodCallHandler(ThrowCamera.channel, null));
+    await mountHome(tester);
+    await tester.tap(find.byKey(const ValueKey('add-throw')));
+    await pumpFrames(tester, 8);
+    expect(find.byKey(const ValueKey('add-phone-camera')), findsNothing);
+    await tester.tapAt(const Offset(200, 50));
+    await pumpFrames(tester, 8);
   });
 
   group('shelves', () {

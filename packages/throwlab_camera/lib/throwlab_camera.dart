@@ -109,6 +109,36 @@ class RecordedTake {
       frames > 1 && seconds > 0 ? (frames - 1) / seconds : null;
 }
 
+/// A video the phone's own camera app saved, found in its media store.
+class PhoneVideo {
+  const PhoneVideo({
+    required this.uri,
+    required this.added,
+    required this.duration,
+    required this.width,
+    required this.height,
+    this.name = '',
+  });
+
+  factory PhoneVideo.fromMap(Map<Object?, Object?> map) => PhoneVideo(
+        uri: map['uri']! as String,
+        added: DateTime.fromMillisecondsSinceEpoch(
+            (map['addedMillis'] as num?)?.toInt() ?? 0),
+        duration: Duration(
+            milliseconds: (map['durationMillis'] as num?)?.toInt() ?? 0),
+        width: map['width'] as int? ?? 0,
+        height: map['height'] as int? ?? 0,
+        name: map['name'] as String? ?? '',
+      );
+
+  final String uri;
+  final DateTime added;
+  final Duration duration;
+  final int width;
+  final int height;
+  final String name;
+}
+
 /// The sound the phone makes, for the athlete twenty meters away who can't
 /// see the screen.
 enum Beep { tick, go, stop }
@@ -182,6 +212,32 @@ class ThrowCamera {
 
   static Future<void> beep(Beep kind) =>
       channel.invokeMethod('beep', {'kind': kind.name});
+
+  /// Which camera app the phone has for what this one can't film:
+  /// 'samsung', 'other', or null when there is none.
+  static Future<String?> phoneCamera() =>
+      channel.invokeMethod<String>('phoneCamera');
+
+  /// Opens the phone's camera app the way its own icon does, so it comes
+  /// back in the mode it was last left in. False when it wouldn't open.
+  static Future<bool> openPhoneCamera() async =>
+      await channel.invokeMethod<bool>('openPhoneCamera') ?? false;
+
+  /// Videos the phone has saved since [since], newest first. Asks for
+  /// permission to read them the first time.
+  static Future<List<PhoneVideo>> videosSince(DateTime since) async {
+    final found = await channel.invokeListMethod<Object?>(
+        'videosSince', {'since': since.millisecondsSinceEpoch});
+    return [
+      for (final video in found ?? const [])
+        PhoneVideo.fromMap(video! as Map<Object?, Object?>),
+    ];
+  }
+
+  /// Copies a video the phone saved into [path], and returns it.
+  static Future<String> copyVideo(String uri, String path) async =>
+      (await channel
+          .invokeMethod<String>('copyVideo', {'uri': uri, 'path': path}))!;
 
   /// How far the screen is turned from the phone's natural orientation, in
   /// degrees — what the preview has to be turned against.

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/main.dart';
+import 'package:throwlab_camera/throwlab_camera.dart';
 
 import 'harness.dart';
 import 'sample_library.dart';
@@ -25,6 +26,10 @@ const _out = '../../build/preview';
 void main() {
   testWidgets('home screen', (tester) async {
     await loadPreviewFonts();
+    // A Galaxy, so the add sheet offers Samsung's camera beside the app's.
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(ThrowCamera.channel,
+            (call) async => call.method == 'phoneCamera' ? 'samsung' : null);
     final thumbs = sampleThumbnails();
     // ignore: invalid_use_of_visible_for_testing_member
     SharedPreferences.setMockInitialValues({
@@ -47,7 +52,7 @@ void main() {
     await settle(tester);
     await _shoot(tester, 'home_by_athlete');
 
-    // The one button's two ways in.
+    // The one button's ways in.
     await tester.tap(find.byKey(const ValueKey('add-throw')));
     await settle(tester);
     await _shoot(tester, 'home_add_throw');

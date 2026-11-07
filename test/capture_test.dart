@@ -426,6 +426,151 @@ void main() {
       expect(find.textContaining('needs the camera'), findsOneWidget);
       expect(find.byKey(const ValueKey('capture-system')), findsOneWidget);
     });
+
+    group("Samsung's camera", () {
+      Future<void> comeBack(WidgetTester tester) async {
+        // Out to the camera app and back, as Android reports it.
+        for (final state in [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+          AppLifecycleState.hidden,
+          AppLifecycleState.inactive,
+          AppLifecycleState.resumed,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+        }
+        await tester.pump();
+      }
+
+      Future<FilmedClip?> start(WidgetTester tester) async {
+        FilmedClip? got;
+        var done = false;
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  got = await filmInPhoneCamera(context);
+                  done = true;
+                },
+                child: const Text('samsung'),
+              ),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('samsung'));
+        await tester.pumpAndSettle();
+        // The first time, the way to set it up.
+        expect(find.textContaining('Settings to keep'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('phone-camera-go')));
+        await tester.pumpAndSettle();
+        expect(calls.map((c) => c.method), contains('openPhoneCamera'));
+        await comeBack(tester);
+        await tester.pumpAndSettle();
+        expect(done, isTrue);
+        return got;
+      }
+
+      setUp(() {
+        override = (call) => switch (call.method) {
+              'phoneCamera' => 'samsung',
+              'openPhoneCamera' => true,
+              'videosSince' => [
+                  {
+                    'uri': 'content://media/external/video/media/42',
+                    'addedMillis': DateTime.now().millisecondsSinceEpoch,
+                    'durationMillis': 9000,
+                    'width': 3840,
+                    'height': 2160,
+                    'name': 'take.mp4',
+                  }
+                ],
+              'copyVideo' => (call.arguments as Map)['path'],
+              _ => null,
+            };
+      });
+
+      testWidgets('the clip it saved comes back on its own', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final clip = await start(tester);
+        expect(clip, isNotNull);
+        expect(clip!.inGallery, isTrue);
+        final copy = calls.firstWhere((c) => c.method == 'copyVideo');
+        expect((copy.arguments as Map)['uri'],
+            'content://media/external/video/media/42');
+        expect(clip.path, (copy.arguments as Map)['path']);
+        // Only clips saved since it was opened are asked for.
+        final asked = calls.firstWhere((c) => c.method == 'videosSince');
+        final since = DateTime.fromMillisecondsSinceEpoch(
+            (asked.arguments as Map)['since'] as int);
+        expect(DateTime.now().difference(since).inSeconds, lessThan(10));
+        // The tip is said once.
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getBool('throwlab.phoneCameraTip'), isTrue);
+      });
+
+      testWidgets('nothing filmed brings nothing in', (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        final base = override!;
+        override =
+            (call) => call.method == 'videosSince' ? <Object>[] : base(call);
+        FilmedClip? got;
+        SharedPreferences.setMockInitialValues(
+            {'throwlab.phoneCameraTip': true});
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async => got = await filmInPhoneCamera(context),
+                child: const Text('samsung'),
+              ),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('samsung'));
+        await tester.pump();
+        await tester.pump();
+        expect(find.textContaining('Settings to keep'), findsNothing);
+        await comeBack(tester);
+        // Asked again a few times while the phone indexes the clip.
+        for (var second = 0; second < 6; second++) {
+          await tester.pump(const Duration(seconds: 1));
+        }
+        expect(got, isNull);
+        expect(calls.where((c) => c.method == 'videosSince').length, 5);
+        expect(find.text('No new clip from the camera.'), findsOneWidget);
+      });
+
+      testWidgets('the mode list offers it where 4K at 120 is kept back',
+          (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        Object? popped;
+        await tester.pumpWidget(MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                popped = await Navigator.of(context).push<Object>(
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const CaptureScreen(preview: _Viewfinder())));
+              },
+              child: const Text('film'),
+            ),
+          ),
+        ));
+        await tester.tap(find.text('film'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('capture-mode')));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+            find.byKey(const ValueKey('use-phone-camera')), 100,
+            scrollable: find.byType(Scrollable).last);
+        await tester.tap(find.byKey(const ValueKey('use-phone-camera')));
+        await tester.pumpAndSettle();
+        expect(popped, CaptureScreen.usePhoneCamera);
+      });
+    });
   });
 }
 

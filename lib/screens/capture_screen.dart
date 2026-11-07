@@ -14,9 +14,14 @@ import '../utils/capture_plan.dart';
 /// app's own camera knows it (the phone's camera app is probed like an
 /// import).
 class FilmedClip {
-  const FilmedClip(this.path, {this.fps, this.deliveredFps});
+  const FilmedClip(this.path,
+      {this.fps, this.deliveredFps, this.inGallery = false});
   final String path;
   final int? fps;
+
+  /// Filmed in the phone's own camera app, so the clip is still in the
+  /// gallery whatever is cut from the copy brought in.
+  final bool inGallery;
 
   /// The rate the camera really delivered, counted while it filmed.
   final double? deliveredFps;
@@ -51,12 +56,156 @@ Future<FilmedClip?> filmThrow(BuildContext context) async {
     }
     return result;
   }
+  if (result == CaptureScreen.usePhoneCamera && context.mounted) {
+    return filmInPhoneCamera(context);
+  }
   if (result != CaptureScreen.useSystemCamera) return null;
   final picked = await ImagePicker().pickVideo(
     source: ImageSource.camera,
     preferredCameraDevice: CameraDevice.rear,
   );
   return picked == null ? null : FilmedClip(picked.path);
+}
+
+/// Films in the phone's own camera app and brings the clip back.
+///
+/// For what ThrowLab's camera can't be given: Samsung keeps 4K at 120 to
+/// its own app, in Pro Video, and getting there by hand took a coach
+/// through the app's modes and Pro Video's dials every time. Opened from
+/// its icon rather than as a capture request, it comes back in the mode it
+/// was last left in, so set up once it is one tap from here; and the clip
+/// it saves is found and brought in when the coach comes back, rather than
+/// hunted for in the gallery. Null when nothing new was filmed.
+Future<FilmedClip?> filmInPhoneCamera(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final kind = await ThrowCamera.phoneCamera().catchError((Object _) => null);
+  if (kind == null) {
+    messenger.showSnackBar(
+        const SnackBar(content: Text('There is no camera app to open.')));
+    return null;
+  }
+  if (!context.mounted || !await _phoneCameraTip(context, kind)) return null;
+  // A moment's slack: the phone stamps a clip with when it was saved, in
+  // whole seconds.
+  final since = DateTime.now().subtract(const Duration(seconds: 2));
+  final back = _nextResume();
+  if (!await ThrowCamera.openPhoneCamera()) {
+    messenger.showSnackBar(
+        const SnackBar(content: Text("The camera app wouldn't open.")));
+    return null;
+  }
+  await back;
+  if (!context.mounted) return null;
+
+  // The clip can take a moment to be indexed after the camera saves it.
+  List<PhoneVideo> found = const [];
+  for (var attempt = 0; attempt < 5 && found.isEmpty; attempt++) {
+    if (attempt > 0) await Future<void>.delayed(const Duration(seconds: 1));
+    try {
+      found = (await ThrowCamera.videosSince(since))
+          .where((v) => v.duration > Duration.zero)
+          .toList();
+    } on PlatformException catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text(e.code == 'permission'
+              ? 'ThrowLab needs to read your videos to bring the clip in. '
+                  "It can be allowed in the phone's settings."
+              : "The phone's videos couldn't be read.")));
+      return null;
+    }
+  }
+  if (found.isEmpty || !context.mounted) {
+    messenger.showSnackBar(
+        const SnackBar(content: Text('No new clip from the camera.')));
+    return null;
+  }
+  final newest = found.first;
+  final navigator = Navigator.of(context);
+  showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const AlertDialog(
+      content: Row(children: [
+        SizedBox(width: 24, height: 24, child: CircularProgressIndicator()),
+        SizedBox(width: 20),
+        Expanded(child: Text('Bringing the clip in…')),
+      ]),
+    ),
+  );
+  String? path;
+  try {
+    final dir = await getTemporaryDirectory();
+    path = await ThrowCamera.copyVideo(newest.uri,
+        '${dir.path}/throwlab_phone_${DateTime.now().millisecondsSinceEpoch}.mp4');
+  } catch (_) {
+    path = null;
+  }
+  navigator.pop();
+  if (path == null) {
+    messenger.showSnackBar(
+        const SnackBar(content: Text("The clip couldn't be brought in.")));
+    return null;
+  }
+  if (found.length > 1) {
+    messenger.showSnackBar(SnackBar(
+        content: Text('Brought in the newest of ${found.length} clips. '
+            'The others are in the gallery.')));
+  }
+  return FilmedClip(path, inGallery: true);
+}
+
+/// The way to set the phone's camera up so the button lands in the right
+/// place, said the first time it is used and then not again. True to go on.
+Future<bool> _phoneCameraTip(BuildContext context, String kind) async {
+  const key = 'throwlab.phoneCameraTip';
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(key) ?? false) return true;
+  } catch (_) {}
+  if (!context.mounted) return false;
+  final samsung = kind == 'samsung';
+  final go = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(
+          samsung ? "Film in Samsung's camera" : "Film in the phone's camera"),
+      content: Text(samsung
+          ? 'For 4K at 120 fps, switch to Pro Video and set it to 4K and '
+              '120 fps. It keeps those settings.\n\n'
+              'To land in Pro Video every time, turn on Camera settings › '
+              'Settings to keep › Camera mode.\n\n'
+              'Film the throw, then come back to ThrowLab. The clip comes in '
+              'on its own.'
+          : 'Film the throw, then come back to ThrowLab. The clip comes in '
+              'on its own.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel')),
+        FilledButton(
+            key: const ValueKey('phone-camera-go'),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Open camera')),
+      ],
+    ),
+  );
+  if (go != true) return false;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, true);
+  } catch (_) {}
+  return true;
+}
+
+/// Completes the next time the app comes back to the front.
+Future<void> _nextResume() {
+  final back = Completer<void>();
+  late final AppLifecycleListener listener;
+  listener = AppLifecycleListener(onResume: () {
+    listener.dispose();
+    if (!back.isCompleted) back.complete();
+  });
+  return back.future;
 }
 
 /// The app's own camera.
@@ -78,6 +227,9 @@ class CaptureScreen extends StatefulWidget {
   /// phone's own should be used instead.
   static const useSystemCamera = 'system';
 
+  /// What it pops with to film in the phone's own camera app instead.
+  static const usePhoneCamera = 'phone';
+
   static const _fpsKey = 'throwlab.capture.fps';
   static const _heightKey = 'throwlab.capture.height';
   static const _countdownKey = 'throwlab.capture.countdown';
@@ -91,6 +243,9 @@ class _CaptureScreenState extends State<CaptureScreen>
     with WidgetsBindingObserver {
   List<CameraMode> _modes = const [];
   List<String> _details = const [];
+
+  /// The phone's own camera app, for what this one can't film.
+  String? _phoneCamera;
   CameraMode? _mode;
   OpenCamera? _camera;
   int _display = 0;
@@ -158,6 +313,8 @@ class _CaptureScreenState extends State<CaptureScreen>
       final offered = await ThrowCamera.modes();
       _modes = offeredModes(offered.modes);
       _details = offered.details;
+      _phoneCamera =
+          await ThrowCamera.phoneCamera().catchError((Object _) => null);
       final mode = pickMode(_modes,
           preferredFps: preferredFps, preferredHeight: preferredHeight);
       if (mode == null) throw StateError('no modes');
@@ -320,10 +477,27 @@ class _CaptureScreenState extends State<CaptureScreen>
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   child: Text(
                     "This phone doesn't let other apps film 4K at 120 fps. "
-                    "For that, film in the phone's own camera and import "
-                    'the clip.',
+                    "For that, film in the phone's own camera and the clip "
+                    'comes back here.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              if (!_modes.any((m) => m.resolution == '4K' && m.fps >= 120) &&
+                  _phoneCamera != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: OutlinedButton.icon(
+                    key: const ValueKey('use-phone-camera'),
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(_phoneCamera == 'samsung'
+                        ? "Film 4K 120 in Samsung's camera"
+                        : "Film in the phone's camera"),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.of(this.context)
+                          .pop(CaptureScreen.usePhoneCamera);
+                    },
                   ),
                 ),
               // The camera's own word on what it gives apps, folded away:

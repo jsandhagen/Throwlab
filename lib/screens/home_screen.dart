@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:throwlab_camera/throwlab_camera.dart';
 
 import '../models/meet.dart';
 import '../models/throw_event.dart';
@@ -71,7 +72,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkForUpdate();
+    // Asked up front rather than when the add button is pressed, so the
+    // sheet never waits on it.
+    ThrowCamera.phoneCamera()
+        .then((kind) => _phoneCamera = kind, onError: (Object _) => null);
   }
+
+  /// Which camera app the phone has: 'samsung' puts Samsung's camera on
+  /// the add sheet.
+  String? _phoneCamera;
 
   @override
   void dispose() {
@@ -127,10 +136,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Asks which way the throw is coming in: filmed now, or out of the
-  /// gallery.
+  /// Asks which way the throw is coming in: filmed now, in ThrowLab's
+  /// camera or the phone's own, or out of the gallery.
   Future<void> _addThrow() async {
-    final filmed = await showModalBottomSheet<bool>(
+    // Samsung's camera is offered by name, because it is the one place a
+    // Galaxy films 4K at 120. Anywhere else the app's own camera already
+    // reaches whatever the phone gives apps, and its sheet still offers the
+    // phone's camera at the foot of the list.
+    final phoneCamera = _phoneCamera;
+    final way = await showModalBottomSheet<_AddWay>(
       context: context,
       useSafeArea: true,
       builder: (context) => Padding(
@@ -147,36 +161,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               title: const Text('Film a throw'),
               subtitle: const Text('Filming yourself? Leave it running. '
                   'The throw is found and the waiting is cut out.'),
-              onTap: () => Navigator.pop(context, true),
+              onTap: () => Navigator.pop(context, _AddWay.film),
             ),
+            if (phoneCamera == 'samsung')
+              ListTile(
+                key: const ValueKey('add-phone-camera'),
+                leading: const Icon(Icons.camera),
+                title: const Text("Film in Samsung's camera"),
+                subtitle: const Text('For 4K at 120 in Pro Video. '
+                    'The clip comes back here when you do.'),
+                onTap: () => Navigator.pop(context, _AddWay.phoneCamera),
+              ),
             ListTile(
               key: const ValueKey('add-import'),
               leading: const Icon(Icons.video_library),
               title: const Text('Import from gallery'),
-              onTap: () => Navigator.pop(context, false),
+              onTap: () => Navigator.pop(context, _AddWay.gallery),
             ),
           ],
         ),
       ),
     );
-    if (filmed == null || !mounted) return;
-    await _importVideo(filmed: filmed);
+    if (way == null || !mounted) return;
+    await _importVideo(way: way);
   }
 
-  /// Brings a throw into the library — out of the gallery, or [filmed] with
-  /// the phone's camera there and then.
+  /// Brings a throw into the library — out of the gallery, or filmed there
+  /// and then in ThrowLab's camera or the phone's own.
   ///
   /// Filming is the case an athlete on their own is in: the phone on a
   /// bag, record, walk out, throw, walk back. So a long clip is searched
   /// for the throw before anything is encoded, and cutting to it is offered
   /// — which also makes the import a few seconds of encoding rather than a
   /// couple of minutes of it.
-  Future<void> _importVideo({bool filmed = false}) async {
+  Future<void> _importVideo({_AddWay way = _AddWay.gallery}) async {
     final library = context.read<VideoLibrary>();
+    final filmed = way != _AddWay.gallery;
     // Filmed in the app's own camera, which reaches the 120 and 240 fps the
-    // phone's camera app does; picked out of the gallery otherwise.
+    // phone's camera app does, or in Samsung's for 4K at 120; picked out of
+    // the gallery otherwise. Either camera hands over a temporary file.
+    final FilmedClip? clip = switch (way) {
+      _AddWay.film => await filmThrow(context),
+      _AddWay.phoneCamera => await filmInPhoneCamera(context),
+      _AddWay.gallery => null,
+    };
     final String? source = filmed
-        ? (await filmThrow(context))?.path
+        ? clip?.path
         : (await ImagePicker().pickVideo(source: ImageSource.gallery))?.path;
     if (source == null || !mounted) return;
 
@@ -204,7 +234,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       event: details.event,
       fps: fps,
       captureFps: rates?.capture ?? fps,
-      keepsOriginal: !filmed,
+      // The phone's camera saved its own copy in the gallery; only the
+      // copy brought in is cut.
+      keepsOriginal: !filmed || (clip?.inGallery ?? false),
     );
     final trim = found?.toRange(
         Duration(microseconds: (found.duration * 1e6).round()), fps);
@@ -1319,3 +1351,6 @@ class OptimizingDialog extends StatelessWidget {
     );
   }
 }
+
+/// The ways the library's add button brings a throw in.
+enum _AddWay { film, phoneCamera, gallery }

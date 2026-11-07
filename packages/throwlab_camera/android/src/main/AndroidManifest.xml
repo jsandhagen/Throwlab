@@ -4,4 +4,20 @@
          for one they get nothing for. -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- To find the clip just filmed in the phone's own camera app, which is
+         where 4K at 120 lives on a Samsung. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Android 11+ hides other apps unless asked for by name: Samsung's
+         camera, and whatever answers a plain video-camera request. -->
+    <queries>
+        <package android:name="com.sec.android.app.camera" />
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAMERA" />
+        </intent>
+    </queries>
 </manifest>

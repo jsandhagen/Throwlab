@@ -854,6 +854,17 @@ like the app rather than a bare Material default.
   accelerometer, not the screen, so a phone on a tripod with rotation
   locked still films the right way up. Where the camera will not open, the
   screen says why and offers the phone's own camera instead.
+  Samsung's camera is a way in of its own (`filmInPhoneCamera`), on the
+  library's add sheet when the phone has it and at the foot of the mode
+  list, because 4K at 120 is Pro Video's and getting there by hand is a
+  walk through the camera's modes and dials every time. It is opened the
+  way its icon opens it, not as a capture request, so it comes back in the
+  mode it was left in; the first time, a tip says how to leave it in Pro
+  Video for good (Settings to keep › Camera mode). Whatever it saved while
+  the coach was away is found in the media store when ThrowLab is back in
+  front, copied in and taken through the same import as any filmed clip,
+  except that cutting to the throw says the uncut clip survives, because
+  the gallery still has it (`FilmedClip.inGallery`).
   The preview is a `SurfaceView` handed to Flutter as a platform view
   (`CameraPreview`, hybrid composition), never a Flutter texture. A texture
   is an image queue Flutter drains on the main thread a couple of frames at
