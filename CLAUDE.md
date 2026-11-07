@@ -825,7 +825,15 @@ like the app rather than a bare Material default.
   stock Flutter camera asks an ordinary Camera2 session for a rate, which on
   a Samsung tops out at 60, so `packages/throwlab_camera` is ours: it opens
   the *constrained high-speed* session for 120 and 240, an ordinary one for
-  30 and 60, and lists only what the camera says it can record. The
+  every steady rate the camera lists at a size it can keep up at, and lists
+  only what the camera says it can record — the ordinary session past 60
+  being the one place a phone whose high-speed sizes stop at 1080p could
+  still give apps 4K at 120. Where both sessions offer a rate at a size the
+  high-speed one is kept. The bottom of the list folds out what every back
+  camera tells apps (`CameraModes.details`), because whether a phone gives
+  apps 4K at 120 is settled by that and nothing else: a Galaxy Ultra films
+  it in its own camera app and, as far as anybody has measured, lists high
+  speed only at 1080p. The
   encoder's surface is a persistent one kept in the session from the start,
   so recording is a change of request rather than a new session — the first
   frames of a throw are not spent setting a camera up. It opens on the rate

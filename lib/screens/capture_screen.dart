@@ -90,6 +90,7 @@ class CaptureScreen extends StatefulWidget {
 class _CaptureScreenState extends State<CaptureScreen>
     with WidgetsBindingObserver {
   List<CameraMode> _modes = const [];
+  List<String> _details = const [];
   CameraMode? _mode;
   OpenCamera? _camera;
   int _display = 0;
@@ -156,6 +157,7 @@ class _CaptureScreenState extends State<CaptureScreen>
     try {
       final offered = await ThrowCamera.modes();
       _modes = offeredModes(offered.modes);
+      _details = offered.details;
       final mode = pickMode(_modes,
           preferredFps: preferredFps, preferredHeight: preferredHeight);
       if (mode == null) throw StateError('no modes');
@@ -323,6 +325,28 @@ class _CaptureScreenState extends State<CaptureScreen>
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
+                ),
+              // The camera's own word on what it gives apps, folded away:
+              // the question of what a phone can film is settled by this and
+              // nothing else, and it is a screenshot to send.
+              if (_details.isNotEmpty)
+                ExpansionTile(
+                  key: const ValueKey('camera-details'),
+                  title: Text('What this camera gives apps',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                  childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  expandedCrossAxisAlignment: CrossAxisAlignment.start,
+                  expandedAlignment: Alignment.centerLeft,
+                  children: [
+                    for (final line in _details)
+                      Text(line,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(fontFeatures: const [
+                            FontFeature.tabularFigures()
+                          ])),
+                  ],
                 ),
             ],
           ),

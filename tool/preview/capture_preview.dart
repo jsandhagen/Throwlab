@@ -29,7 +29,6 @@ void main() {
     CameraMode(width: 1920, height: 1080, fps: 120, highSpeed: true),
     CameraMode(width: 1920, height: 1080, fps: 240, highSpeed: true),
     CameraMode(width: 3840, height: 2160, fps: 60, highSpeed: false),
-    CameraMode(width: 3840, height: 2160, fps: 120, highSpeed: true),
   ];
 
   setUp(() {
@@ -42,6 +41,19 @@ void main() {
           return {
             'modes': [for (final m in modes) m.toMap()],
             'sensorOrientation': 90,
+            // What a Galaxy Ultra reports to apps: high speed only at 1080p.
+            'details': [
+              'Back camera 0 · 6.3 mm',
+              '  High speed: 1920x1080 at 120/240',
+              '  Steady rates: 24/30/60',
+              '  3840x2160: up to 60 fps',
+              '  1920x1080: up to 60 fps',
+              'Back camera 2 · 2.2 mm',
+              '  High speed: none',
+              '  Steady rates: 24/30',
+              '  3840x2160: up to 30 fps',
+              '  1920x1080: up to 30 fps',
+            ],
           };
         case 'open':
           // Ready a moment after opening, as the phone says once its
@@ -105,6 +117,15 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('capture-mode')));
     await tester.pumpAndSettle();
     await _shoot(tester, 'capture_modes');
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('camera-details')), 100,
+        scrollable: find.byType(Scrollable).last);
+    await tester.tap(find.byKey(const ValueKey('camera-details')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('  1920x1080: up to 30 fps'), 100,
+        scrollable: find.byType(Scrollable).last);
+    await tester.pumpAndSettle();
+    await _shoot(tester, 'capture_camera_details');
   });
 
   testWidgets('on its side', (tester) async {

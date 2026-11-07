@@ -26,6 +26,30 @@ void main() {
   const uhd60 =
       CameraMode(width: 3840, height: 2160, fps: 60, highSpeed: false);
 
+  group('ordinary sessions past 60', () {
+    const hd120Ordinary =
+        CameraMode(width: 1920, height: 1080, fps: 120, highSpeed: false);
+    const uhd120Ordinary =
+        CameraMode(width: 3840, height: 2160, fps: 120, highSpeed: false);
+
+    test('the high-speed session is kept where both offer a rate', () {
+      final offered = offeredModes([hd120Ordinary, hd120, hd30]);
+      expect(offered, [hd120, hd30]);
+    });
+
+    test(
+        '4K at 120 comes through an ordinary session where the phone '
+        'gives it to apps', () {
+      final offered = offeredModes([hd120, uhd120Ordinary, uhd60, hd30]);
+      expect(offered.first, uhd120Ordinary);
+      expect(offered.first.toString(), '4K · 120 fps');
+      // Still not where it opens: 1080p at 120 is.
+      expect(pickMode(offered), hd120);
+      expect(pickMode(offered, preferredFps: 120, preferredHeight: 2160),
+          uhd120Ordinary);
+    });
+  });
+
   group('mode', () {
     test('4K at 120 is offered first and chosen only once picked', () {
       final modes = [hd30, hd60, uhd60, hd120, uhd120, hd240];
@@ -222,6 +246,11 @@ void main() {
                 hd240.toMap()
               ],
               'sensorOrientation': 90,
+              'details': [
+                'Back camera 0 · 6.3 mm',
+                '  High speed: 1920x1080 at 120/240',
+                '  3840x2160: up to 60 fps',
+              ],
             };
           case 'open':
             // The camera says it is ready once its preview is up, as the
@@ -356,6 +385,22 @@ void main() {
               .where((c) => c.method == 'beep')
               .map((c) => (c.arguments as Map)['kind']),
           ['go', 'stop']);
+    });
+
+    testWidgets('the list says what the camera gives apps', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await mount(tester);
+      await tester.tap(find.byKey(const ValueKey('capture-mode')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining("doesn't let other apps film 4K at 120"),
+          findsOneWidget);
+      await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('camera-details')), 100,
+          scrollable: find.byType(Scrollable).last);
+      await tester.tap(find.byKey(const ValueKey('camera-details')));
+      await tester.pumpAndSettle();
+      expect(find.text('  High speed: 1920x1080 at 120/240'), findsOneWidget);
+      expect(find.text('  3840x2160: up to 60 fps'), findsOneWidget);
     });
 
     testWidgets('the countdown and the stop are remembered', (tester) async {

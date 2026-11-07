@@ -36,11 +36,19 @@ int _short(CameraMode mode) =>
 
 /// The modes as a coach chooses between them: fastest first, one per rate
 /// and size.
+///
+/// Where the high-speed session and the ordinary one both offer a rate at a
+/// size, the high-speed one is the one kept: it is the session built for
+/// that rate, and the ordinary one is only listed for the sizes the
+/// high-speed one doesn't reach.
 List<CameraMode> offeredModes(List<CameraMode> modes) {
   final seen = <String>{};
-  final sorted = [...modes]..sort((a, b) => b.fps != a.fps
-      ? b.fps.compareTo(a.fps)
-      : (b.width * b.height).compareTo(a.width * a.height));
+  final sorted = [...modes]..sort((a, b) {
+      if (b.fps != a.fps) return b.fps.compareTo(a.fps);
+      final area = (b.width * b.height).compareTo(a.width * a.height);
+      if (area != 0) return area;
+      return (b.highSpeed ? 1 : 0).compareTo(a.highSpeed ? 1 : 0);
+    });
   return [
     for (final mode in sorted)
       if (seen.add('${mode.fps}x${mode.width}x${mode.height}')) mode,

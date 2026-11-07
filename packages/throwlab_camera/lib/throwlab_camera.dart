@@ -58,12 +58,16 @@ class CameraMode {
 
 /// What the camera offers, and how its sensor is mounted.
 class CameraModes {
-  const CameraModes(this.modes, {required this.sensorOrientation});
+  const CameraModes(this.modes,
+      {required this.sensorOrientation, this.details = const []});
 
   final List<CameraMode> modes;
 
   /// Degrees the sensor is turned from the phone's natural orientation.
   final int sensorOrientation;
+
+  /// What every back camera tells apps it can film, a line at a time.
+  final List<String> details;
 }
 
 /// An open camera and what it is filming at. Its picture is shown by
@@ -123,6 +127,10 @@ class ThrowCamera {
           CameraMode.fromMap(mode as Map<Object?, Object?>),
       ],
       sensorOrientation: reply['sensorOrientation'] as int? ?? 90,
+      details: [
+        for (final line in (reply['details'] as List? ?? const []))
+          line as String,
+      ],
     );
   }
 

@@ -237,16 +237,63 @@ class ThrowlabCameraPlugin :
         val recordable = map.getOutputSizes(MediaRecorder::class.java)?.toList() ?: emptyList()
         for (size in listOf(Size(3840, 2160), Size(1920, 1080), Size(1280, 720))) {
             if (size !in recordable) continue
-            val minFrame = map.getOutputMinFrameDuration(MediaRecorder::class.java, size)
-            val fastest = if (minFrame > 0) 1_000_000_000L / minFrame else 30L
-            for (fps in listOf(30, 60)) {
-                if (fps in fixed && fps <= fastest + 1) modes.add(mode(size, fps, false))
+            val fastest = fastestAt(map, size)
+            // Every steady rate the ordinary session offers, not just 30 and
+            // 60: a phone that lets apps have 4K at 120 at all does it here,
+            // since its high-speed sizes stop at 1080p.
+            for (fps in fixed.filter { it >= 24 }.sorted()) {
+                if (fps <= fastest + 1) modes.add(mode(size, fps, false))
             }
         }
         return mapOf(
             "modes" to modes,
             "sensorOrientation" to (traits.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90),
+            "details" to details(),
         )
+    }
+
+    private fun fastestAt(map: android.hardware.camera2.params.StreamConfigurationMap, size: Size): Long {
+        val minFrame = map.getOutputMinFrameDuration(MediaRecorder::class.java, size)
+        return if (minFrame > 0) 1_000_000_000L / minFrame else 30L
+    }
+
+    /**
+     * What every back camera tells apps it can film, in lines a coach can
+     * screenshot: the question of whether a phone gives apps 4K at 120 is
+     * settled by what it says here and nowhere else, since the phone's own
+     * camera app is allowed more than it lists.
+     */
+    private fun details(): List<String> {
+        val lines = mutableListOf<String>()
+        for (id in manager.cameraIdList) {
+            val traits = manager.getCameraCharacteristics(id)
+            if (traits.get(CameraCharacteristics.LENS_FACING) !=
+                CameraCharacteristics.LENS_FACING_BACK
+            ) continue
+            val map = traits.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: continue
+            val focal = traits.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                ?.firstOrNull()?.let { " · %.1f mm".format(it) } ?: ""
+            lines.add("Back camera $id$focal")
+            val highSpeed = if (highSpeedCapable(traits)) {
+                map.highSpeedVideoSizes.joinToString(", ") { size ->
+                    val rates = map.getHighSpeedVideoFpsRangesFor(size)
+                        .filter { it.lower == it.upper }.map { it.upper }.distinct().sorted()
+                    "${size.width}x${size.height} at ${rates.joinToString("/")}"
+                }
+            } else {
+                "none"
+            }
+            lines.add("  High speed: $highSpeed")
+            val steady = (traits.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+                ?: emptyArray()).filter { it.lower == it.upper }.map { it.upper }.distinct().sorted()
+            lines.add("  Steady rates: ${steady.joinToString("/")}")
+            val recordable = map.getOutputSizes(MediaRecorder::class.java)?.toList() ?: emptyList()
+            for (size in listOf(Size(3840, 2160), Size(1920, 1080))) {
+                if (size !in recordable) continue
+                lines.add("  ${size.width}x${size.height}: up to ${fastestAt(map, size)} fps")
+            }
+        }
+        return lines
     }
 
     private fun mode(size: Size, fps: Int, highSpeed: Boolean) = mapOf(
