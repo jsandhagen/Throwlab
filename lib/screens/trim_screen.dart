@@ -272,7 +272,7 @@ class _TrimScreenState extends State<TrimScreen> with TickerProviderStateMixin {
         ..scrubFramesDir = frames.dir
         ..scrubFrameCount = frames.count
         ..scrubFrameStride = frames.stride
-        ..scrubFrameLongSide = VideoOptimizer.scrubFrameMax
+        ..scrubFrameLongSide = frames.longSide
         ..scrubFramesVersion = VideoOptimizer.scrubFramesVersion;
     }
     final thumbnail = await VideoOptimizer.extractThumbnail(path, video.id);

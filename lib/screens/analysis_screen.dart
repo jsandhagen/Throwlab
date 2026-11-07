@@ -213,7 +213,8 @@ class _AnalysisScreenState extends State<AnalysisScreen>
       final needsFrames = _frames == null ||
           widget.video.optimizePending ||
           widget.video.scrubFramesVersion < VideoOptimizer.scrubFramesVersion ||
-          widget.video.playbackVersion < VideoOptimizer.playbackVersion;
+          widget.video.playbackVersion < VideoOptimizer.playbackVersion ||
+          _stillsSkipFrames;
       if (_mayHaveMissedRate) {
         // Asked first: stills extracted at a rate that is about to change
         // would be extracted again.
@@ -226,6 +227,17 @@ class _AnalysisScreenState extends State<AnalysisScreen>
         _prepareScrubFrames();
       }
     }
+  }
+
+  /// Stills cut under the old six-second budget that the current one would
+  /// cut closer together — a 120 fps take scrubbing on every other frame
+  /// that can now have every frame. Only those are cut again: a clip whose
+  /// stills come out the same is left alone.
+  bool get _stillsSkipFrames {
+    final video = widget.video;
+    if (video.scrubFrameStride <= 1 || video.scrubFrameCount <= 0) return false;
+    final frames = video.scrubFrameCount * video.scrubFrameStride;
+    return VideoOptimizer.stillPlan(frames).stride < video.scrubFrameStride;
   }
 
   /// A clip stored at 30 fps with no slow-motion rate is what every import
@@ -337,7 +349,7 @@ class _AnalysisScreenState extends State<AnalysisScreen>
     widget.video.scrubFramesDir = result.dir;
     widget.video.scrubFrameCount = result.count;
     widget.video.scrubFrameStride = result.stride;
-    widget.video.scrubFrameLongSide = VideoOptimizer.scrubFrameMax;
+    widget.video.scrubFrameLongSide = result.longSide;
     widget.video.scrubFramesVersion = VideoOptimizer.scrubFramesVersion;
     await library.update(widget.video);
     final next = ScrubFrames(

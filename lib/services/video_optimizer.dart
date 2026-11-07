@@ -409,7 +409,32 @@ class VideoOptimizer {
   /// extraction strides over source frames so a long or very high-fps clip
   /// can't blow up disk use — scrubbing stays smooth on the extracted grid
   /// and exact frame steps still fall back to seeking.
-  static const _maxScrubFrames = 720;
+  ///
+  /// Twelve seconds at 120 fps, which is a throw cut down to itself. It was
+  /// 720 — six seconds at 120 — and a twelve-second take scrubbed on every
+  /// other frame, a thirty-second one on every fifth: a clip filmed at 120
+  /// read as 60 or 24 under the finger, which is the opposite of what it
+  /// was filmed for. The disk is held where it was by [stillPlan] instead.
+  static const _maxScrubFrames = 1440;
+
+  /// How many stills a clip of [frames] frames is cut into, and how big:
+  /// every frame where it can be, and the stills smaller the more of them
+  /// there are, so the whole set costs about what [_fullSizeStills] stills
+  /// at [scrubFrameMax] always did — never under [_minStillSide], which is
+  /// still sharper than the 640 that read as a resolution drop.
+  static ({int stride, int longSide}) stillPlan(int frames) {
+    final stride =
+        frames > _maxScrubFrames ? (frames / _maxScrubFrames).ceil() : 1;
+    final count = (frames / stride).ceil();
+    if (count <= _fullSizeStills) {
+      return (stride: stride, longSide: scrubFrameMax);
+    }
+    final side = (scrubFrameMax * math.sqrt(_fullSizeStills / count)).floor();
+    return (stride: stride, longSide: math.max(_minStillSide, side - side % 2));
+  }
+
+  static const _fullSizeStills = 720;
+  static const _minStillSide = 960;
 
   /// Longest-side cap for the extracted scrub frames. Matches the 1440p
   /// playback copy exactly, so the stills shown while scrubbing are
@@ -470,7 +495,8 @@ class VideoOptimizer {
   /// directory, the number of frames written, and the stride (1 = every
   /// frame), or null if extraction failed or was canceled — the caller then
   /// keeps the seek-based scrub path. [onProgress] gets 0..1 while running.
-  static Future<({String dir, int count, int stride})?> extractScrubFrames(
+  static Future<({String dir, int count, int stride, int longSide})?>
+      extractScrubFrames(
     String videoPath,
     String id,
     double fps, {
@@ -497,8 +523,8 @@ class VideoOptimizer {
     // than out of a guess — see [jpegColorFilter].
     final color = await _jpegColorFilterFor(videoPath);
     final total = (seconds != null && fps > 0) ? (seconds * fps).round() : 0;
-    final stride =
-        total > _maxScrubFrames ? (total / _maxScrubFrames).ceil() : 1;
+    final plan = stillPlan(total);
+    final stride = plan.stride;
 
     // select drops all but every Nth frame; -vsync 0 stops ffmpeg from
     // re-timing (duplicating/dropping) what select left, so output image k
@@ -514,7 +540,7 @@ class VideoOptimizer {
     // the pixels are touched.
     final select = stride > 1 ? "select='not(mod(n\\,$stride))'," : '';
     final vf = '${select}scale=iw*sar:ih,setsar=1,'
-        'scale=w=$scrubFrameMax:h=$scrubFrameMax:'
+        'scale=w=${plan.longSide}:h=${plan.longSide}:'
         'force_original_aspect_ratio=decrease:force_divisible_by=2:$color';
 
     final done = Completer<bool>();
@@ -549,7 +575,12 @@ class VideoOptimizer {
       dir.delete(recursive: true).ignore();
       return null;
     }
-    return (dir: finalDir.path, count: count, stride: stride);
+    return (
+      dir: finalDir.path,
+      count: count,
+      stride: stride,
+      longSide: plan.longSide,
+    );
   }
 
   /// File written beside the stills holding each one's presentation time in
