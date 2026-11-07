@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 /// A rate and a size the phone's back camera will really record at.
 class CameraMode {
@@ -62,18 +66,43 @@ class CameraModes {
   final int sensorOrientation;
 }
 
-/// An open camera: the texture its preview is drawn into, and what it is
-/// filming at.
+/// An open camera and what it is filming at. Its picture is shown by
+/// [CameraPreview].
 class OpenCamera {
-  const OpenCamera({
-    required this.textureId,
-    required this.mode,
-    required this.sensorOrientation,
-  });
+  const OpenCamera({required this.mode, required this.sensorOrientation});
 
-  final int textureId;
   final CameraMode mode;
   final int sensorOrientation;
+}
+
+/// A take as the camera delivered it: the file, and how many frames went
+/// into it over how long — counted off the camera's own results, so a take
+/// that was meant to be 120 fps and wasn't says so.
+class RecordedTake {
+  const RecordedTake(
+      {required this.path,
+      required this.frames,
+      required this.seconds,
+      this.failed = 0});
+
+  factory RecordedTake.fromMap(Map<Object?, Object?> map) => RecordedTake(
+        path: map['path']! as String,
+        frames: map['frames'] as int? ?? 0,
+        seconds: (map['seconds'] as num?)?.toDouble() ?? 0,
+        failed: map['failed'] as int? ?? 0,
+      );
+
+  final String path;
+  final int frames;
+  final double seconds;
+
+  /// Frames the camera reported it could not deliver.
+  final int failed;
+
+  /// The rate the camera really delivered, or null when it delivered too
+  /// little to tell.
+  double? get deliveredFps =>
+      frames > 1 && seconds > 0 ? (frames - 1) / seconds : null;
 }
 
 /// The sound the phone makes, for the athlete twenty meters away who can't
@@ -97,11 +126,34 @@ class ThrowCamera {
     );
   }
 
+  /// Whether the camera has its preview and is ready to record. Set when a
+  /// session is up on the preview's surface, which is after [open] has
+  /// returned and the preview has been laid out.
+  static final ValueNotifier<bool> ready = ValueNotifier(false);
+
+  /// Why the camera could not start a session, once it has said.
+  static final ValueNotifier<String?> failure = ValueNotifier(null);
+
+  static void _listen() {
+    channel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'ready':
+          failure.value = null;
+          ready.value = true;
+        case 'failed':
+          ready.value = false;
+          failure.value = call.arguments as String?;
+      }
+    });
+  }
+
   static Future<OpenCamera> open(CameraMode mode) async {
+    _listen();
+    ready.value = false;
+    failure.value = null;
     final reply = (await channel.invokeMapMethod<Object?, Object?>(
         'open', mode.toMap()))!;
     return OpenCamera(
-      textureId: reply['textureId']! as int,
       mode: CameraMode.fromMap(reply),
       sensorOrientation: reply['sensorOrientation'] as int? ?? 90,
     );
@@ -111,11 +163,14 @@ class ThrowCamera {
   static Future<void> start(String path) =>
       channel.invokeMethod('start', {'path': path});
 
-  /// Stops, and returns the file it wrote.
-  static Future<String> stop() async =>
-      (await channel.invokeMethod<String>('stop'))!;
+  /// Stops, and returns the take it wrote.
+  static Future<RecordedTake> stop() async => RecordedTake.fromMap(
+      (await channel.invokeMapMethod<Object?, Object?>('stop'))!);
 
-  static Future<void> close() => channel.invokeMethod('close');
+  static Future<void> close() {
+    ready.value = false;
+    return channel.invokeMethod('close');
+  }
 
   static Future<void> beep(Beep kind) =>
       channel.invokeMethod('beep', {'kind': kind.name});
@@ -124,4 +179,35 @@ class ThrowCamera {
   /// degrees — what the preview has to be turned against.
   static Future<int> displayRotation() async =>
       await channel.invokeMethod<int>('displayRotation') ?? 0;
+}
+
+/// The camera's viewfinder: an Android SurfaceView in the app's own window,
+/// composited by the system rather than drawn by Flutter — see
+/// `ThrowlabCameraPlugin.kt` for why. Hybrid composition, because that is
+/// the mode a SurfaceView keeps its own surface in. The system turns the
+/// picture upright; the caller gives it the shape the mode's picture has
+/// on this screen.
+class CameraPreview extends StatelessWidget {
+  const CameraPreview({super.key});
+
+  static const viewType = 'throwlab_camera/preview';
+
+  @override
+  Widget build(BuildContext context) => PlatformViewLink(
+        viewType: viewType,
+        surfaceFactory: (context, controller) => AndroidViewSurface(
+          controller: controller as AndroidViewController,
+          gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+          hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+        ),
+        onCreatePlatformView: (params) =>
+            PlatformViewsService.initExpensiveAndroidView(
+          id: params.id,
+          viewType: viewType,
+          layoutDirection: TextDirection.ltr,
+          creationParamsCodec: const StandardMessageCodec(),
+        )
+              ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+              ..create(),
+      );
 }

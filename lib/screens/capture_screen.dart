@@ -14,9 +14,20 @@ import '../utils/capture_plan.dart';
 /// app's own camera knows it (the phone's camera app is probed like an
 /// import).
 class FilmedClip {
-  const FilmedClip(this.path, {this.fps});
+  const FilmedClip(this.path, {this.fps, this.deliveredFps});
   final String path;
   final int? fps;
+
+  /// The rate the camera really delivered, counted while it filmed.
+  final double? deliveredFps;
+
+  /// Whether the camera fell short of the rate it was asked for: below nine
+  /// tenths of it, which is more than a stray frame at either end.
+  bool get shortOfRate {
+    final asked = fps;
+    final got = deliveredFps;
+    return asked != null && got != null && got < asked * 0.9;
+  }
 }
 
 /// Films a throw — in the app's own camera, which reaches the 120 and 240
@@ -26,7 +37,20 @@ Future<FilmedClip?> filmThrow(BuildContext context) async {
   final result = await Navigator.of(context).push<Object>(
     MaterialPageRoute(builder: (_) => const CaptureScreen()),
   );
-  if (result is FilmedClip) return result;
+  if (result is FilmedClip) {
+    // Said rather than buried: a clip filmed at 120 that came in at 70 is
+    // the difference between seeing the release and guessing at it, and
+    // nothing in the file tells the two apart once its gaps are filled.
+    if (result.shortOfRate && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text('The camera delivered '
+            '${result.deliveredFps!.round()} of ${result.fps} fps on that '
+            'take. Try a slower rate, or more light.'),
+      ));
+    }
+    return result;
+  }
   if (result != CaptureScreen.useSystemCamera) return null;
   final picked = await ImagePicker().pickVideo(
     source: ImageSource.camera,
@@ -43,7 +67,12 @@ Future<FilmedClip?> filmThrow(BuildContext context) async {
 /// a beep for each, and the volume button — which is also what a Bluetooth
 /// selfie remote presses — as the shutter.
 class CaptureScreen extends StatefulWidget {
-  const CaptureScreen({super.key});
+  const CaptureScreen({super.key, this.preview});
+
+  /// What the viewfinder is drawn with: the camera's own [CameraPreview],
+  /// unless a test hands in a stand-in for the platform view it cannot
+  /// host.
+  final Widget? preview;
 
   /// What the screen pops with when the camera would not open and the
   /// phone's own should be used instead.
@@ -73,9 +102,23 @@ class _CaptureScreenState extends State<CaptureScreen>
     beep: (kind) => ThrowCamera.beep(kind).catchError((_) {}),
   )..addListener(_changed);
 
+  /// Whether the camera has its session up on the preview and can record.
+  bool _ready = false;
+
+  void _onReady() {
+    if (mounted) setState(() => _ready = ThrowCamera.ready.value);
+  }
+
+  void _onFailure() {
+    final why = ThrowCamera.failure.value;
+    if (why != null && mounted) setState(() => _error = why);
+  }
+
   @override
   void initState() {
     super.initState();
+    ThrowCamera.ready.addListener(_onReady);
+    ThrowCamera.failure.addListener(_onFailure);
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_onKey);
     _boot();
@@ -83,6 +126,8 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   @override
   void dispose() {
+    ThrowCamera.ready.removeListener(_onReady);
+    ThrowCamera.failure.removeListener(_onFailure);
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onKey);
     _run.dispose();
@@ -185,7 +230,7 @@ class _CaptureScreenState extends State<CaptureScreen>
 
   bool _onKey(KeyEvent event) {
     if (!_shutters.contains(event.logicalKey)) return false;
-    if (event is KeyDownEvent && _camera != null) _press();
+    if (event is KeyDownEvent && _camera != null && _ready) _press();
     return true;
   }
 
@@ -209,20 +254,21 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   Future<void> _stopRecording() async {
-    String? written;
+    RecordedTake? take;
     try {
-      written = await ThrowCamera.stop();
+      take = await ThrowCamera.stop();
     } catch (_) {
-      written = null;
+      take = null;
     }
     _path = null;
     if (!mounted) return;
-    if (written == null || !File(written).existsSync()) {
+    if (take == null || !File(take.path).existsSync()) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Nothing was recorded.')));
       return;
     }
-    Navigator.of(context).pop(FilmedClip(written, fps: _mode?.fps));
+    Navigator.of(context).pop(FilmedClip(take.path,
+        fps: _mode?.fps, deliveredFps: take.deliveredFps));
   }
 
   Future<void> _remember() async {
@@ -264,6 +310,20 @@ class _CaptureScreenState extends State<CaptureScreen>
                   subtitle: Text(_modeNote(mode)),
                   onTap: () => Navigator.pop(context, mode),
                 ),
+              // Said here because it is the first thing looked for: the
+              // phone's own camera films 4K at 120, and most phones keep
+              // that to themselves.
+              if (!_modes.any((m) => m.resolution == '4K' && m.fps >= 120))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Text(
+                    "This phone doesn't let other apps film 4K at 120 fps. "
+                    "For that, film in the phone's own camera and import "
+                    'the clip.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
             ],
           ),
         ),
@@ -280,6 +340,10 @@ class _CaptureScreenState extends State<CaptureScreen>
   }
 
   static String _modeNote(CameraMode mode) {
+    if (mode.fps == 120 && mode.resolution == '1080p') {
+      return 'Recommended. Four times the frames of normal video, '
+          'sharp and bright enough for most days.';
+    }
     final speed = switch (mode.fps) {
       >= 240 => 'Most frames, darkest picture. For a bright day.',
       >= 120 => 'Four times the frames of normal video.',
@@ -343,6 +407,9 @@ class _CaptureScreenState extends State<CaptureScreen>
         ? 0
         : previewQuarterTurns(camera.sensorOrientation, _display);
     final mode = camera?.mode;
+    // The system stands the picture up; the view only has to be the shape
+    // the picture is on this screen, which is the mode's turned whenever
+    // the sensor and the screen are a quarter turn apart.
     final preview = camera == null || mode == null
         ? const Center(child: CircularProgressIndicator())
         : Center(
@@ -350,10 +417,7 @@ class _CaptureScreenState extends State<CaptureScreen>
               aspectRatio: turns.isOdd
                   ? mode.height / mode.width
                   : mode.width / mode.height,
-              child: RotatedBox(
-                quarterTurns: turns,
-                child: Texture(textureId: camera.textureId),
-              ),
+              child: widget.preview ?? const CameraPreview(),
             ),
           );
     return OrientationBuilder(builder: (context, orientation) {
@@ -363,7 +427,7 @@ class _CaptureScreenState extends State<CaptureScreen>
         timings: _timings,
         mode: _mode,
         vertical: side,
-        ready: camera != null,
+        ready: camera != null && _ready,
         onPress: _press,
         onMode: _modes.length > 1 ? _pickMode : null,
         onCountdown: () {

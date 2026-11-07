@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:throwlab/screens/capture_screen.dart';
+import 'package:throwlab/services/video_optimizer.dart';
 import 'package:throwlab/utils/capture_plan.dart';
 import 'package:throwlab_camera/throwlab_camera.dart';
 
@@ -67,6 +68,45 @@ void main() {
       // Turned onto its left side, the screen turns with it.
       expect(previewQuarterTurns(90, 90), 0);
       expect(previewQuarterTurns(90, 270), 2);
+    });
+  });
+
+  group('what was delivered', () {
+    test('a take counts the rate the camera really delivered', () {
+      const take = RecordedTake(path: '/t.mp4', frames: 601, seconds: 10);
+      expect(take.deliveredFps, closeTo(60, 0.01));
+      expect(
+          const RecordedTake(path: '/t.mp4', frames: 1, seconds: 0)
+              .deliveredFps,
+          isNull);
+    });
+
+    test('a clip that came in short of its rate says so', () {
+      expect(const FilmedClip('/c', fps: 120, deliveredFps: 119.6).shortOfRate,
+          isFalse);
+      expect(const FilmedClip('/c', fps: 120, deliveredFps: 72).shortOfRate,
+          isTrue);
+      // The phone's own camera, which nothing counted.
+      expect(const FilmedClip('/c').shortOfRate, isFalse);
+    });
+
+    test('a 120 fps throw keeps every frame as a still', () {
+      // Twelve seconds at 120: every frame, a little smaller.
+      final throwClip = VideoOptimizer.stillPlan(1440);
+      expect(throwClip.stride, 1);
+      expect(throwClip.longSide, lessThan(VideoOptimizer.scrubFrameMax));
+      expect(throwClip.longSide, greaterThanOrEqualTo(960));
+      // Six seconds or less: every frame at full size, as always.
+      expect(VideoOptimizer.stillPlan(720),
+          (stride: 1, longSide: VideoOptimizer.scrubFrameMax));
+      // Two minutes at 120 still strides, down to the same 1440 stills.
+      expect(VideoOptimizer.stillPlan(14400),
+          (stride: 10, longSide: throwClip.longSide));
+      // The disk stays about where 720 full-size stills put it.
+      double cost(({int stride, int longSide}) plan, int frames) =>
+          (frames / plan.stride).ceil() * plan.longSide * plan.longSide / 1e6;
+      expect(cost(throwClip, 1440),
+          lessThanOrEqualTo(cost(VideoOptimizer.stillPlan(720), 720) * 1.01));
     });
   });
 
@@ -149,11 +189,23 @@ void main() {
     late Directory temp;
     late List<MethodCall> calls;
     Object? Function(MethodCall)? override;
+    var takeFrames = 1201;
+
+    /// A call from the camera's side of the channel, the way the plugin
+    /// tells the screen its session is up or has failed.
+    Future<void> sendReady(String method, [Object? arguments]) =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .handlePlatformMessage(
+                ThrowCamera.channel.name,
+                ThrowCamera.channel.codec
+                    .encodeMethodCall(MethodCall(method, arguments)),
+                (_) {});
 
     setUp(() {
       temp = Directory.systemTemp.createTempSync('throwlab_capture');
       calls = [];
       override = null;
+      takeFrames = 1201;
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       messenger.setMockMethodCallHandler(ThrowCamera.channel, (call) async {
@@ -172,14 +224,18 @@ void main() {
               'sensorOrientation': 90,
             };
           case 'open':
-            return {
-              ...(call.arguments as Map),
-              'textureId': 7,
-              'sensorOrientation': 90
-            };
+            // The camera says it is ready once its preview is up, as the
+            // phone does a moment after open returns.
+            Future<void>.delayed(Duration.zero, () => sendReady('ready'));
+            return {...(call.arguments as Map), 'sensorOrientation': 90};
           case 'stop':
             final file = File('${temp.path}/take.mp4')..writeAsStringSync('x');
-            return file.path;
+            return {
+              'path': file.path,
+              'frames': takeFrames,
+              'seconds': 10.0,
+              'failed': 0,
+            };
           case 'displayRotation':
             return 0;
         }
@@ -206,7 +262,9 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () async {
               popped = await Navigator.of(context).push<Object>(
-                  MaterialPageRoute(builder: (_) => const CaptureScreen()));
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          const CaptureScreen(preview: _Viewfinder())));
             },
             child: const Text('film'),
           ),
@@ -224,7 +282,36 @@ void main() {
       expect((open.arguments as Map)['fps'], 120);
       expect((open.arguments as Map)['highSpeed'], true);
       expect(find.text('120 fps'), findsOneWidget);
-      expect(find.byType(Texture), findsOneWidget);
+      expect(find.byType(_Viewfinder), findsOneWidget);
+    });
+
+    testWidgets('the shutter waits for the camera to say it is ready',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      override = (call) => call.method == 'open'
+          ? {...(call.arguments as Map), 'sensorOrientation': 90}
+          : null;
+      await mount(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeUp);
+      await tester.pump();
+      expect(calls.map((c) => c.method), isNot(contains('start')));
+      await sendReady('ready');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeUp);
+      await tester.pump();
+      expect(calls.map((c) => c.method), contains('start'));
+      await tester.sendKeyEvent(LogicalKeyboardKey.audioVolumeUp);
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a session the camera could not start is said', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      await mount(tester);
+      await sendReady(
+          'failed', "This camera can't film at 1920x1080, 240 fps.");
+      await tester.pump();
+      expect(find.textContaining("can't film at"), findsOneWidget);
+      expect(find.byKey(const ValueKey('capture-system')), findsOneWidget);
     });
 
     testWidgets('a volume press from a remote starts and stops a take',
@@ -236,7 +323,9 @@ void main() {
           builder: (context) => TextButton(
             onPressed: () async {
               popped = await Navigator.of(context).push<Object>(
-                  MaterialPageRoute(builder: (_) => const CaptureScreen()));
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          const CaptureScreen(preview: _Viewfinder())));
             },
             child: const Text('film'),
           ),
@@ -256,7 +345,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(calls.map((c) => c.method), contains('stop'));
       expect(popped, isA<FilmedClip>());
-      expect((popped! as FilmedClip).fps, 120);
+      final clip = popped! as FilmedClip;
+      expect(clip.fps, 120);
+      // 1201 frames over ten seconds is 120 a second, which is what was
+      // asked for.
+      expect(clip.deliveredFps, closeTo(120, 0.01));
+      expect(clip.shortOfRate, isFalse);
       expect(
           calls
               .where((c) => c.method == 'beep')
@@ -288,4 +382,13 @@ void main() {
       expect(find.byKey(const ValueKey('capture-system')), findsOneWidget);
     });
   });
+}
+
+/// Stands in for the camera's platform view, which a test cannot host.
+class _Viewfinder extends StatelessWidget {
+  const _Viewfinder();
+
+  @override
+  Widget build(BuildContext context) =>
+      const ColoredBox(color: Colors.blueGrey);
 }

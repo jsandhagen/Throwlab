@@ -833,7 +833,9 @@ like the app rather than a bare Material default.
   across a release, where 240 halves the light and an evening at a track
   turns it to grain. The size is remembered with the rate
   (`throwlab.capture.height`), since 4K at 120 and 1080p at 120 are two
-  choices. 4K is offered wherever the camera lists it, at 30 and 60 in an
+  choices. The list marks 1080p at 120 as the one to use, and where the
+  phone keeps 4K at 120 to its own camera app — Samsung does — says so and
+  says to film it there and import it. 4K is offered wherever the camera lists it, at 30 and 60 in an
   ordinary session and at 120 in a high-speed one on a phone that gives it
   to apps, but never opened on by default: the playback copy is cut at
   1440p, so it buys the sharpest copy rather than four times the detail.
@@ -842,10 +844,24 @@ like the app rather than a bare Material default.
   does; ffmpeg reads either. No sound, so no microphone permission: a high-speed
   session records none on most phones. The orientation is read off the
   accelerometer, not the screen, so a phone on a tripod with rotation
-  locked still films the right way up; the preview is turned in Dart
-  (`previewQuarterTurns`), since a camera hands frames over the way its
-  sensor is mounted. Where the camera will not open, the screen says why
-  and offers the phone's own camera instead.
+  locked still films the right way up. Where the camera will not open, the
+  screen says why and offers the phone's own camera instead.
+  The preview is a `SurfaceView` handed to Flutter as a platform view
+  (`CameraPreview`, hybrid composition), never a Flutter texture. A texture
+  is an image queue Flutter drains on the main thread a couple of frames at
+  a time; when it falls behind, the camera waits for a buffer, and a camera
+  waiting on its preview is not delivering to the encoder either — the
+  first build's preview stuttered at every rate and its 120 fps takes came
+  out with frames missing and the gaps filled with repeats. A SurfaceView is
+  composited by the system, as the phone's own viewfinder is, and the
+  system stands its picture upright, so Dart only gives the view the
+  picture's shape on this screen. Its buffers are set to the mode's size,
+  which a high-speed session insists on for both outputs, and the session
+  is built only once the surface has taken that size; the plugin says
+  `ready` then, and the shutter waits for it. Every take counts what the
+  camera actually delivered off its own results (`RecordedTake`), and a
+  take under nine tenths of its rate is said out loud (`filmThrow`): once
+  the file's gaps are filled nothing downstream can tell 120 from 70.
   It is built for filming oneself (`CaptureRun`): a countdown to walk out
   on, a stop after so many seconds so nobody walks back to end it, a beep
   for each on the alarm stream — the person it is for is at the ring, not
@@ -856,6 +872,14 @@ like the app rather than a bare Material default.
   in a session without the Android SDK; it is compiled against Robolectric's
   `android-all` jar and the engine's `flutter.jar` with `kotlinc` instead,
   which is a real type check of everything but the Gradle wiring.
+- A clip's scrub stills are every frame wherever the budget allows
+  (`VideoOptimizer.stillPlan`): up to 1440 of them, twelve seconds at 120
+  fps, and smaller the more there are, so a set costs about the disk 720
+  full-size stills always did. The cap was 720 frames at full size, which
+  is six seconds at 120 — a twelve-second take scrubbed on every other
+  frame and read as 60 under the finger, the opposite of what it was filmed
+  for. A clip cut under the old cap that the new one would cut closer is
+  cut again when it is opened (`_stillsSkipFrames`); the rest are left.
 - Filming at a meet skips the import's re-encode, which runs for minutes:
   `VideoOptimizer.stashCapture` copies the camera's file into app storage
   as it was shot and the clip is stamped `optimizePending`, which

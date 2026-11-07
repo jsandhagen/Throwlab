@@ -5,7 +5,7 @@
 //   flutter test --update-goldens tool/preview/capture_preview.dart
 //
 // The camera is the plugin's channel answered in-process, so the preview is
-// black where the picture would be: what is being looked at is the chrome
+// a flat panel where the picture would be: what is being looked at is the chrome
 // over it, and whether it can be read from the ring.
 
 import 'dart:io';
@@ -44,11 +44,17 @@ void main() {
             'sensorOrientation': 90,
           };
         case 'open':
-          return {
-            ...(call.arguments as Map),
-            'textureId': 1,
-            'sensorOrientation': 90,
-          };
+          // Ready a moment after opening, as the phone says once its
+          // preview is up.
+          Future<void>.delayed(Duration.zero, () {
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+                .handlePlatformMessage(
+                    ThrowCamera.channel.name,
+                    ThrowCamera.channel.codec
+                        .encodeMethodCall(const MethodCall('ready')),
+                    (_) {});
+          });
+          return {...(call.arguments as Map), 'sensorOrientation': 90};
         case 'displayRotation':
           return 0;
       }
@@ -72,7 +78,9 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(
       theme: ThrowLabApp.theme,
-      home: const CaptureScreen(),
+      // The platform view the phone shows can't be hosted here; a flat
+      // panel marks where it goes and how much of the screen it takes.
+      home: const CaptureScreen(preview: ColoredBox(color: Color(0xFF26323A))),
     ));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -105,5 +113,5 @@ void main() {
   });
 }
 
-Future<void> _shoot(WidgetTester tester, String name) => expectLater(
-    find.byType(MaterialApp), matchesGoldenFile('$_out/$name.png'));
+Future<void> _shoot(WidgetTester tester, String name) =>
+    expectLater(find.byType(MaterialApp), matchesGoldenFile('$_out/$name.png'));

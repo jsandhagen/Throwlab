@@ -11,7 +11,10 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraConstrainedHighSpeedCaptureSession
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import android.media.AudioManager
 import android.media.MediaCodec
 import android.media.MediaRecorder
@@ -24,6 +27,9 @@ import android.util.Range
 import android.util.Size
 import android.view.OrientationEventListener
 import android.view.Surface
+import android.view.SurfaceHolder
+import android.view.SurfaceView
+import android.view.View
 import android.view.WindowManager
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -31,7 +37,9 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.PluginRegistry
-import io.flutter.view.TextureRegistry
+import io.flutter.plugin.common.StandardMessageCodec
+import io.flutter.plugin.platform.PlatformView
+import io.flutter.plugin.platform.PlatformViewFactory
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -52,6 +60,16 @@ import java.util.concurrent.TimeUnit
  * session from the start, so recording is a change of request rather than a
  * new session: starting costs nothing, and the first frames of a throw are
  * not spent setting a camera up.
+ *
+ * The preview is a [SurfaceView] handed to Flutter as a platform view, not a
+ * Flutter texture. A texture is fed through an image queue Flutter drains on
+ * the app's main thread, a couple of frames at a time; when it falls behind,
+ * the camera waits for a free buffer, and a camera waiting on its preview
+ * is a camera not delivering frames to the encoder either — a choppy
+ * preview and a recording with frames missing out of it, which is what the
+ * texture did. A SurfaceView is composited by the system, the way the
+ * phone's own camera app draws its viewfinder, and never makes the camera
+ * wait.
  */
 class ThrowlabCameraPlugin :
     FlutterPlugin,
@@ -61,18 +79,21 @@ class ThrowlabCameraPlugin :
 
     private lateinit var channel: MethodChannel
     private lateinit var context: Context
-    private lateinit var textures: TextureRegistry
     private var activity: Activity? = null
     private var activityBinding: ActivityPluginBinding? = null
     private var pendingPermission: ((Boolean) -> Unit)? = null
     private var camera: Recorder? = null
     private val main = Handler(Looper.getMainLooper())
 
+    /** The preview's surface while Flutter has the view up, and its size. */
+    private var previewHolder: SurfaceHolder? = null
+    private var previewSize: Size? = null
+
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
-        textures = binding.textureRegistry
         channel = MethodChannel(binding.binaryMessenger, "throwlab_camera")
         channel.setMethodCallHandler(this)
+        binding.platformViewRegistry.registerViewFactory(PREVIEW_VIEW, PreviewFactory())
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -248,6 +269,62 @@ class ThrowlabCameraPlugin :
         camera = recorder
         keepScreenOn(true)
         recorder.open(result)
+        // A preview already up is resized to the new mode, which hands the
+        // camera its surface again once it has taken the size.
+        previewHolder?.setFixedSize(size.width, size.height)
+    }
+
+    // --- Preview ------------------------------------------------------------
+
+    private inner class PreviewFactory : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
+        override fun create(context: Context, viewId: Int, args: Any?): PlatformView =
+            PreviewView(context)
+    }
+
+    /**
+     * The viewfinder. Its buffers are set to the mode's size, which a
+     * high-speed session insists on for both of its outputs; the system
+     * turns them upright for the screen and scales them into the view, so
+     * Flutter only has to give the view the right shape.
+     */
+    private inner class PreviewView(context: Context) : PlatformView, SurfaceHolder.Callback {
+        private val surfaceView = SurfaceView(context).also { it.holder.addCallback(this) }
+
+        override fun getView(): View = surfaceView
+
+        override fun dispose() {
+            surfaceView.holder.removeCallback(this)
+            if (previewHolder === surfaceView.holder) forgetPreview()
+        }
+
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            previewHolder = holder
+            previewSize = null
+            camera?.let { holder.setFixedSize(it.size.width, it.size.height) }
+        }
+
+        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+            previewHolder = holder
+            previewSize = Size(width, height)
+            camera?.previewChanged()
+        }
+
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+            if (previewHolder === holder) forgetPreview()
+        }
+    }
+
+    private fun forgetPreview() {
+        previewHolder = null
+        previewSize = null
+        camera?.previewGone()
+    }
+
+    /** The preview's surface, if it is up and at [size]. */
+    private fun previewAt(size: Size): Surface? {
+        val holder = previewHolder ?: return null
+        if (previewSize != size) return null
+        return holder.surface?.takeIf { it.isValid }
     }
 
     /**
@@ -303,19 +380,21 @@ class ThrowlabCameraPlugin :
     /** One open camera, its session, and the recording going through it. */
     private inner class Recorder(
         private val id: String,
-        private val size: Size,
+        val size: Size,
         private val fps: Int,
         private val highSpeed: Boolean,
     ) {
         private val thread = HandlerThread("throwlab-camera").apply { start() }
         private val handler = Handler(thread.looper)
-        private var producer: TextureRegistry.SurfaceProducer? = null
         private var device: CameraDevice? = null
         private var session: CameraCaptureSession? = null
+        private var sessionPreview: Surface? = null
         private var encoderSurface: Surface? = null
         private var recorder: MediaRecorder? = null
         private var path: String? = null
         private var deviceDegrees = 0
+        @Volatile private var closed = false
+
         /**
          * Past 1080p at 120 the pixels come faster than a phone's H.264
          * encoder takes them — 4K at 120 is four times that — and the phone's
@@ -326,6 +405,36 @@ class ThrowlabCameraPlugin :
 
         private val sensorOrientation =
             manager.getCameraCharacteristics(id).get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+
+        // What the camera actually delivered to the encoder during a take,
+        // counted off its own results: the number that says whether 120 was
+        // 120, which nothing downstream can tell apart from a camera that
+        // dropped half of them and had the gaps filled in.
+        private var frames = 0
+        private var failed = 0
+        private var firstStamp = 0L
+        private var lastStamp = 0L
+
+        private val counting = object : CameraCaptureSession.CaptureCallback() {
+            override fun onCaptureCompleted(
+                session: CameraCaptureSession,
+                request: CaptureRequest,
+                result: TotalCaptureResult,
+            ) {
+                val stamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
+                if (frames == 0) firstStamp = stamp
+                lastStamp = stamp
+                frames++
+            }
+
+            override fun onCaptureFailed(
+                session: CameraCaptureSession,
+                request: CaptureRequest,
+                failure: CaptureFailure,
+            ) {
+                failed++
+            }
+        }
 
         /**
          * Which way up the phone is held, off the accelerometer rather than
@@ -339,25 +448,8 @@ class ThrowlabCameraPlugin :
             }
         }
 
-        private fun previewSurface(): Surface = producer!!.surface
-
         @SuppressLint("MissingPermission")
         fun open(result: MethodChannel.Result) {
-            val entry = textures.createSurfaceProducer()
-            producer = entry
-            entry.setSize(size.width, size.height)
-            entry.setCallback(object : TextureRegistry.SurfaceProducer.Callback {
-                override fun onSurfaceCleanup() {
-                    // Flutter is taking the surface back (the app went to the
-                    // background). The screen closes the camera on its way
-                    // out; this keeps the session off a dead surface until it
-                    // does.
-                    try {
-                        session?.stopRepeating()
-                    } catch (_: Exception) {
-                    }
-                }
-            })
             if (orientation.canDetectOrientation()) orientation.enable()
             encoderSurface = MediaCodec.createPersistentInputSurface().also { surface ->
                 // A persistent surface has no buffers until an encoder has
@@ -375,24 +467,22 @@ class ThrowlabCameraPlugin :
             try {
                 manager.openCamera(id, object : CameraDevice.StateCallback() {
                     override fun onOpened(camera: CameraDevice) {
+                        if (closed) {
+                            camera.close()
+                            return
+                        }
                         device = camera
-                        configure { error ->
-                            answer {
-                                if (error != null) {
-                                    result.error("camera", error, null)
-                                } else {
-                                    result.success(
-                                        mapOf(
-                                            "textureId" to entry.id(),
-                                            "width" to size.width,
-                                            "height" to size.height,
-                                            "fps" to fps,
-                                            "highSpeed" to highSpeed,
-                                            "sensorOrientation" to sensorOrientation,
-                                        ),
-                                    )
-                                }
-                            }
+                        answer {
+                            result.success(
+                                mapOf(
+                                    "width" to size.width,
+                                    "height" to size.height,
+                                    "fps" to fps,
+                                    "highSpeed" to highSpeed,
+                                    "sensorOrientation" to sensorOrientation,
+                                ),
+                            )
+                            previewChanged()
                         }
                     }
 
@@ -413,43 +503,93 @@ class ThrowlabCameraPlugin :
             }
         }
 
+        /**
+         * The preview came up, or took a new size: the session is built on
+         * it once it is at this mode's size — a high-speed session refuses
+         * outputs of two sizes — and rebuilt if it is a new surface.
+         */
+        fun previewChanged() {
+            val surface = previewAt(size)
+            if (surface == null) {
+                previewHolder?.let { holder ->
+                    if (previewSize != size) holder.setFixedSize(size.width, size.height)
+                }
+                return
+            }
+            handler.post {
+                if (closed || device == null) return@post
+                if (session != null && sessionPreview === surface) return@post
+                closeSession()
+                configure(surface)
+            }
+        }
+
+        /** The preview went (the app left the screen): no session without it. */
+        fun previewGone() {
+            handler.post { closeSession() }
+        }
+
+        private fun closeSession() {
+            try {
+                session?.close()
+            } catch (_: Exception) {
+            }
+            session = null
+            sessionPreview = null
+        }
+
         @Suppress("DEPRECATION")
-        private fun configure(done: (String?) -> Unit) {
-            val camera = device ?: return done("The camera closed.")
-            val outputs = listOf(previewSurface(), encoderSurface!!)
+        private fun configure(preview: Surface) {
+            val camera = device ?: return
+            val outputs = listOf(preview, encoderSurface!!)
             val callback = object : CameraCaptureSession.StateCallback() {
                 override fun onConfigured(configured: CameraCaptureSession) {
+                    if (closed) {
+                        configured.close()
+                        return
+                    }
                     session = configured
+                    sessionPreview = preview
                     try {
-                        repeat(recording = false)
-                        done(null)
+                        repeat(recording = recorder != null)
+                        main.post { channel.invokeMethod("ready", null) }
                     } catch (e: Exception) {
-                        done(e.message ?: e.toString())
+                        main.post { channel.invokeMethod("failed", e.message ?: e.toString()) }
                     }
                 }
 
                 override fun onConfigureFailed(failed: CameraCaptureSession) {
-                    done("This camera can't film at ${size.width}x${size.height}, $fps fps.")
+                    main.post {
+                        channel.invokeMethod(
+                            "failed",
+                            "This camera can't film at ${size.width}x${size.height}, $fps fps.",
+                        )
+                    }
                 }
             }
-            if (highSpeed) {
-                camera.createConstrainedHighSpeedCaptureSession(outputs, callback, handler)
-            } else {
-                camera.createCaptureSession(outputs, callback, handler)
+            try {
+                if (highSpeed) {
+                    camera.createConstrainedHighSpeedCaptureSession(outputs, callback, handler)
+                } else {
+                    camera.createCaptureSession(outputs, callback, handler)
+                }
+            } catch (e: Exception) {
+                main.post { channel.invokeMethod("failed", e.message ?: e.toString()) }
             }
         }
 
         /**
          * The request the session repeats: the preview alone, or the preview
-         * and the encoder. A high-speed session takes it as a burst, and
-         * previews at a range starting lower where the camera offers one,
+         * and the encoder, counted. A high-speed session takes it as a burst,
+         * and previews at a range starting lower where the camera offers one,
          * which is how the platform's own samples keep the viewfinder cool.
          */
         private fun repeat(recording: Boolean) {
             val camera = device ?: return
             val active = session ?: return
+            val preview = sessionPreview ?: return
             val request = camera.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
-                addTarget(previewSurface())
+                addTarget(preview)
                 if (recording) addTarget(encoderSurface!!)
                 set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
                 set(
@@ -458,10 +598,11 @@ class ThrowlabCameraPlugin :
                 )
                 set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, rangeFor(recording))
             }.build()
+            val callback = if (recording) counting else null
             if (active is CameraConstrainedHighSpeedCaptureSession) {
-                active.setRepeatingBurst(active.createHighSpeedRequestList(request), null, handler)
+                active.setRepeatingBurst(active.createHighSpeedRequestList(request), callback, handler)
             } else {
-                active.setRepeatingRequest(request, null, handler)
+                active.setRepeatingRequest(request, callback, handler)
             }
         }
 
@@ -506,6 +647,10 @@ class ThrowlabCameraPlugin :
         fun start(output: String, result: MethodChannel.Result) {
             if (recorder != null) return result.error("busy", "Already recording.", null)
             handler.post {
+                if (session == null) {
+                    main.post { result.error("record", "The camera isn't ready yet.", null) }
+                    return@post
+                }
                 try {
                     // The back camera is turned by the sensor's own mounting
                     // plus however far the phone is turned.
@@ -513,6 +658,10 @@ class ThrowlabCameraPlugin :
                     val made = newRecorder(output, encoderSurface!!, hint)
                     recorder = made
                     path = output
+                    frames = 0
+                    failed = 0
+                    firstStamp = 0L
+                    lastStamp = 0L
                     repeat(recording = true)
                     made.start()
                     main.post { result.success(null) }
@@ -520,6 +669,10 @@ class ThrowlabCameraPlugin :
                     recorder?.release()
                     recorder = null
                     File(output).delete()
+                    try {
+                        repeat(recording = false)
+                    } catch (_: Exception) {
+                    }
                     main.post { result.error("record", e.message ?: e.toString(), null) }
                 }
             }
@@ -528,6 +681,12 @@ class ThrowlabCameraPlugin :
         fun stop(result: MethodChannel.Result) {
             val made = recorder ?: return result.error("idle", "Not recording.", null)
             handler.post {
+                // The preview goes back to its own request first, so no
+                // frame is sent to an encoder that has been told to stop.
+                try {
+                    repeat(recording = false)
+                } catch (_: Exception) {
+                }
                 var error: String? = null
                 try {
                     made.stop()
@@ -538,14 +697,16 @@ class ThrowlabCameraPlugin :
                 }
                 made.release()
                 recorder = null
-                try {
-                    repeat(recording = false)
-                } catch (_: Exception) {
-                }
                 val written = path
                 path = null
+                val take = mapOf(
+                    "path" to written,
+                    "frames" to frames,
+                    "failed" to failed,
+                    "seconds" to (lastStamp - firstStamp) / 1e9,
+                )
                 main.post {
-                    if (error != null) result.error("record", error, null) else result.success(written)
+                    if (error != null) result.error("record", error, null) else result.success(take)
                 }
             }
         }
@@ -556,6 +717,7 @@ class ThrowlabCameraPlugin :
          * being closed refuses the one being opened.
          */
         fun close() {
+            closed = true
             orientation.disable()
             val released = CountDownLatch(1)
             handler.post {
@@ -565,11 +727,7 @@ class ThrowlabCameraPlugin :
                 }
                 recorder?.release()
                 recorder = null
-                try {
-                    session?.close()
-                } catch (_: Exception) {
-                }
-                session = null
+                closeSession()
                 device?.close()
                 device = null
                 encoderSurface?.release()
@@ -578,12 +736,11 @@ class ThrowlabCameraPlugin :
                 thread.quitSafely()
             }
             released.await(1500, TimeUnit.MILLISECONDS)
-            producer?.release()
-            producer = null
         }
     }
 
     companion object {
         private const val PERMISSION_REQUEST = 4721
+        private const val PREVIEW_VIEW = "throwlab_camera/preview"
     }
 }
