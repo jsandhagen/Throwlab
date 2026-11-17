@@ -36,6 +36,10 @@ dependencies:
   throwlab_camera:
     path: packages/throwlab_camera
   archive: ^4.6.0
+  # Opens the links a coach keeps in the notebook — a lecture on YouTube, a
+  # paper's DOI — in whatever the phone opens links in. Only launchUrl is
+  # called, never canLaunchUrl, so the manifest needs no <queries> entry.
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

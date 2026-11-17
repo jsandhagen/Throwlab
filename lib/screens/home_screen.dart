@@ -35,6 +35,7 @@ import 'meet_event_screen.dart';
 import 'meet_screen.dart';
 import 'meets_screen.dart';
 import 'calculators_screen.dart';
+import 'notebook_screen.dart';
 
 enum LibraryGrouping { athlete, event, date }
 
@@ -513,6 +514,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             tooltip: 'Meets',
             icon: const Icon(Icons.emoji_events_outlined),
             onPressed: _openMeets,
+          ),
+          IconButton(
+            key: const ValueKey('open-notebook'),
+            tooltip: "Coach's notebook",
+            icon: const Icon(Icons.menu_book_outlined),
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const NotebookScreen())),
           ),
           IconButton(
             tooltip: 'Compare two throws',

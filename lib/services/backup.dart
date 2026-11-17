@@ -35,6 +35,8 @@ class LibraryBackup {
     'throwlab.marks': 'id',
     'throwlab.meets': 'id',
     'throwlab.notes': 'id',
+    'throwlab.notebook': 'id',
+    'throwlab.notebookSections': 'id',
     'throwlab.athletes': 'name',
   };
 

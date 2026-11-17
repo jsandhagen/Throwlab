@@ -6,11 +6,17 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/notebook.dart';
 import '../models/training_note.dart';
+import '../services/note_store.dart';
+import '../services/notebook_library.dart';
 import '../services/notes_library.dart';
 import '../widgets/note_text.dart';
+import '../widgets/notebook_embeds.dart';
 
-/// Writes one training note.
+/// Writes one training note — or one page of the coach's notebook, which is
+/// the same editor with more to put on the page: a throw from the library,
+/// an athlete, a meet, a link, a callout and a rule across the page.
 ///
 /// Always editable — there is no read mode to switch out of, the way a
 /// notes app works — and it saves itself, so a coach who backs out of the
@@ -23,9 +29,10 @@ import '../widgets/note_text.dart';
 class NoteEditorScreen extends StatefulWidget {
   const NoteEditorScreen({super.key, required this.note});
 
-  /// The note to edit. A copy is taken, so nothing reaches the store until
-  /// it is saved.
-  final TrainingNote note;
+  /// The note or page to edit. A copy is taken, so nothing reaches the
+  /// store until it is saved. Which store it saves to follows from what it
+  /// is: a [TrainingNote] to the notes, a [NotebookPage] to the notebook.
+  final NoteDocument note;
 
   @override
   State<NoteEditorScreen> createState() => _NoteEditorScreenState();
@@ -36,7 +43,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   /// is a preference about their hands rather than about this note.
   static const _dockKey = 'throwlab.noteToolbarTop';
 
-  late final TrainingNote _note = widget.note.copy();
+  late final NoteDocument _note = widget.note.copy();
+
+  /// A notebook page rather than a training note — which is what turns on
+  /// the blocks that point at things.
+  bool get _notebook => _note is NotebookPage;
   late final TextEditingController _title =
       TextEditingController(text: _note.title);
 
@@ -57,7 +68,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   /// Held rather than read from context on demand: the last save happens in
   /// dispose(), where the tree is already coming down and a lookup would
   /// throw. A half-typed line is exactly what must not be lost.
-  NotesLibrary? _store;
+  NoteStore? _store;
 
   /// Set once the note has been deleted. Everything else on this screen
   /// saves — on a debounce, on leaving, on the way down in dispose() — and
@@ -68,7 +79,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _store = context.read<NotesLibrary>();
+    _store = _notebook
+        ? context.read<NotebookLibrary>() as NoteStore
+        : context.read<NotesLibrary>();
   }
 
   @override
@@ -110,7 +123,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     // with the screen.
     if ((_saveTimer?.isActive ?? false) && !_deleted) {
       _saveTimer!.cancel();
-      _store?.save(_note);
+      _store?.saveDocument(_note);
     }
     _saveTimer?.cancel();
     _title.dispose();
@@ -164,7 +177,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   void _save() {
     _saveTimer?.cancel();
     if (_deleted) return;
-    _store?.save(_note);
+    _store?.saveDocument(_note);
   }
 
   void _typed(NoteBlock block, String value) {
@@ -172,13 +185,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     // it — which is what makes a bulleted list feel like a list rather than
     // like six separate decisions.
     final newline = value.indexOf('\n');
-    if (newline != -1 && !block.isImage) {
+    if (newline != -1 && block.isText) {
       final head = value.substring(0, newline);
       final tail = value.substring(newline + 1);
       block.text = head;
       _controllerFor(block).text = head;
-      // A heading's continuation is body text, never another heading.
-      final kind = block.kind == NoteBlockKind.heading
+      // A heading's continuation is body text, never another heading — and
+      // a callout is one boxed thought, so the next line steps out of it.
+      final kind = block.kind == NoteBlockKind.heading ||
+              block.kind == NoteBlockKind.callout
           ? NoteBlockKind.paragraph
           : block.kind;
       _insertAfter(
@@ -195,13 +210,73 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _scheduleSave();
   }
 
-  void _insertAfter(NoteBlock block, NoteBlock fresh) {
+  /// Puts [fresh] in after [block]. [focus] is off for a block that is not
+  /// typed into first — a throw, a rule — so adding one does not throw the
+  /// keyboard up over it.
+  void _insertAfter(NoteBlock block, NoteBlock fresh, {bool focus = true}) {
     final index = _note.blocks.indexOf(block);
-    setState(() => _note.blocks.insert(index + 1, fresh));
+    setState(() {
+      _note.blocks.insert(index + 1, fresh);
+      if (!focus) _active = fresh.id;
+    });
+    if (!focus) return;
     // Focus lands after the frame that builds the new field.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _focusFor(fresh).requestFocus();
     });
+  }
+
+  /// Adds a block that holds something rather than words — after the line
+  /// the cursor was in, or at the end — and a line after it to carry on
+  /// writing in when it lands at the very end of the page.
+  void _insertEmbed(NoteBlock fresh) {
+    final active = _activeBlock;
+    if (active == null) {
+      setState(() {
+        _note.blocks.add(fresh);
+        _active = fresh.id;
+      });
+    } else {
+      _insertAfter(active, fresh, focus: false);
+    }
+    if (_note.blocks.last.id == fresh.id) {
+      setState(() =>
+          _note.blocks.add(NoteBlock(id: NotesLibrary.newBlockId())));
+    }
+    _save();
+  }
+
+  /// The notebook's insert menu, and whatever picking the choice needs.
+  Future<void> _insert() async {
+    FocusScope.of(context).unfocus();
+    final choice = await showInsertSheet(context);
+    if (choice == null || !mounted) return;
+    final id = NotesLibrary.newBlockId();
+    switch (choice) {
+      case InsertChoice.picture:
+        await _addPicture();
+      case InsertChoice.callout:
+        _addBlock(NoteBlockKind.callout);
+      case InsertChoice.divider:
+        _insertEmbed(NoteBlock(id: id, kind: NoteBlockKind.divider));
+      case InsertChoice.clip:
+        final video = await pickThrow(context);
+        if (video == null || !mounted) return;
+        _insertEmbed(NoteBlock(id: id, kind: NoteBlockKind.clip, ref: video.id));
+      case InsertChoice.athlete:
+        final name = await pickAthlete(context);
+        if (name == null || !mounted) return;
+        _insertEmbed(NoteBlock(id: id, kind: NoteBlockKind.athlete, ref: name));
+      case InsertChoice.meet:
+        final meet = await pickMeet(context);
+        if (meet == null || !mounted) return;
+        _insertEmbed(NoteBlock(id: id, kind: NoteBlockKind.meet, ref: meet.id));
+      case InsertChoice.link:
+        final link = await askForLink(context);
+        if (link == null || !mounted) return;
+        _insertEmbed(NoteBlock(
+            id: id, kind: NoteBlockKind.link, url: link.url, text: link.label));
+    }
   }
 
   void _addBlock(NoteBlockKind kind) {
@@ -220,7 +295,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   void _setKind(NoteBlockKind kind) {
     final block = _activeBlock;
-    if (block == null || block.isImage) return;
+    if (block == null || !block.isText) return;
     setState(() => block.kind = block.kind == kind
         // Tapping the kind a block already is turns it back into a
         // paragraph, so the buttons toggle rather than trap.
@@ -290,7 +365,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
       // at the end — the same place a cursor lands in any editor.
       final landing = _note.blocks[at.clamp(0, _note.blocks.length - 1)];
       _active = landing.id;
-      if (typing && !landing.isImage) {
+      if (typing && landing.isText) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _focusFor(landing).requestFocus();
         });
@@ -382,9 +457,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null || !mounted) return;
     final id = NotesLibrary.newBlockId();
-    final stored = await context
-        .read<NotesLibrary>()
-        .adoptPicture(_note.id, id, picked.path);
+    final stored = await _store?.adoptPicture(_note.id, id, picked.path);
     if (stored == null || !mounted) return;
     final fresh =
         NoteBlock(id: id, kind: NoteBlockKind.image, imagePath: stored);
@@ -398,7 +471,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   Future<void> _deleteNote() async {
-    if (!await _confirm('Delete this note?', _note.displayTitle)) return;
+    if (!await _confirm(
+        _notebook ? 'Delete this page?' : 'Delete this note?',
+        _note.displayTitle)) {
+      return;
+    }
     _saveTimer?.cancel();
     _deleted = true;
     // The held store rather than a fresh lookup: _confirm has already been
@@ -423,9 +500,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Training note'),
+              Text(_notebook ? "Coach's notebook" : 'Training note'),
               Text(
-                _note.athlete,
+                _subtitle(),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -442,7 +519,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
               onPressed: _toggleDock,
             ),
             IconButton(
-              tooltip: 'Delete note',
+              tooltip: _notebook ? 'Delete page' : 'Delete note',
               icon: const Icon(Icons.delete_outline),
               onPressed: _deleteNote,
             ),
@@ -467,6 +544,20 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
   }
 
+  /// Under the screen's name: whose note it is, or which section the page
+  /// is filed in.
+  String _subtitle() {
+    final note = _note;
+    if (note is TrainingNote) return note.athlete;
+    if (note is NotebookPage) {
+      final section = context
+          .watch<NotebookLibrary>()
+          .sectionById(note.sectionId);
+      return section?.name ?? 'No section';
+    }
+    return '';
+  }
+
   Widget _blocks() {
     final theme = Theme.of(context);
     return ListView(
@@ -476,9 +567,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           controller: _title,
           textCapitalization: TextCapitalization.sentences,
           style: theme.textTheme.headlineSmall,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             border: InputBorder.none,
-            hintText: 'Note title',
+            hintText: _notebook ? 'Page title' : 'Note title',
             isDense: true,
           ),
           onChanged: (value) {
@@ -503,6 +594,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   Widget _blockRow(NoteBlock block) {
     if (block.isImage) return _pictureBlock(block);
+    if (block.isDivider) return _dividerBlock(block);
+    if (block.isEmbed) return _embedBlock(block);
+    if (block.kind == NoteBlockKind.callout) return _calloutBlock(block);
 
     final theme = Theme.of(context);
     final style = switch (block.kind) {
@@ -547,6 +641,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   String? _hintFor(NoteBlock block) {
     if (_note.blocks.first.id != block.id) return null;
+    if (_notebook && block.kind == NoteBlockKind.paragraph) {
+      return 'A drill, a cue, a plan — or tap + to add a throw or a link';
+    }
     return switch (block.kind) {
       NoteBlockKind.heading => 'Heading',
       NoteBlockKind.checklist => 'Something to do next session',
@@ -692,6 +789,107 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     );
   }
 
+  /// A callout: one line boxed and tinted, for the thing on the page that
+  /// matters most.
+  Widget _calloutBlock(NoteBlock block) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      decoration: BoxDecoration(
+        color: scheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border(left: BorderSide(color: scheme.primary, width: 3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 6, right: 8),
+            child: Icon(Icons.lightbulb_outline, size: 18, color: scheme.primary),
+          ),
+          Expanded(
+            child: TextField(
+              controller: _controllerFor(block),
+              focusNode: _focusFor(block),
+              style: theme.textTheme.bodyLarge
+                  ?.copyWith(fontWeight: FontWeight.w500),
+              maxLines: null,
+              textCapitalization: TextCapitalization.sentences,
+              decoration: const InputDecoration(
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 4),
+                hintText: 'The point to remember',
+              ),
+              onChanged: (value) => _typed(block, value),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A rule across the page. It has no text to put a cursor in, so a tap is
+  /// what makes it the block the toolbar's move and delete act on.
+  Widget _dividerBlock(NoteBlock block) {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = _active == block.id;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        FocusScope.of(context).unfocus();
+        setState(() => _active = block.id);
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: Divider(
+          height: 2,
+          thickness: selected ? 2 : 1,
+          color: selected ? scheme.primary : scheme.outlineVariant,
+        ),
+      ),
+    );
+  }
+
+  /// A throw, an athlete, a meet or a link: a card that opens what it points
+  /// at, with a caption under it like a picture's.
+  Widget _embedBlock(NoteBlock block) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          NotebookEmbedCard(
+            block: block,
+            selected: _active == block.id,
+            onSelect: () => setState(() => _active = block.id),
+            onRemove: () => _removeBlocks([block]),
+          ),
+          TextField(
+            controller: _controllerFor(block),
+            focusNode: _focusFor(block),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            maxLines: null,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: InputDecoration(
+              border: InputBorder.none,
+              isDense: true,
+              contentPadding: const EdgeInsets.only(top: 6, bottom: 2),
+              hintText: block.kind == NoteBlockKind.link
+                  ? 'What it is, and why it is here'
+                  : 'Why it is on this page',
+            ),
+            onChanged: (value) => _typed(block, value),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// The formatting bar. Acts on whichever line the cursor is in, and stays
   /// put while the keyboard is up — pinned just above it, or under the app
   /// bar if that is where the coach put it.
@@ -724,6 +922,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       children: [
+                        // First on a notebook page, where the bar can
+                        // put more on the page than words.
+                        if (_notebook) ...[
+                          _tool(Icons.add_circle_outline,
+                              'Add a throw, link, picture…',
+                              onTap: _insert),
+                          const _ToolDivider(),
+                        ],
                         _tool(Icons.format_bold, 'Bold',
                             onTap: () => _emphasise('**')),
                         _tool(Icons.format_italic, 'Italic',
@@ -743,10 +949,18 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                         _tool(Icons.checklist, 'Checklist',
                             on: block?.kind == NoteBlockKind.checklist,
                             onTap: () => _setKind(NoteBlockKind.checklist)),
+                        if (_notebook)
+                          _tool(Icons.lightbulb_outline, 'Callout',
+                              on: block?.kind == NoteBlockKind.callout,
+                              onTap: () => _setKind(NoteBlockKind.callout)),
                         const _ToolDivider(),
-                        _tool(Icons.image_outlined, 'Add a picture',
-                            onTap: _addPicture),
-                        const _ToolDivider(),
+                        // A notebook page adds its pictures from the + menu
+                        // at the front of the bar, with everything else.
+                        if (!_notebook) ...[
+                          _tool(Icons.image_outlined, 'Add a picture',
+                              onTap: _addPicture),
+                          const _ToolDivider(),
+                        ],
                         _tool(Icons.arrow_upward, 'Move up',
                             onTap: () => _move(-1)),
                         _tool(Icons.arrow_downward, 'Move down',

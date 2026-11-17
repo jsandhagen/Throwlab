@@ -17,7 +17,46 @@ import 'package:flutter/material.dart';
 
 /// What a block is. The kind decides how it is drawn and what the editor
 /// does when you press Enter in it.
-enum NoteBlockKind { heading, paragraph, bullet, numbered, checklist, image }
+///
+/// The kinds after [image] are the coach's notebook's: a training note never
+/// makes one, but a note is drawn by the same editor, so they are one enum.
+/// New kinds go on the end — the stored name is what is read back, so the
+/// order is free, but the end is where a reader looks for what came later.
+enum NoteBlockKind {
+  heading,
+  paragraph,
+  bullet,
+  numbered,
+  checklist,
+  image,
+
+  /// A boxed line that stands out from the page — the cue that matters.
+  callout,
+
+  /// A rule across the page. Holds no text.
+  divider,
+
+  /// A throw from the library, by [NoteBlock.ref] (its id).
+  clip,
+
+  /// An athlete, by [NoteBlock.ref] (their name, as throws are tagged).
+  athlete,
+
+  /// A meet, by [NoteBlock.ref] (its id).
+  meet,
+
+  /// A web page or video somewhere else, by [NoteBlock.url].
+  link,
+}
+
+/// The kinds that point at something rather than holding words: drawn as a
+/// card, with [NoteBlock.text] as the caption under it.
+const embedKinds = {
+  NoteBlockKind.clip,
+  NoteBlockKind.athlete,
+  NoteBlockKind.meet,
+  NoteBlockKind.link,
+};
 
 class NoteBlock {
   NoteBlock({
@@ -26,6 +65,8 @@ class NoteBlock {
     this.text = '',
     this.checked = false,
     this.imagePath,
+    this.ref,
+    this.url,
   });
 
   final String id;
@@ -41,11 +82,29 @@ class NoteBlock {
   /// gallery being tidied up. Null for every kind but [NoteBlockKind.image].
   String? imagePath;
 
+  /// What an embed points at inside the app — a throw's id, an athlete's
+  /// name, a meet's id. Null for every kind that holds its own content.
+  String? ref;
+
+  /// Where a [NoteBlockKind.link] goes. Null for every other kind.
+  String? url;
+
   bool get isImage => kind == NoteBlockKind.image;
+  bool get isEmbed => embedKinds.contains(kind);
+  bool get isDivider => kind == NoteBlockKind.divider;
+
+  /// Whether the block is typed into directly, as a line of words. A
+  /// picture or an embed is typed into too, but only as its caption.
+  bool get isText => !isImage && !isEmbed && !isDivider;
 
   /// Whether this block holds nothing at all — an empty paragraph left
   /// behind, which the note's preview should skip over.
-  bool get isBlank => text.trim().isEmpty && imagePath == null;
+  bool get isBlank =>
+      text.trim().isEmpty &&
+      imagePath == null &&
+      ref == null &&
+      url == null &&
+      !isDivider;
 
   NoteBlock copy() => NoteBlock(
         id: id,
@@ -53,6 +112,8 @@ class NoteBlock {
         text: text,
         checked: checked,
         imagePath: imagePath,
+        ref: ref,
+        url: url,
       );
 
   Map<String, dynamic> toJson() => {
@@ -61,6 +122,8 @@ class NoteBlock {
         'text': text,
         'checked': checked,
         'imagePath': imagePath,
+        if (ref != null) 'ref': ref,
+        if (url != null) 'url': url,
       };
 
   factory NoteBlock.fromJson(Map<String, dynamic> json) => NoteBlock(
@@ -72,11 +135,40 @@ class NoteBlock {
         text: json['text'] as String? ?? '',
         checked: json['checked'] as bool? ?? false,
         imagePath: json['imagePath'] as String?,
+        ref: json['ref'] as String?,
+        url: json['url'] as String?,
       );
 }
 
+/// What the note editor writes into: a title over a list of blocks. A
+/// training note is one, and so is a page of the coach's notebook — the
+/// same editor draws both, so a coach learns it once.
+abstract class NoteDocument {
+  String get id;
+  String get title;
+  set title(String value);
+  List<NoteBlock> get blocks;
+  String get displayTitle;
+  NoteDocument copy();
+}
+
+/// A block as one plain line — for a list's preview line, where a picture
+/// or an embed has no words of its own to show.
+String blockSummary(NoteBlock block) {
+  final caption = stripMarkers(block.text.trim());
+  if (block.isText || caption.isNotEmpty) return caption;
+  return switch (block.kind) {
+    NoteBlockKind.image => 'Picture',
+    NoteBlockKind.clip => 'A throw',
+    NoteBlockKind.athlete => block.ref ?? 'An athlete',
+    NoteBlockKind.meet => 'A meet',
+    NoteBlockKind.link => block.url ?? 'A link',
+    _ => '',
+  };
+}
+
 /// One training note, belonging to one athlete.
-class TrainingNote {
+class TrainingNote implements NoteDocument {
   TrainingNote({
     required this.id,
     required this.athlete,
@@ -86,6 +178,7 @@ class TrainingNote {
     List<NoteBlock>? blocks,
   }) : blocks = blocks ?? [];
 
+  @override
   final String id;
 
   /// Who it is about. Matched the way athletes are matched everywhere else:
@@ -95,11 +188,14 @@ class TrainingNote {
   final DateTime createdAt;
   DateTime updatedAt;
 
+  @override
   String title;
+  @override
   List<NoteBlock> blocks;
 
   /// What the note is called in a list. An untitled note is named by its
   /// first line, the way a notes app does, so it is still recognizable.
+  @override
   String get displayTitle {
     if (title.trim().isNotEmpty) return title.trim();
     for (final block in blocks) {
@@ -142,6 +238,7 @@ class TrainingNote {
     return (done: done, total: total);
   }
 
+  @override
   TrainingNote copy() => TrainingNote(
         id: id,
         athlete: athlete,

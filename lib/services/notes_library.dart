@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/training_note.dart';
+import 'note_store.dart';
 
 /// Persists the training notes, and the pictures in them.
 ///
@@ -14,7 +15,7 @@ import '../models/training_note.dart';
 /// have no reason to be written to storage together. Notes reference their
 /// athlete by name, the same way a throw does, so re-tagging works the same
 /// everywhere — there is still no athlete record to keep in step.
-class NotesLibrary extends ChangeNotifier {
+class NotesLibrary extends ChangeNotifier implements NoteStore {
   static const _storageKey = 'throwlab.notes';
 
   final List<TrainingNote> _notes = [];
@@ -90,6 +91,11 @@ class NotesLibrary extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  Future<void> saveDocument(NoteDocument document) =>
+      save(document as TrainingNote);
+
+  @override
   Future<void> remove(String id) async {
     final index = _notes.indexWhere((n) => n.id == id);
     if (index == -1) return;
@@ -105,6 +111,7 @@ class NotesLibrary extends ChangeNotifier {
   /// The gallery's copy can be moved or cleaned up at any time, and on
   /// Android the picker's own temporary file certainly will be — so a note
   /// that pointed at either would quietly lose its pictures.
+  @override
   Future<String?> adoptPicture(
       String noteId, String blockId, String sourcePath) async {
     try {
@@ -125,6 +132,7 @@ class NotesLibrary extends ChangeNotifier {
 
   /// Reclaims one deleted block's picture. Best-effort, like the note-wide
   /// sweep below: a picture that will not delete costs space, never data.
+  @override
   Future<void> deletePicture(String path) async {
     try {
       final file = File(path);

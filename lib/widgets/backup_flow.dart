@@ -9,6 +9,7 @@ import '../screens/home_screen.dart' show OptimizingDialog;
 import '../services/athlete_library.dart';
 import '../services/backup.dart';
 import '../services/meet_library.dart';
+import '../services/notebook_library.dart';
 import '../services/notes_library.dart';
 import '../services/video_library.dart';
 import 'distance_field.dart';
@@ -138,6 +139,7 @@ Future<void> restoreLibrary(BuildContext context) async {
   final videos = context.read<VideoLibrary>();
   final meets = context.read<MeetLibrary>();
   final notes = context.read<NotesLibrary>();
+  final notebook = context.read<NotebookLibrary>();
   final athletes = context.read<AthleteLibrary>();
   final navigator = Navigator.of(context);
   final progress = ValueNotifier<double?>(null);
@@ -165,6 +167,7 @@ Future<void> restoreLibrary(BuildContext context) async {
       videos.load(),
       meets.load(),
       notes.load(),
+      notebook.load(),
       athletes.load(),
       DistanceField.loadPreference(),
     ]);
